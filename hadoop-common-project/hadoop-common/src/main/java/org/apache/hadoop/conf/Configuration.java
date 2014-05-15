@@ -176,6 +176,8 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
   private static final Log LOG_DEPRECATION =
     LogFactory.getLog("org.apache.hadoop.conf.Configuration.deprecation");
 
+  private static final String HADOOP_PROPERTY_PREFIX = "hadoop.property.";
+
   private boolean quietmode = true;
   
   private static class Resource {
@@ -2286,6 +2288,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
           updatingResource.put(key, backup.get(key));
         }
       }
+      loadSystemProperties(properties);
     }
     return properties;
   }
@@ -2374,6 +2377,19 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
       Resource ret = loadResource(properties, resources.get(i), quiet);
       if (ret != null) {
         resources.set(i, ret);
+      }
+    }
+  }
+
+  private void loadSystemProperties(Properties properties) {
+    Properties systemProperties = System.getProperties();
+    for (Map.Entry<Object, Object> item: systemProperties.entrySet()) {
+      String key = (String)item.getKey();
+      if (key.startsWith(HADOOP_PROPERTY_PREFIX)) {
+        String attr = key.substring(HADOOP_PROPERTY_PREFIX.length());
+        String value = (String)item.getValue();
+        loadProperty(properties, "system", attr, value, false,
+            new String[] {"system-property" });
       }
     }
   }
