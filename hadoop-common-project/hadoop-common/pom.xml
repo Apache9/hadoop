@@ -33,6 +33,7 @@
   <properties>
     <hadoop.component>common</hadoop.component>
     <is.hadoop.component>true</is.hadoop.component>
+    <scribe-log4j.version>1.0.0-SNAPSHOT</scribe-log4j.version>
   </properties>
 
   <dependencies>
@@ -148,6 +149,11 @@
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
       <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.xiaomi.infra</groupId>
+      <artifactId>scribe-log4j</artifactId>
+      <version>${scribe-log4j.version}</version>
     </dependency>
     <dependency>
       <groupId>net.java.dev.jets3t</groupId>
