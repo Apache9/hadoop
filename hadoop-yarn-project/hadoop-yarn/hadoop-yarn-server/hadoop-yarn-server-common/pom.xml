@@ -107,6 +107,12 @@
       <groupId>org.fusesource.leveldbjni</groupId>
       <artifactId>leveldbjni-all</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.xiaomi.infra</groupId>
+      <artifactId>ext-log4j</artifactId>
+      <scope>compile</scope>
+      <version>${ext-log4j.version}</version>
+    </dependency>
   </dependencies>
 
   <build>

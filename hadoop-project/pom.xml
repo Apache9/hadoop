@@ -73,6 +73,8 @@
     <zookeeper.version>3.4.6</zookeeper.version>
 
     <tomcat.version>6.0.41</tomcat.version>
+    <scribe-log4j.version>1.0.0-SNAPSHOT</scribe-log4j.version>
+    <ext-log4j.version>1.0.0-SNAPSHOT</ext-log4j.version>
   </properties>
 
   <dependencyManagement>
