@@ -204,6 +204,8 @@ public abstract class ZKFailoverController {
           }
         }
         return formatZK(force, interactive);
+      } else if ("-clearZK".equals(args[0])) {
+        return clearZK();
       } else {
         badArg(args[0]);
       }
@@ -266,6 +268,19 @@ public abstract class ZKFailoverController {
     }
     
     elector.ensureParentZNode();
+    return 0;
+  }
+
+  private int clearZK()
+      throws IOException, InterruptedException {
+    if (elector.parentZNodeExists()) {
+      try {
+        elector.clearParentZNode();
+      } catch (IOException e) {
+        LOG.error("Unable to clear zk parent znode", e);
+        return 1;
+      }
+    }
     return 0;
   }
 
