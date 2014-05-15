@@ -35,6 +35,7 @@
     <is.hadoop.component>true</is.hadoop.component>
     <wsce.config.dir>../etc/hadoop</wsce.config.dir>
     <wsce.config.file>wsce-site.xml</wsce.config.file>
+    <scribe-log4j.version>1.0.0-SNAPSHOT</scribe-log4j.version>
   </properties>
 
   <dependencies>
@@ -150,6 +151,11 @@
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
       <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.xiaomi.infra</groupId>
+      <artifactId>scribe-log4j</artifactId>
+      <version>${scribe-log4j.version}</version>
     </dependency>
     <dependency>
       <groupId>net.java.dev.jets3t</groupId>
