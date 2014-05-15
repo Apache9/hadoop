@@ -18,6 +18,7 @@
  
 package org.apache.hadoop.mapred;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.regex.PatternSyntaxException;
 
@@ -208,11 +209,15 @@ public class SequenceFileInputFilter<K, V>
     }
         
     public synchronized boolean next(K key, V value) throws IOException {
-      while (next(key)) {
-        if (filter.accept(key)) {
-          getCurrentValue(value);
-          return true;
+      try {
+        while (next(key)) {
+          if (filter.accept(key)) {
+            getCurrentValue(value);
+            return true;
+          }
         }
+      } catch (EOFException e) {
+        return false;
       }
             
       return false;
