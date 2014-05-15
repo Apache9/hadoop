@@ -19,10 +19,12 @@ package org.apache.hadoop.util;
 
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
+import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
@@ -48,6 +50,7 @@ public class DirectBufferPool {
   // Essentially implement a multimap with weak values.
   final ConcurrentMap<Integer, Queue<WeakReference<ByteBuffer>>> buffersBySize =
     new ConcurrentHashMap<Integer, Queue<WeakReference<ByteBuffer>>>();
+  private AtomicLong usingMemoryBytes = new AtomicLong(0);
  
   /**
    * Allocate a direct buffer of the specified size, in bytes.
@@ -58,18 +61,23 @@ public class DirectBufferPool {
     Queue<WeakReference<ByteBuffer>> list = buffersBySize.get(size);
     if (list == null) {
       // no available buffers for this size
-      return ByteBuffer.allocateDirect(size);
+      ByteBuffer buffer = ByteBuffer.allocateDirect(size);
+      usingMemoryBytes.addAndGet(size);
+      return buffer;
     }
     
     WeakReference<ByteBuffer> ref;
     while ((ref = list.poll()) != null) {
       ByteBuffer b = ref.get();
       if (b != null) {
+        usingMemoryBytes.addAndGet(size);
         return b;
       }
     }
 
-    return ByteBuffer.allocateDirect(size);
+    ByteBuffer buffer =  ByteBuffer.allocateDirect(size);
+    usingMemoryBytes.addAndGet(size);
+    return buffer;
   }
   
   /**
@@ -91,6 +99,7 @@ public class DirectBufferPool {
       }
     }
     list.add(new WeakReference<ByteBuffer>(buf));
+    usingMemoryBytes.addAndGet(size * -1);
   }
   
   /**
@@ -105,5 +114,23 @@ public class DirectBufferPool {
     }
     
     return list.size();
+  }
+
+  /**
+   * Return the sum size of pool buffers, in MB.
+   */
+  public long getPooledMemoryMB() {
+    long sizeInTotal = 0;
+    for (Entry<Integer, Queue<WeakReference<ByteBuffer>>> entry : buffersBySize.entrySet()) {
+      sizeInTotal += entry.getKey().longValue() * entry.getValue().size();
+    }
+    return sizeInTotal/(1024 * 1024);
+  }
+
+  /**
+   * Return the currently using memory sum size in MB.
+   */
+  public long getUsingMemoryMB() {
+    return usingMemoryBytes.get()/(1024 * 1024);
   }
 }

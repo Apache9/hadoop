@@ -270,6 +270,10 @@ public class PacketReceiver implements Closeable {
       ByteBuffer newBuf;
       if (useDirectBuffers) {
         newBuf = bufferPool.getBuffer(atLeastCapacity);
+        if (LOG.isTraceEnabled()) {
+          LOG.trace("PacketReceiver buffer pool size(MB):" + bufferPool.getPooledMemoryMB()
+              + ", using mem(MB):" + bufferPool.getUsingMemoryMB());
+        }
       } else {
         newBuf = ByteBuffer.allocate(atLeastCapacity);
       }
@@ -289,6 +293,10 @@ public class PacketReceiver implements Closeable {
     if (curPacketBuf != null && curPacketBuf.isDirect()) {
       bufferPool.returnBuffer(curPacketBuf);
       curPacketBuf = null;
+      if (LOG.isTraceEnabled()) {
+        LOG.trace("PacketReceiver (return)buffer pool size(MB):" + bufferPool.getPooledMemoryMB()
+            + ", using mem(MB):" + bufferPool.getUsingMemoryMB());
+      }
     }
   }
 

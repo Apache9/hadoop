@@ -48,6 +48,19 @@ public class TestDirectBufferPool {
     assertNotSame(b, c);
     pool.returnBuffer(b);
     pool.returnBuffer(c);
+
+    ByteBuffer d = pool.getBuffer(1024 * 1024);
+    assertEquals(0, pool.getPooledMemoryMB());
+    assertEquals(1, pool.getUsingMemoryMB());
+    pool.returnBuffer(d);
+    assertEquals(1, pool.getPooledMemoryMB());
+    assertEquals(0, pool.getUsingMemoryMB());
+    ByteBuffer e = pool.getBuffer(10 * 1024 * 1024);
+    assertEquals(1, pool.getPooledMemoryMB());
+    assertEquals(10, pool.getUsingMemoryMB());
+    pool.returnBuffer(e);
+    assertEquals(11, pool.getPooledMemoryMB());
+    assertEquals(0, pool.getUsingMemoryMB());
   }
   
   @Test
