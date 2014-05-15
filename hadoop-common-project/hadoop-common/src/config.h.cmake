@@ -23,5 +23,6 @@
 #cmakedefine HADOOP_SNAPPY_LIBRARY "@HADOOP_SNAPPY_LIBRARY@"
 #cmakedefine HAVE_SYNC_FILE_RANGE
 #cmakedefine HAVE_POSIX_FADVISE
+#cmakedefine HAVE_POSIX_FALLOCATE
 
 #endif
