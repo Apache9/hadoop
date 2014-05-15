@@ -65,6 +65,9 @@
     <!-- define the protobuf JAR version                               -->
     <protobuf.version>2.5.0</protobuf.version>
     <protoc.path>${env.HADOOP_PROTOC_PATH}</protoc.path>
+
+    <scribe-log4j.version>1.0.0-SNAPSHOT</scribe-log4j.version>
+    <ext-log4j.version>1.0.0-SNAPSHOT</ext-log4j.version>
   </properties>
 
   <dependencyManagement>

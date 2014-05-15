@@ -131,6 +131,12 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
       <scope>compile</scope>
     </dependency>
     <dependency>
+      <groupId>com.xiaomi.infra</groupId>
+      <artifactId>ext-log4j</artifactId>
+      <version>${ext-log4j.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <scope>compile</scope>
