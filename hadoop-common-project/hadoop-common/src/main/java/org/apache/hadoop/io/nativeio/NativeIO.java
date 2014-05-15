@@ -113,6 +113,8 @@ public class NativeIO {
 
     private static boolean nativeLoaded = false;
     private static boolean fadvisePossible = true;
+    private static boolean fallocatePossible = true;
+    private static boolean ftruncatePossible = true;
     private static boolean syncFileRangePossible = true;
     private static boolean ioprioPossible = true;
 
@@ -257,6 +259,13 @@ public class NativeIO {
     /** Wrapper around posix_fadvise(2) */
     static native void posix_fadvise(
       FileDescriptor fd, long offset, long len, int flags) throws NativeIOException;
+
+    /** wrapper around posix_fallocate(3) */
+    static native void posix_fallocate(
+      FileDescriptor fd, long offset, long len) throws NativeIOException;
+
+    /** Use in conjunction with posix_fallocate() to free up space that we reserved but didn't use */
+    static native void ftruncate(FileDescriptor fd, long len) throws NativeIOException;
 
     /** Wrapper around sync_file_range(2) */
     static native void sync_file_range(
@@ -684,6 +693,27 @@ public class NativeIO {
         // installed - in this case we can continue without native IO
         // after warning
         PerformanceAdvisory.LOG.debug("Unable to initialize NativeIO libraries", t);
+      }
+    }
+  }
+
+  public static void posixFallocateIfPossible(FileDescriptor fd, long offset, long len)
+      throws NativeIOException {
+    if (POSIX.nativeLoaded && POSIX.fallocatePossible) {
+      try {
+        POSIX.posix_fallocate(fd, offset, len);
+      } catch (UnsupportedOperationException uoe) {
+        POSIX.fallocatePossible = false;
+      }
+    }
+  }
+
+  public static void ftruncateIfPossible(FileDescriptor fd, long len) throws NativeIOException {
+    if (POSIX.nativeLoaded && POSIX.ftruncatePossible) {
+      try {
+        POSIX.ftruncate(fd, len);
+      } catch (UnsupportedOperationException uoe) {
+        POSIX.ftruncatePossible = false;
       }
     }
   }

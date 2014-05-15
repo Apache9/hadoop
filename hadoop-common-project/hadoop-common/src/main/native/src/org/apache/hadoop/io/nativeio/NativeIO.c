@@ -426,6 +426,47 @@ Java_org_apache_hadoop_io_nativeio_NativeIO_00024POSIX_posix_1fadvise(
 #endif
 }
 
+/**
+ * public static native void posix_fallocate(
+ *   FileDescriptor fd, long offset, long len);
+ */
+JNIEXPORT void JNICALL
+Java_org_apache_hadoop_io_nativeio_NativeIO_posix_1fallocate(
+  JNIEnv *env, jclass clazz,
+  jobject fd_object, jlong offset, jlong len)
+{
+#ifndef HAVE_POSIX_FALLOCATE
+  THROW(env, "java/lang/UnsupportedOperationException",
+        "fallocate support not available");
+#else
+  int fd = fd_get(env, fd_object);
+  PASS_EXCEPTIONS(env);
+
+  int err = 0;
+  if ((err = posix_fallocate(fd, (off_t)offset, (off_t)len))) {
+    throw_ioe(env, err);
+  }
+#endif
+}
+
+/**
+ * public static native void ftruncate(
+ *   FileDescriptor fd, long len);
+ */
+JNIEXPORT void JNICALL
+Java_org_apache_hadoop_io_nativeio_NativeIO_ftruncate(
+  JNIEnv *env, jclass clazz,
+  jobject fd_object, jlong len)
+{
+  int fd = fd_get(env, fd_object);
+  PASS_EXCEPTIONS(env);
+
+  int err = 0;
+  if ((err = ftruncate(fd, (off_t)len))) {
+    throw_ioe(env, err);
+  }
+}
+
 #if defined(HAVE_SYNC_FILE_RANGE)
 #  define my_sync_file_range sync_file_range
 #elif defined(SYS_sync_file_range)

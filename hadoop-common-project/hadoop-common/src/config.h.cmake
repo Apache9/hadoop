@@ -24,5 +24,6 @@
 #cmakedefine HADOOP_OPENSSL_LIBRARY "@HADOOP_OPENSSL_LIBRARY@"
 #cmakedefine HAVE_SYNC_FILE_RANGE
 #cmakedefine HAVE_POSIX_FADVISE
+#cmakedefine HAVE_POSIX_FALLOCATE
 
 #endif

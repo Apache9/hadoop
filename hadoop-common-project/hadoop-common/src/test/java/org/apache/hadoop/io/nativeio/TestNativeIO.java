@@ -470,6 +470,31 @@ public class TestNativeIO {
     }
   }
 
+  @Test
+  public void testPosixFallocate() throws Exception {
+    FileOutputStream fos = new FileOutputStream(
+      new File(TEST_DIR, "testPosixFallocate"));
+    try {
+      NativeIO.POSIX.posix_fallocate(fos.getFD(), 0, 65536);
+      fos.write("foo".getBytes());
+      NativeIO.POSIX.ftruncate(fos.getFD(), 8192);
+      // no way to verify that this actually has allocated right,
+      // but if it doesn't throw, we can assume it worked
+    } catch (UnsupportedOperationException uoe) {
+      // we should just skip the unit test on machines where we don't
+      // have fadvise support
+      assumeTrue(false);
+    } finally {
+      fos.close();
+    }
+    try {
+      NativeIO.POSIX.posix_fallocate(fos.getFD(), 0, 65536);
+      fail("Did not throw on bad file");
+    } catch (NativeIOException nioe) {
+      assertEquals(Errno.EBADF, nioe.getErrno());
+    }
+  }
+
   @Test (timeout = 30000)
   public void testSyncFileRange() throws Exception {
     FileOutputStream fos = new FileOutputStream(
