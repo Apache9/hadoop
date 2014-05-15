@@ -100,11 +100,21 @@ public class NativeIO {
        write.  */
     public static final int SYNC_FILE_RANGE_WAIT_AFTER = 4;
 
+    // Flags for ioprio_get() and ioprio_set() call from linux/ioprio.h
+    public static final int IOPRIO_CLASS_NONE = 0;
+    /* real-time I/O class */
+    public static final int IOPRIO_CLASS_RT = 1;
+    /* best-effort scheduling class */
+    public static final int IOPRIO_CLASS_BE = 2;
+    /* idle scheduling class */
+    public static final int IOPRIO_CLASS_IDLE = 3;
+
     private static final Log LOG = LogFactory.getLog(NativeIO.class);
 
     private static boolean nativeLoaded = false;
     private static boolean fadvisePossible = true;
     private static boolean syncFileRangePossible = true;
+    private static boolean ioprioPossible = true;
 
     static final String WORKAROUND_NON_THREADSAFE_CALLS_KEY =
       "hadoop.workaround.non.threadsafe.getpwuid";
@@ -338,6 +348,81 @@ public class NativeIO {
     /** Linux only methods used for getOwner() implementation */
     private static native long getUIDforFDOwnerforOwner(FileDescriptor fd) throws IOException;
     private static native String getUserName(long uid) throws IOException;
+
+    /**
+     * Call ioprio_get for this thread.
+     *
+     * @throws NativeIOException
+     *           if there is an error with the syscall
+     * @return -1 on failure, ioprio value on success.
+     */
+    public static int ioprioGetIfPossible() throws NativeIOException {
+      if (nativeLoaded && ioprioPossible) {
+        try {
+          return ioprio_get();
+        } catch (UnsupportedOperationException uoe) {
+          LOG.warn("ioprioGetIfPossible() failed", uoe);
+          ioprioPossible = false;
+        } catch (UnsatisfiedLinkError ule) {
+          LOG.warn("ioprioGetIfPossible() failed", ule);
+          ioprioPossible = false;
+        } catch (NativeIOException nie) {
+          LOG.warn("ioprioGetIfPossible() failed", nie);
+          throw nie;
+        }
+      }
+      return -1;
+    }
+  
+    /**
+     * Call ioprio_set(ioprio_value) for this thread.
+     *
+     * @throws NativeIOException
+     *           if there is an error with the syscall
+     */
+    public static void ioprioSetIfPossible(int ioprio_value) throws NativeIOException {
+      if (nativeLoaded && ioprioPossible) {
+        try {
+          ioprio_set(ioprio_value);
+        } catch (UnsupportedOperationException uoe) {
+          LOG.warn("ioprioSetIfPossible() failed", uoe);
+          ioprioPossible = false;
+        } catch (UnsatisfiedLinkError ule) {
+          LOG.warn("ioprioSetIfPossible() failed", ule);
+          ioprioPossible = false;
+        } catch (NativeIOException nie) {
+          LOG.warn("ioprioSetIfPossible() failed", nie);
+          throw nie;
+        }
+      }
+    }
+
+    /**
+     * Call ioprio_set(class, data) for this thread.
+     *
+     * @throws NativeIOException
+     *           if there is an error with the syscall
+     */
+    public static void ioprioSetIfPossible(int classOfService, int data) throws NativeIOException {
+      if (nativeLoaded && ioprioPossible) {
+        if (classOfService == IOPRIO_CLASS_NONE) {
+          // ioprio is disabled.
+          return;
+        }
+        try {
+          ioprio_set(classOfService, data);
+        } catch (UnsupportedOperationException uoe) {
+          LOG.warn("ioprioSetIfPossible() failed", uoe);
+          ioprioPossible = false;
+        } catch (UnsatisfiedLinkError ule) {
+          LOG.warn("ioprioSetIfPossible() failed", ule);
+          ioprioPossible = false;
+        } catch (NativeIOException nie) {
+          LOG.warn("ioprioSetIfPossible() failed", nie);
+          throw nie;
+        }
+      }
+    }
 
     /**
      * Result type of the fstat call
@@ -609,6 +694,27 @@ public class NativeIO {
   public static boolean isAvailable() {
     return NativeCodeLoader.isNativeCodeLoaded() && nativeLoaded;
   }
+
+  /**
+   * Wrapper around ioprio_set, we always do this for the current thread so
+   * we omit 'which' and 'who'.
+   */
+  static native void ioprio_set(int classOfService, int priority) throws NativeIOException;
+
+  /**
+   * Wrapper around ioprio_set, we always do this for the current thread so
+   * we omit 'which' and 'who'. This is different from ioprio_set(class,
+   * priority) in the sense that this is the value that is returned by
+   * ioprio_get and we can directly pass this value in to reset the
+   * priority of a thread.
+   */
+  static native void ioprio_set(int ioprio_prio_value) throws NativeIOException;
+
+  /**
+   * Wrapper around ioprio_get, we always do this for the current thread so
+   * we omit 'which' and 'who'.
+   */
+  static native int ioprio_get() throws NativeIOException;
 
   /** Initialize the JNI method ID and class ID cache */
   private static native void initNative();

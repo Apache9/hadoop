@@ -498,6 +498,33 @@ public class TestNativeIO {
     }
   }
 
+  @Test
+  public void testIOPrio() throws Exception {
+    FileOutputStream fos = new FileOutputStream(new File(TEST_DIR, "testIOPrio"));
+    try {
+      int ioPrioValue = NativeIO.ioprio_get();
+      if (ioPrioValue == -1) {
+        fail("Did not throw NativeIOException!");
+      }
+      NativeIO.ioprio_set(NativeIO.POSIX.IOPRIO_CLASS_IDLE, 1);
+      fos.write("foo".getBytes());
+      ioPrioValue = NativeIO.ioprio_get();
+      if (ioPrioValue == -1) {
+        fail("Did not throw NativeIOException!");
+      }
+      int ioPrioClass = ioPrioValue >> 13;
+      assertEquals(ioPrioClass, NativeIO.POSIX.IOPRIO_CLASS_IDLE);
+      int ioPrioData = ioPrioValue & ((1 << 13) - 1);
+      assertEquals(ioPrioData, 1);
+    } catch (UnsupportedOperationException uoe) {
+      // we should just skip the unit test on machines where we don't
+      // have ioprio_set/get support
+      assumeTrue(false);
+    } finally {
+      fos.close();
+    }
+  }
+
   private void assertPermissions(File f, int expected) throws IOException {
     FileSystem localfs = FileSystem.getLocal(new Configuration());
     FsPermission perms = localfs.getFileStatus(

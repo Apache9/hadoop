@@ -53,6 +53,11 @@
 #include "file_descriptor.h"
 #include "errno_enum.h"
 
+// Copied from linux/ioprio.h
+#define IOPRIO_CLASS_SHIFT      (13)
+#define IOPRIO_PRIO_VALUE(class, data)  (((class) << IOPRIO_CLASS_SHIFT) | data)
+#define IOPRIO_WHO_PROCESS (1)
+
 #define MMAP_PROT_READ org_apache_hadoop_io_nativeio_NativeIO_POSIX_MMAP_PROT_READ
 #define MMAP_PROT_WRITE org_apache_hadoop_io_nativeio_NativeIO_POSIX_MMAP_PROT_WRITE
 #define MMAP_PROT_EXEC org_apache_hadoop_io_nativeio_NativeIO_POSIX_MMAP_PROT_EXEC
@@ -245,6 +250,73 @@ error:
   errno_enum_deinit(env);
 #endif
 }
+
+/**
+ * public static native int ioprio_get();
+ */
+JNIEXPORT int JNICALL
+Java_org_apache_hadoop_io_nativeio_NativeIO_ioprio_1get(
+  JNIEnv *env, jclass clazz) {
+#ifndef SYS_ioprio_get
+  THROW(env, "java/lang/UnsupportedOperationException",
+        "ioprio_get support not available");
+#else
+  int prio = syscall(SYS_ioprio_get, IOPRIO_WHO_PROCESS, 0);
+  if(prio == -1) {
+    if (errno == ENOSYS) {
+      // we know the syscall number, but it's not compiled
+      // into the running kernel
+      THROW(env, "java/lang/UnsupportedOperationException",
+          "ioprio_get kernel support not available");
+    } else {
+      throw_ioe(env, errno);
+    }
+  }
+  return prio;
+#endif
+}
+
+void syscall_ioprio_set(JNIEnv *env, jint ioprio_prio_value) {
+  if(syscall(SYS_ioprio_set, IOPRIO_WHO_PROCESS, 0, ioprio_prio_value) == -1) {
+    if (errno == ENOSYS) {
+      // we know the syscall number, but it's not compiled
+      // into the running kernel
+      THROW(env, "java/lang/UnsupportedOperationException",
+          "ioprio_set kernel support not available");
+    } else {
+      throw_ioe(env, errno);
+    }
+  }
+}
+
+/**
+ * public static native void ioprio_set(int ioprio_prio_value);
+ */
+JNIEXPORT void JNICALL
+Java_org_apache_hadoop_io_nativeio_NativeIO_ioprio_1set__I(
+  JNIEnv *env, jclass clazz, jint ioprio_prio_value) {
+#ifndef SYS_ioprio_set
+  THROW(env, "java/lang/UnsupportedOperationException",
+        "ioprio_set support not available");
+#else
+  syscall_ioprio_set(env, ioprio_prio_value);
+#endif
+}
+
+/**
+ * public static native void ioprio_set(int classOfService, int priority);
+ */
+JNIEXPORT void JNICALL
+Java_org_apache_hadoop_io_nativeio_NativeIO_ioprio_1set__II(
+  JNIEnv *env, jclass clazz, jint class, jint priority) {
+#ifndef SYS_ioprio_set
+  THROW(env, "java/lang/UnsupportedOperationException",
+        "ioprio_set support not available");
+#else
+  syscall_ioprio_set(env, IOPRIO_PRIO_VALUE(class, priority));
+#endif
+}
+
 
 /*
  * Class:     org_apache_hadoop_io_nativeio_NativeIO_POSIX
