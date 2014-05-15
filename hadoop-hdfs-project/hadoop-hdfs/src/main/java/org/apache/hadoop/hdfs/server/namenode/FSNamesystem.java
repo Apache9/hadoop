@@ -84,6 +84,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_DEFAU
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSER_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSER_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_KEY;
@@ -392,6 +394,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private final UserGroupInformation fsOwner;
   private final String fsOwnerShortUserName;
   private final String supergroup;
+  private final String superuser;
   private final boolean standbyShouldCheckpoint;
   
   // Scan interval is not configurable.
@@ -804,6 +807,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       this.fsOwnerShortUserName = fsOwner.getShortUserName();
       this.supergroup = conf.get(DFS_PERMISSIONS_SUPERUSERGROUP_KEY, 
                                  DFS_PERMISSIONS_SUPERUSERGROUP_DEFAULT);
+      this.superuser = conf.get(DFS_PERMISSIONS_SUPERUSER_KEY,
+                                DFS_PERMISSIONS_SUPERUSER_DEFAULT);
       this.isPermissionEnabled = conf.getBoolean(DFS_PERMISSIONS_ENABLED_KEY,
                                                  DFS_PERMISSIONS_ENABLED_DEFAULT);
       LOG.info("fsOwner             = " + fsOwner);
@@ -3932,7 +3937,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private FSPermissionChecker getPermissionChecker()
       throws AccessControlException {
     try {
-      return new FSPermissionChecker(fsOwnerShortUserName, supergroup, getRemoteUser());
+      return new FSPermissionChecker(fsOwnerShortUserName, superuser,
+          supergroup, getRemoteUser());
     } catch (IOException ioe) {
       throw new AccessControlException(ioe);
     }
