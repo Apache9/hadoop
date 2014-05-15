@@ -256,6 +256,14 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String HADOOP_SECURITY_UID_NAME_CACHE_TIMEOUT_KEY =
     "hadoop.security.uid.cache.secs";
 
+  /*The hadoop client keytab path*/
+  public static final String HADOOP_CLIENT_KEYTAB_FILE =
+      "hadoop.client.keytab.file";
+
+  /*The hadoop kerberos principal*/
+  public static final String HADOOP_CLIENT_KERBEROS_PRINCIPAL =
+      "hadoop.client.kerberos.principal";
+
   public static final long HADOOP_SECURITY_UID_NAME_CACHE_TIMEOUT_DEFAULT =
     4*60*60; // 4 hours
   

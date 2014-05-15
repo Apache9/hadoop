@@ -56,6 +56,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
@@ -745,6 +746,15 @@ public class UserGroupInformation {
   public synchronized 
   static UserGroupInformation getLoginUser() throws IOException {
     if (loginUser == null) {
+      if (isSecurityEnabled()) {
+        try {
+          tryLoginFromKeytab();
+          return loginUser;
+        } catch (IOException ioe) {
+          LOG.info("Can't login from keytab, try to login from ticket cache");
+        }
+      }
+
       loginUserFromSubject(null);
     }
     return loginUser;
@@ -809,6 +819,26 @@ public class UserGroupInformation {
     loginUser = ugi;
   }
   
+  /**
+   * Try to login from the user specified principal and keytab file
+   * @throws IOException
+   */
+  private static void tryLoginFromKeytab()
+      throws IOException {
+    String keytabFile = conf.get(
+        CommonConfigurationKeys.HADOOP_CLIENT_KEYTAB_FILE);
+    String principal = conf.get(
+        CommonConfigurationKeys.HADOOP_CLIENT_KERBEROS_PRINCIPAL);
+
+    if (keytabFile != null && principal != null &&
+        keytabFile.length() != 0 && principal.length() != 0) {
+      loginUserFromKeytab(principal, keytabFile);
+    } else {
+      throw new IOException("Invalid keytab: " + keytabFile +
+          " and principal:" + principal);
+    }
+  }
+
   /**
    * Is this user logged in from a keytab file?
    * @return true if the credentials are from a keytab file.
