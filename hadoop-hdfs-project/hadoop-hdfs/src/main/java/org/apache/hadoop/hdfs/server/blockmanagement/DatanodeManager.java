@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.net.InetAddresses;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -989,6 +990,27 @@ public class DatanodeManager {
       }
     }
   }
+
+  /**
+   * Reload the rack info
+   */
+  public void refreshTopology() {
+    if (dnsToSwitchMapping instanceof CachedDNSToSwitchMapping) {
+      ((CachedDNSToSwitchMapping) dnsToSwitchMapping).clearMappingCache();
+
+      List<String> addressList = new LinkedList<String>();
+      EntrySet entrySet = hostFileManager.getIncludes();
+      Iterator<Entry> iter = entrySet.iterator();
+      while (iter.hasNext()) {
+        addressList.add(iter.next().getPrefix());
+      }
+
+      dnsToSwitchMapping.resolve(addressList);
+    } else {
+      LOG.warn("refreshTopology is only support on " + 
+      "CachedDNSToSwitchMapping currently");
+    }
+  }  
 
   /** @return the number of live datanodes. */
   public int getNumLiveDataNodes() {

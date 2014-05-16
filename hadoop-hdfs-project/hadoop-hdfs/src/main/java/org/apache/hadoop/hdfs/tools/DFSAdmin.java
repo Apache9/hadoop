@@ -655,6 +655,7 @@ public class DFSAdmin extends FsShell {
       "\t[-refreshSuperUserGroupsConfiguration]\n" +
       "\t[-refreshCallQueue]\n" +
       "\t[-printTopology]\n" +
+      "\t[-refreshTopology]\n" +
       "\t[-refreshNamenodes datanodehost:port]\n"+
       "\t[-deleteBlockPool datanodehost:port blockpoolId [force]]\n"+
       "\t[-setBalancerBandwidth <bandwidth>]\n" +
@@ -729,7 +730,10 @@ public class DFSAdmin extends FsShell {
 
     String printTopology = "-printTopology: Print a tree of the racks and their\n" +
                            "\t\tnodes as reported by the Namenode\n";
-    
+
+    String refreshTopology = "-refreshTopology: reloads the configuration of the racks and their\n" +
+        "\t\tnodes as reported by the Namenode\n";
+
     String refreshNamenodes = "-refreshNamenodes: Takes a datanodehost:port as argument,\n"+
                               "\t\tFor the given datanode, reloads the configuration files,\n" +
                               "\t\tstops serving the removed block-pools\n"+
@@ -813,6 +817,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(refreshCallQueue);
     } else if ("printTopology".equals(cmd)) {
       System.out.println(printTopology);
+    } else if ("refreshTopology".equals(cmd)) {
+      System.out.println(refreshTopology);
     } else if ("refreshNamenodes".equals(cmd)) {
       System.out.println(refreshNamenodes);
     } else if ("deleteBlockPool".equals(cmd)) {
@@ -956,7 +962,21 @@ public class DFSAdmin extends FsShell {
       }
     return 0;
   }
-  
+
+  /**
+   * Reload the configuration of the racks and their nodes in namenode.
+   * 
+   * @throws IOException
+   */
+  public int refreshTopology() throws IOException {
+    int exitCode = -1;
+    DistributedFileSystem dfs = getDFS();
+    dfs.refreshTopology();
+    exitCode = 0;
+   
+    return exitCode;
+  }
+
   private static UserGroupInformation getUGI() 
   throws IOException {
     return UserGroupInformation.getCurrentUser();
@@ -1127,6 +1147,9 @@ public class DFSAdmin extends FsShell {
     } else if ("-printTopology".equals(cmd)) {
       System.err.println("Usage: java DFSAdmin"
                          + " [-printTopology]");
+    } else if ("-refreshTopology".equals(cmd)) {
+      System.err.println("Usage: java DFSAdmin"
+                         + " [-refreshTopology]");
     } else if ("-refreshNamenodes".equals(cmd)) {
       System.err.println("Usage: java DFSAdmin"
                          + " [-refreshNamenodes datanode-host:port]");
@@ -1158,6 +1181,7 @@ public class DFSAdmin extends FsShell {
       System.err.println("           [-refreshSuperUserGroupsConfiguration]");
       System.err.println("           [-refreshCallQueue]");
       System.err.println("           [-printTopology]");
+      System.err.println("           [-refreshTopology]");
       System.err.println("           [-refreshNamenodes datanodehost:port]");
       System.err.println("           [-deleteBlockPool datanode-host:port blockpoolId [force]]");
       System.err.println("           ["+SetQuotaCommand.USAGE+"]");
@@ -1264,6 +1288,11 @@ public class DFSAdmin extends FsShell {
         printUsage(cmd);
         return exitCode;
       }
+    } else if ("-refreshTopology".equals(cmd)) {
+      if(argv.length != 1) {
+        printUsage(cmd);
+        return exitCode;
+      }
     } else if ("-refreshNamenodes".equals(cmd)) {
       if (argv.length != 2) {
         printUsage(cmd);
@@ -1351,6 +1380,8 @@ public class DFSAdmin extends FsShell {
         exitCode = refreshCallQueue();
       } else if ("-printTopology".equals(cmd)) {
         exitCode = printTopology();
+      } else if ("-refreshTopology".equals(cmd)) {
+        exitCode = refreshTopology();
       } else if ("-refreshNamenodes".equals(cmd)) {
         exitCode = refreshNamenodes(argv, i);
       } else if ("-deleteBlockPool".equals(cmd)) {
