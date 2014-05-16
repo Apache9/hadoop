@@ -106,12 +106,14 @@ public class ServiceAuthorizationManager {
     if((clientPrincipal != null && !clientPrincipal.equals(user.getUserName())) || 
         !acl.isUserAllowed(user)) {
       AUDITLOG.warn(AUTHZ_FAILED_FOR + user + " for protocol=" + protocol
-          + ", expected client Kerberos principal is " + clientPrincipal);
+          + " and addr=" + addr + ", expected client Kerberos principal is "
+          + clientPrincipal);
       throw new AuthorizationException("User " + user + 
           " is not authorized for protocol " + protocol + 
           ", expected client Kerberos principal is " + clientPrincipal);
     }
-    AUDITLOG.info(AUTHZ_SUCCESSFUL_FOR + user + " for protocol="+protocol);
+    AUDITLOG.info(AUTHZ_SUCCESSFUL_FOR + user + " for protocol="+protocol +
+        " and addr=" + addr);
   }
 
   public synchronized void refresh(Configuration conf,
