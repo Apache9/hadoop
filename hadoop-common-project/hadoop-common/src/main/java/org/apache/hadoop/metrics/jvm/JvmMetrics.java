@@ -29,6 +29,11 @@ import org.apache.hadoop.metrics.MetricsContext;
 import org.apache.hadoop.metrics.MetricsRecord;
 import org.apache.hadoop.metrics.MetricsUtil;
 import org.apache.hadoop.metrics.Updater;
+import org.apache.hadoop.metrics.util.MetricsBase;
+import org.apache.hadoop.metrics.util.MetricsFloatValue;
+import org.apache.hadoop.metrics.util.MetricsIntValue;
+import org.apache.hadoop.metrics.util.MetricsLongValue;
+import org.apache.hadoop.metrics.util.MetricsRegistry;
 
 import static java.lang.Thread.State.*;
 import java.lang.management.GarbageCollectorMXBean;
@@ -49,17 +54,54 @@ public class JvmMetrics implements Updater {
     private static JvmMetrics theInstance = null;
     private static Log log = LogFactory.getLog(JvmMetrics.class);
     
+    private final MetricsRegistry registry = new MetricsRegistry();
     private MetricsRecord metrics;
     
+    private final JvmStatistics jvmStatistics;
+    
+    // The metrics variables are private and only read by JMX through registry.
     // garbage collection counters
-    private long gcCount = 0;
-    private long gcTimeMillis = 0;
+    private MetricsLongValue gcCount =
+        new MetricsLongValue("gcCount", registry);
+    private MetricsLongValue gcTimeMillis =
+        new MetricsLongValue("gcTimeMillis", registry);
     
     // logging event counters
-    private long fatalCount = 0;
-    private long errorCount = 0;
-    private long warnCount  = 0;
-    private long infoCount  = 0;
+    private MetricsLongValue fatalCount =
+        new MetricsLongValue("fatalCount", registry);
+    private MetricsLongValue errorCount =
+        new MetricsLongValue("errorCount", registry);
+    private MetricsLongValue warnCount =
+        new MetricsLongValue("warnCount", registry);
+    private MetricsLongValue infoCount =
+        new MetricsLongValue("infoCount", registry);
+    
+    // memory usage counters
+    private MetricsFloatValue memNonHeapUsedM =
+        new MetricsFloatValue("memNonHeapUsedM", registry);
+    private MetricsFloatValue memNonHeapCommittedM =
+        new MetricsFloatValue("memNonHeapCommittedM", registry);
+    private MetricsFloatValue memHeapUsedM =
+        new MetricsFloatValue("memHeapUsedM", registry);
+    private MetricsFloatValue memHeapCommittedM =
+        new MetricsFloatValue("memHeapCommittedM", registry);
+    private MetricsFloatValue maxMemoryM =
+        new MetricsFloatValue("maxMemoryM", registry);
+    
+    // thread counters
+    private MetricsIntValue threadsNew =
+        new MetricsIntValue("threadsNew", registry);
+    private MetricsIntValue threadsRunnable =
+        new MetricsIntValue("threadsRunnable", registry);
+    private MetricsIntValue threadsBlocked =
+        new MetricsIntValue("threadsBlocked", registry);
+    private MetricsIntValue threadsWaiting =
+        new MetricsIntValue("threadsWaiting", registry);
+    private MetricsIntValue threadsTimedWaiting =
+        new MetricsIntValue("threadsTimedWaiting", registry);
+    private MetricsIntValue threadsTerminated =
+        new MetricsIntValue("threadsTerminated", registry);
+   
     
     public synchronized static JvmMetrics init(String processName, String sessionId) {
       return init(processName, sessionId, "metrics");
@@ -88,6 +130,8 @@ public class JvmMetrics implements Updater {
         metrics.setTag("processName", processName);
         metrics.setTag("sessionId", sessionId);
         context.registerUpdater(this);
+        
+        jvmStatistics = new JvmStatistics(this.registry, processName);
     }
     
     /**
@@ -99,6 +143,11 @@ public class JvmMetrics implements Updater {
         doGarbageCollectionUpdates();
         doThreadUpdates();
         doEventCountUpdates();
+
+        // Both getMetricsList() and pushMetric() are thread-safe
+        for (MetricsBase m : registry.getMetricsList()) {
+          m.pushMetric(metrics);
+        }
         metrics.update();
     }
     
@@ -111,11 +160,11 @@ public class JvmMetrics implements Updater {
                 memoryMXBean.getHeapMemoryUsage();
         Runtime runtime = Runtime.getRuntime();
 
-        metrics.setMetric("memNonHeapUsedM", memNonHeap.getUsed()/M);
-        metrics.setMetric("memNonHeapCommittedM", memNonHeap.getCommitted()/M);
-        metrics.setMetric("memHeapUsedM", memHeap.getUsed()/M);
-        metrics.setMetric("memHeapCommittedM", memHeap.getCommitted()/M);
-        metrics.setMetric("maxMemoryM", runtime.maxMemory()/M);
+        memNonHeapUsedM.set(memNonHeap.getUsed()/M);
+        memNonHeapCommittedM.set(memNonHeap.getCommitted()/M);
+        memHeapUsedM.set(memHeap.getUsed()/M);
+        memHeapCommittedM.set(memHeap.getCommitted()/M);
+        maxMemoryM.set(runtime.maxMemory()/M);
     }
     
     private void doGarbageCollectionUpdates() {
@@ -127,11 +176,8 @@ public class JvmMetrics implements Updater {
             count += gcBean.getCollectionCount();
             timeMillis += gcBean.getCollectionTime();
         }
-        metrics.incrMetric("gcCount", (int)(count - gcCount));
-        metrics.incrMetric("gcTimeMillis", (int)(timeMillis - gcTimeMillis));
-        
-        gcCount = count;
-        gcTimeMillis = timeMillis;
+        gcCount.set(count);
+        gcTimeMillis.set(timeMillis);
     }
     
     private void doThreadUpdates() {
@@ -172,28 +218,23 @@ public class JvmMetrics implements Updater {
                 threadsTerminated++;
             }
         }
-        metrics.setMetric("threadsNew", threadsNew);
-        metrics.setMetric("threadsRunnable", threadsRunnable);
-        metrics.setMetric("threadsBlocked", threadsBlocked);
-        metrics.setMetric("threadsWaiting", threadsWaiting);
-        metrics.setMetric("threadsTimedWaiting", threadsTimedWaiting);
-        metrics.setMetric("threadsTerminated", threadsTerminated);
+        this.threadsNew.set(threadsNew);
+        this.threadsRunnable.set(threadsRunnable);
+        this.threadsBlocked.set(threadsBlocked);
+        this.threadsWaiting.set(threadsWaiting);
+        this.threadsTimedWaiting.set(threadsTimedWaiting);
+        this.threadsTerminated.set(threadsTerminated);
     }
     
     private void doEventCountUpdates() {
-        long newFatal = EventCounter.getFatal();
-        long newError = EventCounter.getError();
-        long newWarn  = EventCounter.getWarn();
-        long newInfo  = EventCounter.getInfo();
-        
-        metrics.incrMetric("logFatal", (int)(newFatal - fatalCount));
-        metrics.incrMetric("logError", (int)(newError - errorCount));
-        metrics.incrMetric("logWarn",  (int)(newWarn - warnCount));
-        metrics.incrMetric("logInfo",  (int)(newInfo - infoCount));
-        
-        fatalCount = newFatal;
-        errorCount = newError;
-        warnCount  = newWarn;
-        infoCount  = newInfo;
+        fatalCount.set(EventCounter.getFatal());
+        errorCount.set(EventCounter.getError());
+        warnCount.set(EventCounter.getWarn());
+        infoCount.set(EventCounter.getInfo());
+    }
+
+    public void shutdown() {
+      if (jvmStatistics != null)
+        jvmStatistics.shutdown();
     }
 }
