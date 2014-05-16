@@ -111,6 +111,9 @@ public abstract class MetricsDynamicMBeanBase implements DynamicMBean {
       } else if ( MetricsLongValue.class.isInstance(o) || MetricsTimeVaryingLong.class.isInstance(o) ) {
         attributesInfo.add(new MBeanAttributeInfo(o.getName(), "java.lang.Long",
             o.getDescription(), true, false, false));     
+      } else if ( MetricsFloatValue.class.isInstance(o) ) {
+        attributesInfo.add(new MBeanAttributeInfo(o.getName(), "java.lang.Float",
+            o.getDescription(), true, false, false));     
       } else {
         MetricsUtil.LOG.error("unknown metrics type: " + o.getClass().getName());
       }
@@ -145,6 +148,8 @@ public abstract class MetricsDynamicMBeanBase implements DynamicMBean {
       return ((MetricsIntValue) o).get();
     else if (o instanceof MetricsLongValue)
       return ((MetricsLongValue) o).get();
+    else if (o instanceof MetricsFloatValue)
+      return ((MetricsFloatValue) o).get();
     else if (o instanceof MetricsTimeVaryingInt)
       return ((MetricsTimeVaryingInt) o).getPreviousIntervalValue();
     else if (o instanceof MetricsTimeVaryingLong)
