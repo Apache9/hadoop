@@ -4,6 +4,7 @@ cc_library(
     "src/main/native/libhdfs/exception.c",
     "src/main/native/libhdfs/hdfs.c",
     "src/main/native/libhdfs/jni_helper.c",
+    "src/main/native/libhdfs/sequence_file.c",
   ],
   incs = [
     "/opt/soft/jdk/include",
