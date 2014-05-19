@@ -154,7 +154,7 @@ int SequenceFileSync(SequenceFileWriter writer) {
   return 0;
 }
 
-int SequenceFileHFlush(SequenceFileWriter writer) {
+int SequenceFileHFlush(SequenceFileWriter writer, int update_length) {
   JNIEnv* env = getJNIEnv();
   if (env == NULL) {
     errno = EINTERNAL;
@@ -168,10 +168,11 @@ int SequenceFileHFlush(SequenceFileWriter writer) {
   }
 
   jobject jWriter = (jobject) writer;
+  jboolean jUpdateLength = update_length ? JNI_TRUE : JNI_FALSE;
   jthrowable jThr;
 
   jThr = invokeMethod(env, NULL, INSTANCE, jWriter,
-      WRITER_CLASS, "hflush", "()V");
+      WRITER_CLASS, "hflush", "()V", jUpdateLength);
   if (jThr) {
     errno = printExceptionAndFree(env, jThr, PRINT_EXC_ALL,
         "SequenceFileHFlush: hflush");
@@ -180,7 +181,7 @@ int SequenceFileHFlush(SequenceFileWriter writer) {
   return 0;
 }
 
-int SequenceFileHSync(SequenceFileWriter writer) {
+int SequenceFileHSync(SequenceFileWriter writer, int update_length) {
   JNIEnv* env = getJNIEnv();
   if (env == NULL) {
     errno = EINTERNAL;
@@ -194,10 +195,11 @@ int SequenceFileHSync(SequenceFileWriter writer) {
   }
 
   jobject jWriter = (jobject) writer;
+  jboolean jUpdateLength = update_length ? JNI_TRUE : JNI_FALSE;
   jthrowable jThr;
 
   jThr = invokeMethod(env, NULL, INSTANCE, jWriter,
-      WRITER_CLASS, "hsync", "()V");
+      WRITER_CLASS, "hsync", "()V", jUpdateLength);
   if (jThr) {
     errno = printExceptionAndFree(env, jThr, PRINT_EXC_ALL,
         "SequenceFileHSync: hsync");

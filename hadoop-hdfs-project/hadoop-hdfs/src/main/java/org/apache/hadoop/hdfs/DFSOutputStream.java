@@ -1943,14 +1943,13 @@ public class DFSOutputStream extends FSOutputSummer
    */
   @Override
   public void hflush() throws IOException {
-    flushOrSync(false, EnumSet.noneOf(SyncFlag.class));
+    hflush(EnumSet.noneOf(SyncFlag.class));
   }
 
-  @Override
-  public void hsync() throws IOException {
-    hsync(EnumSet.noneOf(SyncFlag.class));
+  public void hflush(EnumSet<SyncFlag> syncFlags) throws IOException {
+    flushOrSync(false, syncFlags);
   }
-  
+
   /**
    * The expected semantics is all data have flushed out to all replicas 
    * and all replicas have done posix fsync equivalent - ie the OS has 
@@ -1964,6 +1963,11 @@ public class DFSOutputStream extends FSOutputSummer
    *          Indicate the semantic of the sync. Currently used to specify
    *          whether or not to update the block length in NameNode.
    */
+  @Override
+  public void hsync() throws IOException {
+    hsync(EnumSet.noneOf(SyncFlag.class));
+  }
+  
   public void hsync(EnumSet<SyncFlag> syncFlags) throws IOException {
     flushOrSync(true, syncFlags);
   }

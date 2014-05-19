@@ -79,6 +79,19 @@ public class HdfsDataOutputStream extends FSDataOutputStream {
   }
   
   /**
+   * Flush buffered data to DataNodes (visible for reading, but not necessarily
+   * flush to disk devices).
+   * 
+   * @param syncFlags
+   *          Indicate the detailed semantic and actions of the hflush.
+   * @throws IOException
+   * @see FSDataOutputStream#hflush()
+   */
+  public void hflush(EnumSet<SyncFlag> syncFlags) throws IOException {
+    ((DFSOutputStream) getWrappedStream()).hflush(syncFlags);
+  }
+  
+  /**
    * Sync buffered data to DataNodes (flush to disk devices).
    * 
    * @param syncFlags

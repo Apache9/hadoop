@@ -1,12 +1,15 @@
 package com.xiaomi.infra.hadoop.io;
 
 import java.io.IOException;
+import java.util.EnumSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
 
 public class SequenceFileWriter {
@@ -42,14 +45,30 @@ public class SequenceFileWriter {
     writer.sync();
   }
 
-  public void hflush() throws IOException {
+  public void hflush(boolean updateLength) throws IOException {
+    if (updateLength) {
+      FSDataOutputStream outputStream = writer.getStream();
+      if (outputStream instanceof HdfsDataOutputStream) {
+        ((HdfsDataOutputStream)outputStream).hflush(
+            EnumSet.of(HdfsDataOutputStream.SyncFlag.UPDATE_LENGTH));
+        return;
+      }
+    }
     writer.hflush();
   }
 
-  public void hsync() throws IOException {
+  public void hsync(boolean updateLength) throws IOException {
+    if (updateLength) {
+      FSDataOutputStream outputStream = writer.getStream();
+      if (outputStream instanceof HdfsDataOutputStream) {
+        ((HdfsDataOutputStream)outputStream).hsync(
+            EnumSet.of(HdfsDataOutputStream.SyncFlag.UPDATE_LENGTH));
+        return;
+      }
+    }
     writer.hsync();
   }
-  
+
   public void close() throws IOException {
     writer.close();
   }

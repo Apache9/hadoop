@@ -1362,6 +1362,10 @@ public class SequenceFile {
       return out.getPos();
     }
 
+    public FSDataOutputStream getStream() {
+      return out;
+    }
+
   } // class Writer
 
   /** Write key/compressed-value pairs to a sequence-format file. */
