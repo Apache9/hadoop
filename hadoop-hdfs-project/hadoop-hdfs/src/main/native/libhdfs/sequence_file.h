@@ -52,17 +52,21 @@ int SequenceFileSync(SequenceFileWriter writer);
  * SequenceFileHFlush - HFlush the underlying HDFS file.
  * See SequenceFile.Writer.hflush() for the details.
  * @param writer The handle of the sequence file writer.
+ * @param update_length Update the metadata (block length) in the namenode if
+ * non-zero.
  * @return Returns 0 on success, -1 on error.  
  */
-int SequenceFileHFlush(SequenceFileWriter writer);
+int SequenceFileHFlush(SequenceFileWriter writer, int update_length);
 
 /** 
  * SequenceFileHSync - HSync the underlying HDFS file.
  * See SequenceFile.Writer.hsync() for the details.
  * @param writer The handle of the sequence file writer.
+ * @param update_length Update the metadata (block length) in the namenode if
+ * non-zero.
  * @return Returns 0 on success, -1 on error.  
  */
-int SequenceFileHSync(SequenceFileWriter writer);
+int SequenceFileHSync(SequenceFileWriter writer, int update_length);
 
 /** 
  * SequenceFileClose - Close the sequence file writer.
