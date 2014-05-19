@@ -3659,11 +3659,6 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     readLock();
     try {
       checkOperation(OperationCategory.READ);
-
-      if (isPermissionEnabled) {
-        FSPermissionChecker pc = getPermissionChecker();
-        checkPermission(pc, src, false, null, null, null, FsAction.READ_EXECUTE);
-      }
       return dir.getQuotaSummary(src);
     } finally {
       readUnlock();
