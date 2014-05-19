@@ -54,6 +54,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIO;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 
@@ -69,7 +70,8 @@ class BlockReceiver implements Closeable {
 
   @VisibleForTesting
   static long CACHE_DROP_LAG_BYTES = 8 * 1024 * 1024;
-  
+
+  private static final int SLOW_LOG_THRESHOLD_MS = 100;
   private DataInputStream in = null; // from where data are read
   private DataChecksum clientChecksum; // checksum used by client
   private DataChecksum diskChecksum; // checksum we write to disk
@@ -340,6 +342,7 @@ class BlockReceiver implements Closeable {
    */
   void flushOrSync(boolean isSync) throws IOException {
     long flushTotalNanos = 0;
+    long begin = System.nanoTime();
     if (checksumOut != null) {
       long flushStartNanos = System.nanoTime();
       checksumOut.flush();
@@ -367,6 +370,11 @@ class BlockReceiver implements Closeable {
       if (isSync) {
     	  datanode.metrics.incrFsyncCount();      
       }
+    }
+    long end = System.nanoTime();
+    if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
+      LOG.info("flushOrSync cost:" + (end - begin) + "ns, isSync:" + isSync + ", flushTotalNanos="
+          + flushTotalNanos);
     }
   }
 
@@ -493,8 +501,13 @@ class BlockReceiver implements Closeable {
     //First write the packet to the mirror:
     if (mirrorOut != null && !mirrorError) {
       try {
+        long t1 = Time.monotonicNow();
         packetReceiver.mirrorPacketTo(mirrorOut);
         mirrorOut.flush();
+        long t2 = Time.monotonicNow();
+        if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
+          LOG.info("write the packet to the mirror cost:" + (t2 - t1) + "ms");
+        }
       } catch (IOException e) {
         handleMirrorOutError(e);
       }
@@ -585,7 +598,13 @@ class BlockReceiver implements Closeable {
           }
 
           // Write data to disk.
+          long t1 = Time.monotonicNow();
           out.write(dataBuf.array(), startByteToDisk, numBytesToDisk);
+          long t2 = Time.monotonicNow();
+          if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
+            LOG.info("BlockReceiver write data to disk cost:"
+                + (t2 - t1) + "ms");
+          }
 
           // If this is a partial chunk, then verify that this is the only
           // chunk in the packet. Calculate new crc for this chunk.
@@ -660,6 +679,7 @@ class BlockReceiver implements Closeable {
         // start                  last                      curPos
         // of file                 
         //
+        long t1 =  Time.monotonicNow();
         if (syncBehindWrites) {
           NativeIO.POSIX.syncFileRangeIfPossible(outFd,
               lastCacheManagementOffset,
@@ -683,6 +703,10 @@ class BlockReceiver implements Closeable {
               NativeIO.POSIX.POSIX_FADV_DONTNEED);
         }
         lastCacheManagementOffset = offsetInBlock;
+        long t2 =  Time.monotonicNow();
+        if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
+          LOG.info("dropOsCacheBehindWriter cost:" + (t2 - t1) + "ms");
+        }
       }
     } catch (Throwable t) {
       LOG.warn("Error managing cache for writer of block " + block, t);
@@ -1316,9 +1340,14 @@ class BlockReceiver implements Closeable {
         replicaInfo.setBytesAcked(offsetInBlock);
       }
       // send my ack back to upstream datanode
+      long t1 = Time.monotonicNow();
       replyAck.write(upstreamOut);
       upstreamOut.flush();
-      if (LOG.isDebugEnabled()) {
+      long t2 = Time.monotonicNow();
+      if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
+        LOG.info("PacketResponder send ack to upstream cost:" + (t2 - t1)
+            + "ms, " + myString + ", replyAck=" + replyAck);
+      } else if (LOG.isDebugEnabled()) {
         LOG.debug(myString + ", replyAck=" + replyAck);
       }
 

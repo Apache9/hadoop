@@ -122,7 +122,11 @@ public class DFSOutputStream extends FSOutputSummer
     implements Syncable, CanSetDropBehind {
   private final DFSClient dfsClient;
   private static final int MAX_PACKETS = 80; // each packet 64K, total 5MB
+<<<<<<< HEAD
+  private static final int SLOW_LOG_THRESHOLD_MS = 100;
+=======
   private static final int SLOW_LOG_THRESHOLD_MS = 30;
+>>>>>>> hadoop-2.4.0-mdh2
   private Socket s;
   // closed is accessed by different threads under different locks.
   private volatile boolean closed = false;
