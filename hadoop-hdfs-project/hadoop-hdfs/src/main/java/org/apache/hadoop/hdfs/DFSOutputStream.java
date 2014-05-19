@@ -122,6 +122,7 @@ public class DFSOutputStream extends FSOutputSummer
     implements Syncable, CanSetDropBehind {
   private final DFSClient dfsClient;
   private static final int MAX_PACKETS = 80; // each packet 64K, total 5MB
+  private static final int SLOW_LOG_THRESHOLD_MS = 30;
   private Socket s;
   // closed is accessed by different threads under different locks.
   private volatile boolean closed = false;
@@ -795,11 +796,16 @@ public class DFSOutputStream extends FSOutputSummer
           // process responses from datanodes.
           try {
             // read an ack from the pipeline
+            long t1 = Time.monotonicNow();
             ack.readFields(blockReplyStream);
-            if (DFSClient.LOG.isDebugEnabled()) {
+            long t2 = Time.monotonicNow();
+            if (t2 - t1 > SLOW_LOG_THRESHOLD_MS && ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
+              DFSClient.LOG.info("ResponseProcessorReadAckCost:" + (t2 - t1) + "ms,ack:" + ack
+                  + ",targets:" + Arrays.asList(targets));
+            } else if (DFSClient.LOG.isDebugEnabled()) {
               DFSClient.LOG.debug("DFSClient " + ack);
             }
-            
+
             long seqno = ack.getSeqno();
             // processes response status from datanodes.
             for (int i = ack.getNumOfReplies()-1; i >=0  && dfsClient.clientRunning; i--) {
@@ -2047,6 +2053,7 @@ public class DFSOutputStream extends FSOutputSummer
       DFSClient.LOG.debug("Waiting for ack for: " + seqno);
     }
     try {
+      long t1 = Time.monotonicNow();
       synchronized (dataQueue) {
         while (!closed) {
           checkClosed();
@@ -2061,6 +2068,10 @@ public class DFSOutputStream extends FSOutputSummer
                 "Interrupted while waiting for data to be acknowledged by pipeline");
           }
         }
+      }
+      long t2 = Time.monotonicNow();
+      if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
+        DFSClient.LOG.info("waitForAckedSeqno cost:" + (t2 - t1) + "ms");
       }
       checkClosed();
     } catch (ClosedChannelException e) {
