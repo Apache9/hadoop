@@ -1032,6 +1032,11 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   }
 
   @Override
+  public ReplicaInfo deleteBlock(String bpid, long blockId) {
+    return null;
+  }
+
+  @Override
   public ReplicaInPipelineInterface convertTemporaryToRbw(ExtendedBlock temporary)
       throws IOException {
     final Map<Block, BInfo> map = blockMap.get(temporary.getBlockPoolId());

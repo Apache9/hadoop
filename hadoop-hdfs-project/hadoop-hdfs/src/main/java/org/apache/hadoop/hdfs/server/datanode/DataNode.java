@@ -1595,6 +1595,14 @@ public class DataNode extends Configured
      */
     @Override
     public void run() {
+      try {
+        doRun();
+      } catch (IOException ioe) {
+        // do nothing
+      }
+    }
+
+    public void doRun() throws IOException {
       xmitsInProgress.getAndIncrement();
       Socket sock = null;
       DataOutputStream out = null;
@@ -1674,13 +1682,14 @@ public class DataNode extends Configured
       } catch (IOException ie) {
         LOG.warn(bpReg + ":Failed to transfer " + b + " to " +
             targets[0] + " got ", ie);
-          // check if there are any disk problem
+        // check if there are any disk problem
         try{
           checkDiskError(ie);
         } catch(IOException e) {
-            LOG.warn("DataNode.checkDiskError failed in run() with: ", e);
+          LOG.warn("DataNode.checkDiskError failed in run() with: ", e);
+          throw e;
         }
-        
+        throw ie;
       } finally {
         xmitsInProgress.getAndDecrement();
         IOUtils.closeStream(blockSender);
@@ -2355,7 +2364,7 @@ public class DataNode extends Configured
     b.setNumBytes(visible);
 
     if (targets.length > 0) {
-      new DataTransfer(targets, b, stage, client).run();
+      new DataTransfer(targets, b, stage, client).doRun();
     }
   }
 

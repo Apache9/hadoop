@@ -50,7 +50,8 @@ public class DatanodeInfo extends DatanodeID implements Node {
   private int xceiverCount;
   private String location = NetworkTopology.DEFAULT_RACK;
   private String softwareVersion;
-  
+  private long failedTime = -1L; // only used in DFSOutputStream
+
   // Datanode administrative states
   public enum AdminStates {
     NORMAL("In Service"), 
@@ -466,5 +467,13 @@ public class DatanodeInfo extends DatanodeID implements Node {
 
   public void setSoftwareVersion(String softwareVersion) {
     this.softwareVersion = softwareVersion;
+  }
+
+  public void setFailedTime(long time) {
+    this.failedTime = time;
+  }
+
+  public long getFailedTime() {
+    return this.failedTime;
   }
 }

@@ -352,6 +352,8 @@ public class DFSOutputStream extends FSOutputSummer
 
     /** Nodes have been used in the pipeline before and have failed. */
     private final List<DatanodeInfo> failed = new ArrayList<DatanodeInfo>();
+    private int retryCount = 0;
+
     /** The last ack sequence number before pipeline failure. */
     private long lastAckedSeqnoBeforeFailure = -1;
     private int pipelineRecoveryCount = 0;
@@ -1016,10 +1018,26 @@ public class DFSOutputStream extends FSOutputSummer
 
       //get a new datanode
       final DatanodeInfo[] original = nodes;
-      final LocatedBlock lb = dfsClient.namenode.getAdditionalDatanode(
-          src, block, nodes, storageIDs,
-          failed.toArray(new DatanodeInfo[failed.size()]),
-          1, dfsClient.clientName);
+      LocatedBlock lb = null;
+      do {
+        lb = dfsClient.namenode.getAdditionalDatanode(src, block, nodes,
+            storageIDs, failed.toArray(new DatanodeInfo[failed.size()]),
+            1, dfsClient.clientName);
+        nodes = lb.getLocations();
+
+        if (nodes.length == original.length + 1) {
+          break;
+        }
+
+        try {
+          Thread.sleep(1000);
+        } catch (InterruptedException e) {
+          // need do nothing
+        }
+
+        retryCount++;
+        refreshFailedDatanodes();
+      } while (retryCount < dfsClient.getConf().failedDatanodeMaxRetry);
       setPipeline(lb);
 
       //find the new datanode
@@ -1029,6 +1047,20 @@ public class DFSOutputStream extends FSOutputSummer
       final DatanodeInfo src = d == 0? nodes[1]: nodes[d - 1];
       final DatanodeInfo[] targets = {nodes[d]};
       transfer(src, targets, lb.getBlockToken());
+    }
+
+    private void refreshFailedDatanodes() {
+      List<DatanodeInfo> timeoutDatanodes = new ArrayList<DatanodeInfo>();
+      long currentTime = System.currentTimeMillis();
+      for (DatanodeInfo info: failed) {
+        if ((currentTime - info.getFailedTime()) / 1000 >=
+            dfsClient.getConf().failedDatanodeTimeout) {
+          timeoutDatanodes.add(info);
+        } else {
+          break;
+        }
+      }
+      failed.removeAll(timeoutDatanodes);
     }
 
     private void transfer(final DatanodeInfo src, final DatanodeInfo[] targets,
@@ -1133,6 +1165,7 @@ public class DFSOutputStream extends FSOutputSummer
           DFSClient.LOG.warn("Error Recovery for block " + block +
               " in pipeline " + pipelineMsg + 
               ": bad datanode " + nodes[errorIndex]);
+          nodes[errorIndex].setFailedTime(System.currentTimeMillis());
           failed.add(nodes[errorIndex]);
 
           DatanodeInfo[] newnodes = new DatanodeInfo[nodes.length-1];
@@ -1241,6 +1274,7 @@ public class DFSOutputStream extends FSOutputSummer
      * Returns the list of target datanodes.
      */
     private LocatedBlock nextBlockOutputStream() throws IOException {
+      retryCount = 0;
       LocatedBlock lb = null;
       DatanodeInfo[] nodes = null;
       int count = dfsClient.getConf().nBlockWriteRetry;

@@ -294,6 +294,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
     final long shortCircuitMmapCacheExpiryMs;
     final long shortCircuitMmapCacheRetryTimeout;
     final long shortCircuitCacheStaleThresholdMs;
+    final int failedDatanodeTimeout;
+    final int failedDatanodeMaxRetry;
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
@@ -431,6 +433,13 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
       datanodeRestartTimeout = conf.getLong(
           DFS_CLIENT_DATANODE_RESTART_TIMEOUT_KEY,
           DFS_CLIENT_DATANODE_RESTART_TIMEOUT_DEFAULT) * 1000;
+
+      failedDatanodeTimeout = conf.getInt(
+          DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_TIMEOUT,
+          DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_TIMEOUT_DEFAULT);
+      failedDatanodeMaxRetry = conf.getInt(
+          DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_MAX_RETRY,
+          DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT);
     }
 
     private DataChecksum.Type getChecksumType(Configuration conf) {
