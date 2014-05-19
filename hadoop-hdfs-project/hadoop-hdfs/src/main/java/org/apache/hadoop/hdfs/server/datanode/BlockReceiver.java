@@ -603,11 +603,19 @@ class BlockReceiver implements Closeable {
             partialCrc = computePartialChunkCrc(onDiskLen, offsetInChecksum);
           }
 
-          int startByteToDisk = (int)(onDiskLen-firstByteInBlock) 
+          int skippedDataBytes = (int)(onDiskLen-firstByteInBlock);
+          int startByteToDisk = skippedDataBytes
               + dataBuf.arrayOffset() + dataBuf.position();
 
           int numBytesToDisk = (int)(offsetInBlock-onDiskLen);
-          
+          // Skip checksum bytes corresponding to skippedDataBytes
+          int skippedChecksumBytes = ((skippedDataBytes) / bytesPerChecksum) * checksumSize;
+
+          if(skippedDataBytes > 0 && LOG.isDebugEnabled()) {
+            LOG.debug("Skipped data bytes: " + skippedDataBytes +
+                ", skipped checksum bytes: " + skippedChecksumBytes);
+          }
+
           // Write data to disk.
           long begin = Time.monotonicNow();
           out.write(dataBuf.array(), startByteToDisk, numBytesToDisk);
@@ -644,7 +652,8 @@ class BlockReceiver implements Closeable {
             final int end = offset + checksumLen;
             lastCrc = copyLastChunkChecksum(checksumBuf.array(), checksumSize,
                 end);
-            checksumOut.write(checksumBuf.array(), offset, checksumLen);
+            checksumOut.write(checksumBuf.array(), offset + skippedChecksumBytes,
+                checksumLen - skippedChecksumBytes);
           }
 
           /// flush entire packet, sync if requested
