@@ -32,11 +32,9 @@ import org.apache.hadoop.fs.Path;
 
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
-
 // this class may not look useful now, but it's a placeholder for future
-// functionality to act as a registry for fs commands.  currently it's being
+// functionality to act as a registry for fs commands. currently it's being
 // used to implement unnecessary abstract methods in the base class
-
 abstract public class FsCommand extends Command {
   /**
    * Register the command classes used by the fs subcommand
@@ -53,6 +51,7 @@ abstract public class FsCommand extends Command {
     factory.registerCommands(Ls.class);
     factory.registerCommands(Mkdir.class);
     factory.registerCommands(MoveCommands.class);
+    factory.registerCommands(Quota.class);
     factory.registerCommands(SetReplication.class);
     factory.registerCommands(Stat.class);
     factory.registerCommands(Tail.class);

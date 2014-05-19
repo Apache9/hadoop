@@ -159,6 +159,7 @@ public class TestFilterFileSystem {
     public short getReplication(Path src) { return 0 ; }
     public void processDeleteOnExit() { }
     public ContentSummary getContentSummary(Path f) { return null; }
+    public QuotaSummary getQuotaSummary(Path f) { return null; }
     public FsStatus getStatus() { return null; }
     public FileStatus[] listStatus(Path f, PathFilter filter) { return null; }
     public FileStatus[] listStatus(Path[] files) { return null; }

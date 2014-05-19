@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.fs.PathIsNotDirectoryException;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.DFSUtil;
@@ -122,6 +123,18 @@ public class INodeDirectory extends INodeWithAdditionalFields
       quota = addDirectoryWithQuotaFeature(nsQuota, dsQuota);
       quota.setSpaceConsumed(c.get(Quota.NAMESPACE), c.get(Quota.DISKSPACE));
     }
+  }
+
+  @Override
+  public QuotaSummary getQuotaSummary() {
+    DirectoryWithQuotaFeature quota = getDirectoryWithQuotaFeature();
+    if (quota != null) {
+      return new QuotaSummary(quota.getSpaceConsumed().get(Quota.NAMESPACE),
+          quota.getQuota().get(Quota.NAMESPACE),
+          quota.getSpaceConsumed().get(Quota.DISKSPACE),
+          quota.getQuota().get(Quota.DISKSPACE));
+    }
+    return super.getQuotaSummary();
   }
 
   @Override

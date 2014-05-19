@@ -48,6 +48,7 @@ import org.apache.hadoop.fs.InvalidPathException;
 import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
@@ -929,6 +930,11 @@ class NameNodeRpcServer implements NamenodeProtocols {
   @Override // ClientProtocol
   public ContentSummary getContentSummary(String path) throws IOException {
     return namesystem.getContentSummary(path);
+  }
+
+  @Override // ClientProtocol
+  public QuotaSummary getQuotaSummary(String path) throws IOException {
+    return namesystem.getQuotaSummary(path);
   }
 
   @Override // ClientProtocol

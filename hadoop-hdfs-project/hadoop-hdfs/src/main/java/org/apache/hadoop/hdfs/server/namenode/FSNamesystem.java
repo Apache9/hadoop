@@ -144,6 +144,7 @@ import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
@@ -3650,6 +3651,22 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     } finally {
       readUnlock();
       logAuditEvent(success, "contentSummary", src);
+    }
+  }
+
+  QuotaSummary getQuotaSummary(String src) throws AccessControlException,
+      FileNotFoundException, UnresolvedLinkException, StandbyException {
+    readLock();
+    try {
+      checkOperation(OperationCategory.READ);
+
+      if (isPermissionEnabled) {
+        FSPermissionChecker pc = getPermissionChecker();
+        checkPermission(pc, src, false, null, null, null, FsAction.READ_EXECUTE);
+      }
+      return dir.getQuotaSummary(src);
+    } finally {
+      readUnlock();
     }
   }
 
