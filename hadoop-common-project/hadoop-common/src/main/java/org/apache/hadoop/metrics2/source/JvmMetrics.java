@@ -69,6 +69,12 @@ public class JvmMetrics implements MetricsSource {
   private JvmPauseMonitor pauseMonitor = null;
   final ConcurrentHashMap<String, MetricsInfo[]> gcInfoCache =
       new ConcurrentHashMap<String, MetricsInfo[]>();
+  private long previousGcCount;
+  private long previousGcTimeMillis;
+  private long previousFatalCount;
+  private long previousErrorCount;
+  private long previousWarnCount;
+  private long previousInfoCount;
 
   JvmMetrics(String processName, String sessionId) {
     this.processName = processName;
@@ -114,18 +120,20 @@ public class JvmMetrics implements MetricsSource {
   }
 
   private void getGcUsage(MetricsRecordBuilder rb) {
-    long count = 0;
-    long timeMillis = 0;
+    long currentGcCount = 0;
+    long currentGcTimeMillis = 0;
     for (GarbageCollectorMXBean gcBean : gcBeans) {
       long c = gcBean.getCollectionCount();
       long t = gcBean.getCollectionTime();
       MetricsInfo[] gcInfo = getGcInfo(gcBean.getName());
       rb.addCounter(gcInfo[0], c).addCounter(gcInfo[1], t);
-      count += c;
-      timeMillis += t;
+      currentGcCount += c;
+      currentGcTimeMillis += t;
     }
-    rb.addCounter(GcCount, count)
-      .addCounter(GcTimeMillis, timeMillis);
+    rb.addCounter(GcCount, currentGcCount - previousGcCount)
+      .addCounter(GcTimeMillis, currentGcTimeMillis - previousGcTimeMillis);
+    previousGcCount = currentGcCount;
+    previousGcTimeMillis = currentGcTimeMillis;
     
     if (pauseMonitor != null) {
       rb.addCounter(GcNumWarnThresholdExceeded,
@@ -180,9 +188,17 @@ public class JvmMetrics implements MetricsSource {
   }
 
   private void getEventCounters(MetricsRecordBuilder rb) {
-    rb.addCounter(LogFatal, EventCounter.getFatal())
-      .addCounter(LogError, EventCounter.getError())
-      .addCounter(LogWarn, EventCounter.getWarn())
-      .addCounter(LogInfo, EventCounter.getInfo());
+    long currentFatalCount = EventCounter.getFatal();
+    long currentErrorCount = EventCounter.getError();
+    long currentWarnCount = EventCounter.getWarn();
+    long currentInfoCount = EventCounter.getInfo();
+    rb.addCounter(LogFatal, currentFatalCount - previousFatalCount)
+        .addCounter(LogError, currentErrorCount - previousErrorCount)
+        .addCounter(LogWarn, currentWarnCount - previousWarnCount)
+        .addCounter(LogInfo, currentInfoCount - previousInfoCount);
+    previousFatalCount = currentFatalCount;
+    previousErrorCount = currentErrorCount;
+    previousWarnCount = currentWarnCount;
+    previousInfoCount = currentInfoCount;
   }
 }

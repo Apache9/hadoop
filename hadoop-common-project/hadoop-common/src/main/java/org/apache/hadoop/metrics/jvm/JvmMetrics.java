@@ -65,6 +65,8 @@ public class JvmMetrics implements Updater {
         new MetricsLongValue("gcCount", registry);
     private MetricsLongValue gcTimeMillis =
         new MetricsLongValue("gcTimeMillis", registry);
+    private long previousGcCount;
+    private long previousGcTimeMillis;
     
     // logging event counters
     private MetricsLongValue fatalCount =
@@ -75,6 +77,10 @@ public class JvmMetrics implements Updater {
         new MetricsLongValue("warnCount", registry);
     private MetricsLongValue infoCount =
         new MetricsLongValue("infoCount", registry);
+    private long previousFatalCount;
+    private long previousErrorCount;
+    private long previousWarnCount;
+    private long previousInfoCount;
     
     // memory usage counters
     private MetricsFloatValue memNonHeapUsedM =
@@ -170,14 +176,16 @@ public class JvmMetrics implements Updater {
     private void doGarbageCollectionUpdates() {
         List<GarbageCollectorMXBean> gcBeans =
                 ManagementFactory.getGarbageCollectorMXBeans();
-        long count = 0;
-        long timeMillis = 0;
+        long currentCount = 0;
+        long currentTimeMillis = 0;
         for (GarbageCollectorMXBean gcBean : gcBeans) {
-            count += gcBean.getCollectionCount();
-            timeMillis += gcBean.getCollectionTime();
+          currentCount += gcBean.getCollectionCount();
+          currentTimeMillis += gcBean.getCollectionTime();
         }
-        gcCount.set(count);
-        gcTimeMillis.set(timeMillis);
+        gcCount.set(currentCount - previousGcCount);
+        gcTimeMillis.set(currentTimeMillis - previousGcTimeMillis);
+        previousGcCount = currentCount;
+        previousGcTimeMillis = currentTimeMillis;
     }
     
     private void doThreadUpdates() {
@@ -227,10 +235,18 @@ public class JvmMetrics implements Updater {
     }
     
     private void doEventCountUpdates() {
-        fatalCount.set(EventCounter.getFatal());
-        errorCount.set(EventCounter.getError());
-        warnCount.set(EventCounter.getWarn());
-        infoCount.set(EventCounter.getInfo());
+      long currentFatalCount = EventCounter.getFatal();
+      fatalCount.set(currentFatalCount - previousFatalCount);
+      previousFatalCount = currentFatalCount;
+      long currentErrorCount = EventCounter.getError();
+      errorCount.set(currentErrorCount - previousErrorCount);
+      previousErrorCount = currentErrorCount;
+      long currentWarnCount = EventCounter.getWarn();
+      warnCount.set(currentWarnCount - previousWarnCount);
+      previousWarnCount = currentWarnCount;
+      long currentInfoCount = EventCounter.getInfo();
+      infoCount.set(currentInfoCount - previousInfoCount);
+      previousInfoCount = currentInfoCount;
     }
 
     public void shutdown() {
