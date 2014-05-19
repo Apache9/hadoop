@@ -569,11 +569,19 @@ class BlockReceiver implements Closeable {
             computePartialChunkCrc(onDiskLen, offsetInChecksum, bytesPerChecksum);
           }
 
-          int startByteToDisk = (int)(onDiskLen-firstByteInBlock) 
+          int skippedDataBytes = (int)(onDiskLen-firstByteInBlock);
+          int startByteToDisk = skippedDataBytes
               + dataBuf.arrayOffset() + dataBuf.position();
 
           int numBytesToDisk = (int)(offsetInBlock-onDiskLen);
-          
+          // Skip checksum bytes corresponding to skippedDataBytes
+          int skippedChecksumBytes = ((skippedDataBytes) / bytesPerChecksum) * checksumSize;
+
+          if(skippedDataBytes > 0 && LOG.isDebugEnabled()) {
+            LOG.debug("Skipped data bytes: " + skippedDataBytes +
+                ", skipped checksum bytes: " + skippedChecksumBytes);
+          }
+
           // Write data to disk.
           out.write(dataBuf.array(), startByteToDisk, numBytesToDisk);
 
@@ -581,7 +589,7 @@ class BlockReceiver implements Closeable {
           // chunk in the packet. Calculate new crc for this chunk.
           if (partialCrc != null) {
             if (len > bytesPerChecksum) {
-              throw new IOException("Got wrong length during writeBlock(" + 
+              throw new IOException("Got wrong length during writeBlock(" +
                                     block + ") from " + inAddr + " " +
                                     "A packet can have only one partial chunk."+
                                     " len = " + len + 
@@ -603,12 +611,12 @@ class BlockReceiver implements Closeable {
                 checksumBuf.arrayOffset() + checksumBuf.position() + checksumLen - checksumSize,
                 checksumBuf.arrayOffset() + checksumBuf.position() + checksumLen);
             checksumOut.write(checksumBuf.array(),
-                checksumBuf.arrayOffset() + checksumBuf.position(),
-                checksumLen);
+                checksumBuf.arrayOffset() + checksumBuf.position() + skippedChecksumBytes,
+                checksumLen - skippedChecksumBytes);
           }
           /// flush entire packet, sync if requested
           flushOrSync(syncBlock);
-          
+
           replicaInfo.setLastChecksumAndDataLen(
             offsetInBlock, lastChunkChecksum
           );
