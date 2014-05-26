@@ -197,7 +197,10 @@ public class TestSafeMode {
       public Boolean get() {
         return NameNodeAdapter.getSafeModeSafeBlocks(nn) > 0;
       }
-    }, 10, 10000);
+    }, 10, 30000);
+    assertTrue("Wait for the block report from the restarted DN to come in "
+        + "30s timeout", NameNodeAdapter.getSafeModeSafeBlocks(nn) > 0);
+
     // SafeMode is fine-grain synchronized, so the processMisReplicatedBlocks
     // call is still going on at this point - wait until it's done by grabbing
     // the lock.

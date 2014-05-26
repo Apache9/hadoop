@@ -56,8 +56,8 @@ public class TestEditLogAutoroll {
 
     MiniDFSNNTopology topology = new MiniDFSNNTopology()
     .addNameservice(new MiniDFSNNTopology.NSConf("ns1")
-      .addNN(new MiniDFSNNTopology.NNConf("nn1").setHttpPort(10061))
-      .addNN(new MiniDFSNNTopology.NNConf("nn2").setHttpPort(10062)));
+      .addNN(new MiniDFSNNTopology.NNConf("nn1").setHttpPort(10063))
+      .addNN(new MiniDFSNNTopology.NNConf("nn2").setHttpPort(10064)));
 
     cluster = new MiniDFSCluster.Builder(conf)
       .nnTopology(topology)

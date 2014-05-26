@@ -7175,7 +7175,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7193,7 +7193,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7210,7 +7210,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7227,7 +7227,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7277,19 +7277,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file2</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file3</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file4</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7309,19 +7309,19 @@
      <comparators>
        <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file2</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file3</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file4</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7341,19 +7341,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file2</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file3</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 /file4</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7374,19 +7374,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file2</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file3</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 file4</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7406,19 +7406,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir2</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir3</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir4</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7438,19 +7438,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir2</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir3</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir4</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7470,19 +7470,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir2</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir3</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 /dir4</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7502,19 +7502,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir2</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir3</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 dir4</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7531,7 +7531,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7549,7 +7549,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7568,7 +7568,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7587,7 +7587,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7637,19 +7637,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file2</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file3</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file4</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7669,19 +7669,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file2</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file3</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file4</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7701,19 +7701,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file2</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file3</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 /file4</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 /file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7734,19 +7734,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file2</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file3</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 file4</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7774,19 +7774,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir2</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir3</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir4</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7814,19 +7814,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir2</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir3</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir4</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7854,19 +7854,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir2</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir3</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 /dir4</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 /dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7894,19 +7894,19 @@
       <comparators>
       <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir2</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir3</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 dir4</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7923,7 +7923,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7940,7 +7940,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -7975,19 +7975,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file2</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file3</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file4</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8007,19 +8007,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file2</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file3</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 hdfs:///file4</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8039,19 +8039,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir2</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir3</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir4</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8071,19 +8071,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir2</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir3</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir4</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8100,7 +8100,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8119,7 +8119,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8154,19 +8154,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file2</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file3</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-         <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file4</expected-output>
+         <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8186,19 +8186,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file2</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file3</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 hdfs:///file4</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 hdfs:///file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8226,19 +8226,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir2</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir3</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir4</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8266,19 +8266,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir2</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir3</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 hdfs:///dir4</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 hdfs:///dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8295,7 +8295,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8312,7 +8312,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8347,19 +8347,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file2</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file3</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file4</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8379,19 +8379,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file1</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file2</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file3</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file4</expected-output>
+          <expected-output>( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8411,19 +8411,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir2</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir3</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir4</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8443,19 +8443,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir2</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir3</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir4</expected-output>
+          <expected-output>( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8472,7 +8472,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8491,7 +8491,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8526,19 +8526,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file2</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file3</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-         <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file4</expected-output>
+         <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8558,19 +8558,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file1</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file2</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file3</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0 NAMENODE/file4</expected-output>
+          <expected-output>( |\t)*none( |\t)*inf( |\t)*none( |\t)*inf( |\t)*0( |\t)*1( |\t)*0( |\t)*0 NAMENODE/file4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8598,19 +8598,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir2</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir3</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir4</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir4</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -8638,19 +8638,19 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir1</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir2</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir2</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir3</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir3</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0 NAMENODE/dir4</expected-output>
+          <expected-output>( |\t)*10( |\t)*9( |\t)*1048576( |\t)*1048576( |\t)*1( |\t)*0( |\t)*0( |\t)*0 NAMENODE/dir4</expected-output>
         </comparator>
       </comparators>
     </test>
