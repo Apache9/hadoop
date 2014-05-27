@@ -591,7 +591,7 @@ public class LeafQueue implements CSQueue {
 
   @Override
   public synchronized void reinitialize(
-      CSQueue newlyParsedQueue, Resource clusterResource) 
+      CSQueue newlyParsedQueue, Resource clusterResource, int maximumAssignmentOnce) 
   throws IOException {
     // Sanity check
     if (!(newlyParsedQueue instanceof LeafQueue) || 

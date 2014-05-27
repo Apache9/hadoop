@@ -38,45 +38,45 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 
 public class CapacitySchedulerConfiguration extends Configuration {
 
-  private static final Log LOG = 
+  private static final Log LOG =
     LogFactory.getLog(CapacitySchedulerConfiguration.class);
-  
+
   private static final String CS_CONFIGURATION_FILE = "capacity-scheduler.xml";
-  
+
   @Private
   public static final String PREFIX = "yarn.scheduler.capacity.";
-  
+
   @Private
   public static final String DOT = ".";
-  
+
   @Private
   public static final String MAXIMUM_APPLICATIONS_SUFFIX =
     "maximum-applications";
-  
+
   @Private
   public static final String MAXIMUM_SYSTEM_APPLICATIONS =
     PREFIX + MAXIMUM_APPLICATIONS_SUFFIX;
-  
+
   @Private
   public static final String MAXIMUM_AM_RESOURCE_SUFFIX =
     "maximum-am-resource-percent";
-  
+
   @Private
   public static final String MAXIMUM_APPLICATION_MASTERS_RESOURCE_PERCENT =
     PREFIX + MAXIMUM_AM_RESOURCE_SUFFIX;
-  
+
   @Private
   public static final String QUEUES = "queues";
-  
+
   @Private
   public static final String CAPACITY = "capacity";
-  
+
   @Private
   public static final String MAXIMUM_CAPACITY = "maximum-capacity";
-  
+
   @Private
   public static final String USER_LIMIT = "minimum-user-limit-percent";
-  
+
   @Private
   public static final String USER_LIMIT_FACTOR = "user-limit-factor";
 
@@ -85,26 +85,26 @@ public class CapacitySchedulerConfiguration extends Configuration {
 
   @Private
   public static final int DEFAULT_MAXIMUM_SYSTEM_APPLICATIIONS = 10000;
-  
+
   @Private
-  public static final float 
+  public static final float
   DEFAULT_MAXIMUM_APPLICATIONMASTERS_RESOURCE_PERCENT = 0.1f;
-  
+
   @Private
   public static final float UNDEFINED = -1;
-  
+
   @Private
   public static final float MINIMUM_CAPACITY_VALUE = 0;
-  
+
   @Private
   public static final float MAXIMUM_CAPACITY_VALUE = 100;
-  
+
   @Private
   public static final float DEFAULT_MAXIMUM_CAPACITY_VALUE = -1.0f;
-  
+
   @Private
   public static final int DEFAULT_USER_LIMIT = 100;
-  
+
   @Private
   public static final float DEFAULT_USER_LIMIT_FACTOR = 1.0f;
 
@@ -122,17 +122,21 @@ public class CapacitySchedulerConfiguration extends Configuration {
   @Private public static final String RESOURCE_CALCULATOR_CLASS =
       PREFIX + "resource-calculator";
 
-  @Private public static final Class<? extends ResourceCalculator> 
+  @Private public static final Class<? extends ResourceCalculator>
   DEFAULT_RESOURCE_CALCULATOR_CLASS = DefaultResourceCalculator.class;
-  
+
+  @Private
+  public static final String MAX_ASSIGNMENT_ONCE =
+     PREFIX + "max-assignment-once";
+
   @Private
   public static final String ROOT = "root";
 
-  @Private 
-  public static final String NODE_LOCALITY_DELAY = 
+  @Private
+  public static final String NODE_LOCALITY_DELAY =
      PREFIX + "node-locality-delay";
 
-  @Private 
+  @Private
   public static final int DEFAULT_NODE_LOCALITY_DELAY = -1;
 
   @Private
@@ -145,11 +149,11 @@ public class CapacitySchedulerConfiguration extends Configuration {
 
   @Private
   public static final boolean DEFAULT_SCHEDULE_ASYNCHRONOUSLY_ENABLE = false;
-  
+
   public CapacitySchedulerConfiguration() {
     this(new Configuration());
   }
-  
+
   public CapacitySchedulerConfiguration(Configuration configuration) {
     this(configuration, true);
   }
@@ -166,15 +170,15 @@ public class CapacitySchedulerConfiguration extends Configuration {
     String queueName = PREFIX + queue + DOT;
     return queueName;
   }
-  
+
   public int getMaximumSystemApplications() {
-    int maxApplications = 
+    int maxApplications =
       getInt(MAXIMUM_SYSTEM_APPLICATIONS, DEFAULT_MAXIMUM_SYSTEM_APPLICATIIONS);
     return maxApplications;
   }
-  
+
   public float getMaximumApplicationMasterResourcePercent() {
-    return getFloat(MAXIMUM_APPLICATION_MASTERS_RESOURCE_PERCENT, 
+    return getFloat(MAXIMUM_APPLICATION_MASTERS_RESOURCE_PERCENT,
         DEFAULT_MAXIMUM_APPLICATIONMASTERS_RESOURCE_PERCENT);
   }
 
@@ -185,8 +189,8 @@ public class CapacitySchedulerConfiguration extends Configuration {
    * @return setting specified or -1 if not set
    */
   public int getMaximumApplicationsPerQueue(String queue) {
-    int maxApplicationsPerQueue = 
-      getInt(getQueuePrefix(queue) + MAXIMUM_APPLICATIONS_SUFFIX, 
+    int maxApplicationsPerQueue =
+      getInt(getQueuePrefix(queue) + MAXIMUM_APPLICATIONS_SUFFIX,
           (int)UNDEFINED);
     return maxApplicationsPerQueue;
   }
@@ -194,14 +198,14 @@ public class CapacitySchedulerConfiguration extends Configuration {
   /**
    * Get the maximum am resource percent per queue setting.
    * @param queue name of the queue
-   * @return per queue setting or defaults to the global am-resource-percent 
+   * @return per queue setting or defaults to the global am-resource-percent
    *         setting if per queue setting not present
    */
   public float getMaximumApplicationMasterResourcePerQueuePercent(String queue) {
-    return getFloat(getQueuePrefix(queue) + MAXIMUM_AM_RESOURCE_SUFFIX, 
+    return getFloat(getQueuePrefix(queue) + MAXIMUM_AM_RESOURCE_SUFFIX,
     		getMaximumApplicationMasterResourcePercent());
   }
-  
+
   public float getCapacity(String queue) {
     float capacity = queue.equals("root") ? 100.0f : getFloat(
         getQueuePrefix(queue) + CAPACITY, UNDEFINED);
@@ -209,39 +213,39 @@ public class CapacitySchedulerConfiguration extends Configuration {
       throw new IllegalArgumentException("Illegal " +
       		"capacity of " + capacity + " for queue " + queue);
     }
-    LOG.debug("CSConf - getCapacity: queuePrefix=" + getQueuePrefix(queue) + 
+    LOG.debug("CSConf - getCapacity: queuePrefix=" + getQueuePrefix(queue) +
         ", capacity=" + capacity);
     return capacity;
   }
-  
+
   public void setCapacity(String queue, float capacity) {
     if (queue.equals("root")) {
       throw new IllegalArgumentException(
           "Cannot set capacity, root queue has a fixed capacity of 100.0f");
     }
     setFloat(getQueuePrefix(queue) + CAPACITY, capacity);
-    LOG.debug("CSConf - setCapacity: queuePrefix=" + getQueuePrefix(queue) + 
+    LOG.debug("CSConf - setCapacity: queuePrefix=" + getQueuePrefix(queue) +
         ", capacity=" + capacity);
   }
 
   public float getMaximumCapacity(String queue) {
     float maxCapacity = getFloat(getQueuePrefix(queue) + MAXIMUM_CAPACITY,
         MAXIMUM_CAPACITY_VALUE);
-    maxCapacity = (maxCapacity == DEFAULT_MAXIMUM_CAPACITY_VALUE) ? 
+    maxCapacity = (maxCapacity == DEFAULT_MAXIMUM_CAPACITY_VALUE) ?
         MAXIMUM_CAPACITY_VALUE : maxCapacity;
     return maxCapacity;
   }
-  
+
   public void setMaximumCapacity(String queue, float maxCapacity) {
     if (maxCapacity > MAXIMUM_CAPACITY_VALUE) {
       throw new IllegalArgumentException("Illegal " +
           "maximum-capacity of " + maxCapacity + " for queue " + queue);
     }
     setFloat(getQueuePrefix(queue) + MAXIMUM_CAPACITY, maxCapacity);
-    LOG.debug("CSConf - setMaxCapacity: queuePrefix=" + getQueuePrefix(queue) + 
+    LOG.debug("CSConf - setMaxCapacity: queuePrefix=" + getQueuePrefix(queue) +
         ", maxCapacity=" + maxCapacity);
   }
-  
+
   public int getUserLimit(String queue) {
     int userLimit = getInt(getQueuePrefix(queue) + USER_LIMIT,
         DEFAULT_USER_LIMIT);
@@ -250,27 +254,27 @@ public class CapacitySchedulerConfiguration extends Configuration {
 
   public void setUserLimit(String queue, int userLimit) {
     setInt(getQueuePrefix(queue) + USER_LIMIT, userLimit);
-    LOG.debug("here setUserLimit: queuePrefix=" + getQueuePrefix(queue) + 
+    LOG.debug("here setUserLimit: queuePrefix=" + getQueuePrefix(queue) +
         ", userLimit=" + getUserLimit(queue));
   }
-  
+
   public float getUserLimitFactor(String queue) {
-    float userLimitFactor = 
-      getFloat(getQueuePrefix(queue) + USER_LIMIT_FACTOR, 
+    float userLimitFactor =
+      getFloat(getQueuePrefix(queue) + USER_LIMIT_FACTOR,
           DEFAULT_USER_LIMIT_FACTOR);
     return userLimitFactor;
   }
 
   public void setUserLimitFactor(String queue, float userLimitFactor) {
-    setFloat(getQueuePrefix(queue) + USER_LIMIT_FACTOR, userLimitFactor); 
+    setFloat(getQueuePrefix(queue) + USER_LIMIT_FACTOR, userLimitFactor);
   }
-  
+
   public QueueState getState(String queue) {
     String state = get(getQueuePrefix(queue) + STATE);
-    return (state != null) ? 
+    return (state != null) ?
         QueueState.valueOf(state.toUpperCase()) : QueueState.RUNNING;
   }
-  
+
   private static String getAclKey(QueueACL acl) {
     return "acl_" + acl.toString().toLowerCase();
   }
@@ -307,17 +311,17 @@ public class CapacitySchedulerConfiguration extends Configuration {
   public String[] getQueues(String queue) {
     LOG.debug("CSConf - getQueues called for: queuePrefix=" + getQueuePrefix(queue));
     String[] queues = getStrings(getQueuePrefix(queue) + QUEUES);
-    LOG.debug("CSConf - getQueues: queuePrefix=" + getQueuePrefix(queue) + 
+    LOG.debug("CSConf - getQueues: queuePrefix=" + getQueuePrefix(queue) +
         ", queues=" + ((queues == null) ? "" : StringUtils.arrayToString(queues)));
     return queues;
   }
-  
+
   public void setQueues(String queue, String[] subQueues) {
     set(getQueuePrefix(queue) + QUEUES, StringUtils.arrayToString(subQueues));
-    LOG.debug("CSConf - setQueues: qPrefix=" + getQueuePrefix(queue) + 
+    LOG.debug("CSConf - setQueues: qPrefix=" + getQueuePrefix(queue) +
         ", queues=" + StringUtils.arrayToString(subQueues));
   }
-  
+
   public Resource getMinimumAllocation() {
     int minimumMemory = getInt(
         YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
@@ -346,14 +350,20 @@ public class CapacitySchedulerConfiguration extends Configuration {
     int delay = getInt(NODE_LOCALITY_DELAY, DEFAULT_NODE_LOCALITY_DELAY);
     return (delay == DEFAULT_NODE_LOCALITY_DELAY) ? 0 : delay;
   }
-  
+
   public ResourceCalculator getResourceCalculator() {
     return ReflectionUtils.newInstance(
         getClass(
-            RESOURCE_CALCULATOR_CLASS, 
-            DEFAULT_RESOURCE_CALCULATOR_CLASS, 
-            ResourceCalculator.class), 
+            RESOURCE_CALCULATOR_CLASS,
+            DEFAULT_RESOURCE_CALCULATOR_CLASS,
+            ResourceCalculator.class),
         this);
+  }
+
+  public int getMaximumAssignmentOnce() {
+    int maxAssignmentOnce =
+      getInt(MAX_ASSIGNMENT_ONCE, (int)UNDEFINED);
+    return maxAssignmentOnce;
   }
 
   public boolean getUsePortForNodeName() {
@@ -364,8 +374,8 @@ public class CapacitySchedulerConfiguration extends Configuration {
   public void setResourceComparator(
       Class<? extends ResourceCalculator> resourceCalculatorClass) {
     setClass(
-        RESOURCE_CALCULATOR_CLASS, 
-        resourceCalculatorClass, 
+        RESOURCE_CALCULATOR_CLASS,
+        resourceCalculatorClass,
         ResourceCalculator.class);
   }
 

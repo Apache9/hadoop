@@ -73,6 +73,8 @@ public class ParentQueue implements CSQueue {
   private float absoluteUsedCapacity = 0.0f;
 
   private float usedCapacity = 0.0f;
+  
+  private int maximumAssignmentOnce;
 
   private final Set<CSQueue> childQueues;
   private final Comparator<CSQueue> queueComparator;
@@ -133,6 +135,7 @@ public class ParentQueue implements CSQueue {
       (float) cs.getConfiguration().getMaximumCapacity(getQueuePath()) / 100;
     float absoluteMaxCapacity = 
           CSQueueUtils.computeAbsoluteMaximumCapacity(maximumCapacity, parent);
+    int maximumAssignmentOnce = cs.getConfiguration().getMaximumAssignmentOnce();
     
     QueueState state = cs.getConfiguration().getState(getQueuePath());
 
@@ -145,7 +148,8 @@ public class ParentQueue implements CSQueue {
 
     setupQueueConfigs(cs.getClusterResources(),
         capacity, absoluteCapacity, 
-        maximumCapacity, absoluteMaxCapacity, state, acls);
+        maximumCapacity, absoluteMaxCapacity, state, acls, 
+        maximumAssignmentOnce);
     
     this.queueComparator = cs.getQueueComparator();
     this.childQueues = new TreeSet<CSQueue>(queueComparator);
@@ -159,7 +163,8 @@ public class ParentQueue implements CSQueue {
       Resource clusterResource,
       float capacity, float absoluteCapacity, 
       float maximumCapacity, float absoluteMaxCapacity,
-      QueueState state, Map<QueueACL, AccessControlList> acls
+      QueueState state, Map<QueueACL, AccessControlList> acls,
+      int maximumAssignmentOnce
   ) {
     // Sanity check
     CSQueueUtils.checkMaxCapacity(getQueueName(), capacity, maximumCapacity);
@@ -184,6 +189,8 @@ public class ParentQueue implements CSQueue {
       aclsString.append(e.getKey() + ":" + e.getValue().getAclString());
     }
 
+    this.maximumAssignmentOnce = maximumAssignmentOnce;
+    
     // Update metrics
     CSQueueUtils.updateQueueStatistics(
         resourceCalculator, this, parent, clusterResource, minimumAllocation);
@@ -364,7 +371,7 @@ public class ParentQueue implements CSQueue {
   
   @Override
   public synchronized void reinitialize(
-      CSQueue newlyParsedQueue, Resource clusterResource)
+      CSQueue newlyParsedQueue, Resource clusterResource, int maximumAssignmentOnce)
   throws IOException {
     // Sanity check
     if (!(newlyParsedQueue instanceof ParentQueue) ||
@@ -382,7 +389,8 @@ public class ParentQueue implements CSQueue {
         newlyParsedParentQueue.maximumCapacity, 
         newlyParsedParentQueue.absoluteMaxCapacity,
         newlyParsedParentQueue.state, 
-        newlyParsedParentQueue.acls);
+        newlyParsedParentQueue.acls,
+        maximumAssignmentOnce);
 
     // Re-configure existing child queues and add new ones
     // The CS has already checked to ensure all existing child queues are present!
@@ -398,7 +406,7 @@ public class ParentQueue implements CSQueue {
       // Check if the child-queue already exists
       if (childQueue != null) {
         // Re-init existing child queues
-        childQueue.reinitialize(newChildQueue, clusterResource);
+        childQueue.reinitialize(newChildQueue, clusterResource, maximumAssignmentOnce);
         LOG.info(getQueueName() + ": re-configured queue: " + childQueue);
       } else {
         // New child queue, do not re-init
@@ -553,6 +561,7 @@ public class ParentQueue implements CSQueue {
       Resource clusterResource, FiCaSchedulerNode node) {
     CSAssignment assignment = 
         new CSAssignment(Resources.createResource(0, 0), NodeType.NODE_LOCAL);
+    int assignedNum = 0;
     
     while (canAssign(clusterResource, node)) {
       if (LOG.isDebugEnabled()) {
@@ -596,6 +605,18 @@ public class ParentQueue implements CSQueue {
           + " assignedSoFarInThisIteration=" + assignment.getResource()
           + " usedCapacity=" + getUsedCapacity()
           + " absoluteUsedCapacity=" + getAbsoluteUsedCapacity());
+      }
+      
+      // Do not assign more than maxAssignedNumOnce in one time
+      // to make container allocation more even
+      ++assignedNum;
+      if (maximumAssignmentOnce > 0 && assignedNum >= maximumAssignmentOnce) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Assignment on node reached max: " + maximumAssignmentOnce +
+          		" node=" + node.getNodeID() + 
+          		" container=" + node.getNumContainers());
+        }
+        break;
       }
 
       // Do not assign more than one container if this isn't the root queue

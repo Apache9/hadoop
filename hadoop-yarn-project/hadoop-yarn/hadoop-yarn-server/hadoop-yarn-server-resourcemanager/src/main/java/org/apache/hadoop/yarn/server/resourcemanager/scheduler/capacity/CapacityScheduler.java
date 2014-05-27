@@ -409,6 +409,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
     CSQueue newRoot = 
         parseQueue(this, conf, null, CapacitySchedulerConfiguration.ROOT, 
             newQueues, queues, noop); 
+    int maximumAssignmentOnce = conf.getMaximumAssignmentOnce();
     
     // Ensure all existing queues are still present
     validateExistingQueues(queues, newQueues);
@@ -417,7 +418,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
     addNewQueues(queues, newQueues);
     
     // Re-configure queues
-    root.reinitialize(newRoot, clusterResource);
+    root.reinitialize(newRoot, clusterResource, maximumAssignmentOnce);
   }
 
   /**

@@ -218,8 +218,10 @@ extends org.apache.hadoop.yarn.server.resourcemanager.scheduler.Queue {
    * Reinitialize the queue.
    * @param newlyParsedQueue new queue to re-initalize from
    * @param clusterResource resources in the cluster
+   * @param maximumAssignmentOnce max assignment to node once
    */
-  public void reinitialize(CSQueue newlyParsedQueue, Resource clusterResource) 
+  public void reinitialize(CSQueue newlyParsedQueue, Resource clusterResource, 
+      int maximumAssignmentOnce) 
   throws IOException;
 
    /**

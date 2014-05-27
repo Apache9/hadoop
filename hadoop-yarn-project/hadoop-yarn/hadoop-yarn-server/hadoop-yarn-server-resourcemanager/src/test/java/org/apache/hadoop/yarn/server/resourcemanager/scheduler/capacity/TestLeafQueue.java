@@ -1652,7 +1652,7 @@ public class TestLeafQueue {
             newQueues, queues,
             TestUtils.spyHook);
     queues = newQueues;
-    root.reinitialize(newRoot, cs.getClusterResources());
+    root.reinitialize(newRoot, cs.getClusterResources(), -1);
 
     // after reinitialization
     assertEquals(3, e.activeApplications.size());
@@ -1677,7 +1677,7 @@ public class TestLeafQueue {
             newQueues, queues,
             TestUtils.spyHook);
     queues = newQueues;
-    root.reinitialize(newRoot, cs.getClusterResources());
+    root.reinitialize(newRoot, cs.getClusterResources(), -1);
 
     // after reinitialization
     assertEquals(60, e.getNodeLocalityDelay());
@@ -2005,7 +2005,7 @@ public class TestLeafQueue {
     csConf.setFloat(CapacitySchedulerConfiguration.
         MAXIMUM_APPLICATION_MASTERS_RESOURCE_PERCENT, 0.2f);
     LeafQueue newA = new LeafQueue(csContext, A, root, null);
-    a.reinitialize(newA, clusterResource);
+    a.reinitialize(newA, clusterResource, -1);
     assertEquals(0.2f, a.getMaxAMResourcePerQueuePercent(), 1e-3f);
     assertEquals(320, a.getMaximumActiveApplications());
 
