@@ -293,6 +293,9 @@ public abstract class RMContainerRequestor extends RMCommunicator {
   }
 
   protected Resource getAvailableResources() {
+    if (availableResources == null) {
+      return Resources.none();
+    }
     return availableResources;
   }
   

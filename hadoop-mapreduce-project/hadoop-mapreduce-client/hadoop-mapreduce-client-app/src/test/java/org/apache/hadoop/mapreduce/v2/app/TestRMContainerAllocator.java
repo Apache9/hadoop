@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.mapreduce.v2.app;
 
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyFloat;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.isA;
@@ -1544,17 +1545,17 @@ public class TestRMContainerAllocator {
     int scheduledReduces = 0;
     int assignedMaps = 2;
     int assignedReduces = 0;
-    int mapResourceReqt = 1024;
-    int reduceResourceReqt = 2*1024;
+    Resource mapResourceReqt = Resource.newInstance(1024, 1);
+    Resource reduceResourceReqt = Resource.newInstance(2*1024, 1);
     int numPendingReduces = 4;
     float maxReduceRampupLimit = 0.5f;
     float reduceSlowStart = 0.2f;
     
     RMContainerAllocator allocator = mock(RMContainerAllocator.class);
     doCallRealMethod().when(allocator).
-        scheduleReduces(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), 
-            anyInt(), anyInt(), anyInt(), anyInt(), anyFloat(), anyFloat());
-    
+        scheduleReduces(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
+            anyInt(), any(Resource.class), any(Resource.class), anyInt(), anyFloat(), anyFloat());
+
     // Test slow-start
     allocator.scheduleReduces(
         totalMaps, succeededMaps, 
@@ -1578,6 +1579,7 @@ public class TestRMContainerAllocator {
     verify(allocator, never()).scheduleAllReduces();
 
     succeededMaps = 3;
+    doReturn(Resource.newInstance(0, 0)).when(allocator).getResourceLimit();
     allocator.scheduleReduces(
         totalMaps, succeededMaps, 
         scheduledMaps, scheduledReduces, 
@@ -1588,7 +1590,7 @@ public class TestRMContainerAllocator {
     verify(allocator, times(1)).setIsReduceStarted(true);
     
     // Test reduce ramp-up
-    doReturn(100 * 1024).when(allocator).getMemLimit();
+    doReturn(Resource.newInstance(100 * 1024, 100 * 1)).when(allocator).getResourceLimit();
     allocator.scheduleReduces(
         totalMaps, succeededMaps, 
         scheduledMaps, scheduledReduces, 
@@ -1601,13 +1603,75 @@ public class TestRMContainerAllocator {
 
     // Test reduce ramp-down
     scheduledReduces = 3;
-    doReturn(10 * 1024).when(allocator).getMemLimit();
+    doReturn(Resource.newInstance(10 * 1024, 10 * 1)).when(allocator).getResourceLimit();
     allocator.scheduleReduces(
-        totalMaps, succeededMaps, 
-        scheduledMaps, scheduledReduces, 
-        assignedMaps, assignedReduces, 
-        mapResourceReqt, reduceResourceReqt, 
-        numPendingReduces, 
+        totalMaps, succeededMaps,
+        scheduledMaps, scheduledReduces,
+        assignedMaps, assignedReduces,
+        mapResourceReqt, reduceResourceReqt,
+        numPendingReduces,
+        maxReduceRampupLimit, reduceSlowStart);
+    verify(allocator).rampDownReduces(anyInt());
+  }
+
+  @Test
+  public void testReduceSchedulingWithNotEnoughCpu() throws Exception {
+    int totalMaps = 10;
+    int succeededMaps = 3;
+    int scheduledMaps = 10;
+    int scheduledReduces = 3;
+    int assignedMaps = 2;
+    int assignedReduces = 0;
+    Resource mapResourceReqt = Resource.newInstance(1024, 1);
+    Resource reduceResourceReqt = Resource.newInstance(2*1024, 1);
+    int numPendingReduces = 4;
+    float maxReduceRampupLimit = 0.5f;
+    float reduceSlowStart = 0.2f;
+
+    RMContainerAllocator allocator = mock(RMContainerAllocator.class);
+    doCallRealMethod().when(allocator).
+        scheduleReduces(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
+            anyInt(), any(Resource.class), any(Resource.class), anyInt(), anyFloat(), anyFloat());
+
+    // Test ramp-down when enough memory but not enough cpu resource
+    doReturn(Resource.newInstance(100 * 1024, 5 * 1)).when(allocator).getResourceLimit();
+    allocator.scheduleReduces(
+        totalMaps, succeededMaps,
+        scheduledMaps, scheduledReduces,
+        assignedMaps, assignedReduces,
+        mapResourceReqt, reduceResourceReqt,
+        numPendingReduces,
+        maxReduceRampupLimit, reduceSlowStart);
+    verify(allocator).rampDownReduces(anyInt());
+  }
+
+  @Test
+  public void testReduceSchedulingWithNotEnoughMemory() throws Exception {
+    int totalMaps = 10;
+    int succeededMaps = 3;
+    int scheduledMaps = 10;
+    int scheduledReduces = 3;
+    int assignedMaps = 2;
+    int assignedReduces = 0;
+    Resource mapResourceReqt = Resource.newInstance(1024, 1);
+    Resource reduceResourceReqt = Resource.newInstance(2*1024, 1);
+    int numPendingReduces = 4;
+    float maxReduceRampupLimit = 0.5f;
+    float reduceSlowStart = 0.2f;
+
+    RMContainerAllocator allocator = mock(RMContainerAllocator.class);
+    doCallRealMethod().when(allocator).
+        scheduleReduces(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
+            anyInt(), any(Resource.class), any(Resource.class), anyInt(), anyFloat(), anyFloat());
+
+    // Test ramp-down when enough cpu but not enough memory resource
+    doReturn(Resource.newInstance(10 * 1024, 100 * 1)).when(allocator).getResourceLimit();
+    allocator.scheduleReduces(
+        totalMaps, succeededMaps,
+        scheduledMaps, scheduledReduces,
+        assignedMaps, assignedReduces,
+        mapResourceReqt, reduceResourceReqt,
+        numPendingReduces,
         maxReduceRampupLimit, reduceSlowStart);
     verify(allocator).rampDownReduces(anyInt());
 
@@ -1616,7 +1680,7 @@ public class TestRMContainerAllocator {
     // should be invoked twice.
     scheduledMaps = 2;
     assignedReduces = 2;
-    doReturn(10 * 1024).when(allocator).getMemLimit();
+    doReturn(Resource.newInstance(10 * 1024, 10 * 1)).when(allocator).getResourceLimit();
     allocator.scheduleReduces(
         totalMaps, succeededMaps, 
         scheduledMaps, scheduledReduces, 
@@ -1638,7 +1702,7 @@ public class TestRMContainerAllocator {
     @Override
     public void scheduleReduces(int totalMaps, int completedMaps,
         int scheduledMaps, int scheduledReduces, int assignedMaps,
-        int assignedReduces, int mapResourceReqt, int reduceResourceReqt,
+        int assignedReduces, Resource mapResourceReqt, Resource reduceResourceReqt,
         int numPendingReduces, float maxReduceRampupLimit, float reduceSlowStart) {
       recalculatedReduceSchedule = true;
     }
