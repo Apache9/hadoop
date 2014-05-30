@@ -25,9 +25,11 @@ import static org.junit.Assert.fail;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.BindException;
 import java.net.URI;
 import java.net.URL;
 import java.util.List;
+import java.util.Random;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -69,6 +71,7 @@ public class TestStandbyCheckpoints {
   protected MiniDFSCluster cluster;
   protected NameNode nn0, nn1;
   protected FileSystem fs;
+  private final Random random = new Random();
   
   private static final Log LOG = LogFactory.getLog(TestStandbyCheckpoints.class);
 
@@ -91,22 +94,33 @@ public class TestStandbyCheckpoints {
     CompressionCodecFactory.setCodecClasses(conf,
         ImmutableList.<Class>of(SlowCodec.class));
 
-    MiniDFSNNTopology topology = new MiniDFSNNTopology()
-      .addNameservice(new MiniDFSNNTopology.NSConf("ns1")
-        .addNN(new MiniDFSNNTopology.NNConf("nn1").setHttpPort(10061))
-        .addNN(new MiniDFSNNTopology.NNConf("nn2").setHttpPort(10062)));
-    
-    cluster = new MiniDFSCluster.Builder(conf)
-      .nnTopology(topology)
-      .numDataNodes(0)
-      .build();
-    cluster.waitActive();
-    
-    nn0 = cluster.getNameNode(0);
-    nn1 = cluster.getNameNode(1);
-    fs = HATestUtil.configureFailoverFs(cluster, conf);
+    int retryCount = 0;
+    while (true) {
+      try {
+        int basePort = 10060 + random.nextInt(100) * 2;
+        MiniDFSNNTopology topology = new MiniDFSNNTopology()
+            .addNameservice(new MiniDFSNNTopology.NSConf("ns1")
+                .addNN(new MiniDFSNNTopology.NNConf("nn1").setHttpPort(basePort))
+                .addNN(new MiniDFSNNTopology.NNConf("nn2").setHttpPort(basePort + 1)));
 
-    cluster.transitionToActive(0);
+        cluster = new MiniDFSCluster.Builder(conf)
+            .nnTopology(topology)
+            .numDataNodes(0)
+            .build();
+        cluster.waitActive();
+
+        nn0 = cluster.getNameNode(0);
+        nn1 = cluster.getNameNode(1);
+        fs = HATestUtil.configureFailoverFs(cluster, conf);
+
+        cluster.transitionToActive(0);
+        ++retryCount;
+        break;
+      } catch (BindException e) {
+        LOG.info("Set up MiniDFSCluster failed due to port conflicts, retry "
+            + retryCount + " times");
+      }
+    }
   }
   
   @After
