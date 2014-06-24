@@ -111,10 +111,12 @@ public class SecureIOUtils {
   public static RandomAccessFile openForRandomRead(File f,
       String mode, String expectedOwner, String expectedGroup)
       throws IOException {
-    if (!UserGroupInformation.isSecurityEnabled()) {
-      return new RandomAccessFile(f, mode);
-    }
-    return forceSecureOpenForRandomRead(f, mode, expectedOwner, expectedGroup);
+    // Cause processes run under user 'work' remotely, so skip checking file owner
+    return new RandomAccessFile(f, mode);
+    // if (!UserGroupInformation.isSecurityEnabled()) {
+    //   return new RandomAccessFile(f, mode);
+    // }
+    // return forceSecureOpenForRandomRead(f, mode, expectedOwner, expectedGroup);
   }
 
   /**
@@ -152,10 +154,12 @@ public class SecureIOUtils {
    */
   public static FSDataInputStream openFSDataInputStream(File file,
       String expectedOwner, String expectedGroup) throws IOException {
-    if (!UserGroupInformation.isSecurityEnabled()) {
-      return rawFilesystem.open(new Path(file.getAbsolutePath()));
-    }
-    return forceSecureOpenFSDataInputStream(file, expectedOwner, expectedGroup);
+    // Cause processes run under user 'work' remotely, so skip checking file owner
+    return rawFilesystem.open(new Path(file.getAbsolutePath()));
+    // if (!UserGroupInformation.isSecurityEnabled()) {
+    //   return rawFilesystem.open(new Path(file.getAbsolutePath()));
+    // }
+    // return forceSecureOpenFSDataInputStream(file, expectedOwner, expectedGroup);
   }
 
   /**
@@ -198,10 +202,12 @@ public class SecureIOUtils {
    */
   public static FileInputStream openForRead(File f, String expectedOwner, 
       String expectedGroup) throws IOException {
-    if (!UserGroupInformation.isSecurityEnabled()) {
-      return new FileInputStream(f);
-    }
-    return forceSecureOpenForRead(f, expectedOwner, expectedGroup);
+    // Cause processes run under user 'work' remotely, so skip checking file owner
+    return new FileInputStream(f);
+    // if (!UserGroupInformation.isSecurityEnabled()) {
+    //   return new FileInputStream(f);
+    // }
+    // return forceSecureOpenForRead(f, expectedOwner, expectedGroup);
   }
 
   /**
