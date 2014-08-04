@@ -15710,8 +15710,8 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
-          <expected-output></expected-output>
+          <type>RegexpComparator</type>
+          <expected-output>Refresh service acl successful(\n)*</expected-output>
         </comparator>
       </comparators>
     </test><!--
@@ -15947,8 +15947,8 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
-          <expected-output></expected-output>
+          <type>RegexpComparator</type>
+          <expected-output>Save namespace successful(\n)*</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -16083,8 +16083,8 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
-          <expected-output></expected-output>
+          <type>RegexpComparator</type>
+          <expected-output>Refresh user to groups mapping successful(\n)*</expected-output>
         </comparator>
       </comparators>
     </test>
