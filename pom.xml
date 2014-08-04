@@ -36,19 +36,15 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
 
   <distributionManagement>
     <repository>
-      <id>${distMgmtStagingId}</id>
-      <name>${distMgmtStagingName}</name>
-      <url>${distMgmtStagingUrl}</url>
+      <id>archiva.internal</id>
+      <name>Internal Release Repository</name>
+      <url>https://nexus.d.xiaomi.net/nexus/content/repositories/releases/</url>
     </repository>
     <snapshotRepository>
-      <id>${distMgmtSnapshotsId}</id>
-      <name>${distMgmtSnapshotsName}</name>
-      <url>${distMgmtSnapshotsUrl}</url>
+      <id>archiva.snapshots</id>
+      <name>Internal Snapshot Repository</name>
+      <url>https://nexus.d.xiaomi.net/nexus/content/repositories/snapshots/</url>
     </snapshotRepository>
-    <site>
-      <id>apache.website</id>
-      <url>scpexe://people.apache.org/www/hadoop.apache.org/docs/r${project.version}</url>
-    </site>
   </distributionManagement>
 
   <repositories>
@@ -244,7 +240,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
       </plugin>
     </plugins>
   </build>
-  
+
   <reporting>
     <excludeDefaults>true</excludeDefaults>
     <plugins>
@@ -290,15 +286,15 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
                 </docletArtifact>
               </docletArtifacts>
               <useStandardDocletOptions>true</useStandardDocletOptions>
-    
+
               <!-- switch on dependency-driven aggregation -->
               <includeDependencySources>false</includeDependencySources>
-    
+
               <dependencySourceIncludes>
                 <!-- include ONLY dependencies I control -->
                 <dependencySourceInclude>org.apache.hadoop:hadoop-annotations</dependencySourceInclude>
               </dependencySourceIncludes>
-    
+
             </configuration>
             <reports>
               <report>aggregate</report>
@@ -321,7 +317,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
       </plugin>
     </plugins>
   </reporting>
-  
+
   <profiles>
     <profile>
       <id>src</id>
@@ -436,12 +432,12 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
       <properties>
         <cloverLicenseLocation>${user.home}/.clover.license</cloverLicenseLocation>
         <cloverDatabase>${project.build.directory}/clover/hadoop-coverage.db</cloverDatabase>
-        <!-- NB: This additional parametrization is made in order 
+        <!-- NB: This additional parametrization is made in order
              to be able to re-define these properties with "-Dk=v" maven options.
-             By some reason the expressions declared in clover 
-             docs like "${maven.clover.generateHtml}" do not work in that way. 
-             However, the below properties are confirmed to work: e.g. 
-             -DcloverGenHtml=false switches off the Html generation.  
+             By some reason the expressions declared in clover
+             docs like "${maven.clover.generateHtml}" do not work in that way.
+             However, the below properties are confirmed to work: e.g.
+             -DcloverGenHtml=false switches off the Html generation.
              The default values provided here exactly correspond to Clover defaults, so
              the behavior is 100% backwards compatible. -->
         <cloverAlwaysReport>true</cloverAlwaysReport>
