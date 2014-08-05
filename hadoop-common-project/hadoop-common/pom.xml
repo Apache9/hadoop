@@ -645,11 +645,46 @@
                       <arg value="[ x$SKIPTESTS = xtrue ] || ${project.build.directory}/native/test_bulk_crc32"/>
                       <env key="SKIPTESTS" value="${skipTests}"/>
                     </exec>
+                    <mkdir dir="${project.build.directory}/${project.artifactId}-${project.version}-tar"/>
+                    <echo file="${project.build.directory}/copynativelibs.sh">
+                      cp -PR ${project.build.directory}/native/target/usr/local/lib/* ${project.build.directory}/${project.artifactId}-${project.version}-tar
+                    </echo>
+                    <exec executable="sh" dir="${project.build.directory}" failonerror="true">
+                      <arg line="./copynativelibs.sh"/>
+                    </exec>
+                    <exec executable="tar" dir="${project.build.directory}/${project.artifactId}-${project.version}-tar" failonerror="yes">
+                      <arg value="cf"/>
+                      <arg value="${project.build.directory}/${project.artifactId}-${project.version}-${build.platform}.tar"/>
+                      <arg value="."/>
+                    </exec>
                   </target>
                 </configuration>
               </execution>
             </executions>
           </plugin>
+          <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>1.5</version>
+                <executions>
+                    <execution>
+                        <id>upload-native</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>attach-artifact</goal>
+                        </goals>
+                        <configuration>
+                            <artifacts>
+                                <artifact>
+                                    <file>${project.build.directory}/${project.artifactId}-${project.version}-${build.platform}.tar</file>
+                                    <type>tar</type>
+                                    <classifier>${build.platform}</classifier>
+                                </artifact>
+                            </artifacts>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
       </build>
     </profile>
