@@ -25,6 +25,7 @@ import java.security.NoSuchAlgorithmException;
 import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
+import org.apache.hadoop.ha.HAServiceProtocol.RequestSource;
 import org.apache.hadoop.ha.HAServiceProtocol.StateChangeRequestInfo;
 import org.apache.hadoop.ha.HealthMonitor.State;
 import org.apache.hadoop.ha.MiniZKFCCluster.DummyZKFC;
@@ -431,6 +432,8 @@ public class TestZKFailoverController extends ClientBaseWithFixes {
       cluster.getService(1).getZKFCProxy(conf, 5000).gracefulFailover();
       cluster.waitForActiveLockHolder(1);
 
+      cluster.waitForHealthState(0, State.SERVICE_HEALTHY);
+      cluster.waitForHealthState(1, State.SERVICE_HEALTHY);
       cluster.getService(0).getZKFCProxy(conf, 5000).gracefulFailover();
       cluster.waitForActiveLockHolder(0);
 
@@ -583,6 +586,33 @@ public class TestZKFailoverController extends ClientBaseWithFixes {
       // Graceful failovers
       cluster.getZkfc(1).gracefulFailoverToYou();
       cluster.getZkfc(0).gracefulFailoverToYou();
+    } finally {
+      cluster.stop();
+    }
+  }
+
+  @Test(timeout=30000)
+  public void testTargetServiceRestart() throws Exception {
+    try {
+      cluster.start();
+      cluster.waitForActiveLockHolder(0);
+
+      assertEquals(HAServiceState.ACTIVE, cluster.getService(0).state);
+      assertEquals(HAServiceState.STANDBY, cluster.getService(1).state);
+
+      ZKFailoverController zkfc0 = cluster.getZkfc(0);
+      DummyHAService svc0 = cluster.getService(0);
+
+      // fake svc0 is restarted and change to standby, but the health monitor
+      // doesn't realize that
+      svc0.proxy.transitionToStandby(new StateChangeRequestInfo(
+          RequestSource.REQUEST_BY_ZKFC));
+
+      cluster.waitForHealthState(0, State.SERVICE_HEALTHY);
+      cluster.waitForHealthState(1, State.SERVICE_HEALTHY);
+
+      cluster.waitForHAState(0, HAServiceState.STANDBY);
+      cluster.waitForHAState(1, HAServiceState.ACTIVE);
     } finally {
       cluster.stop();
     }
