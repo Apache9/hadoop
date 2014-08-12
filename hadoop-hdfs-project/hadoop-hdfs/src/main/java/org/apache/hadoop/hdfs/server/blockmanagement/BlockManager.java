@@ -2023,7 +2023,7 @@ public class BlockManager {
     // Add replica if appropriate. If the replica was previously corrupt
     // but now okay, it might need to be updated.
     if (reportedState == ReplicaState.FINALIZED
-        && (storedBlock.findDatanode(dn) < 0
+        && (!storedBlock.findDatanode(dn)
         || corruptReplicas.isReplicaCorrupt(storedBlock, dn))) {
       toAdd.add(storedBlock);
     }
@@ -2193,7 +2193,8 @@ public class BlockManager {
     block.addReplicaIfNotPresent(node.getStorageInfo(storageID),
         ucBlock.reportedBlock, ucBlock.reportedState);
 
-    if (ucBlock.reportedState == ReplicaState.FINALIZED && block.findDatanode(node) < 0) {
+    if (ucBlock.reportedState == ReplicaState.FINALIZED &&
+        !block.findDatanode(node)) {
       addStoredBlock(block, node, storageID, null, true);
     }
   } 
