@@ -18,6 +18,7 @@
 package org.apache.hadoop.contrib.raid;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -64,6 +65,8 @@ public class BlockCodec {
 
   private static final Path RAID_ROOT = new Path("/raid");
   private static final String CODINF_FILE_SUFFIX = ".ec";
+  private static final String TEMP_CODINF_FILE_SUFFIX = ".tmp";
+  private static final String DECODE_LOCK_FILE_SUFFIX = ".lock";
   private static final int ENCODE_DATA_SIZE = 4096;
   private static final int WORD_SIZE = 8;
   private static final OutputStream DUMMY_STREAM = new ByteArrayOutputStream(1);
@@ -113,9 +116,10 @@ public class BlockCodec {
     Preconditions.checkState(fileStatus.getBlockSize() % ENCODE_DATA_SIZE == 0,
         "Block size must be multiple of " + ENCODE_DATA_SIZE);
 
-    // Create tmp coding file output stream
+    // Create temporary coding file output stream
     Path codingFile = getCodingFile(file);
-    Path tmpCodingFile = new Path(codingFile.toString() + ".tmp");
+    Path tmpCodingFile = new Path(codingFile.toString() +
+        TEMP_CODINF_FILE_SUFFIX);
     FSDataOutputStream codingOut = fs.create(tmpCodingFile, true,
         conf.getInt(CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY,
             CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT),
@@ -155,39 +159,90 @@ public class BlockCodec {
    * Decodes corrupted blocks of specified file.
    */
   public void decode(Path file, int[] corruptedBlocks) throws IOException {
-    FileStatus fileStatus = fs.getFileStatus(file);
-    long fileLen = fileStatus.getLen();
-    long blockSize = fileStatus.getBlockSize();
-    BlockLocation[] locations = fs.getFileBlockLocations(fileStatus, 0, fileLen);
-    Path codingFile = getCodingFile(file);
-
-    // Partition the corrupted blocks into groups
-    int groupNum = locations.length / dataBlocksNum;
-    if (locations.length % dataBlocksNum != 0) {
-      groupNum++;
-    }
-    Map<Integer, OutputStream>[] erasuredDataInfos = new Map[groupNum];
-    Map<Integer, OutputStream>[] erasuredCodingInfos = new Map[groupNum];
-    partitionErasureBlocks(corruptedBlocks, locations.length,
-        erasuredDataInfos, erasuredCodingInfos);
-    // TODO: Before decoding, we should ensure that the corrupted blocks have
-    // already be deleted.
-    constructBlockOutputStreams(file, erasuredDataInfos);
-    constructBlockOutputStreams(codingFile, erasuredCodingInfos);
-
-    // Decode blocks within each group
+    FSDataOutputStream lockOut = beginDecoding(fs, file);
+    Map<Integer, OutputStream>[] erasuredDataInfos = null;
+    Map<Integer, OutputStream>[] erasuredCodingInfos = null;
     try {
+      FileStatus fileStatus = fs.getFileStatus(file);
+      long fileLen = fileStatus.getLen();
+      long blockSize = fileStatus.getBlockSize();
+      BlockLocation[] locations = fs.getFileBlockLocations(
+          fileStatus, 0, fileLen);
+      Path codingFile = getCodingFile(file);
+
+      // Partition the corrupted blocks into groups
+      int groupNum = locations.length / dataBlocksNum;
+      if (locations.length % dataBlocksNum != 0) {
+        groupNum++;
+      }
+      erasuredDataInfos = new Map[groupNum];
+      erasuredCodingInfos = new Map[groupNum];
+      partitionErasureBlocks(corruptedBlocks, locations.length,
+          erasuredDataInfos, erasuredCodingInfos);
+      // TODO: Before decoding, we should ensure that the corrupted blocks have
+      // already be deleted.
+      constructBlockOutputStreams(file, erasuredDataInfos);
+      constructBlockOutputStreams(codingFile, erasuredCodingInfos);
+
+      // Decode blocks within each group
       for (int i = 0; i < groupNum; ++i) {
         decodeBlocks(file, i, blockSize, erasuredDataInfos[i],
             erasuredCodingInfos[i]);
       }
     } finally {
-      for (Map<Integer, OutputStream> map : erasuredDataInfos) {
-        closeOutputStreams(map.values().toArray());
+      if (erasuredDataInfos != null) {
+        for (Map<Integer, OutputStream> map : erasuredDataInfos) {
+          closeOutputStreams(map.values().toArray());
+        }
       }
 
-      for (Map<Integer, OutputStream> map : erasuredCodingInfos) {
-        closeOutputStreams(map.values().toArray());
+      if (erasuredCodingInfos != null) {
+        for (Map<Integer, OutputStream> map : erasuredCodingInfos) {
+          closeOutputStreams(map.values().toArray());
+        }
+      }
+
+      if (lockOut != null) {
+        endDecoding(fs, file, lockOut);
+      }
+    }
+  }
+
+  /**
+   * Decodes the specified range of the content of a file.
+   */
+  public byte[] decode(Path file, long offset, int length) throws IOException {
+    Map<Integer, OutputStream> erasuredDataInfo = null;
+    Map<Integer, OutputStream> erasuredCodingInfo = null;
+    try {
+      FileStatus fileStatus = fs.getFileStatus(file);
+      long blockSize = fileStatus.getBlockSize();
+      long adjustedOffset = adjustOffset(offset % blockSize, ENCODE_DATA_SIZE);
+      long adjustedLength = adjustLength(length, ENCODE_DATA_SIZE);
+      int blockIdx = (int)(offset / blockSize);
+      int groupNo = (int)(blockIdx / dataBlocksNum);
+
+      erasuredDataInfo = new HashMap<Integer, OutputStream>();
+      erasuredCodingInfo = new HashMap<Integer, OutputStream>();
+      erasuredDataInfo.put(blockIdx, new ByteArrayOutputStream(
+          (int)adjustedLength));
+
+      decodeData(file, groupNo, blockSize, adjustedOffset, adjustedLength,
+          erasuredDataInfo, erasuredCodingInfo);
+
+      byte[] data = ((ByteArrayOutputStream)(erasuredDataInfo.get(blockIdx)))
+          .toByteArray();
+      byte[] result = new byte[length];
+      System.arraycopy(data, (int)(offset % blockSize - adjustedOffset),
+          result, 0, (int)length);
+      return result;
+    } finally {
+      if (erasuredCodingInfo != null) {
+        closeOutputStreams(erasuredCodingInfo.values().toArray());
+      }
+
+      if (erasuredCodingInfo != null) {
+        closeOutputStreams(erasuredCodingInfo.values().toArray());
       }
     }
   }
@@ -241,6 +296,15 @@ public class BlockCodec {
   void decodeBlocks(Path file, int groupNo, long blockSize,
       Map<Integer, OutputStream> dataErasures,
       Map<Integer, OutputStream> codingErasures) throws IOException {
+    decodeData(file, groupNo, blockSize, 0, blockSize,
+        dataErasures, codingErasures);
+  }
+
+  void decodeData(Path file, int groupNo, long blockSize, long offset,
+      long length, Map<Integer, OutputStream> dataErasures,
+      Map<Integer, OutputStream> codingErasures) throws IOException {
+    Preconditions.checkArgument(offset % ENCODE_DATA_SIZE == 0);
+    Preconditions.checkArgument(length > 0 && length % ENCODE_DATA_SIZE == 0);
     FSDataInputStream[] dataIns = new FSDataInputStream[dataBlocksNum];
     FSDataInputStream[] codingIns = new FSDataInputStream[codingBlocksNum];
     try {
@@ -251,13 +315,13 @@ public class BlockCodec {
       byte[][] coding = new byte[codingBlocksNum][ENCODE_DATA_SIZE];
       int[] erasures = getErasures(dataErasures, codingErasures);
       // Construct the corrupted blocks
-      for (int r = 0; r < blockSize / ENCODE_DATA_SIZE; ++r) {
+      for (int r = 0; r < length / ENCODE_DATA_SIZE; ++r) {
         int count = 0;
         // Read next piece of data
         for (int i = 0; i < dataBlocksNum; ++i) {
           int blockIdx = groupNo * dataBlocksNum + i;
           if (dataErasures.get(blockIdx) == null) {
-            dataIns[i].read(blockIdx * blockSize + r * ENCODE_DATA_SIZE,
+            dataIns[i].read(blockIdx * blockSize + offset + r * ENCODE_DATA_SIZE,
                 data[i], 0, data[i].length);
             ++count;
           } else {
@@ -389,7 +453,7 @@ public class BlockCodec {
       if (corruptedBlocks[i] < totalDataBlocksNum) {
         // data blocks
         int index = corruptedBlocks[i] / dataBlocksNum;
-        dataBlocksGroup[index] .put(corruptedBlocks[i], DUMMY_STREAM);
+        dataBlocksGroup[index].put(corruptedBlocks[i], DUMMY_STREAM);
       } else {
         // coding blocks
         int index = (corruptedBlocks[i] - totalDataBlocksNum) / codingBlocksNum;
@@ -453,11 +517,77 @@ public class BlockCodec {
     }
   }
 
-  static Path getCodingFile(Path file) {
+  long adjustOffset(long offset, int eps) {
+    Preconditions.checkArgument(eps > 0);
+    if (offset % eps != 0) {
+      offset = (offset / eps) * eps;
+    }
+    return offset;
+  }
+
+  long adjustLength(long length, int eps) {
+    Preconditions.checkArgument(eps > 0);
+    if (length % eps != 0) {
+      length = (length / eps + 1) * eps;
+    }
+    return length;
+  }
+
+  public static Path getCodingFile(Path file) {
     return new Path(RAID_ROOT.toString() + file + CODINF_FILE_SUFFIX);
   }
 
-  static Path getRaidRoot() {
+  public static Path getRaidRoot() {
     return RAID_ROOT;
+  }
+
+  private static Path getDecodeLockFile(Path file) {
+    return new Path(RAID_ROOT.toString() + file + DECODE_LOCK_FILE_SUFFIX);
+  }
+
+  public static boolean isFileDecoding(FileSystem fs, Path file)
+      throws IOException {
+    checkDistributedFileSystem(fs);
+    Path lockFile = getDecodeLockFile(file);
+    if (!fs.exists(lockFile) ||
+        ((DistributedFileSystem)fs).isFileClosed(file)) {
+      return false;
+    }
+    return true;
+  }
+
+  public static boolean isFileEncoded(FileSystem fs, Path file)
+      throws IOException {
+    return fs.exists(getCodingFile(file));
+  }
+
+  public static FSDataOutputStream beginDecoding(FileSystem fs, Path file)
+      throws IOException {
+    checkDistributedFileSystem(fs);
+    Path lockFile = getDecodeLockFile(file);
+    try {
+      if (((DistributedFileSystem) fs).isFileClosed(lockFile)) {
+        fs.delete(lockFile, false);
+      }
+    } catch (FileNotFoundException e) {
+      // Ignored
+    }
+    FSDataOutputStream out = fs.create(lockFile, false);
+    return out;
+  }
+
+  public static void endDecoding(FileSystem fs, Path file,
+      FSDataOutputStream out) throws IOException {
+    checkDistributedFileSystem(fs);
+    Path lockFile = getDecodeLockFile(file);
+    out.close();
+    fs.delete(lockFile, false);
+  }
+
+  private static void checkDistributedFileSystem(FileSystem fs)
+      throws IOException {
+    if (!(fs instanceof DistributedFileSystem)) {
+      throw new IOException("Non-distributed filesystem not supported");
+    }
   }
 }

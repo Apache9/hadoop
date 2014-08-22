@@ -369,4 +369,52 @@ public class TestBlockCodec {
 
     fs.delete(new Path(blockFile), false);
   }
+
+  @Test
+  public void testDecodePartialBlock() throws Exception {
+    Path file = new Path("/text3.txt");
+    int blockSize = 1048576;
+    int fileLen = blockSize * 10 - 100;
+    DFSTestUtil.createFile(dfs, file, 1024, fileLen, blockSize, (short)3,
+        System.currentTimeMillis());
+    Thread.sleep(1000);
+
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY, 6);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY, 3);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 1000);
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    BlockCodec codec = new BlockCodec(conf);
+
+    FileStatus status = dfs.getFileStatus(file);
+    Assert.assertEquals((short)3, status.getReplication());
+
+    // Encode the file
+    codec.encode(file);
+    Path codingFile = BlockCodec.getCodingFile(file);
+    Assert.assertTrue(dfs.exists(codingFile));
+    FileStatus codingFileStatus = dfs.getFileStatus(codingFile);
+    Assert.assertEquals(codingFileStatus.getBlockSize() * 2 * 3,
+        codingFileStatus.getLen());
+
+    status = dfs.getFileStatus(file);
+    Assert.assertEquals((short)1, status.getReplication());
+
+    byte[] fileContent = DFSTestUtil.readFileBuffer(dfs, file);
+    Assert.assertEquals(fileLen, fileContent.length);
+    byte[] codingContent = DFSTestUtil.readFileBuffer(dfs, codingFile);
+    Assert.assertEquals(blockSize * 3 * 2, codingContent.length);
+
+    // Corrupt 1 data block
+    LocatedBlock block = getBlock(file, 1, blockSize);
+    dfsClient.reportBadBlocks(new LocatedBlock[]{block});
+
+    // Try to read data of the corrupted block
+    long offset = blockSize + 10;
+    int length = 101;
+    byte[] data = codec.decode(file, offset, length);
+    Assert.assertNotNull(data);
+    Assert.assertArrayEquals(
+        Arrays.copyOfRange(fileContent, (int)offset, (int)(offset + length)),
+        data);
+  }
 }
