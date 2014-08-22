@@ -121,46 +121,7 @@ public class TestDistributedRaidFileSystem {
     LocatedBlock block = blocks.get(0);
     deleteBlockFile(block);
 
-    // Read the whole file and verify the data
-    byte[] data = new byte[fileContent.length];
-    FSDataInputStream in = dfs.open(file);
-    int totalReadLen = 0;
-    while (totalReadLen < data.length) {
-      int readLen = in.read(data, totalReadLen, data.length - totalReadLen);
-      totalReadLen += readLen;
-    }
-    Assert.assertArrayEquals(fileContent, data);
-    in.close();
-
-    // Pread part of the file and verify the data
-    int blockSize = (int)(fileStatus.getBlockSize());
-    data = new byte[blockSize];
-    in = dfs.open(file);
-    long offset = 4 * fileStatus.getBlockSize();
-    int readLen = in.read(offset, data, 0, data.length);
-    Assert.assertEquals(data.length, readLen);
-    Assert.assertArrayEquals(
-        Arrays.copyOfRange(fileContent, 4 * blockSize, 5 * blockSize), data);
-  }
-
-  private void deleteBlockFile(LocatedBlock block) throws Exception {
-    long blockId = block.getBlock().getBlockId();
-    String bpId = block.getBlock().getBlockPoolId();
-    String dataDir = dfsCluster.getDataDirectory();
-    int dirIdx = 1;
-
-    String blockFile = null;
-    FileSystem fs = FileSystem.getLocal(new Configuration());
-    do {
-      blockFile = dataDir + "/data" + (dirIdx++) + "/current/" + bpId +
-          "/current/finalized/blk_" + blockId;
-      if (fs.exists(new Path(blockFile))) {
-        break;
-      }
-    } while (dirIdx < 10);
-    Assert.assertNotNull(blockFile);
-
-    fs.delete(new Path(blockFile), false);
+    runReadTest(file, fileContent, 4);
   }
 
   @Test
@@ -186,6 +147,12 @@ public class TestDistributedRaidFileSystem {
     LocatedBlock block = blocks.get(0);
     corruptChecksumFile(block);
 
+    runReadTest(file, fileContent, 4);
+  }
+
+  void runReadTest(Path file, byte[] fileContent, int corruptedBlockIdx) throws Exception {
+    FileStatus fileStatus = dfs.getFileStatus(file);
+
     // Read the whole file and verify the data
     byte[] data = new byte[fileContent.length];
     FSDataInputStream in = dfs.open(file);
@@ -201,11 +168,44 @@ public class TestDistributedRaidFileSystem {
     int blockSize = (int)(fileStatus.getBlockSize());
     data = new byte[blockSize];
     in = dfs.open(file);
-    long offset = 4 * fileStatus.getBlockSize();
+    long offset = corruptedBlockIdx * fileStatus.getBlockSize();
     int readLen = in.read(offset, data, 0, data.length);
     Assert.assertEquals(data.length, readLen);
     Assert.assertArrayEquals(
-        Arrays.copyOfRange(fileContent, 4 * blockSize, 5 * blockSize), data);
+        Arrays.copyOfRange(fileContent, corruptedBlockIdx * blockSize,
+            (corruptedBlockIdx + 1) * blockSize), data);
+    in.close();
+
+    // Readfully and verify
+    Assert.assertTrue(corruptedBlockIdx > 0);
+    long pos = corruptedBlockIdx * blockSize - 100;
+    int len = blockSize + 200;
+    byte[] buffer = new byte[len];
+    in = dfs.open(file);
+    in.readFully(pos, buffer, 0, buffer.length);
+    Assert.assertArrayEquals(
+        Arrays.copyOfRange(fileContent, (int)pos, (int)(pos + len)), buffer);
+    in.close();
+  }
+
+  private void deleteBlockFile(LocatedBlock block) throws Exception {
+    long blockId = block.getBlock().getBlockId();
+    String bpId = block.getBlock().getBlockPoolId();
+    String dataDir = dfsCluster.getDataDirectory();
+    int dirIdx = 1;
+
+    String blockFile = null;
+    FileSystem fs = FileSystem.getLocal(new Configuration());
+    do {
+      blockFile = dataDir + "/data" + (dirIdx++) + "/current/" + bpId +
+          "/current/finalized/blk_" + blockId;
+      if (fs.exists(new Path(blockFile))) {
+        break;
+      }
+    } while (dirIdx < 10);
+    Assert.assertNotNull(blockFile);
+
+    fs.delete(new Path(blockFile), false);
   }
 
   private void corruptChecksumFile(LocatedBlock block) throws Exception {

@@ -61,7 +61,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
 /**
- * Stream which is used to write a specified block to the dfs.
+ * Stream which is used to write a specified block to the HDFS.
  */
 public class BlockOutputStream extends FSOutputSummer {
 

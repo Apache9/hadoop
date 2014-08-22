@@ -22,7 +22,6 @@ import java.net.URI;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.contrib.raid.BlockCodec;
-import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FSInputStream;
@@ -91,7 +90,6 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
 
     private final DistributedRaidFileSystem fs;
     private final FileSystem rawFs;
-    private final Configuration conf;
     private final FSDataInputStream underlyingStream;
     private final Path file;
     private final FileStatus fileStatus;
@@ -102,7 +100,6 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
         Path file, int bufferSize) throws IOException {
       this.fs = fs;
       this.rawFs = this.fs.getRawFileSystem();
-      this.conf = conf;
       this.underlyingStream = this.rawFs.open(file, bufferSize);
       this.file = file;
       this.fileStatus = this.rawFs.getFileStatus(this.file);
@@ -143,7 +140,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     }
 
     @Override
-    public long getPos() throws IOException {
+    public synchronized long getPos() throws IOException {
       return currentPos;
     }
 
@@ -156,6 +153,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
 
     @Override
     public synchronized int read() throws IOException {
+      checkPos();
       IOException ioe = null;
       try {
         int readLen = underlyingStream.read();
@@ -165,10 +163,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
         ioe = e;
       }
 
-      if (isBlockCorrupted(ioe) && isFileEncoded()) {
+      if (BlockCodec.isBlockCorrupted(ioe) && isFileEncoded()) {
         int readLen = downgradeRead(getPos(), 1)[0];
-        currentPos += readLen;
-        underlyingStream.skip(readLen);
+        skipInternal(readLen);
         return readLen;
       } else {
         throw ioe;
@@ -183,6 +180,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     @Override
     public synchronized int read(byte[] bytes, int offset, int length)
         throws IOException {
+      checkPos();
       IOException ioe = null;
       try {
         int readLen = underlyingStream.read(bytes, offset, length);
@@ -192,11 +190,10 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
         ioe = e;
       }
 
-      if (isBlockCorrupted(ioe) && isFileEncoded()) {
+      if (BlockCodec.isBlockCorrupted(ioe) && isFileEncoded()) {
         byte[] result = downgradeRead(getPos(), length);
         System.arraycopy(result, 0, bytes, offset, result.length);
-        currentPos += result.length;
-        underlyingStream.skip(result.length);
+        skipInternal(result.length);
         return result.length;
       } else {
         throw ioe;
@@ -204,8 +201,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     }
 
     @Override
-    public synchronized int read(long position, byte[] buffer, int offset,
+    public int read(long position, byte[] buffer, int offset,
         int length) throws IOException {
+      checkPos();
       IOException ioe = null;
       try {
         int readLen = underlyingStream.read(position, buffer, offset, length);
@@ -214,10 +212,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
         ioe = e;
       }
 
-      if (isBlockCorrupted(ioe) && isFileEncoded()) {
+      if (BlockCodec.isBlockCorrupted(ioe) && isFileEncoded()) {
         byte[] result = downgradeRead(position, length);
         System.arraycopy(result, 0, buffer, offset, result.length);
-        underlyingStream.skip(result.length);
         return result.length;
       } else {
         throw ioe;
@@ -225,34 +222,49 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     }
 
     @Override
-    public void readFully(long position, byte[] buffer) throws IOException {
+    public synchronized void readFully(long position, byte[] buffer)
+        throws IOException {
       readFully(position, buffer, 0, buffer.length);
     }
 
     @Override
     public synchronized void readFully(long position, byte[] buffer, int offset,
         int length) throws IOException {
-      IOException ioe = null;
-      try {
-        underlyingStream.readFully(position, buffer, offset, length);
-        currentPos += length;
-      } catch (IOException e) {
-        ioe = e;
-      }
+      checkPos();
+      long blockSize = fileStatus.getBlockSize();
+      int startBlockIdx = (int)((position - 1) / blockSize);
+      int endBlockIdx = (int)((position + length - 1) / blockSize);
+      int totalReadLen = 0;
 
-      if (isBlockCorrupted(ioe) && isFileEncoded()) {
-        int totalReadLen = 0;
-        while (totalReadLen < length) {
-          byte[] result = downgradeRead(position + totalReadLen,
-              length - totalReadLen);
-          System.arraycopy(result, 0, buffer, offset + totalReadLen,
-              result.length);
-          totalReadLen += result.length;
+      for (int i = startBlockIdx; i <= endBlockIdx; ++i) {
+        long pos = position;
+        if (i > startBlockIdx) {
+          pos = i * blockSize;
         }
-        currentPos += length;
-        underlyingStream.skip(length);
-      } else {
-        throw ioe;
+
+        int len = (int)((i + 1) * blockSize - pos);
+        if (len + pos > position + length) {
+          len = (int)((position + length - 1) % blockSize + 1);
+        }
+
+        IOException ioe = null;
+        try {
+          underlyingStream.read(pos, buffer, offset + totalReadLen, len);
+          currentPos += len;
+          totalReadLen += len;
+          continue;
+        } catch (IOException e) {
+          ioe = e;
+        }
+
+        if (BlockCodec.isBlockCorrupted(ioe) && isFileEncoded()) {
+          byte[] result = downgradeRead(pos, len);
+          System.arraycopy(result, 0, buffer, offset + totalReadLen, len);
+          totalReadLen += result.length;
+          skipInternal(length);
+        } else {
+          throw ioe;
+        }
       }
     }
 
@@ -261,9 +273,21 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
       underlyingStream.close();
     }
 
-    boolean isBlockCorrupted(IOException ioe) {
-      return (ioe instanceof BlockMissingException) ||
-          (ioe instanceof ChecksumException);
+    private void skipInternal(long bytes) {
+      currentPos += bytes;
+      try {
+        underlyingStream.skip(bytes);
+      } catch (IOException e) {
+        // Ignored
+      }
+    }
+
+    private void checkPos() throws IOException {
+      if (underlyingStream.getPos() != currentPos) {
+        throw new IOException("Read position of underlying stream is not " +
+            "equal to current read position, underlyingPos=" +
+            underlyingStream.getPos() + ", currentPos=" + currentPos);
+      }
     }
 
     boolean isFileEncoded() throws IOException {
@@ -274,7 +298,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     }
 
     byte[] downgradeRead(long offset, int length) throws IOException {
-      // read at most untill the end of the current block
+      // read at most until the end of the current block
       long blockSize = fileStatus.getBlockSize();
       length = Math.min(length, (int) (blockSize - (offset % blockSize)));
       return fs.blockCodec.decode(file, offset, length);
