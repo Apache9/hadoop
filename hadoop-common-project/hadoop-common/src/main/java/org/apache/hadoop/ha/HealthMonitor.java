@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.commons.logging.Log;
@@ -68,8 +67,6 @@ public class HealthMonitor {
   private final Configuration conf;
   
   private State state = State.INITIALIZING;
-
-  private final ReentrantLock healthCheckLock = new ReentrantLock();
 
   /**
    * Listeners for state changes
@@ -187,59 +184,38 @@ public class HealthMonitor {
 
   private void doHealthChecks() throws InterruptedException {
     while (shouldRun) {
+      HAServiceStatus status = null;
+      boolean healthy = false;
       try {
-        lockHealthCheck();
-        HAServiceStatus status = null;
-        boolean healthy = false;
-        try {
-          status = proxy.getServiceStatus();
-          proxy.monitorHealth();
-          healthy = true;
-        } catch (HealthCheckFailedException e) {
-          LOG.warn("Service health check failed for " + targetToMonitor
-              + ": " + e.getMessage());
-          enterState(State.SERVICE_UNHEALTHY);
-        } catch (Throwable t) {
-          LOG.warn("Transport-level exception trying to monitor health of " +
-              targetToMonitor + ": " + t.getLocalizedMessage());
-          RPC.stopProxy(proxy);
-          proxy = null;
-          enterState(State.SERVICE_NOT_RESPONDING);
-          Thread.sleep(sleepAfterDisconnectMillis);
-          return;
-        }
-
-        if (!checkServiceStatus(status)) {
-          enterState(State.SERVICE_UNHEALTHY);
-        } else {
-          if (status != null) {
-            setLastServiceStatus(status);
-          }
-          if (healthy) {
-            enterState(State.SERVICE_HEALTHY);
-          }
-        }
-      } finally {
-        unlockHealthCheck();
+        status = proxy.getServiceStatus();
+        proxy.monitorHealth();
+        healthy = true;
+      } catch (HealthCheckFailedException e) {
+        LOG.warn("Service health check failed for " + targetToMonitor
+            + ": " + e.getMessage());
+        enterState(State.SERVICE_UNHEALTHY);
+      } catch (Throwable t) {
+        LOG.warn("Transport-level exception trying to monitor health of " +
+            targetToMonitor + ": " + t.getLocalizedMessage());
+        RPC.stopProxy(proxy);
+        proxy = null;
+        enterState(State.SERVICE_NOT_RESPONDING);
+        Thread.sleep(sleepAfterDisconnectMillis);
+        return;
       }
+      
+      if (status != null) {
+        setLastServiceStatus(status);
+      }
+      if (healthy) {
+        enterState(State.SERVICE_HEALTHY);
+      }
+
       Thread.sleep(checkIntervalMillis);
     }
   }
-
-  synchronized boolean checkServiceStatus(HAServiceStatus status) {
-    if (status != null && status.getState().equals(HAServiceState.STANDBY) &&
-        lastServiceState != null &&
-        lastServiceState.getState().equals(HAServiceState.ACTIVE)) {
-      // In this case, the target service is restarted, but the health monitor
-      // doesn't realize that, so we should reset the health state and trigger
-      // the failover
-      setLastServiceStatus(status);
-      return false;
-    }
-    return true;
-  }
   
-  synchronized void setLastServiceStatus(HAServiceStatus status) {
+  private synchronized void setLastServiceStatus(HAServiceStatus status) {
     this.lastServiceState = status;
   }
 
@@ -301,15 +277,7 @@ public class HealthMonitor {
       }
     }
   }
-
-  void lockHealthCheck() {
-    healthCheckLock.lock();
-  }
-
-  void unlockHealthCheck() {
-    healthCheckLock.unlock();
-  }
-
+  
   /**
    * Callback interface for state change events.
    * 
