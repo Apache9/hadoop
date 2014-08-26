@@ -833,7 +833,8 @@ public class Client {
       }
 
       try {
-        Thread.sleep(action.delayMillis);
+        // Thread.sleep(action.delayMillis);
+        Thread.sleep(15000);
       } catch (InterruptedException e) {
         throw (IOException)new InterruptedIOException("Interrupted: action="
             + action + ", retry policy=" + connectionRetryPolicy).initCause(e);
