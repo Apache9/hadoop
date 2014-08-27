@@ -8,6 +8,7 @@ Release 2.4.1 - UNRELEASED
 
   IMPROVEMENTS
 
+    HDFS-6879. Adding tracing to Hadoop RPC.  Contributed by Masatake Iwasaki.
   OPTIMIZATIONS
 
   BUG FIXES 

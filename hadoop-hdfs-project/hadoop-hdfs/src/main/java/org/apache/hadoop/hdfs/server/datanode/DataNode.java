@@ -88,6 +88,7 @@ import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.*;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
+import org.apache.hadoop.tracing.SpanReceiverHost;
 import org.mortbay.util.ajax.JSON;
 
 import javax.management.ObjectName;
@@ -232,6 +233,8 @@ public class DataNode extends Configured
   ReadaheadPool readaheadPool;
   private final boolean getHdfsBlockLocationsEnabled;
   private ObjectName dataNodeInfoBeanName;
+
+  private SpanReceiverHost spanReceiverHost;
 
   /**
    * Create the DataNode given a configuration, an array of dataDirs,
@@ -707,6 +710,7 @@ public class DataNode extends Configured
     this.dataDirs = dataDirs;
     this.conf = conf;
     this.dnConf = new DNConf(conf);
+    this.spanReceiverHost = SpanReceiverHost.getInstance(conf);
 
     if (dnConf.maxLockedMemory > 0) {
       if (!NativeIO.POSIX.getCacheManipulator().verifyCanMlock()) {
@@ -1314,6 +1318,9 @@ public class DataNode extends Configured
     if (dataNodeInfoBeanName != null) {
       MBeans.unregister(dataNodeInfoBeanName);
       dataNodeInfoBeanName = null;
+    }
+    if (this.spanReceiverHost != null) {
+      this.spanReceiverHost.closeReceivers();
     }
     if (shortCircuitRegistry != null) shortCircuitRegistry.shutdown();
     LOG.info("Shutdown complete.");
