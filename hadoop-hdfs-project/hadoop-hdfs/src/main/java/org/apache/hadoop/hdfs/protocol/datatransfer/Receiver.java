@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.protocol.datatransfer;
 
 import static org.apache.hadoop.hdfs.protocolPB.PBHelper.vintPrefixed;
 import static org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil.fromProto;
+import static org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil.continueTraceSpan;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.io.IOException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.hdfs.ShortCircuitShm.SlotId;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpBlockChecksumProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpCopyBlockProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpReadBlockProto;
@@ -38,6 +40,7 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ReleaseShortCirc
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ShortCircuitShmRequestProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
+import org.htrace.TraceScope;
 
 /** Receiver */
 @InterfaceAudience.Private
@@ -107,7 +110,10 @@ public abstract class Receiver implements DataTransferProtocol {
   /** Receive OP_READ_BLOCK */
   private void opReadBlock() throws IOException {
     OpReadBlockProto proto = OpReadBlockProto.parseFrom(vintPrefixed(in));
-    readBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+    TraceScope traceScope = continueTraceSpan(proto.getHeader(),
+        proto.getClass().getSimpleName());
+    try {
+      readBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
         PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
         proto.getHeader().getClientName(),
         proto.getOffset(),
@@ -116,34 +122,51 @@ public abstract class Receiver implements DataTransferProtocol {
         (proto.hasCachingStrategy() ?
             getCachingStrategy(proto.getCachingStrategy()) :
           CachingStrategy.newDefaultStrategy()));
+    } finally {
+      if (traceScope != null) traceScope.close();
+    }
   }
   
   /** Receive OP_WRITE_BLOCK */
   private void opWriteBlock(DataInputStream in) throws IOException {
     final OpWriteBlockProto proto = OpWriteBlockProto.parseFrom(vintPrefixed(in));
-    writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
-        PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
-        proto.getHeader().getClientName(),
-        PBHelper.convert(proto.getTargetsList()),
-        PBHelper.convert(proto.getSource()),
-        fromProto(proto.getStage()),
-        proto.getPipelineSize(),
-        proto.getMinBytesRcvd(), proto.getMaxBytesRcvd(),
-        proto.getLatestGenerationStamp(),
-        fromProto(proto.getRequestedChecksum()),
-        (proto.hasCachingStrategy() ?
-            getCachingStrategy(proto.getCachingStrategy()) :
-          CachingStrategy.newDefaultStrategy()));
+    final DatanodeInfo[] targets = PBHelper.convert(proto.getTargetsList());
+    TraceScope traceScope = continueTraceSpan(proto.getHeader(),
+        proto.getClass().getSimpleName());
+    try {
+      writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
+          proto.getHeader().getClientName(),
+          targets,
+          PBHelper.convert(proto.getSource()),
+          fromProto(proto.getStage()),
+          proto.getPipelineSize(),
+          proto.getMinBytesRcvd(), proto.getMaxBytesRcvd(),
+          proto.getLatestGenerationStamp(),
+          fromProto(proto.getRequestedChecksum()),
+          (proto.hasCachingStrategy() ?
+              getCachingStrategy(proto.getCachingStrategy()) :
+            CachingStrategy.newDefaultStrategy()));
+     } finally {
+      if (traceScope != null) traceScope.close();
+     }
   }
 
   /** Receive {@link Op#TRANSFER_BLOCK} */
   private void opTransferBlock(DataInputStream in) throws IOException {
     final OpTransferBlockProto proto =
       OpTransferBlockProto.parseFrom(vintPrefixed(in));
-    transferBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
-        PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
-        proto.getHeader().getClientName(),
-        PBHelper.convert(proto.getTargetsList()));
+    final DatanodeInfo[] targets = PBHelper.convert(proto.getTargetsList());
+    TraceScope traceScope = continueTraceSpan(proto.getHeader(),
+        proto.getClass().getSimpleName());
+    try {
+      transferBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
+          proto.getHeader().getClientName(),
+          targets);
+    } finally {
+      if (traceScope != null) traceScope.close();
+    }
   }
 
   /** Receive {@link Op#REQUEST_SHORT_CIRCUIT_FDS} */
@@ -152,9 +175,15 @@ public abstract class Receiver implements DataTransferProtocol {
       OpRequestShortCircuitAccessProto.parseFrom(vintPrefixed(in));
     SlotId slotId = (proto.hasSlotId()) ? 
         PBHelper.convert(proto.getSlotId()) : null;
-    requestShortCircuitFds(PBHelper.convert(proto.getHeader().getBlock()),
-        PBHelper.convert(proto.getHeader().getToken()),
-        slotId, proto.getMaxVersion());
+    TraceScope traceScope = continueTraceSpan(proto.getHeader(),
+        proto.getClass().getSimpleName());
+    try {
+      requestShortCircuitFds(PBHelper.convert(proto.getHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getToken()),
+          slotId, proto.getMaxVersion());
+    } finally {
+      if (traceScope != null) traceScope.close();
+    }
   }
 
   /** Receive {@link Op#RELEASE_SHORT_CIRCUIT_FDS} */
@@ -162,37 +191,66 @@ public abstract class Receiver implements DataTransferProtocol {
       throws IOException {
     final ReleaseShortCircuitAccessRequestProto proto =
       ReleaseShortCircuitAccessRequestProto.parseFrom(vintPrefixed(in));
-    releaseShortCircuitFds(PBHelper.convert(proto.getSlotId()));
+    TraceScope traceScope = continueTraceSpan(proto.getTraceInfo(),
+        proto.getClass().getSimpleName());
+    try {
+      releaseShortCircuitFds(PBHelper.convert(proto.getSlotId()));
+    } finally {
+      if (traceScope != null) traceScope.close();
+    }
   }
 
   /** Receive {@link Op#REQUEST_SHORT_CIRCUIT_SHM} */
   private void opRequestShortCircuitShm(DataInputStream in) throws IOException {
     final ShortCircuitShmRequestProto proto =
         ShortCircuitShmRequestProto.parseFrom(vintPrefixed(in));
-    requestShortCircuitShm(proto.getClientName());
+    TraceScope traceScope = continueTraceSpan(proto.getTraceInfo(),
+        proto.getClass().getSimpleName());
+    try {
+      requestShortCircuitShm(proto.getClientName());
+    } finally {
+      if (traceScope != null) traceScope.close();
+    }
   }
 
   /** Receive OP_REPLACE_BLOCK */
   private void opReplaceBlock(DataInputStream in) throws IOException {
     OpReplaceBlockProto proto = OpReplaceBlockProto.parseFrom(vintPrefixed(in));
-    replaceBlock(PBHelper.convert(proto.getHeader().getBlock()),
-        PBHelper.convert(proto.getHeader().getToken()),
-        proto.getDelHint(),
-        PBHelper.convert(proto.getSource()));
+    TraceScope traceScope = continueTraceSpan(proto.getHeader(),
+        proto.getClass().getSimpleName());
+    try {
+      replaceBlock(PBHelper.convert(proto.getHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getToken()),
+          proto.getDelHint(),
+          PBHelper.convert(proto.getSource()));
+    } finally {
+      if (traceScope != null) traceScope.close();
+    }
   }
 
   /** Receive OP_COPY_BLOCK */
   private void opCopyBlock(DataInputStream in) throws IOException {
     OpCopyBlockProto proto = OpCopyBlockProto.parseFrom(vintPrefixed(in));
-    copyBlock(PBHelper.convert(proto.getHeader().getBlock()),
-        PBHelper.convert(proto.getHeader().getToken()));
+    TraceScope traceScope = continueTraceSpan(proto.getHeader(),
+        proto.getClass().getSimpleName());
+    try {
+      copyBlock(PBHelper.convert(proto.getHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getToken()));
+    } finally {
+      if (traceScope != null) traceScope.close();
+    }
   }
 
   /** Receive OP_BLOCK_CHECKSUM */
   private void opBlockChecksum(DataInputStream in) throws IOException {
     OpBlockChecksumProto proto = OpBlockChecksumProto.parseFrom(vintPrefixed(in));
-    
+    TraceScope traceScope = continueTraceSpan(proto.getHeader(),
+        proto.getClass().getSimpleName());
+    try {
     blockChecksum(PBHelper.convert(proto.getHeader().getBlock()),
         PBHelper.convert(proto.getHeader().getToken()));
+    } finally {
+      if (traceScope != null) traceScope.close();
+    }
   }
 }

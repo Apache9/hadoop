@@ -88,6 +88,10 @@ import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
 
+import org.htrace.Span;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -365,12 +369,22 @@ public class DFSOutputStream extends FSOutputSummer
     /** Append on an existing block? */
     private final boolean isAppend;
 
+    private final Span traceSpan;
+
     /**
      * Default construction for file create
      */
     private DataStreamer() {
+      this(null);
+    }
+
+    /**
+     * construction with tracing info
+     */
+    private DataStreamer(Span span) {
       isAppend = false;
       stage = BlockConstructionStage.PIPELINE_SETUP_CREATE;
+      traceSpan = span;
     }
     
     /**
@@ -381,9 +395,10 @@ public class DFSOutputStream extends FSOutputSummer
      * @throws IOException if error occurs
      */
     private DataStreamer(LocatedBlock lastBlock, HdfsFileStatus stat,
-        int bytesPerChecksum) throws IOException {
+        int bytesPerChecksum, Span span) throws IOException {
       isAppend = true;
       stage = BlockConstructionStage.PIPELINE_SETUP_APPEND;
+      traceSpan = span;
       block = lastBlock.getBlock();
       bytesSent = block.getNumBytes();
       accessToken = lastBlock.getBlockToken();
@@ -471,6 +486,10 @@ public class DFSOutputStream extends FSOutputSummer
     @Override
     public void run() {
       long lastPacket = Time.now();
+      TraceScope traceScope = null;
+      if (traceSpan != null) {
+        traceScope = Trace.continueSpan(traceSpan);
+      }
       while (!streamerClosed && dfsClient.clientRunning) {
 
         // if the Responder encountered an error, shutdown Responder
@@ -640,6 +659,9 @@ public class DFSOutputStream extends FSOutputSummer
             streamerClosed = true;
           }
         }
+      }
+      if (traceScope != null) {
+        traceScope.close();
       }
       closeInternal();
     }
@@ -1635,7 +1657,11 @@ public class DFSOutputStream extends FSOutputSummer
     computePacketChunkSize(dfsClient.getConf().writePacketSize,
         checksum.getBytesPerChecksum());
 
-    streamer = new DataStreamer();
+    Span traceSpan = null;
+    if (Trace.isTracing()) {
+      traceSpan = Trace.startSpan(this.getClass().getSimpleName()).detach();
+    }
+    streamer = new DataStreamer(traceSpan);
     if (favoredNodes != null && favoredNodes.length != 0) {
       streamer.setFavoredNodes(favoredNodes);
     }
@@ -1682,15 +1708,21 @@ public class DFSOutputStream extends FSOutputSummer
     this(dfsClient, src, progress, stat, checksum);
     initialFileSize = stat.getLen(); // length of file when opened
 
+    Span traceSpan = null;
+    if (Trace.isTracing()) {
+      traceSpan = Trace.startSpan(this.getClass().getSimpleName()).detach();
+    }
+
     // The last partial block of the file has to be filled.
     if (lastBlock != null) {
       // indicate that we are appending to an existing block
       bytesCurBlock = lastBlock.getBlockSize();
-      streamer = new DataStreamer(lastBlock, stat, checksum.getBytesPerChecksum());
+      streamer = new DataStreamer(lastBlock, stat,
+          checksum.getBytesPerChecksum(), traceSpan);
     } else {
       computePacketChunkSize(dfsClient.getConf().writePacketSize,
           checksum.getBytesPerChecksum());
-      streamer = new DataStreamer();
+      streamer = new DataStreamer(traceSpan);
     }
   }
 
