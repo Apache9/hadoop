@@ -685,7 +685,9 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     this.jobTokenSecretManager = jobTokenSecretManager;
 
     this.aclsManager = new JobACLsManager(conf);
-    this.username = System.getProperty("user.name");
+    // using user_name in conf instead of login user name on remote machine
+    // this.username = System.getProperty("user.name");
+    this.username = conf.get(MRJobConfig.USER_NAME);
     this.jobACLs = aclsManager.constructJobACLs(conf);
 
     ThreadFactory threadFactory = new ThreadFactoryBuilder()
