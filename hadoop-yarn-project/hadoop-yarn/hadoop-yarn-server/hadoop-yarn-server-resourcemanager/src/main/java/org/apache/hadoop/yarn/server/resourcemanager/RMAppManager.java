@@ -305,35 +305,33 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
         appState.getApplicationSubmissionContext();
     ApplicationId appId = appState.getAppId();
 
-    // create and recover app.
-    RMAppImpl application =
-        createAndPopulateNewRMApp(appContext, appState.getSubmitTime(),
-          appState.getUser());
-    application.recover(rmState);
-    if (isApplicationInFinalState(appState.getState())) {
-      // We are synchronously moving the application into final state so that
-      // momentarily client will not see this application in NEW state. Also
-      // for finished applications we will avoid renewing tokens.
-      application.handle(new RMAppEvent(appId, RMAppEventType.RECOVER));
-      return;
-    }
+    try {
+      // create and recover app.
+      RMAppImpl application =
+          createAndPopulateNewRMApp(appContext, appState.getSubmitTime(),
+              appState.getUser());
+      application.recover(rmState);
 
-    if (UserGroupInformation.isSecurityEnabled()) {
-      Credentials credentials = null;
-      try {
-        credentials = parseCredentials(appContext);
+      // If security is enabled and the application is NOT in a final state,
+      // parse the credentials and renew delegation token
+      if (UserGroupInformation.isSecurityEnabled() &&
+          !isApplicationInFinalState(appState.getState())) {
+        Credentials credentials = parseCredentials(appContext);
         // synchronously renew delegation token on recovery.
         rmContext.getDelegationTokenRenewer().addApplicationSync(appId,
-          credentials, appContext.getCancelTokensWhenComplete());
-        application.handle(new RMAppEvent(appId, RMAppEventType.RECOVER));
-      } catch (Exception e) {
-        LOG.warn("Unable to parse and renew delegation tokens.", e);
-        this.rmContext.getDispatcher().getEventHandler()
-          .handle(new RMAppRejectedEvent(appId, e.getMessage()));
-        throw e;
+            credentials, appContext.getCancelTokensWhenComplete());
       }
-    } else {
+
+      // Actual recovery of the application
       application.handle(new RMAppEvent(appId, RMAppEventType.RECOVER));
+    } catch (Exception e) {
+      LOG.error("Failed to recover application + " + appId, e);
+      // Fail the application if it is a running application.
+      if (!isApplicationInFinalState(appState.getState())) {
+        rmContext.getDispatcher().getEventHandler().handle(
+            new RMAppRejectedEvent(appId, e.getMessage()));
+      }
+      throw e;
     }
   }
 
@@ -422,7 +420,11 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     Map<ApplicationId, ApplicationState> appStates = state.getApplicationState();
     LOG.info("Recovering " + appStates.size() + " applications");
     for (ApplicationState appState : appStates.values()) {
-      recoverApplication(appState, state);
+      try {
+        recoverApplication(appState, state);
+      } catch (Exception e) {
+        LOG.error("Error recovering application " + appState, e);
+      }
     }
   }
 

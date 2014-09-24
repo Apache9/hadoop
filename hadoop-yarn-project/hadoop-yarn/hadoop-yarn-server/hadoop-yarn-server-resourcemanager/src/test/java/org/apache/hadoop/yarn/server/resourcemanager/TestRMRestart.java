@@ -72,6 +72,7 @@ import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.security.client.RMDelegationTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
@@ -1823,6 +1824,74 @@ public class TestRMRestart {
     }
     MockAM am1 = MockRM.launchAndRegisterAM(loadedApp0, rm2, nm1);
     MockRM.finishAMAndVerifyAppState(loadedApp0, rm2, nm1, am1);
+  }
+  
+  @Test (timeout = 60000)
+  public void testRMRestartOnRecoveryFailure() throws Exception {
+    conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+      YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
+    MemoryRMStateStore memStore = new MemoryRMStateStore();
+    memStore.init(conf);
+    RMState rmState = memStore.getState();
+    Map<ApplicationId, ApplicationState> rmAppState =
+        rmState.getApplicationState();
+
+    // start RM
+    MockRM rm1 = new MockRM(conf, memStore);
+    rm1.start();
+    MockNM nm1 =
+        new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
+    nm1.registerNode();
+
+    // create app and launch the AM
+    RMApp app0 = rm1.submitApp(200);
+    MockAM am0 = launchAM(app0, rm1, nm1);
+
+    // fail the AM by sending CONTAINER_FINISHED event without registering.
+    nm1.nodeHeartbeat(am0.getApplicationAttemptId(), 1, ContainerState.COMPLETE);
+    am0.waitForState(RMAppAttemptState.FAILED);
+
+    ApplicationState appState = rmAppState.get(app0.getApplicationId());
+    // assert the AM failed state is saved.
+    Assert.assertEquals(RMAppAttemptState.FAILED,
+      appState.getAttempt(am0.getApplicationAttemptId()).getState());
+
+    // assert app state has not been saved.
+    Assert.assertNull(rmAppState.get(app0.getApplicationId()).getState());
+
+    // new AM started but not registered, app still stays at ACCECPTED state.
+    rm1.waitForState(app0.getApplicationId(), RMAppState.ACCEPTED);
+
+    // start new RM
+    MockRM rm2 = new MockRM(conf, memStore) {
+      @Override
+      protected RMAppManager createRMAppManager() {
+        return new RMAppManager(this.rmContext, this.scheduler,
+            this.masterService, this.applicationACLsManager, conf) {
+          @Override
+          protected void recoverApplication(ApplicationState appState,
+              RMState rmState) throws Exception {
+            // Throw Exception for recovery failure
+            throw new YarnException("Recovery failed");
+
+          }
+        };
+      }
+    };
+    rm2.start();
+
+    // Verify rm2 functionality by submitting application
+    RMApp app1 = rm2.submitApp(200);
+    // assert app1 info is saved
+    appState = rmAppState.get(app1.getApplicationId());
+    Assert.assertNotNull(appState);
+    Assert.assertEquals(0, appState.getAttemptCount());
+    Assert.assertEquals(appState.getApplicationSubmissionContext()
+        .getApplicationId(), app1.getApplicationSubmissionContext()
+        .getApplicationId());
+    
+    rm1.stop();
+    rm2.stop();
   }
 
   private void writeToHostsFile(String... hosts) throws IOException {
