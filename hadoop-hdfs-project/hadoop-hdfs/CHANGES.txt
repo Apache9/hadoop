@@ -10,6 +10,7 @@ Release 2.4.1 - UNRELEASED
 
     HDFS-6879. Adding tracing to Hadoop RPC.  Contributed by Masatake Iwasaki.
     HDFS-6880. Adding tracing to DataNode data transfer protocol (iwasakims via cmccabe)
+    HDFS-6956. Allow dynamically changing the tracing level in Hadoop servers (cmccabe)
 
   OPTIMIZATIONS
 

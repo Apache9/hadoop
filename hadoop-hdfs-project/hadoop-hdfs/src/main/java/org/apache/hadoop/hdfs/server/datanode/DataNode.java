@@ -86,9 +86,15 @@ import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.*;
+import org.apache.hadoop.tracing.TraceAdminPB;
+import org.apache.hadoop.tracing.TraceAdminPB.TraceAdminService;
+import org.apache.hadoop.tracing.TraceAdminProtocolPB;
+import org.apache.hadoop.tracing.TraceAdminProtocolServerSideTranslatorPB;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
 import org.apache.hadoop.tracing.SpanReceiverHost;
+import org.apache.hadoop.tracing.SpanReceiverInfo;
+import org.apache.hadoop.tracing.TraceAdminProtocol;
 import org.mortbay.util.ajax.JSON;
 
 import javax.management.ObjectName;
@@ -140,7 +146,7 @@ import static org.apache.hadoop.util.ExitUtil.terminate;
 @InterfaceAudience.Private
 public class DataNode extends Configured 
     implements InterDatanodeProtocol, ClientDatanodeProtocol,
-    DataNodeMXBean {
+        TraceAdminProtocol, DataNodeMXBean {
   public static final Log LOG = LogFactory.getLog(DataNode.class);
   
   static{
@@ -431,6 +437,14 @@ public class DataNode extends Configured
         .newReflectiveBlockingService(interDatanodeProtocolXlator);
     DFSUtil.addPBProtocol(conf, InterDatanodeProtocolPB.class, service,
         ipcServer);
+
+    TraceAdminProtocolServerSideTranslatorPB traceAdminXlator =
+        new TraceAdminProtocolServerSideTranslatorPB(this);
+    BlockingService traceAdminService = TraceAdminService
+        .newReflectiveBlockingService(traceAdminXlator);
+    DFSUtil.addPBProtocol(conf, TraceAdminProtocolPB.class, traceAdminService,
+        ipcServer);
+
     LOG.info("Opened IPC server at " + ipcServer.getListenerAddress());
 
     // set service-level authorization security policy
@@ -2601,5 +2615,20 @@ public class DataNode extends Configured
 
   public ShortCircuitRegistry getShortCircuitRegistry() {
     return shortCircuitRegistry;
+  }
+
+  @Override
+  public SpanReceiverInfo[] listSpanReceivers() throws IOException {
+    return spanReceiverHost.listSpanReceivers();
+  }
+
+  @Override
+  public long addSpanReceiver(SpanReceiverInfo info) throws IOException {
+    return spanReceiverHost.addSpanReceiver(info);
+  }
+
+  @Override
+  public void removeSpanReceiver(long id) throws IOException {
+    spanReceiverHost.removeSpanReceiver(id);
   }
 }
