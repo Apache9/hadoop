@@ -7,6 +7,7 @@ Release 2.4.1 - UNRELEASED
   NEW FEATURES
 
   IMPROVEMENTS
+    HDFS-7055. Add tracing to DFSInputStream (cmccabe)
 
     HDFS-6879. Adding tracing to Hadoop RPC.  Contributed by Masatake Iwasaki.
     HDFS-6880. Adding tracing to DataNode data transfer protocol (iwasakims via cmccabe)
