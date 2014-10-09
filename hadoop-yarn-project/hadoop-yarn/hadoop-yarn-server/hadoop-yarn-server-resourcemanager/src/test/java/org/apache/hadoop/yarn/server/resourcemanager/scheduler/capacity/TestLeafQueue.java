@@ -73,6 +73,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptR
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppRemovedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
+import org.apache.hadoop.yarn.util.resource.DominantResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.junit.After;
@@ -100,6 +101,7 @@ public class TestLeafQueue {
   final static String DEFAULT_RACK = "/default";
 
   private final ResourceCalculator resourceCalculator = new DefaultResourceCalculator();
+  private final ResourceCalculator dominantCalculator = new DominantResourceCalculator();
   
   @Before
   public void setUp() throws Exception {
@@ -1638,8 +1640,8 @@ public class TestLeafQueue {
     e.submitApplicationAttempt(app_2, user_e);  // same user
 
     // before reinitialization
-    assertEquals(2, e.activeApplications.size());
-    assertEquals(1, e.pendingApplications.size());
+    assertEquals(1, e.activeApplications.size());
+    assertEquals(2, e.pendingApplications.size());
 
     csConf.setDouble(CapacitySchedulerConfiguration
         .MAXIMUM_APPLICATION_MASTERS_RESOURCE_PERCENT,
@@ -1716,8 +1718,8 @@ public class TestLeafQueue {
     e.submitApplicationAttempt(app_2, user_e);  // same user
 
     // before updating cluster resource
-    assertEquals(2, e.activeApplications.size());
-    assertEquals(1, e.pendingApplications.size());
+    assertEquals(1, e.activeApplications.size());
+    assertEquals(2, e.pendingApplications.size());
 
     e.updateClusterResource(Resources.createResource(200 * 16 * GB, 100 * 32));
 
@@ -2071,6 +2073,37 @@ public class TestLeafQueue {
     when(csContext.getConfiguration()).thenReturn(csConf);
     when(csContext.getConf()).thenReturn(new YarnConfiguration());
     when(csContext.getResourceCalculator()).thenReturn(resourceCalculator);
+    when(csContext.getClusterResources()).thenReturn(clusterResource);
+    when(csContext.getMinimumResourceCapability()).thenReturn(
+        Resources.createResource(GB, 1));
+    when(csContext.getMaximumResourceCapability()).thenReturn(
+        Resources.createResource(2 * GB, 2));
+    return csContext;
+  }
+
+  @Test
+  public void testMaxActiveApplicationsForDominantResourceCalculator()
+      throws Exception {
+    CapacitySchedulerConfiguration csConf = new CapacitySchedulerConfiguration();
+    Resource clusterResource = Resources
+        .createResource(100 * 16 * GB, 100 * 8);
+    CapacitySchedulerContext csContext = mockCSContextForDominantCalculator(csConf, clusterResource);
+    csConf.setFloat(CapacitySchedulerConfiguration.
+        MAXIMUM_APPLICATION_MASTERS_RESOURCE_PERCENT, 0.1f);
+    ParentQueue root = new ParentQueue(csContext,
+        CapacitySchedulerConfiguration.ROOT, null, null);
+    csConf.setCapacity(CapacitySchedulerConfiguration.ROOT + "." + A, 80);
+    LeafQueue a = new LeafQueue(csContext, A, root, null);
+    assertEquals(0.1f, a.getMaxAMResourcePerQueuePercent(), 1e-3f);
+    assertEquals(80, a.getMaximumActiveApplications());
+  }
+
+  private CapacitySchedulerContext mockCSContextForDominantCalculator(
+      CapacitySchedulerConfiguration csConf, Resource clusterResource) {
+    CapacitySchedulerContext csContext = mock(CapacitySchedulerContext.class);
+    when(csContext.getConfiguration()).thenReturn(csConf);
+    when(csContext.getConf()).thenReturn(new YarnConfiguration());
+    when(csContext.getResourceCalculator()).thenReturn(dominantCalculator);
     when(csContext.getClusterResources()).thenReturn(clusterResource);
     when(csContext.getMinimumResourceCapability()).thenReturn(
         Resources.createResource(GB, 1));
