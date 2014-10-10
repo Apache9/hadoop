@@ -44,6 +44,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_MAX_BLOCK_ACQUIRE_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_READ_PREFETCH_SIZE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_RETRY_WINDOW_BASE;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_SLOW_LOG_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_SLOW_LOG_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_SOCKET_CACHE_CAPACITY_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_SOCKET_CACHE_CAPACITY_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_SOCKET_CACHE_EXPIRY_MSEC_DEFAULT;
@@ -294,6 +296,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
     final long shortCircuitCacheStaleThresholdMs;
     final int failedDatanodeTimeout;
     final int failedDatanodeMaxRetry;
+    final long slowLogThresholdMs;
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
@@ -438,6 +441,10 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
       failedDatanodeMaxRetry = conf.getInt(
           DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_MAX_RETRY,
           DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT);
+
+      slowLogThresholdMs = conf.getLong(
+          DFSConfigKeys.DFS_CLIENT_SLOW_LOG_THRESHOLD_MS_KEY,
+          DFSConfigKeys.DFS_CLIENT_SLOW_LOG_THRESHOLD_MS_DEFAULT);
     }
 
     private DataChecksum.Type getChecksumType(Configuration conf) {
