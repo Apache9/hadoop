@@ -122,7 +122,6 @@ public class DFSOutputStream extends FSOutputSummer
     implements Syncable, CanSetDropBehind {
   private final DFSClient dfsClient;
   private static final int MAX_PACKETS = 80; // each packet 64K, total 5MB
-  private static final int SLOW_LOG_THRESHOLD_MS = 100;
   private Socket s;
   // closed is accessed by different threads under different locks.
   private volatile boolean closed = false;
@@ -799,7 +798,8 @@ public class DFSOutputStream extends FSOutputSummer
             long t1 = Time.monotonicNow();
             ack.readFields(blockReplyStream);
             long t2 = Time.monotonicNow();
-            if (t2 - t1 > SLOW_LOG_THRESHOLD_MS && ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
+            if (t2 - t1 > dfsClient.getConf().slowLogThresholdMs &&
+                ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
               DFSClient.LOG.info("ResponseProcessorReadAckCost:" + (t2 - t1) + "ms,ack:" + ack
                   + ",targets:" + Arrays.asList(targets));
             } else if (DFSClient.LOG.isDebugEnabled()) {
@@ -2072,7 +2072,7 @@ public class DFSOutputStream extends FSOutputSummer
         }
       }
       long t2 = Time.monotonicNow();
-      if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
+      if (t2 - t1 > dfsClient.getConf().slowLogThresholdMs) {
         DFSClient.LOG.info("waitForAckedSeqno cost:" + (t2 - t1) + "ms");
       }
       checkClosed();
