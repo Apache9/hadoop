@@ -3026,7 +3026,8 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   // Symlinks are temporarily disabled - see HADOOP-10020 and HADOOP-10052
-  private static boolean symlinksEnabled = false;
+  // For mdh version, we enable symlinks for compatibility
+  private static boolean symlinksEnabled = true;
 
   private static Configuration conf = null;
 
