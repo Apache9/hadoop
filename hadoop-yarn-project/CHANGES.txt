@@ -10,7 +10,11 @@ Release 2.4.1 - UNRELEASED
 
   OPTIMIZATIONS
 
-  BUG FIXES 
+  BUG FIXES
+
+      YARN-1922. Fixed NodeManager to kill process-trees correctly in the presence
+      of races between the launch and the stop-container call and when root
+      processes crash. (Billie Rinaldi via vinodkv)
 
 Release 2.4.0 - 2014-04-07 
 
