@@ -1001,6 +1001,7 @@ public class DatanodeManager {
         addressList.add(addr.getAddress().getHostAddress());
       }
 
+      dnsToSwitchMapping.reloadCachedMappings();
       dnsToSwitchMapping.resolve(addressList);
     } else {
       LOG.warn("refreshTopology is only support on " + 
