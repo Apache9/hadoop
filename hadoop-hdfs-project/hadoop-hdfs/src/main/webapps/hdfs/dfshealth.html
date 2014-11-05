@@ -31,11 +31,11 @@
   </div>
 
   <ul class="nav navbar-nav" id="ui-tabs">
-    <li><a href="#tab-overview">Overview</a></li>
-    <li><a href="#tab-datanode">Datanodes</a></li>
-    <li><a href="#tab-snapshot">Snapshot</a></li>
-    <li><a href="#tab-startup-progress">Startup Progress</a></li>
-    <li class="dropdown">
+    <li id="overview"><a href="#tab-overview">Overview</a></li>
+    <li id="datanodes"><a href="#tab-datanode">Datanodes</a></li>
+    <li id="snapshot"><a href="#tab-snapshot">Snapshot</a></li>
+    <li id="startup-progress"><a href="#tab-startup-progress">Startup Progress</a></li>
+    <li id="utilities" class="dropdown">
       <a href="#" class="dropdown-toggle" data-toggle="dropdown">Utilities <b class="caret"></b></a>
       <ul class="dropdown-menu">
         <li><a href="explorer.html">Browse the file system</a></li>
@@ -197,7 +197,7 @@
 <div class="page-header"><h1>Datanode Information</h1></div>
 <div class="page-header"><h1><small>In operation</small></h1></div>
 <small>
-<table class="table">
+<table class="table" id="datanode-list">
   <thead>
     <tr>
       <th>Node</th>
@@ -302,7 +302,25 @@
 </script>
 
 <script type="text/javascript" src="/static/jquery-1.10.2.min.js">
-</script><script type="text/javascript" src="/static/bootstrap-3.0.2/js/bootstrap.min.js">
+</script><script type="text/javascript" src="/static/jquery.tablesorter.min.js">
+</script>
+<script type="text/javascript">
+function setDatanodeTableSortable() {
+  window.setTimeout(function() {
+    $("#datanode-list").tablesorter();
+  }, 1000);
+}
+
+$(document).ready(function() {
+  setDatanodeTableSortable();
+
+  $("li#datanodes").on("click", function() {
+    setDatanodeTableSortable();
+  });
+});
+</script>
+
+<script type="text/javascript" src="/static/bootstrap-3.0.2/js/bootstrap.min.js">
 </script><script type="text/javascript" src="/static/dust-full-2.0.0.min.js">
 </script><script type="text/javascript" src="/static/dust-helpers-1.1.1.min.js">
 </script><script type="text/javascript" src="dfs-dust.js">
