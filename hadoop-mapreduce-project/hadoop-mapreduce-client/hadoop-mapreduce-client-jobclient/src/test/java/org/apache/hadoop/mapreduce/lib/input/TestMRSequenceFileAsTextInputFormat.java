@@ -113,6 +113,40 @@ public class TestMRSequenceFileAsTextInputFormat extends TestCase {
     }
   }
 
+  /**
+   * Test skip empty sequence file
+   */
+  public void testForEmptyFile() throws Exception {
+    Configuration conf = new Configuration();
+    FileSystem fileSys = FileSystem.get(conf);
+    Path file = new Path("test" + "/file1");
+    FSDataOutputStream out = fileSys.create(file, true);
+    out.write(new byte[1024]);
+    out.close();
+
+    file = new Path("test" + "/file2");
+    out = fileSys.create(file, true);
+    out.write(new byte[0]);
+    out.close();
+
+    file = new Path("test" + "/file3");
+    out = fileSys.create(file, true);
+    out.write(new byte[1024]);
+    out.close();
+
+    // split it using a CombinedFile input format
+    InputFormat<Text, Text> inFormat =
+        new SequenceFileAsTextInputFormat();
+    Job job = Job.getInstance(conf);
+    FileInputFormat.setInputPaths(job, "test");
+    List<InputSplit> splits = inFormat.getSplits(job);
+    assertEquals(2, splits.size());
+    assertEquals("file1", ((FileSplit)splits.get(0)).getPath().getName());
+    assertEquals("file3", ((FileSplit)splits.get(1)).getPath().getName());
+
+    fileSys.delete(file.getParent(), true);
+  }
+
   public static void main(String[] args) throws Exception {
     new TestMRSequenceFileAsTextInputFormat().testFormat();
   }

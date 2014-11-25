@@ -19,6 +19,7 @@
 package org.apache.hadoop.mapred;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -43,6 +44,8 @@ public class SequenceFileInputFormat<K, V> extends FileInputFormat<K, V> {
   @Override
   protected FileStatus[] listStatus(JobConf job) throws IOException {
     FileStatus[] files = super.listStatus(job);
+
+    int j = 0;
     for (int i = 0; i < files.length; i++) {
       FileStatus file = files[i];
       if (file.isDirectory()) {     // it's a MapFile
@@ -51,8 +54,12 @@ public class SequenceFileInputFormat<K, V> extends FileInputFormat<K, V> {
         // use the data file
         files[i] = fs.getFileStatus(dataFile);
       }
+      if (files[i].getLen() != 0) {
+        files[j] = files[i];
+        ++j;
+      }
     }
-    return files;
+    return Arrays.copyOfRange(files, 0, j);
   }
 
   public RecordReader<K, V> getRecordReader(InputSplit split,
