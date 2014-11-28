@@ -68,6 +68,7 @@ public class DNConf {
   final int socketTimeout;
   final int socketWriteTimeout;
   final int socketKeepaliveTimeout;
+  final int slowBlockReadThresholdMs;
   
   final boolean transferToAllowed;
   final boolean dropCacheBehindWrites;
@@ -109,6 +110,9 @@ public class DNConf {
     socketKeepaliveTimeout = conf.getInt(
         DFSConfigKeys.DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY,
         DFSConfigKeys.DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_DEFAULT);
+    slowBlockReadThresholdMs = conf.getInt(
+        DFSConfigKeys.DFS_DATANODE_SLOW_BLOCK_READ_MILLIS_KEY,
+        DFSConfigKeys.DFS_DATANODE_SLOW_BLOCK_READ_MILLIS_DEFAULT);
     
     /* Based on results on different platforms, we might need set the default 
      * to false on some of them. */
