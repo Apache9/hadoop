@@ -160,7 +160,7 @@ class BlockSender implements java.io.Closeable {
    * See {{@link BlockSender#isLongRead()}
    */
   private static final long LONG_READ_THRESHOLD_BYTES = 256 * 1024;
-  
+  private static int SLOW_LOG_THRESHOLD_MS = 500; 
 
   /**
    * Constructor
@@ -185,7 +185,7 @@ class BlockSender implements java.io.Closeable {
       this.corruptChecksumOk = corruptChecksumOk;
       this.verifyChecksum = verifyChecksum;
       this.clientTraceFmt = clientTraceFmt;
-
+      SLOW_LOG_THRESHOLD_MS = datanode.getDnConf().slowBlockReadThresholdMs;
       /*
        * If the client asked for the cache to be dropped behind all reads,
        * we honor that.  Otherwise, we use the DataNode defaults.
@@ -430,12 +430,17 @@ class BlockSender implements java.io.Closeable {
   private static void waitForMinLength(ReplicaBeingWritten rbw, long len)
       throws IOException {
     // Wait for 3 seconds for rbw replica to reach the minimum length
+    long begin = System.nanoTime();
     for (int i = 0; i < 30 && rbw.getBytesOnDisk() < len; i++) {
       try {
         Thread.sleep(100);
       } catch (InterruptedException ie) {
         throw new IOException(ie);
       }
+    }
+    long end = System.nanoTime();
+    if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
+      LOG.info("waitForMinLength cost:" + (end - begin) + "ns");
     }
     long bytesOnDisk = rbw.getBytesOnDisk();
     if (bytesOnDisk < len) {
@@ -527,8 +532,12 @@ class BlockSender implements java.io.Closeable {
     
     int dataOff = checksumOff + checksumDataLen;
     if (!transferTo) { // normal transfer
+      long begin = System.nanoTime();
       IOUtils.readFully(blockIn, buf, dataOff, dataLen);
-
+      long end = System.nanoTime();
+      if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
+        LOG.info("BlockSender normal transfer1 cost:" + (end - begin) + "ns");
+      }
       if (verifyChecksum) {
         verifyChecksum(buf, dataOff, dataLen, numChunks, checksumOff);
       }
@@ -538,20 +547,34 @@ class BlockSender implements java.io.Closeable {
       if (transferTo) {
         SocketOutputStream sockOut = (SocketOutputStream)out;
         // First write header and checksums
+        long begin = System.nanoTime();
         sockOut.write(buf, headerOff, dataOff - headerOff);
-        
+        long endOfWriteHeader = System.nanoTime();
         // no need to flush since we know out is not a buffered stream
         FileChannel fileCh = ((FileInputStream)blockIn).getChannel();
         LongWritable waitTime = new LongWritable();
         LongWritable transferTime = new LongWritable();
         sockOut.transferToFully(fileCh, blockInPosition, dataLen, 
             waitTime, transferTime);
+        long end = System.nanoTime();
         datanode.metrics.addSendDataPacketBlockedOnNetworkNanos(waitTime.get());
         datanode.metrics.addSendDataPacketTransferNanos(transferTime.get());
+        if (waitTime.get() > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L
+            || transferTime.get() > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
+          LOG.info("BlockSender sendDataPacketBlockedOnNetwork cost:" + waitTime.get()
+              + "ns, sendDataPacketTransfer cost:" + transferTime.get() + "ns"
+              + ", writeHeader cost:" + (endOfWriteHeader - begin) + "ns, write packet cost:"
+              + (end - endOfWriteHeader) + "ns");
+        }
         blockInPosition += dataLen;
       } else {
         // normal transfer
+        long begin = System.nanoTime();
         out.write(buf, headerOff, dataOff + dataLen - headerOff);
+        long end = System.nanoTime();
+        if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
+          LOG.info("BlockSender normal transfer2 cost:" + (end - begin) + "ns");
+        }
       }
     } catch (IOException e) {
       if (e instanceof SocketTimeoutException) {
@@ -603,7 +626,12 @@ class BlockSender implements java.io.Closeable {
       return;
     }
     try {
+      long begin = System.nanoTime();
       checksumIn.readFully(buf, checksumOffset, checksumLen);
+      long end = System.nanoTime();
+      if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
+        LOG.info("BlockSender.readChecksum cost:" + (end - begin) + "ns");
+      }
     } catch (IOException e) {
       LOG.warn(" Could not read or failed to veirfy checksum for data"
           + " at offset " + offset + " for block " + block, e);
@@ -679,9 +707,14 @@ class BlockSender implements java.io.Closeable {
 
     if (isLongRead() && blockInFd != null) {
       // Advise that this file descriptor will be accessed sequentially.
+      long begin = System.nanoTime();
       NativeIO.POSIX.getCacheManipulator().posixFadviseIfPossible(
           block.getBlockName(), blockInFd, 0, 0,
           NativeIO.POSIX.POSIX_FADV_SEQUENTIAL);
+      long end = System.nanoTime();
+      if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
+        LOG.info("BlockSender POSIX_FADV_SEQUENTIAL cost:" + (end - begin) + "ns");
+      }
     }
     
     // Trigger readahead of beginning of file if configured.
@@ -766,10 +799,15 @@ class BlockSender implements java.io.Closeable {
         (dropCacheBehindLargeReads && isLongRead())) {
       long nextCacheDropOffset = lastCacheDropOffset + CACHE_DROP_INTERVAL_BYTES;
       if (offset >= nextCacheDropOffset) {
+        long begin = System.nanoTime();
         long dropLength = offset - lastCacheDropOffset;
         NativeIO.POSIX.getCacheManipulator().posixFadviseIfPossible(
             block.getBlockName(), blockInFd, lastCacheDropOffset,
             dropLength, NativeIO.POSIX.POSIX_FADV_DONTNEED);
+        long end = System.nanoTime();
+        if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
+          LOG.info("BlockSender POSIX_FADV_DONTNEED cost:" + (end - begin) + "ns");
+        }
         lastCacheDropOffset = offset;
       }
     }
