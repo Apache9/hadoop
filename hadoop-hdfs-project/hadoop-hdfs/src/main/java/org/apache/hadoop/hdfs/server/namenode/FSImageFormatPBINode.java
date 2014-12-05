@@ -119,8 +119,9 @@ public final class FSImageFormatPBINode {
       }
 
       if (d.hasAcl()) {
-        dir.addAclFeature(new AclFeature(loadAclEntries(d.getAcl(),
-            state.getStringTable())));
+        int[] entries = AclEntryStatusFormat.toInt(loadAclEntries(
+            d.getAcl(), state.getStringTable()));
+        dir.addAclFeature(new AclFeature(entries));
       }
       return dir;
     }
@@ -251,8 +252,9 @@ public final class FSImageFormatPBINode {
           f.getAccessTime(), blocks, replication, f.getPreferredBlockSize());
 
       if (f.hasAcl()) {
-        file.addAclFeature(new AclFeature(loadAclEntries(f.getAcl(),
-            state.getStringTable())));
+        int[] entries = AclEntryStatusFormat.toInt(loadAclEntries(
+            f.getAcl(), state.getStringTable()));
+        file.addAclFeature(new AclFeature(entries));
       }
 
       // under-construction information
@@ -308,11 +310,13 @@ public final class FSImageFormatPBINode {
     private static AclFeatureProto.Builder buildAclEntries(AclFeature f,
         final SaverContext.DeduplicationMap<String> map) {
       AclFeatureProto.Builder b = AclFeatureProto.newBuilder();
-      for (AclEntry e : f.getEntries()) {
-        int v = ((map.getId(e.getName()) & ACL_ENTRY_NAME_MASK) << ACL_ENTRY_NAME_OFFSET)
-            | (e.getType().ordinal() << ACL_ENTRY_TYPE_OFFSET)
-            | (e.getScope().ordinal() << ACL_ENTRY_SCOPE_OFFSET)
-            | (e.getPermission().ordinal());
+      for (int pos = 0, e; pos < f.getEntriesSize(); pos++) {
+        e = f.getEntryAt(pos);
+        int nameId = map.getId(AclEntryStatusFormat.getName(e));
+        int v = ((nameId & ACL_ENTRY_NAME_MASK) << ACL_ENTRY_NAME_OFFSET)
+            | (AclEntryStatusFormat.getType(e).ordinal() << ACL_ENTRY_TYPE_OFFSET)
+            | (AclEntryStatusFormat.getScope(e).ordinal() << ACL_ENTRY_SCOPE_OFFSET)
+            | (AclEntryStatusFormat.getPermission(e).ordinal());
         b.addEntries(v);
       }
       return b;
