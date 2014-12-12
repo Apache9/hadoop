@@ -297,6 +297,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
     final int failedDatanodeTimeout;
     final int failedDatanodeMaxRetry;
     final long slowLogThresholdMs;
+    final int slowConnWarningMs;
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
@@ -445,6 +446,10 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
       slowLogThresholdMs = conf.getLong(
           DFSConfigKeys.DFS_CLIENT_SLOW_LOG_THRESHOLD_MS_KEY,
           DFSConfigKeys.DFS_CLIENT_SLOW_LOG_THRESHOLD_MS_DEFAULT);
+
+      slowConnWarningMs = conf.getInt(
+          DFSConfigKeys.DFS_CLIENT_SLOW_CONN_WARNING_MS_KEY,
+          DFSConfigKeys.DFS_CLIENT_SLOW_CONN_WARNING_MS_DEFAULT);
     }
 
     private DataChecksum.Type getChecksumType(Configuration conf) {
@@ -2809,9 +2814,14 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
     Socket sock = null;
     try {
       sock = socketFactory.createSocket();
+      long begin = System.currentTimeMillis();
       NetUtils.connect(sock, addr,
         getRandomLocalInterfaceAddr(),
         dfsClientConf.socketTimeout);
+      long end = System.currentTimeMillis();
+      if (end - begin > dfsClientConf.slowConnWarningMs) {
+        LOG.warn("SLOW tcp connection be detected! host:" + addr);
+      }
       peer = TcpPeerServer.peerFromSocketAndKey(sock, 
           getDataEncryptionKey());
       peer.setReadTimeout(dfsClientConf.socketTimeout);
