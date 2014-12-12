@@ -321,12 +321,72 @@ class BlockPoolSlice {
         }
       }
 
-      ReplicaInfo oldReplica = volumeMap.add(bpid, newReplica);
-      if (oldReplica != null) {
+      ReplicaInfo oldReplica = volumeMap.get(bpid, newReplica.getBlockId());
+      if (oldReplica == null) {
+        volumeMap.add(bpid, newReplica);
+      } else {
         FsDatasetImpl.LOG.warn("Two block files with the same block id exist " +
-            "on disk: " + oldReplica.getBlockFile() + " and " + blockFile );
+            "on disk: " + oldReplica.getBlockFile() + " and " + blockFile);
+        // We have multiple replicas of the same block so decide which one
+        // to keep.
+        newReplica = resolveDuplicateReplicas(newReplica, oldReplica, volumeMap);
       }
     }
+  }
+
+  /**
+   * This method is invoked during DN startup when volumes are scanned to
+   * build up the volumeMap.
+   *
+   * Given two replicas, decide which one to keep. The preference is as
+   * follows:
+   *   1. Prefer the replica with the higher generation stamp.
+   *   2. If generation stamps are equal, prefer the replica with the
+   *      larger on-disk length.
+   *   3. If on-disk length is the same, prefer the replica on persistent
+   *      storage volume.
+   *   4. All other factors being equal, keep replica1.
+   *
+   * The other replica is removed from the volumeMap and is deleted from
+   * its storage volume.
+   *
+   * @param replica1
+   * @param replica2
+   * @param volumeMap
+   * @return the replica that is retained.
+   * @throws IOException
+   */
+  private ReplicaInfo resolveDuplicateReplicas(
+      final ReplicaInfo replica1, final ReplicaInfo replica2,
+      final ReplicaMap volumeMap) throws IOException {
+
+    ReplicaInfo replicaToKeep;
+    ReplicaInfo replicaToDelete;
+
+    if (replica1.getGenerationStamp() != replica2.getGenerationStamp()) {
+      replicaToKeep = replica1.getGenerationStamp() > replica2.getGenerationStamp()
+          ? replica1 : replica2;
+    } else if (replica1.getNumBytes() != replica2.getNumBytes()) {
+      replicaToKeep = replica1.getNumBytes() > replica2.getNumBytes() ?
+          replica1 : replica2;
+    } else {
+      replicaToKeep = replica1;
+    }
+
+    replicaToDelete = (replicaToKeep == replica1) ? replica2 : replica1;
+
+    // Update volumeMap.
+    volumeMap.add(bpid, replicaToKeep);
+
+    // Delete the files on disk. Failure here is okay.
+    replicaToDelete.getBlockFile().delete();
+    replicaToDelete.getMetaFile().delete();
+
+    FsDatasetImpl.LOG.info(
+        "resolveDuplicateReplicas keeping " + replicaToKeep.getBlockFile() +
+        ", deleting " + replicaToDelete.getBlockFile());
+
+    return replicaToKeep;
   }
   
   /**
