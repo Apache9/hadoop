@@ -58,6 +58,7 @@ public class SequenceFileInputFormat<K, V> extends FileInputFormat<K, V> {
 
     List<FileStatus> files = super.listStatus(job);
     int len = files.size();
+    int j = 0;
     for(int i=0; i < len; ++i) {
       FileStatus file = files.get(i);
       if (file.isDirectory()) {     // it's a MapFile
@@ -66,8 +67,12 @@ public class SequenceFileInputFormat<K, V> extends FileInputFormat<K, V> {
         // use the data file
         files.set(i, fs.getFileStatus(new Path(p, MapFile.DATA_FILE_NAME)));
       }
+      if (files.get(i).getLen() != 0) {
+        files.set(j, files.get(i));
+        ++j;
+      }
     }
-    return files;
+    return files.subList(0, j);
   }
 }
 
