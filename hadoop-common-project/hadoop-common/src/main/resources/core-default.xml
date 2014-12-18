@@ -221,6 +221,18 @@ for ldap providers in the same way as above does.
 </property>
 
 <property>
+  <name>hadoop.security.group.mapping.file.name</name>
+  <value>${hadoop.conf.dir}/hadoop-groups.conf</value>
+  <description>
+    This is the group mapping file for the ConfigurationBasedGroupsMapping.
+    It is a plain text file, each line is in the format of
+    'user1 group1,group2', which means 'user1' belongs to two groups 'group1'
+    and 'group2'. Lines start with '#' will be treated as comments, and will
+    be skipped.
+  </description>
+</property>
+
+<property>
   <name>hadoop.security.group.mapping.ldap.url</name>
   <value></value>
   <description>

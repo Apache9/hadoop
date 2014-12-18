@@ -58,6 +58,7 @@ class FSPermissionChecker {
       FsAction access, FsPermission mode, List<AclEntry> featureEntries) {
     StringBuilder sb = new StringBuilder("Permission denied: ")
       .append("user=").append(user).append(", ")
+      .append("groups=").append(Arrays.toString(groups.toArray())).append(", ")
       .append("access=").append(access).append(", ")
       .append("inode=\"").append(inode.getFullPathName()).append("\":")
       .append(inode.getUserName(snapshotId)).append(':')
