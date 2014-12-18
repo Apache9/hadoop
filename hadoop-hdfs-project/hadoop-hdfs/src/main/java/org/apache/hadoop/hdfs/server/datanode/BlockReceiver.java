@@ -211,6 +211,8 @@ class BlockReceiver implements Closeable {
           break;
         case TRANSFER_RBW:
         case TRANSFER_FINALIZED:
+          // delete the leftover replica because of datanode restarting
+          datanode.data.deleteBlock(block.getBlockPoolId(), block.getBlockId());
           // this is a transfer destination
           replicaInfo = datanode.data.createTemporary(storageType, block);
           break;

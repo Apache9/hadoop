@@ -328,6 +328,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     final long shortCircuitMmapCacheExpiryMs;
     final long shortCircuitMmapCacheRetryTimeout;
     final long shortCircuitCacheStaleThresholdMs;
+    final int failedDatanodeTimeout;
+    final int failedDatanodeMaxRetry;
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
@@ -492,6 +494,13 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       dfsclientSlowIoWarningThresholdMs = conf.getLong(
           DFSConfigKeys.DFS_CLIENT_SLOW_IO_WARNING_THRESHOLD_KEY,
           DFSConfigKeys.DFS_CLIENT_SLOW_IO_WARNING_THRESHOLD_DEFAULT);
+
+      failedDatanodeTimeout = conf.getInt(
+          DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_TIMEOUT,
+          DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_TIMEOUT_DEFAULT);
+      failedDatanodeMaxRetry = conf.getInt(
+          DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_MAX_RETRY,
+          DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT);
     }
 
     public boolean isUseLegacyBlockReaderLocal() {

@@ -2285,7 +2285,12 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       volume.deleteBPDirectories(bpid, force);
     }
   }
-  
+
+  @Override
+  public synchronized ReplicaInfo deleteBlock(String bpid, long blockId) {
+    return volumeMap.remove(bpid, blockId);
+  }
+
   @Override // FsDatasetSpi
   public BlockLocalPathInfo getBlockLocalPathInfo(ExtendedBlock block)
       throws IOException {

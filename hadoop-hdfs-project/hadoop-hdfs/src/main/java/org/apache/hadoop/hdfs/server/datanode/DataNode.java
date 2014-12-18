@@ -1964,6 +1964,14 @@ public class DataNode extends ReconfigurableBase
      */
     @Override
     public void run() {
+      try {
+        doRun();
+      } catch (IOException ioe) {
+        // do nothing
+      }
+    }
+
+    public void doRun() throws IOException {
       xmitsInProgress.getAndIncrement();
       Socket sock = null;
       DataOutputStream out = null;
@@ -2746,7 +2754,7 @@ public class DataNode extends ReconfigurableBase
     b.setNumBytes(visible);
 
     if (targets.length > 0) {
-      new DataTransfer(targets, targetStorageTypes, b, stage, client).run();
+      new DataTransfer(targets, targetStorageTypes, b, stage, client).doRun();
     }
   }
 

@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.server.datanode.DataStorage;
 import org.apache.hadoop.hdfs.server.datanode.FinalizedReplica;
 import org.apache.hadoop.hdfs.server.datanode.Replica;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaInPipelineInterface;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.StorageLocation;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.FsDatasetFactory;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.FsVolumeImpl;
@@ -412,6 +413,13 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    */
   public void deleteBlockPool(String bpid, boolean force) throws IOException;
   
+  /**
+   * delete the specified block from the block pool if present
+   * @param bpid    the block pool id
+   * @param blockId the block id 
+   */
+  public ReplicaInfo deleteBlock(String bpid, long blockId);
+
   /**
    * Get {@link BlockLocalPathInfo} for the given block.
    */
