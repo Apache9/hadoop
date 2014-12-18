@@ -114,7 +114,6 @@ public class CachedDNSToSwitchMapping extends AbstractDNSToSwitchMapping {
     }
 
     List<String> uncachedHosts = getUncachedHosts(names);
-
     // Resolve the uncached hosts
     List<String> resolvedHosts = rawMapping.resolve(uncachedHosts);
     //cache them
@@ -122,6 +121,14 @@ public class CachedDNSToSwitchMapping extends AbstractDNSToSwitchMapping {
     //now look up the entire list in the cache
     return getCachedHosts(names);
 
+  }
+
+  /**
+   * Removes all of the DNSToSwitch mappings info. 
+   * The map will be empty after this call returns.
+   */
+  public void clearMappingCache() {
+    cache.clear();
   }
 
   /**

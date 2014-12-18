@@ -386,6 +386,7 @@ public class DFSAdmin extends FsShell {
     "\t[-refresh <host:ipc_port> <key> [arg1..argn]\n" +
     "\t[-reconfig <datanode|...> <host:ipc_port> <start|status>]\n" +
     "\t[-printTopology]\n" +
+    "\t[-refreshTopology]\n" +
     "\t[-refreshNamenodes datanode_host:ipc_port]\n"+
     "\t[-deleteBlockPool datanode_host:ipc_port blockpoolId [force]]\n"+
     "\t[-setBalancerBandwidth <bandwidth in bytes per second>]\n" +
@@ -863,7 +864,6 @@ public class DFSAdmin extends FsShell {
       "\tReports basic filesystem information and statistics.\n" +
       "\tOptional flags may be used to filter the list of displayed DNs.\n";
     
-
     String safemode = "-safemode <enter|leave|get|wait>:  Safe mode maintenance command.\n" + 
       "\t\tSafe mode is a Namenode state in which it\n" +
       "\t\t\t1.  does not accept changes to the name space (read-only)\n" +
@@ -933,7 +933,10 @@ public class DFSAdmin extends FsShell {
 
     String printTopology = "-printTopology: Print a tree of the racks and their\n" +
                            "\t\tnodes as reported by the Namenode\n";
-    
+
+    String refreshTopology = "-refreshTopology: reloads the configuration of the racks and their\n" +
+        "\t\tnodes as reported by the Namenode\n";
+
     String refreshNamenodes = "-refreshNamenodes: Takes a datanodehost:port as argument,\n"+
                               "\t\tFor the given datanode, reloads the configuration files,\n" +
                               "\t\tstops serving the removed block-pools\n"+
@@ -1027,6 +1030,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(reconfig);
     } else if ("printTopology".equals(cmd)) {
       System.out.println(printTopology);
+    } else if ("refreshTopology".equals(cmd)) {
+      System.out.println(refreshTopology);
     } else if ("refreshNamenodes".equals(cmd)) {
       System.out.println(refreshNamenodes);
     } else if ("deleteBlockPool".equals(cmd)) {
@@ -1202,7 +1207,21 @@ public class DFSAdmin extends FsShell {
       }
     return 0;
   }
-  
+
+  /**
+   * Reload the configuration of the racks and their nodes in namenode.
+   * 
+   * @throws IOException
+   */
+  public int refreshTopology() throws IOException {
+    int exitCode = -1;
+    DistributedFileSystem dfs = getDFS();
+    dfs.refreshTopology();
+    exitCode = 0;
+   
+    return exitCode;
+  }
+
   private static UserGroupInformation getUGI() 
   throws IOException {
     return UserGroupInformation.getCurrentUser();
@@ -1576,6 +1595,9 @@ public class DFSAdmin extends FsShell {
     } else if ("-printTopology".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
                          + " [-printTopology]");
+    } else if ("-refreshTopology".equals(cmd)) {
+      System.err.println("Usage: java DFSAdmin"
+                         + " [-refreshTopology]");
     } else if ("-refreshNamenodes".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
                          + " [-refreshNamenodes datanode-host:port]");
@@ -1697,6 +1719,11 @@ public class DFSAdmin extends FsShell {
         printUsage(cmd);
         return exitCode;
       }
+    } else if ("-refreshTopology".equals(cmd)) {
+      if(argv.length != 1) {
+        printUsage(cmd);
+        return exitCode;
+      }
     } else if ("-refreshNamenodes".equals(cmd)) {
       if (argv.length != 2) {
         printUsage(cmd);
@@ -1801,6 +1828,8 @@ public class DFSAdmin extends FsShell {
         exitCode = genericRefresh(argv, i);
       } else if ("-printTopology".equals(cmd)) {
         exitCode = printTopology();
+      } else if ("-refreshTopology".equals(cmd)) {
+        exitCode = refreshTopology();
       } else if ("-refreshNamenodes".equals(cmd)) {
         exitCode = refreshNamenodes(argv, i);
       } else if ("-deleteBlockPool".equals(cmd)) {

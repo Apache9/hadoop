@@ -2665,6 +2665,17 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   }
 
   /**
+   * Reload the rack topology configuration
+   * See {@link ClientProtocol#refreshTopology()} 
+   * for more details.
+   * 
+   * @see ClientProtocol#refreshTopology()
+   */
+  public void refreshTopology() throws IOException {
+    namenode.refreshTopology();
+  }
+
+  /**
    * Dumps DFS data structures into specified file.
    * 
    * @see ClientProtocol#metaSave(String)

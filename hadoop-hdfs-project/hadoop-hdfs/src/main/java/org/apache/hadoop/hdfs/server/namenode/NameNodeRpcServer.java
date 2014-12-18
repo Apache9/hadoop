@@ -914,6 +914,11 @@ class NameNodeRpcServer implements NamenodeProtocols {
     namesystem.refreshNodes();
   }
 
+  @Override // ClientProtocol
+  public void refreshTopology() throws IOException {
+    namesystem.getBlockManager().getDatanodeManager().refreshTopology();
+  }
+
   @Override // NamenodeProtocol
   public long getTransactionID() throws IOException {
     namesystem.checkOperation(OperationCategory.UNCHECKED);

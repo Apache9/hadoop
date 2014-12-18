@@ -145,6 +145,8 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.Recove
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RecoverLeaseResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RefreshNodesRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RefreshNodesResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RefreshTopologyRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RefreshTopologyResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RemoveCacheDirectiveRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RemoveCacheDirectiveResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RemoveCachePoolRequestProto;
@@ -282,6 +284,21 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
 
   private static final RefreshNodesResponseProto VOID_REFRESHNODES_RESPONSE = 
   RefreshNodesResponseProto.newBuilder().build();
+
+  static final RefreshTopologyResponseProto VOID_REFRESHTOPOLOGY_RESPONSE =
+    RefreshTopologyResponseProto.newBuilder().build();
+
+  @Override
+  public RefreshTopologyResponseProto refreshTopology(RpcController controller,
+      RefreshTopologyRequestProto req) throws ServiceException {
+    try {
+      server.refreshTopology();
+      return VOID_REFRESHTOPOLOGY_RESPONSE;
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+
+  }
 
   private static final FinalizeUpgradeResponseProto VOID_FINALIZEUPGRADE_RESPONSE = 
   FinalizeUpgradeResponseProto.newBuilder().build();

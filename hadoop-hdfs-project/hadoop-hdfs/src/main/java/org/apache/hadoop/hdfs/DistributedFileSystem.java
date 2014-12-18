@@ -1082,6 +1082,13 @@ public class DistributedFileSystem extends FileSystem {
   }
 
   /**
+   * Refreshes the rack info from the configured scripts/files.  
+   */
+  public void refreshTopology() throws IOException {
+    dfs.refreshTopology();
+  }
+
+  /**
    * Finalize previously upgraded files system state.
    * @throws IOException
    */

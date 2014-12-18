@@ -802,6 +802,12 @@ public interface ClientProtocol {
   public void refreshNodes() throws IOException;
 
   /**
+   * Tells the namenode to reload the rack info
+   * @throws IOException
+   */
+  public void refreshTopology() throws IOException;
+
+  /**
    * Finalize previous upgrade.
    * Remove file system state saved during the upgrade.
    * The upgrade will become irreversible.

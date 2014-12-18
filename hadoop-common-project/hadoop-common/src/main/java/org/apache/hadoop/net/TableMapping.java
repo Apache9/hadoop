@@ -48,7 +48,7 @@ import org.apache.hadoop.conf.Configured;
  * <p>
  * Calls to {@link #resolve(List)} will look up the address as defined in the
  * mapping file. If no entry corresponding to the address is found, the value
- * {@code /default-rack} is returned.
+ * {@link NetworkTopology#DEFAULT_RACK} is returned.
  * </p>
  */
 @InterfaceAudience.Public
