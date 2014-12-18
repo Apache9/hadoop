@@ -47,6 +47,7 @@ import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathIsNotDirectoryException;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.fs.XAttrSetFlag;
@@ -2166,6 +2167,23 @@ public class FSDirectory implements Closeable {
         ContentSummary cs = targetNode.computeAndConvertContentSummary(cscc);
         yieldCount += cscc.getYieldCount();
         return cs;
+      }
+    } finally {
+      readUnlock();
+    }
+  }
+
+  QuotaSummary getQuotaSummary(String src)
+    throws FileNotFoundException, UnresolvedLinkException {
+    String srcs = normalizePath(src);
+    readLock();
+    try {
+      INode targetNode = getNode(srcs, false);
+      if (targetNode == null) {
+        throw new FileNotFoundException("File does not exist: " + srcs);
+      }
+      else {
+        return targetNode.getQuotaSummary();
       }
     } finally {
       readUnlock();

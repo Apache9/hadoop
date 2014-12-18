@@ -35,6 +35,7 @@ import org.apache.hadoop.fs.InvalidPathException;
 import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.fs.XAttrSetFlag;
@@ -908,6 +909,20 @@ public interface ClientProtocol {
    */
   @Idempotent
   public ContentSummary getContentSummary(String path)
+      throws AccessControlException, FileNotFoundException,
+      UnresolvedLinkException, IOException;
+
+  /**
+   * Get {@link QuotaSummary} rooted at the specified directory.
+   * @param path The string representation of the path
+   *
+   * @throws AccessControlException permission denied
+   * @throws FileNotFoundException file <code>path</code> is not found
+   * @throws UnresolvedLinkException if <code>path</code> contains a symlink. 
+   * @throws IOException If an I/O error occurred
+   */
+  @Idempotent
+  public QuotaSummary getQuotaSummary(String path)
       throws AccessControlException, FileNotFoundException,
       UnresolvedLinkException, IOException;
 
