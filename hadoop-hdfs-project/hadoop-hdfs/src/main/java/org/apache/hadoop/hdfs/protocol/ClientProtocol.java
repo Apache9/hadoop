@@ -805,6 +805,7 @@ public interface ClientProtocol {
    * Tells the namenode to reload the rack info
    * @throws IOException
    */
+  @Idempotent
   public void refreshTopology() throws IOException;
 
   /**
