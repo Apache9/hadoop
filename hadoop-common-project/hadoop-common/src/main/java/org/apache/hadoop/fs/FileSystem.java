@@ -1457,14 +1457,6 @@ public abstract class FileSystem extends Configured implements Closeable {
     return new ContentSummary(summary[0], summary[1], summary[2]);
   }
 
-  /** Return the {@link QuotaSummary} of a given {@link Path}.
-  * @param f path to use
-  */
-  public QuotaSummary getQuotaSummary(Path f) throws IOException {
-    // retun -1 by default
-    return new QuotaSummary(-1, -1, -1, -1);
-  }
-
   final private static PathFilter DEFAULT_FILTER = new PathFilter() {
       @Override
       public boolean accept(Path file) {

@@ -52,7 +52,6 @@ import org.apache.hadoop.fs.Options.ChecksumOpt;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
@@ -662,12 +661,6 @@ public class DistributedFileSystem extends FileSystem {
         return fs.getContentSummary(p);
       }
     }.resolve(this, absF);
-  }
-
-  @Override
-  public QuotaSummary getQuotaSummary(Path f) throws IOException {
-    statistics.incrementReadOps(1);
-    return dfs.getQuotaSummary(getPathName(f));
   }
 
   /** Set a directory's quotas

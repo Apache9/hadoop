@@ -100,21 +100,21 @@ public class ContentSummary implements Writable{
   
   /** 
    * Output format:
-   * <----12----> <----12----> <-------18-------> <-------18------->
-   *    DIR_COUNT   FILE_COUNT       CONTENT_SIZE SPACE_USED FILE_NAME
+   * <----12----> <----12----> <-------18------->
+   *    DIR_COUNT   FILE_COUNT       CONTENT_SIZE FILE_NAME    
    */
-  private static final String STRING_FORMAT = "%12d %12d %18d %18d ";
+  private static final String STRING_FORMAT = "%12s %12s %18s ";
   /** 
    * Output format:
-   * <----12----> <----15----> <----15----> <----15----> <----12----> <----12----> <-------18-------> <-------18------->
-   *    QUOTA   REMAINING_QUATA SPACE_QUOTA SPACE_QUOTA_REM DIR_COUNT   FILE_COUNT   CONTENT_SIZE      CONSUMED_SPACE     FILE_NAME
+   * <----12----> <----15----> <----15----> <----15----> <----12----> <----12----> <-------18------->
+   *    QUOTA   REMAINING_QUATA SPACE_QUOTA SPACE_QUOTA_REM DIR_COUNT   FILE_COUNT   CONTENT_SIZE     FILE_NAME    
    */
   private static final String QUOTA_STRING_FORMAT = "%12s %15s ";
   private static final String SPACE_QUOTA_STRING_FORMAT = "%15s %15s ";
   
   /** The header string */
   private static final String HEADER = String.format(
-      STRING_FORMAT.replace('d', 's'), "directories", "files", "bytes", "consumed space");
+      STRING_FORMAT.replace('d', 's'), "directories", "files", "bytes");
 
   private static final String QUOTA_HEADER = String.format(
       QUOTA_STRING_FORMAT + SPACE_QUOTA_STRING_FORMAT, 
@@ -182,8 +182,7 @@ public class ContentSummary implements Writable{
     return prefix + String.format(STRING_FORMAT,
      formatSize(directoryCount, hOption),
      formatSize(fileCount, hOption),
-     formatSize(length, hOption),
-     formatSize(spaceConsumed, hOption));
+     formatSize(length, hOption));
   }
   /**
    * Formats a size to be human readable or in bytes
