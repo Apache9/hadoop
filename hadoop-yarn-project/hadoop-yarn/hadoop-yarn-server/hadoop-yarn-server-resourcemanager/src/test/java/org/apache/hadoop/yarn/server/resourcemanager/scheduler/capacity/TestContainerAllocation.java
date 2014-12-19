@@ -220,8 +220,8 @@ public class TestContainerAllocation {
       throws Exception {
     MockRM rm1 = new MockRM(conf);
     rm1.start();
-    MockNM nm1 = rm1.registerNode("127.0.0.1:1234", 8000);
-    MockNM nm2 = rm1.registerNode("127.0.0.1:2345", 8000);
+    MockNM nm1 = rm1.registerNode("127.0.0.1:1234", 20000);
+    MockNM nm2 = rm1.registerNode("127.0.0.1:2345", 20000);
     // LogAggregationContext is set as null
     Assert
       .assertNull(getLogAggregationContextFromContainerToken(rm1, nm1, null));
