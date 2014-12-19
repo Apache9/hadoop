@@ -116,10 +116,14 @@ class CSQueueUtils {
       float maxAMResourcePercent, float absoluteMaxCapacity) {
     return
         Math.max(
-          calculator.computeAvailableContainers(
-            Resources.multiply(clusterResource, absoluteMaxCapacity * maxAMResourcePercent),
-            minimumAllocation),
-          1);
+            (int)Math.ceil(
+                Resources.ratio(
+                    calculator, 
+                    clusterResource, 
+                    minimumAllocation) * 
+                    maxAMResourcePercent * absoluteMaxCapacity
+                ), 
+            1);
   }
 
   public static int computeMaxActiveApplicationsPerUser(
