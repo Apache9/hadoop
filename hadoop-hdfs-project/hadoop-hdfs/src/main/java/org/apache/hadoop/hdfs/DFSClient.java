@@ -330,6 +330,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     final long shortCircuitCacheStaleThresholdMs;
     final int failedDatanodeTimeout;
     final int failedDatanodeMaxRetry;
+    final int slowConnWarningMs;
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
@@ -501,6 +502,9 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       failedDatanodeMaxRetry = conf.getInt(
           DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_MAX_RETRY,
           DFSConfigKeys.DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT);
+      slowConnWarningMs = conf.getInt(
+          DFSConfigKeys.DFS_CLIENT_SLOW_CONN_WARNING_MS_KEY,
+          DFSConfigKeys.DFS_CLIENT_SLOW_CONN_WARNING_MS_DEFAULT);
     }
 
     public boolean isUseLegacyBlockReaderLocal() {
@@ -3135,9 +3139,14 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     Socket sock = null;
     try {
       sock = socketFactory.createSocket();
+      long begin = System.currentTimeMillis();
       NetUtils.connect(sock, addr,
         getRandomLocalInterfaceAddr(),
         dfsClientConf.socketTimeout);
+      long end = System.currentTimeMillis();
+      if (end - begin > dfsClientConf.slowConnWarningMs) {
+        LOG.warn("SLOW tcp connection be detected! host:" + addr);
+      }
       peer = TcpPeerServer.peerFromSocketAndKey(saslClient, sock, this,
           blockToken, datanodeId);
       peer.setReadTimeout(dfsClientConf.socketTimeout);

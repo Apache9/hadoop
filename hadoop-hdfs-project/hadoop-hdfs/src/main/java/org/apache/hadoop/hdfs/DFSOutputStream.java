@@ -1641,7 +1641,12 @@ public class DFSOutputStream extends FSOutputSummer
     final InetSocketAddress isa = NetUtils.createSocketAddr(dnAddr);
     final Socket sock = client.socketFactory.createSocket();
     final int timeout = client.getDatanodeReadTimeout(length);
+    long begin = System.currentTimeMillis();
     NetUtils.connect(sock, isa, client.getRandomLocalInterfaceAddr(), client.getConf().socketTimeout);
+    long end = System.currentTimeMillis();
+    if (end - begin > client.getConf().slowConnWarningMs) {
+      DFSClient.LOG.warn("SLOW tcp connection be detected! host:" + dnAddr);
+    }
     sock.setSoTimeout(timeout);
     sock.setSendBufferSize(HdfsConstants.DEFAULT_DATA_SOCKET_SIZE);
     if(DFSClient.LOG.isDebugEnabled()) {
