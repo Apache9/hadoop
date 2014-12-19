@@ -136,6 +136,16 @@ message ContentSummaryProto {
 }
 
 /**
+ * Summary of a file or directory
+ */
+message QuotaSummaryProto {
+  required uint64 nameCount = 1;
+  required uint64 quota = 2;
+  required uint64 spaceConsumed = 3;
+  required uint64 spaceQuota = 4;
+}
+
+/**
  * Contains a list of paths corresponding to corrupt files and a cookie
  * used for iterative calls to NameNode.listCorruptFileBlocks.
  *

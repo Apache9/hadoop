@@ -126,6 +126,7 @@ import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Options.ChecksumOpt;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.VolumeId;
@@ -2785,6 +2786,22 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   ContentSummary getContentSummary(String src) throws IOException {
     try {
       return namenode.getContentSummary(src);
+    } catch(RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+                                     FileNotFoundException.class,
+                                     UnresolvedPathException.class);
+    }
+  }
+
+  /**
+   * Get {@link QuotaSummary} rooted at the specified directory.
+   * @param path The string representation of the path
+   * 
+   * @see ClientProtocol#getQuotaSummary(String)
+   */
+  QuotaSummary getQuotaSummary(String src) throws IOException {
+    try {
+      return namenode.getQuotaSummary(src);
     } catch(RemoteException re) {
       throw re.unwrapRemoteException(AccessControlException.class,
                                      FileNotFoundException.class,

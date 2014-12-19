@@ -560,6 +560,14 @@ message GetContentSummaryResponseProto {
   required ContentSummaryProto summary = 1;
 }
 
+message GetQuotaSummaryRequestProto {
+  required string path = 1;
+}
+
+message GetQuotaSummaryResponseProto {
+  required QuotaSummaryProto summary = 1;
+}
+
 message SetQuotaRequestProto {
   required string path = 1;
   required uint64 namespaceQuota = 2;
@@ -780,6 +788,8 @@ service ClientNamenodeProtocol {
       returns(GetFileLinkInfoResponseProto);
   rpc getContentSummary(GetContentSummaryRequestProto)
       returns(GetContentSummaryResponseProto);
+  rpc getQuotaSummary(GetQuotaSummaryRequestProto)
+      returns(GetQuotaSummaryResponseProto);
   rpc setQuota(SetQuotaRequestProto) returns(SetQuotaResponseProto);
   rpc fsync(FsyncRequestProto) returns(FsyncResponseProto);
   rpc setTimes(SetTimesRequestProto) returns(SetTimesResponseProto);

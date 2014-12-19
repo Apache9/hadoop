@@ -27,6 +27,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
@@ -438,6 +439,11 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
   public final ContentSummary computeContentSummary() {
     return computeAndConvertContentSummary(
         new ContentSummaryComputationContext());
+  }
+
+  /** Get {@link QuotaSummary}. */
+  public QuotaSummary getQuotaSummary() {
+    return new QuotaSummary(-1, -1, -1, -1);
   }
 
   /**

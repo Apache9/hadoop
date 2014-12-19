@@ -1267,4 +1267,9 @@ public class HarFileSystem extends FileSystem {
   public short getDefaultReplication(Path f) {
     return fs.getDefaultReplication(f);
   }
+
+  @Override
+  public QuotaSummary getQuotaSummary(Path f) throws IOException {
+    return super.getQuotaSummary(f);
+  }
 }
