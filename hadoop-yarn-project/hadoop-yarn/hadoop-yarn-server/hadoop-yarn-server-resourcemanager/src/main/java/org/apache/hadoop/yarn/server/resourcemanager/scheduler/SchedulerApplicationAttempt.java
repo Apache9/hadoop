@@ -392,15 +392,15 @@ public class SchedulerApplicationAttempt {
   }
   
   public synchronized void showRequests() {
-    if (LOG.isDebugEnabled()) {
+    if (LOG.isTraceEnabled()) {
       for (Priority priority : getPriorities()) {
         Map<String, ResourceRequest> requests = getResourceRequests(priority);
         if (requests != null) {
-          LOG.debug("showRequests:" + " application=" + getApplicationId() + 
+          LOG.trace("showRequests:" + " application=" + getApplicationId() +
               " headRoom=" + getHeadroom() + 
               " currentConsumption=" + currentConsumption.getMemory());
           for (ResourceRequest request : requests.values()) {
-            LOG.debug("showRequests:" + " application=" + getApplicationId()
+            LOG.trace("showRequests:" + " application=" + getApplicationId()
                 + " request=" + request);
           }
         }
