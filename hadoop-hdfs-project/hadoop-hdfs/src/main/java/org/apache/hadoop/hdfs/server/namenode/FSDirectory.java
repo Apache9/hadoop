@@ -1597,6 +1597,10 @@ public class FSDirectory implements Closeable {
     return getLastINodeInPath(src).getINode(0);
   }
 
+  public INode getINode(String src, boolean resolveLink) throws UnresolvedLinkException {
+    return getLastINodeInPath(src, resolveLink).getINode(0);
+  }
+
   /**
    * Get {@link INode} associated with the file / directory.
    */
