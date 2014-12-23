@@ -219,7 +219,7 @@ public abstract class INodeWithAdditionalFields extends INode
   }
 
   @Override
-  final AclFeature getAclFeature(int snapshotId) {
+  public final AclFeature getAclFeature(int snapshotId) {
     if (snapshotId != Snapshot.CURRENT_STATE_ID) {
       return getSnapshotINode(snapshotId).getAclFeature();
     }
@@ -329,6 +329,7 @@ public abstract class INodeWithAdditionalFields extends INode
     AclFeature f = getAclFeature();
     Preconditions.checkNotNull(f);
     removeFeature(f);
+    AclStorage.removeAclFeature(f);
   }
 
   public void addAclFeature(AclFeature f) {
@@ -336,7 +337,7 @@ public abstract class INodeWithAdditionalFields extends INode
     if (f1 != null)
       throw new IllegalStateException("Duplicated ACLFeature");
 
-    addFeature(f);
+    addFeature(AclStorage.addAclFeature(f));
   }
 
   public final Feature[] getFeatures() {

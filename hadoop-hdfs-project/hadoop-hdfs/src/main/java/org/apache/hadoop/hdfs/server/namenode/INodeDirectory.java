@@ -91,6 +91,12 @@ public class INodeDirectory extends INodeWithAdditionalFields
       }
     }
     this.features = featuresToCopy;
+    AclFeature aclFeature = getFeature(AclFeature.class);
+    if (aclFeature != null) {
+      // for the de-duplication of AclFeature
+      removeFeature(aclFeature);
+      addFeature(AclStorage.addAclFeature(aclFeature));
+    }
   }
 
   /** @return true unconditionally. */
@@ -758,6 +764,9 @@ public class INodeDirectory extends INodeWithAdditionalFields
     }
     for (INode child : getChildrenList(Snapshot.CURRENT_STATE_ID)) {
       child.destroyAndCollectBlocks(collectedBlocks, removedINodes);
+    }
+    if (getAclFeature() != null) {
+      AclStorage.removeAclFeature(getAclFeature());
     }
     clear();
     removedINodes.add(this);

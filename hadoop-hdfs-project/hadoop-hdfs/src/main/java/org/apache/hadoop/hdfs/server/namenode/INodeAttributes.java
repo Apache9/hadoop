@@ -69,6 +69,9 @@ public interface INodeAttributes {
         AclFeature aclFeature, long modificationTime, long accessTime) {
       this.name = name;
       this.permission = PermissionStatusFormat.toLong(permissions);
+      if (aclFeature != null) {
+        aclFeature = AclStorage.addAclFeature(aclFeature);
+      }
       this.aclFeature = aclFeature;
       this.modificationTime = modificationTime;
       this.accessTime = accessTime;
@@ -77,7 +80,11 @@ public interface INodeAttributes {
     SnapshotCopy(INode inode) {
       this.name = inode.getLocalNameBytes();
       this.permission = inode.getPermissionLong();
-      this.aclFeature = inode.getAclFeature();
+      if (inode.getAclFeature() != null) {
+        aclFeature = AclStorage.addAclFeature(inode.getAclFeature());
+      } else {
+        aclFeature = null;
+      }
       this.modificationTime = inode.getModificationTime();
       this.accessTime = inode.getAccessTime();
     }
