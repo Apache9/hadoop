@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.ScopedAclEntries;
 import org.apache.hadoop.hdfs.protocol.AclException;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
+import org.apache.hadoop.hdfs.util.ReferenceCountMap;
 
 /**
  * AclStorage contains utility methods that define how ACL data is stored in the
@@ -61,7 +62,10 @@ import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
  * {@link AclTransformation}.
  */
 @InterfaceAudience.Private
-final class AclStorage {
+public final class AclStorage {
+
+  private final static ReferenceCountMap<AclFeature> UNIQUE_ACL_FEATURES =
+      new ReferenceCountMap<AclFeature>();
 
   /**
    * If a default ACL is defined on a parent directory, then copies that default
@@ -391,5 +395,66 @@ final class AclStorage {
       accessEntries.get(1).getPermission(),
       accessEntries.get(2).getPermission(),
       existingPerm.getStickyBit());
+  }
+
+  /**
+   * Translates the given permission bits to the equivalent minimal ACL.
+   *
+   * @param perm FsPermission to translate
+   * @return List<AclEntry> containing exactly 3 entries representing the owner,
+   *   group and other permissions
+   */
+  private static List<AclEntry> getMinimalAcl(FsPermission perm) {
+    return Lists.newArrayList(
+      new AclEntry.Builder()
+        .setScope(AclEntryScope.ACCESS)
+        .setType(AclEntryType.USER)
+        .setPermission(perm.getUserAction())
+        .build(),
+      new AclEntry.Builder()
+        .setScope(AclEntryScope.ACCESS)
+        .setType(AclEntryType.GROUP)
+        .setPermission(perm.getGroupAction())
+        .build(),
+      new AclEntry.Builder()
+        .setScope(AclEntryScope.ACCESS)
+        .setType(AclEntryType.OTHER)
+        .setPermission(perm.getOtherAction())
+        .build());
+  }
+
+  /**
+   * Checks if the given entries represent a minimal ACL (contains exactly 3
+   * entries).
+   *
+   * @param entries List<AclEntry> entries to check
+   * @return boolean true if the entries represent a minimal ACL
+   */
+  private static boolean isMinimalAcl(List<AclEntry> entries) {
+    return entries.size() == 3;
+  }
+
+  @VisibleForTesting
+  public static ReferenceCountMap<AclFeature> getUniqueAclFeatures() {
+    return UNIQUE_ACL_FEATURES;
+  }
+
+  /**
+   * Add reference for the said AclFeature
+   * 
+   * @param aclFeature
+   * @return Referenced AclFeature
+   */
+  public static AclFeature addAclFeature(AclFeature aclFeature) {
+    return UNIQUE_ACL_FEATURES.put(aclFeature);
+  }
+
+  /**
+   * Remove reference to the AclFeature
+   * 
+   * @param aclFeature
+   */
+  public static void removeAclFeature(AclFeature aclFeature) {
+    UNIQUE_ACL_FEATURES.remove(aclFeature);
   }
 }
