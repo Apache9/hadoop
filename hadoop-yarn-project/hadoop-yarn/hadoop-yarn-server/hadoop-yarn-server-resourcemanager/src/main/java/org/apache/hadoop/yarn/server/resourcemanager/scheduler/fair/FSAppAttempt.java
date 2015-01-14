@@ -52,6 +52,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ActiveUsersManage
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.NodeType;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FSPreemptionPolicy;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
@@ -75,7 +76,8 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   private FairScheduler scheduler;
   private Resource fairShare = Resources.createResource(0, 0);
   private Resource preemptedResources = Resources.createResource(0);
-  private RMContainerComparator comparator = new RMContainerComparator();
+  private Comparator<RMContainer> comparator =
+      new FSPreemptionPolicy().getContainerComparator();
   private final Map<RMContainer, Long> preemptionMap = new HashMap<RMContainer, Long>();
 
   /**
