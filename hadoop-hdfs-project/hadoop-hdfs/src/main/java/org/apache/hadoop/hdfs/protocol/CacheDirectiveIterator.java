@@ -24,6 +24,10 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.BatchedRemoteIterator;
 
+import org.htrace.Sampler;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
+
 /**
  * CacheDirectiveIterator is a remote iterator that iterates cache directives.
  * It supports retrying in case of namenode failover.
@@ -35,18 +39,25 @@ public class CacheDirectiveIterator
 
   private final CacheDirectiveInfo filter;
   private final ClientProtocol namenode;
+  private final Sampler<?> traceSampler;
 
   public CacheDirectiveIterator(ClientProtocol namenode,
-      CacheDirectiveInfo filter) {
-    super(Long.valueOf(0));
+      CacheDirectiveInfo filter, Sampler<?> traceSampler) {
+    super(0L);
     this.namenode = namenode;
     this.filter = filter;
+    this.traceSampler = traceSampler;
   }
 
   @Override
   public BatchedEntries<CacheDirectiveEntry> makeRequest(Long prevKey)
       throws IOException {
-    return namenode.listCacheDirectives(prevKey, filter);
+    TraceScope scope = Trace.startSpan("listCacheDirectives", traceSampler);
+    try {
+      return namenode.listCacheDirectives(prevKey, filter);
+    } finally {
+      scope.close();
+    }
   }
 
   @Override
