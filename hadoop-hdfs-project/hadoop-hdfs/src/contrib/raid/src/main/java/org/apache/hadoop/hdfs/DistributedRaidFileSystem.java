@@ -55,23 +55,33 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
   @Override
   public FSDataOutputStream append(Path f, int bufferSize,
       Progressable progress) throws IOException {
+    // TBD: Should we allow appending to normal files which are not encoded?
     throw new UnsupportedOperationException("append() is not supported");
   }
 
   @Override
   public boolean rename(Path src, Path dst) throws IOException {
     boolean result = true;
-    result = result && fs.rename(src, dst);
-    result = result && fs.rename(BlockCodec.getCodingFile(src),
-        BlockCodec.getCodingFile(dst));
+    result =  fs.rename(src, dst);
+    // Rename coding file only when source file is renamed successfully.
+    if(result) {
+      result =  fs.rename(BlockCodec.getCodingFile(src),
+          BlockCodec.getCodingFile(dst));
+      // TBD: if we fail to rename coding file, should we set back the file's 
+      // replication so that the file's availability is not impacted
+    }
     return result;
   }
 
   @Override
   public boolean delete(Path f, boolean recursive) throws IOException {
     boolean result = true;
-    result = result && fs.delete(f, recursive);
-    result = result && fs.delete(BlockCodec.getCodingFile(f), recursive);
+    result =  fs.delete(f, recursive);
+    // Delete coding file only when source file is deleted successfully.
+    if(result) {
+      // If fail to delete the coding file, let the zombie cleaner to remove it later.
+      result = fs.delete(BlockCodec.getCodingFile(f), recursive);
+    }
     return result;
   }
 
@@ -163,7 +173,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
         ioe = e;
       }
 
-      if (BlockCodec.isBlockCorrupted(ioe) && isFileEncoded()) {
+      if (isFileEncoded()) {
         int readLen = downgradeRead(getPos(), 1)[0];
         skipInternal(readLen);
         return readLen;
@@ -190,7 +200,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
         ioe = e;
       }
 
-      if (BlockCodec.isBlockCorrupted(ioe) && isFileEncoded()) {
+      if (isFileEncoded()) {
         byte[] result = downgradeRead(getPos(), length);
         System.arraycopy(result, 0, bytes, offset, result.length);
         skipInternal(result.length);
@@ -212,7 +222,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
         ioe = e;
       }
 
-      if (BlockCodec.isBlockCorrupted(ioe) && isFileEncoded()) {
+      if (isFileEncoded()) {
         byte[] result = downgradeRead(position, length);
         System.arraycopy(result, 0, buffer, offset, result.length);
         return result.length;
@@ -250,18 +260,16 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
         IOException ioe = null;
         try {
           underlyingStream.read(pos, buffer, offset + totalReadLen, len);
-          currentPos += len;
           totalReadLen += len;
           continue;
         } catch (IOException e) {
           ioe = e;
         }
 
-        if (BlockCodec.isBlockCorrupted(ioe) && isFileEncoded()) {
+        if (isFileEncoded()) {
           byte[] result = downgradeRead(pos, len);
           System.arraycopy(result, 0, buffer, offset + totalReadLen, len);
           totalReadLen += result.length;
-          skipInternal(length);
         } else {
           throw ioe;
         }
