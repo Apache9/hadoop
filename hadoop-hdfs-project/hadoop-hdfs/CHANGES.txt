@@ -15,6 +15,7 @@ Release 2.4.0-mdh2
     HDFS-7189. Add trace spans for DFSClient metadata operations. (Colin P. McCabe via yliu)
     HDFS-7855. Separate class Packet from DFSOutputStream. Contributed by Li Bo.
     HDFS-7054. Make DFSOutputStream tracing more fine-grained (cmccabe)
+    HDFS-7623. Add htrace configuration properties to core-default.xml and update user doc about how to enable htrace. (yliu)
 
   OPTIMIZATIONS
 
