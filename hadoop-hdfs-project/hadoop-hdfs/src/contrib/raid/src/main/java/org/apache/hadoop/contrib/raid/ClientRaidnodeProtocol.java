@@ -8,10 +8,16 @@
  * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  * for the specific language governing permissions and limitations under the License.
  */
+
 package org.apache.hadoop.contrib.raid;
 
-/**
- * Implements a RPC server for RaidNode.
- */
-public class RaidNodeRpcServer {
+import java.io.IOException;
+
+public interface ClientRaidnodeProtocol {
+  public static final long versionID = 1L;
+
+  /**
+   * @param cookie is used in case that policy infos are too large to be passed in one trip.
+   */
+  public Policy getPolicyInfos(String cookie) throws IOException;
 }

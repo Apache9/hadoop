@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.contrib.raid;
 
@@ -47,18 +40,13 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 /**
- * A Coder is used to do the encoding and decoding jobs according to the
- * files information collected by the Collector{@link Collector}. It will
- * use a MapReduce job to do the work.
+ * A Coder is used to do the encoding and decoding jobs according to the files information collected
+ * by the Collector{@link Collector}. It will use a MapReduce job to do the work.
  */
 public class Coder {
 
   public enum CounterName {
-    EncodeSuccess,
-    EncodeFail,
-    DecodeSuccess,
-    DecodeFail,
-    InvalidTaskType
+    EncodeSuccess, EncodeFail, DecodeSuccess, DecodeFail, InvalidTaskType
   }
 
   private final Path collectorResultFile;
@@ -67,8 +55,7 @@ public class Coder {
   private final Configuration conf;
   private Job job;
 
-  public Coder(Path collectorResultFile, int mapTaskNum, Path outputPath,
-      Configuration conf) {
+  public Coder(Path collectorResultFile, int mapTaskNum, Path outputPath, Configuration conf) {
     Preconditions.checkNotNull(collectorResultFile);
     Preconditions.checkArgument(mapTaskNum > 0);
     Preconditions.checkNotNull(conf);
@@ -78,12 +65,10 @@ public class Coder {
     this.conf = conf;
   }
 
-  public void run() throws IOException, ClassNotFoundException,
-      InterruptedException {
-    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
-        mapTaskNum);
+  public void run() throws IOException, ClassNotFoundException, InterruptedException {
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY, mapTaskNum);
     conf.set(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY,
-        collectorResultFile.toString());
+      collectorResultFile.toString());
 
     job = Job.getInstance(conf, "RaidNode-Coder");
     job.setJarByClass(Coder.class);
@@ -130,8 +115,7 @@ public class Coder {
     private Counter invalidTaskType;
 
     @Override
-    protected void setup(Context context)
-        throws IOException, InterruptedException {
+    protected void setup(Context context) throws IOException, InterruptedException {
       this.conf = context.getConfiguration();
       this.blockCodec = new BlockCodec(this.conf);
       this.encodeSuccess = context.getCounter(CounterName.EncodeSuccess);
@@ -142,8 +126,8 @@ public class Coder {
     }
 
     @Override
-    protected void map(Object key, Text value, Context context)
-        throws IOException, InterruptedException {
+    protected void map(Object key, Text value, Context context) throws IOException,
+        InterruptedException {
       String info = value.toString();
       String[] tokens = info.split("\t");
       Path file = new Path(tokens[0].trim());
@@ -152,24 +136,24 @@ public class Coder {
       try {
         taskType = TaskType.valueOf(tokens[1].trim());
         switch (taskType) {
-          case Encode:
-            blockCodec.encode(file);
-            encodeSuccess.increment(1);
-            break;
-          case Decode:
-            decodeSuccess.increment(1);
-            break;
+        case Encode:
+          blockCodec.encode(file);
+          encodeSuccess.increment(1);
+          break;
+        case Decode:
+          decodeSuccess.increment(1);
+          break;
         }
       } catch (IllegalArgumentException e) {
         invalidTaskType.increment(1);
       } catch (Exception e) {
         switch (taskType) {
-          case Encode:
-            encodeFail.increment(1);
-            break;
-          case Decode:
-            decodeFail.increment(1);
-            break;
+        case Encode:
+          encodeFail.increment(1);
+          break;
+        case Decode:
+          decodeFail.increment(1);
+          break;
         }
       }
     }
@@ -180,16 +164,14 @@ public class Coder {
    */
   private static class RaidFileInfoInputFormat extends InputFormat {
     @Override
-    public List<InputSplit> getSplits(JobContext context)
-        throws IOException, InterruptedException {
+    public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
       FileSystem fs = FileSystem.get(conf);
 
-      String collectResultFile = conf.get(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY);
-      int mapTaskNum = conf.getInt(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
+      String collectResultFile = conf
+          .get(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY);
+      int mapTaskNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
       List<InputSplit> result = new ArrayList<InputSplit>(mapTaskNum);
 
       FSDataInputStream in = fs.open(new Path(collectResultFile));
@@ -202,7 +184,7 @@ public class Coder {
           split = new RaidFileInfoSplit();
           result.add(split);
         } else {
-          split = (RaidFileInfoSplit)result.get(count++ % mapTaskNum);
+          split = (RaidFileInfoSplit) result.get(count++ % mapTaskNum);
         }
         split.addFileInfo(line.trim());
       }
@@ -211,9 +193,9 @@ public class Coder {
     }
 
     @Override
-    public RecordReader createRecordReader(InputSplit split,
-        TaskAttemptContext context) throws IOException, InterruptedException {
-      RaidFileInfoSplit raidFileInfoSplit = (RaidFileInfoSplit)split;
+    public RecordReader createRecordReader(InputSplit split, TaskAttemptContext context)
+        throws IOException, InterruptedException {
+      RaidFileInfoSplit raidFileInfoSplit = (RaidFileInfoSplit) split;
       RaidFileInfoReader reader = new RaidFileInfoReader();
       reader.initialize(split, context);
       return reader;
@@ -223,8 +205,7 @@ public class Coder {
   /**
    * The raid file information split class.
    */
-  private static class RaidFileInfoSplit extends InputSplit
-      implements Writable {
+  private static class RaidFileInfoSplit extends InputSplit implements Writable {
 
     private List<String> raidFileInfos;
 
@@ -273,9 +254,9 @@ public class Coder {
     private int nextIndex;
 
     @Override
-    public void initialize(InputSplit split, TaskAttemptContext context)
-        throws IOException, InterruptedException {
-      this.split = (RaidFileInfoSplit)split;
+    public void initialize(InputSplit split, TaskAttemptContext context) throws IOException,
+        InterruptedException {
+      this.split = (RaidFileInfoSplit) split;
       this.nextIndex = 0;
     }
 

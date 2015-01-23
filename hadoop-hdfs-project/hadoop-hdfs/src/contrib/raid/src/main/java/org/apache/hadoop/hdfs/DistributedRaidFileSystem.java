@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.hdfs;
 
@@ -47,14 +40,13 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
 
   @Override
   public FSDataInputStream open(Path f, int bufferSize) throws IOException {
-    RaidFsInputStream in = new RaidFsInputStream(this,
-        fs.getConf(), f, bufferSize);
+    RaidFsInputStream in = new RaidFsInputStream(this, fs.getConf(), f, bufferSize);
     return new FSDataInputStream(in);
   }
 
   @Override
-  public FSDataOutputStream append(Path f, int bufferSize,
-      Progressable progress) throws IOException {
+  public FSDataOutputStream append(Path f, int bufferSize, Progressable progress)
+      throws IOException {
     // TBD: Should we allow appending to normal files which are not encoded?
     throw new UnsupportedOperationException("append() is not supported");
   }
@@ -62,12 +54,11 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
   @Override
   public boolean rename(Path src, Path dst) throws IOException {
     boolean result = true;
-    result =  fs.rename(src, dst);
+    result = fs.rename(src, dst);
     // Rename coding file only when source file is renamed successfully.
-    if(result) {
-      result =  fs.rename(BlockCodec.getCodingFile(src),
-          BlockCodec.getCodingFile(dst));
-      // TBD: if we fail to rename coding file, should we set back the file's 
+    if (result) {
+      result = fs.rename(BlockCodec.getCodingFile(src), BlockCodec.getCodingFile(dst));
+      // TBD: if we fail to rename coding file, should we set back the file's
       // replication so that the file's availability is not impacted
     }
     return result;
@@ -76,9 +67,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
   @Override
   public boolean delete(Path f, boolean recursive) throws IOException {
     boolean result = true;
-    result =  fs.delete(f, recursive);
+    result = fs.delete(f, recursive);
     // Delete coding file only when source file is deleted successfully.
-    if(result) {
+    if (result) {
       // If fail to delete the coding file, let the zombie cleaner to remove it later.
       result = fs.delete(BlockCodec.getCodingFile(f), recursive);
     }
@@ -106,8 +97,8 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     private boolean fileEncoded = false;
     private long currentPos = 0;
 
-    public RaidFsInputStream(DistributedRaidFileSystem fs, Configuration conf,
-        Path file, int bufferSize) throws IOException {
+    public RaidFsInputStream(DistributedRaidFileSystem fs, Configuration conf, Path file,
+        int bufferSize) throws IOException {
       this.fs = fs;
       this.rawFs = this.fs.getRawFileSystem();
       this.underlyingStream = this.rawFs.open(file, bufferSize);
@@ -154,10 +145,8 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
       return currentPos;
     }
 
-
     @Override
-    public synchronized boolean seekToNewSource(long targetPos)
-        throws IOException {
+    public synchronized boolean seekToNewSource(long targetPos) throws IOException {
       return underlyingStream.seekToNewSource(targetPos);
     }
 
@@ -188,8 +177,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     }
 
     @Override
-    public synchronized int read(byte[] bytes, int offset, int length)
-        throws IOException {
+    public synchronized int read(byte[] bytes, int offset, int length) throws IOException {
       checkPos();
       IOException ioe = null;
       try {
@@ -211,8 +199,7 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     }
 
     @Override
-    public int read(long position, byte[] buffer, int offset,
-        int length) throws IOException {
+    public int read(long position, byte[] buffer, int offset, int length) throws IOException {
       checkPos();
       IOException ioe = null;
       try {
@@ -232,18 +219,17 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     }
 
     @Override
-    public synchronized void readFully(long position, byte[] buffer)
-        throws IOException {
+    public synchronized void readFully(long position, byte[] buffer) throws IOException {
       readFully(position, buffer, 0, buffer.length);
     }
 
     @Override
-    public synchronized void readFully(long position, byte[] buffer, int offset,
-        int length) throws IOException {
+    public synchronized void readFully(long position, byte[] buffer, int offset, int length)
+        throws IOException {
       checkPos();
       long blockSize = fileStatus.getBlockSize();
-      int startBlockIdx = (int)((position - 1) / blockSize);
-      int endBlockIdx = (int)((position + length - 1) / blockSize);
+      int startBlockIdx = (int) ((position - 1) / blockSize);
+      int endBlockIdx = (int) ((position + length - 1) / blockSize);
       int totalReadLen = 0;
 
       for (int i = startBlockIdx; i <= endBlockIdx; ++i) {
@@ -252,9 +238,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
           pos = i * blockSize;
         }
 
-        int len = (int)((i + 1) * blockSize - pos);
+        int len = (int) ((i + 1) * blockSize - pos);
         if (len + pos > position + length) {
-          len = (int)((position + length - 1) % blockSize + 1);
+          len = (int) ((position + length - 1) % blockSize + 1);
         }
 
         IOException ioe = null;
@@ -292,9 +278,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
 
     private void checkPos() throws IOException {
       if (underlyingStream.getPos() != currentPos) {
-        throw new IOException("Read position of underlying stream is not " +
-            "equal to current read position, underlyingPos=" +
-            underlyingStream.getPos() + ", currentPos=" + currentPos);
+        throw new IOException("Read position of underlying stream is not "
+            + "equal to current read position, underlyingPos=" + underlyingStream.getPos()
+            + ", currentPos=" + currentPos);
       }
     }
 

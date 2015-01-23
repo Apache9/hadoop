@@ -8,10 +8,12 @@
  * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  * for the specific language governing permissions and limitations under the License.
  */
+
 package org.apache.hadoop.contrib.raid;
 
-/**
- * Implements a RPC server for RaidNode.
- */
-public class RaidNodeRpcServer {
+import org.apache.hadoop.contrib.raid.ClientRaidnodeProtocolProtos.ClientRaidnodeProtocolService;
+import org.apache.hadoop.ipc.ProtocolInfo;
+
+@ProtocolInfo(protocolName = "org.apache.hadoop.contrib.raid.ClientRaidnodeProtocol", protocolVersion = 1)
+public interface ClientRaidnodeProtocolPB extends ClientRaidnodeProtocolService.BlockingInterface {
 }

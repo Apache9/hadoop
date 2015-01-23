@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.hdfs;
 
@@ -86,31 +79,29 @@ public class BlockOutputStream extends FSOutputSummer {
 
   /**
    * Create a new block output stream instance.
-   *
    * @param dfsClient The dfs client
    * @param block The block to write
    * @param excludedNodes The excluded datanodes
    * @return The created block output stream
    * @throws IOException
    */
-  public static BlockOutputStream createStream(DFSClient dfsClient,
-      LocatedBlock block, DatanodeInfo[] excludedNodes) throws IOException {
+  public static BlockOutputStream createStream(DFSClient dfsClient, LocatedBlock block,
+      DatanodeInfo[] excludedNodes) throws IOException {
     ChecksumOpt checksumOpt = dfsClient.getConf().defaultChecksumOpt;
-    DataChecksum checksum = DataChecksum.newDataChecksum(
-        checksumOpt.getChecksumType(), checksumOpt.getBytesPerChecksum());
+    DataChecksum checksum = DataChecksum.newDataChecksum(checksumOpt.getChecksumType(),
+      checksumOpt.getBytesPerChecksum());
 
     Token<BlockTokenIdentifier> accessToken = block.getBlockToken();
     DatanodeInfo[] datanodes = getAvailableNodes(dfsClient, excludedNodes);
     CachingStrategy cachingStrategy = CachingStrategy.newDefaultStrategy();
 
-    return new BlockOutputStream(dfsClient, block, checksum, accessToken,
-        datanodes, cachingStrategy);
+    return new BlockOutputStream(dfsClient, block, checksum, accessToken, datanodes,
+        cachingStrategy);
   }
 
-  private BlockOutputStream(DFSClient dfsClient, LocatedBlock block,
-      DataChecksum checksum, Token<BlockTokenIdentifier> accessToken,
-      DatanodeInfo[] datanodes, CachingStrategy cachingStrategy)
-      throws IOException {
+  private BlockOutputStream(DFSClient dfsClient, LocatedBlock block, DataChecksum checksum,
+      Token<BlockTokenIdentifier> accessToken, DatanodeInfo[] datanodes,
+      CachingStrategy cachingStrategy) throws IOException {
     super(checksum, checksum.getBytesPerChecksum(), checksum.getChecksumSize());
     this.dfsClient = dfsClient;
     this.block = block;
@@ -126,8 +117,8 @@ public class BlockOutputStream extends FSOutputSummer {
 
     Preconditions.checkArgument(datanodes.length > 0);
     int retryTimes = this.dfsClient.getConfiguration().getInt(
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_DECODE_BLOCK_RETRY_TIMES_KEY,
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_DECODE_BLOCK_RETRY_TIMES_DEFAULT);
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_DECODE_BLOCK_RETRY_TIMES_KEY,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_DECODE_BLOCK_RETRY_TIMES_DEFAULT);
     int retryCount = retryTimes;
     while (retryCount > 0) {
       try {
@@ -143,8 +134,7 @@ public class BlockOutputStream extends FSOutputSummer {
   }
 
   @Override
-  public synchronized void write(byte[] b, int off, int len)
-      throws IOException {
+  public synchronized void write(byte[] b, int off, int len) throws IOException {
     Preconditions.checkState(!finished, "This stream cannot be reused!");
     // Create a new packet
     int chunkNum = len / checksum.getBytesPerChecksum();
@@ -152,8 +142,7 @@ public class BlockOutputStream extends FSOutputSummer {
     int packetSize = chunkSize * chunkNum;
     if (len % checksum.getBytesPerChecksum() != 0) {
       chunkNum++;
-      packetSize += len % checksum.getBytesPerChecksum() +
-          checksum.getChecksumSize();
+      packetSize += len % checksum.getBytesPerChecksum() + checksum.getChecksumSize();
     }
     currentPacket = new Packet(packetSize, chunkNum, blockOffset);
 
@@ -216,27 +205,24 @@ public class BlockOutputStream extends FSOutputSummer {
 
     Status status = ack.getReply(0);
     if (status != Status.SUCCESS) {
-      throw new IOException("Bad response " + status + " for block " +
-          block + " from datanode " + datanodes[currentNodeIdx]);
+      throw new IOException("Bad response " + status + " for block " + block + " from datanode "
+          + datanodes[currentNodeIdx]);
     }
   }
 
   @Override
-  protected void writeChunk(byte[] data, int offset, int len, byte[] checksum)
-      throws IOException {
+  protected void writeChunk(byte[] data, int offset, int len, byte[] checksum) throws IOException {
     dfsClient.checkOpen();
     checkClosed();
 
     if (len > this.checksum.getBytesPerChecksum()) {
-      throw new IOException("writeChunk() buffer size is " + len +
-          " is larger than supported  bytesPerChecksum " +
-          this.checksum.getBytesPerChecksum());
+      throw new IOException("writeChunk() buffer size is " + len
+          + " is larger than supported  bytesPerChecksum " + this.checksum.getBytesPerChecksum());
     }
 
     if (checksum.length != this.checksum.getChecksumSize()) {
-      throw new IOException("writeChunk() checksum size is supposed to be " +
-          this.checksum.getChecksumSize() + " but found to be " +
-          checksum.length);
+      throw new IOException("writeChunk() checksum size is supposed to be "
+          + this.checksum.getChecksumSize() + " but found to be " + checksum.length);
     }
 
     Preconditions.checkNotNull(currentPacket);
@@ -254,16 +240,14 @@ public class BlockOutputStream extends FSOutputSummer {
 
   /**
    * Get all datanodes that can be used to store the current block.
-   *
    * @param dfsClient The hdfs client
    * @param excludedNodes The excluded datanodes
    * @return The available datanodes
    * @throws IOException
    */
-  static DatanodeInfo[] getAvailableNodes(DFSClient dfsClient,
-      DatanodeInfo[] excludedNodes) throws IOException {
-    DatanodeInfo[] liveNodes = dfsClient.datanodeReport(
-        DatanodeReportType.LIVE);
+  static DatanodeInfo[] getAvailableNodes(DFSClient dfsClient, DatanodeInfo[] excludedNodes)
+      throws IOException {
+    DatanodeInfo[] liveNodes = dfsClient.datanodeReport(DatanodeReportType.LIVE);
 
     if (excludedNodes == null) {
       return liveNodes;
@@ -282,14 +266,11 @@ public class BlockOutputStream extends FSOutputSummer {
   }
 
   /**
-   * Creates the output stream that will be used to send the block data
-   * to datanode.
-   *
+   * Creates the output stream that will be used to send the block data to datanode.
    * @param node The datanode to which the data will send to
    * @param newGS The new generate timestamp for the block
    */
-  void createBlockOutputStream(DatanodeInfo node, long newGS)
-      throws IOException {
+  void createBlockOutputStream(DatanodeInfo node, long newGS) throws IOException {
     Status status = null;
     int refetchEncryptionKey = 1;
     while (true) {
@@ -300,11 +281,10 @@ public class BlockOutputStream extends FSOutputSummer {
         OutputStream unbufOut = NetUtils.getOutputStream(socket, writeTimeout);
         InputStream unbufIn = NetUtils.getInputStream(socket);
 
-        if (dfsClient.shouldEncryptData() &&
-            !dfsClient.trustedChannelResolver.isTrusted(socket.getInetAddress())) {
-          IOStreamPair encryptedStreams =
-              DataTransferEncryptor.getEncryptedStreams(unbufOut,
-                  unbufIn, dfsClient.getDataEncryptionKey());
+        if (dfsClient.shouldEncryptData()
+            && !dfsClient.trustedChannelResolver.isTrusted(socket.getInetAddress())) {
+          IOStreamPair encryptedStreams = DataTransferEncryptor.getEncryptedStreams(unbufOut,
+            unbufIn, dfsClient.getDataEncryptionKey());
           unbufOut = encryptedStreams.out;
           unbufIn = encryptedStreams.in;
         }
@@ -315,13 +295,13 @@ public class BlockOutputStream extends FSOutputSummer {
 
         // Send the request
         new Sender(blockStream).writeBlock(block.getBlock(), accessToken,
-            dfsClient.getClientName(), new DatanodeInfo[]{}, null,
-            BlockConstructionStage.PIPELINE_SETUP_CREATE, 1,
-            block.getBlockSize(), blockOffset, newGS, checksum, cachingStrategy);
+          dfsClient.getClientName(), new DatanodeInfo[] {}, null,
+          BlockConstructionStage.PIPELINE_SETUP_CREATE, 1, block.getBlockSize(), blockOffset,
+          newGS, checksum, cachingStrategy);
 
         // Receive ack for connect
-        BlockOpResponseProto resp = BlockOpResponseProto.parseFrom(
-            PBHelper.vintPrefixed(blockReplyStream));
+        BlockOpResponseProto resp = BlockOpResponseProto.parseFrom(PBHelper
+            .vintPrefixed(blockReplyStream));
         status = resp.getStatus();
 
         if (status == Status.ERROR_ACCESS_TOKEN) {
@@ -334,8 +314,7 @@ public class BlockOutputStream extends FSOutputSummer {
           break;
         }
       } catch (IOException e) {
-        if (e instanceof InvalidEncryptionKeyException &&
-            refetchEncryptionKey > 0) {
+        if (e instanceof InvalidEncryptionKeyException && refetchEncryptionKey > 0) {
           refetchEncryptionKey--;
           dfsClient.clearDataEncryptionKey();
           continue;
@@ -354,14 +333,12 @@ public class BlockOutputStream extends FSOutputSummer {
 
   /**
    * Creates a socket and connects to specified datanode.
-   *
    * @param node The datanode to connect
    * @return The created socket
    * @throws IOException
    */
   Socket createSocket(DatanodeInfo node) throws IOException {
-    String dnAddr = node.getXferAddr(
-        dfsClient.getConf().connectToDnViaHostname);
+    String dnAddr = node.getXferAddr(dfsClient.getConf().connectToDnViaHostname);
     if (LOG.isDebugEnabled()) {
       LOG.debug("Connecting to datanode " + dnAddr);
     }
@@ -369,7 +346,7 @@ public class BlockOutputStream extends FSOutputSummer {
     InetSocketAddress sockAddr = NetUtils.createSocketAddr(dnAddr);
     Socket sock = dfsClient.socketFactory.createSocket();
     NetUtils.connect(sock, sockAddr, dfsClient.getRandomLocalInterfaceAddr(),
-        dfsClient.getConf().socketTimeout);
+      dfsClient.getConf().socketTimeout);
 
     int timeout = dfsClient.getDatanodeReadTimeout(1);
     sock.setSoTimeout(timeout);
@@ -379,13 +356,13 @@ public class BlockOutputStream extends FSOutputSummer {
 
   private class Packet {
 
-    private long seqno;                // Sequence number of buffer in block
-    private long offsetInBlock;        // Offset in block
+    private long seqno; // Sequence number of buffer in block
+    private long offsetInBlock; // Offset in block
     private boolean lastPacketInBlock; // Is this the last packet in block
-    private boolean syncBlock;         // Forces the current block to disk
-    private int numChunks;             // Number of chunks currently in packet
-    private final int maxChunks;       // Max chunks in packet
-    private final byte[] buf;          // The packet data buffer
+    private boolean syncBlock; // Forces the current block to disk
+    private int numChunks; // Number of chunks currently in packet
+    private final int maxChunks; // Max chunks in packet
+    private final byte[] buf; // The packet data buffer
 
     private int checksumStart;
     private int checksumPos;
@@ -410,9 +387,7 @@ public class BlockOutputStream extends FSOutputSummer {
 
     /**
      * Create a new packet.
-     *
-     * @param pktSize maximum size of the packet, including checksum data
-     *                and actual data.
+     * @param pktSize maximum size of the packet, including checksum data and actual data.
      * @param chunksPerPkt maximum number of chunks per packet.
      * @param offsetInBlock offset in bytes into the HDFS block.
      */
@@ -456,14 +431,13 @@ public class BlockOutputStream extends FSOutputSummer {
       final int checksumLen = checksumPos - checksumStart;
       final int pktLen = HdfsConstants.BYTES_IN_INTEGER + dataLen + checksumLen;
 
-      PacketHeader header = new PacketHeader(
-          pktLen, offsetInBlock, seqno, lastPacketInBlock, dataLen, syncBlock);
+      PacketHeader header = new PacketHeader(pktLen, offsetInBlock, seqno, lastPacketInBlock,
+          dataLen, syncBlock);
 
       if (checksumPos != dataStart) {
         // Move the checksum to cover the gap. This can happen for the last
         // packet or during an hflush/hsync call.
-        System.arraycopy(buf, checksumStart, buf,
-            dataStart - checksumLen , checksumLen);
+        System.arraycopy(buf, checksumStart, buf, dataStart - checksumLen, checksumLen);
         checksumPos = dataStart;
         checksumStart = checksumPos - checksumLen;
       }
@@ -476,12 +450,10 @@ public class BlockOutputStream extends FSOutputSummer {
 
       // Copy the header data into the buffer immediately preceding the
       // checksum data.
-      System.arraycopy(header.getBytes(), 0, buf, headerStart,
-          header.getSerializedSize());
+      System.arraycopy(header.getBytes(), 0, buf, headerStart, header.getSerializedSize());
 
       // Write the now contiguous full packet to the output stream.
-      stm.write(buf, headerStart, header.getSerializedSize() +
-          checksumLen + dataLen);
+      stm.write(buf, headerStart, header.getSerializedSize() + checksumLen + dataLen);
     }
 
     // get the packet's last byte's offset in the block
@@ -499,10 +471,9 @@ public class BlockOutputStream extends FSOutputSummer {
 
     @Override
     public String toString() {
-      return "packet seqno:" + this.seqno +
-          " offsetInBlock:" + this.offsetInBlock +
-          " lastPacketInBlock:" + this.lastPacketInBlock +
-          " lastByteOffsetInBlock: " + this.getLastByteOffsetBlock();
+      return "packet seqno:" + this.seqno + " offsetInBlock:" + this.offsetInBlock
+          + " lastPacketInBlock:" + this.lastPacketInBlock + " lastByteOffsetInBlock: "
+          + this.getLastByteOffsetBlock();
     }
   }
 }

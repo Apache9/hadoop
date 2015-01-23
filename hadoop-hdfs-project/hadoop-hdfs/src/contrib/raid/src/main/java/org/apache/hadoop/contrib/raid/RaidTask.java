@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.contrib.raid;
 
@@ -23,13 +16,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.FutureCallback;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+
+import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.FutureCallback;
 
 /**
  * RaidTask defines the base task that the RaidNode runs.
@@ -45,8 +39,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
   }
 
   public enum TaskStatus {
-    Success,
-    Fail
+    Success, Fail
   }
 
   /**
@@ -104,8 +97,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
     @Override
     public void onSuccess(TaskResult result) {
-      LOG.info("Encode file " + file + " successful, consumed "
-          + result.getStartTimeMs() + " ms");
+      LOG.info("Encode file " + file + " successful, consumed " + result.getStartTimeMs() + " ms");
     }
 
     @Override
@@ -125,8 +117,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public DecodeTask(RaidNode raidNode, Path file, int[] corruptedBlocks) {
       super(raidNode);
       Preconditions.checkArgument(file != null);
-      Preconditions.checkArgument(corruptedBlocks != null &&
-          corruptedBlocks.length > 0);
+      Preconditions.checkArgument(corruptedBlocks != null && corruptedBlocks.length > 0);
       this.file = file;
       this.corruptedBlocks = corruptedBlocks;
     }
@@ -141,14 +132,14 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
     @Override
     public void onSuccess(TaskResult result) {
-      LOG.info("Decode corrupted blocks " + Arrays.toString(corruptedBlocks)
-          + " of file " + file + " successful");
+      LOG.info("Decode corrupted blocks " + Arrays.toString(corruptedBlocks) + " of file " + file
+          + " successful");
     }
 
     @Override
     public void onFailure(Throwable t) {
-      LOG.info("Decode corrupted blocks " + Arrays.toString(corruptedBlocks)
-          + " of file " + file + " failed");
+      LOG.info("Decode corrupted blocks " + Arrays.toString(corruptedBlocks) + " of file " + file
+          + " failed");
     }
   }
 
@@ -163,24 +154,18 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     private final String lastCollectRaidInfoTaskId;
     private final Path resultDirPath;
 
-    public CollectRaidInfoTask(RaidNode raidNode,  Configuration conf)
-        throws IOException {
+    public CollectRaidInfoTask(RaidNode raidNode, Configuration conf) throws IOException {
       super(raidNode);
       this.conf = conf;
-      this.lastBatchRaidTaskId = MRUtils.readJobId(this.conf,
-          Coder.getJobIdFilePath());
-      this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf,
-          Collector.getJobIdFilePath());
+      this.lastBatchRaidTaskId = MRUtils.readJobId(this.conf, Coder.getJobIdFilePath());
+      this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf, Collector.getJobIdFilePath());
 
-      String[] rootDirs = conf.getStrings(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY);
+      String[] rootDirs = conf.getStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY);
       Preconditions.checkNotNull(rootDirs);
-      String resultDir = conf.get(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY);
+      String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY);
       Preconditions.checkNotNull(resultDir);
       resultDirPath = new Path(resultDir + "/" + System.currentTimeMillis());
-      this.collector = new Collector(convertPaths(rootDirs),
-          resultDirPath, conf);
+      this.collector = new Collector(convertPaths(rootDirs), resultDirPath, conf);
     }
 
     @Override
@@ -198,8 +183,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
     @Override
     public void onSuccess(TaskResult result) {
-      LOG.info("Collect raid info task success, timeConsumedMs=" +
-          result.getTimeConsumedMs());
+      LOG.info("Collect raid info task success, timeConsumedMs=" + result.getTimeConsumedMs());
 
       try {
         // Start the batch raid task
@@ -216,8 +200,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
       // Retry collecting
       try {
-        CollectRaidInfoTask task = new CollectRaidInfoTask(
-            raidNode, raidNode.getConf());
+        CollectRaidInfoTask task = new CollectRaidInfoTask(raidNode, raidNode.getConf());
         raidNode.submitTask(task);
       } catch (IOException e) {
         LOG.fatal("Cannot retry collecting", e);
@@ -247,45 +230,39 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     private final Path collectResultDir;
     private final FileSystem fs;
 
-    public BatchRaidTask(RaidNode raidNode, Path collectResultDir,
-        Configuration conf) throws IOException {
+    public BatchRaidTask(RaidNode raidNode, Path collectResultDir, Configuration conf)
+        throws IOException {
       super(raidNode);
       this.conf = conf;
-      this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf,
-          Collector.getJobIdFilePath());
+      this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf, Collector.getJobIdFilePath());
       this.collectResultDir = collectResultDir;
       this.fs = FileSystem.get(this.conf);
 
-      String resultDir = conf.get(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY);
+      String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY);
       Preconditions.checkNotNull(resultDir);
-      Path resultDirPath = new Path(resultDir + "/" +
-          System.currentTimeMillis());
+      Path resultDirPath = new Path(resultDir + "/" + System.currentTimeMillis());
 
-      int mapTaskNum = conf.getInt(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
+      int mapTaskNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
 
-      this.coder = new Coder(new Path(this.collectResultDir.toString() +
-          "/part-r-00000"), mapTaskNum, resultDirPath, conf);
+      this.coder = new Coder(new Path(this.collectResultDir.toString() + "/part-r-00000"),
+          mapTaskNum, resultDirPath, conf);
     }
 
     @Override
     public TaskResult call() throws Exception {
       long startTimeMs = System.currentTimeMillis();
       // Ensure that last collect task is successful
-      Path successFile = new Path(collectResultDir.toString() + "/"
-          + "_SUCCESS");
+      Path successFile = new Path(collectResultDir.toString() + "/" + "_SUCCESS");
       Path resultFile = new Path(collectResultDir.toString() + "/part-r-00000");
       if (!fs.exists(successFile) || !fs.exists(resultFile)) {
-        throw new IOException("The last collect task is failed, " +
-            "can't start the batch raid task.");
+        throw new IOException("The last collect task is failed, "
+            + "can't start the batch raid task.");
       }
 
       coder.run();
       long endTimeMs = System.currentTimeMillis();
-      TaskResult result = new TaskResult(TaskStatus.Success, startTimeMs,
-          endTimeMs);
+      TaskResult result = new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
 
       // Sleep some time in case that coder job is finished too quickly.
       if (result.getTimeConsumedMs() < 10000) {

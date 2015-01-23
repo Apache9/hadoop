@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.contrib.raid;
 
@@ -59,8 +52,7 @@ public class TestCollector {
   @Test
   public void testMapper() throws Exception {
     mapDriver.withInput(new Text(), new Text("/test/abc"))
-        .withOutput(new Text("/test/abc"), new Text(TaskType.Encode.name()))
-        .runTest();
+        .withOutput(new Text("/test/abc"), new Text(TaskType.Encode.name())).runTest();
   }
 
   @Test
@@ -68,8 +60,7 @@ public class TestCollector {
     List<Text> values = new ArrayList<Text>(1);
     values.add(new Text(TaskType.Encode.name()));
     reduceDriver.withInput(new Text("/test/abc"), values)
-        .withOutput(new Text("/test/abc"), new Text(TaskType.Encode.name()))
-        .runTest();
+        .withOutput(new Text("/test/abc"), new Text(TaskType.Encode.name())).runTest();
   }
 
   @Test
@@ -77,8 +68,7 @@ public class TestCollector {
     mapReduceDriver.withInput(new Text(), new Text("/test/b"))
         .withInput(new Text(), new Text("/test/a"))
         .withOutput(new Text("/test/a"), new Text(TaskType.Encode.name()))
-        .withOutput(new Text("/test/b"), new Text(TaskType.Encode.name()))
-        .runTest();
+        .withOutput(new Text("/test/b"), new Text(TaskType.Encode.name())).runTest();
   }
 
   @Test
@@ -103,13 +93,11 @@ public class TestCollector {
     List<Path> rootDirs = new ArrayList<Path>(2);
     rootDirs.add(new Path("/user/test1"));
     rootDirs.add(new Path("/user/test2"));
-    Collector collector = new Collector(rootDirs,
-        new Path("/user/test3/result"), conf);
+    Collector collector = new Collector(rootDirs, new Path("/user/test3/result"), conf);
     Thread.sleep(3000);
 
     conf.set("mapreduce.framework.name", "local");
-    conf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
-        3000);
+    conf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 3000);
     collector.run();
 
     // Assert the job is successful

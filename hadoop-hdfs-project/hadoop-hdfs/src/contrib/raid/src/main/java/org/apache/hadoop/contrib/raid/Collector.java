@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.contrib.raid;
 
@@ -53,14 +46,13 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 
 /**
- * A Collector is used to collect the information of files that need encoding
- * and decoding. It will use a MapReduce job to do the work.
+ * A Collector is used to collect the information of files that need encoding and decoding. It will
+ * use a MapReduce job to do the work.
  */
 public class Collector {
 
   public enum TaskType {
-    Encode,
-    Decode
+    Encode, Decode
   }
 
   private static final Log LOG = LogFactory.getLog(Collector.class);
@@ -82,11 +74,9 @@ public class Collector {
   /**
    * Runs the collect raid file information MapReduce job.
    */
-  public void run() throws IOException, ClassNotFoundException,
-      InterruptedException {
+  public void run() throws IOException, ClassNotFoundException, InterruptedException {
     String strRootDirs = StringUtils.arrayToString(getStrDirs(rootDirs));
-    conf.set(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY,
-        strRootDirs);
+    conf.set(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY, strRootDirs);
 
     job = Job.getInstance(conf, "RaidNode-Collector");
     job.setJarByClass(Collector.class);
@@ -136,15 +126,14 @@ public class Collector {
     private FileSystem fs;
 
     @Override
-    protected void setup(Context context)
-        throws IOException, InterruptedException {
+    protected void setup(Context context) throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
       fs = FileSystem.get(conf);
     }
 
     @Override
-    protected void map(Object key, Text value, Context context)
-        throws IOException, InterruptedException {
+    protected void map(Object key, Text value, Context context) throws IOException,
+        InterruptedException {
       // Currently, only encode task is collected. Decode is triggered on
       // demand and may be supported in the future.
       Path codingFile = BlockCodec.getCodingFile(new Path(value.toString()));
@@ -159,8 +148,8 @@ public class Collector {
    */
   public static class CollectorReducer extends Reducer<Text, Text, Text, Text> {
     @Override
-    protected void reduce(Text key, Iterable<Text> values, Context context)
-        throws IOException, InterruptedException {
+    protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException,
+        InterruptedException {
       for (Text value : values) {
         context.write(key, value);
       }
@@ -168,20 +157,16 @@ public class Collector {
   }
 
   /**
-   * The raid directory information input format class for the Collector
-   * MapReduce job.
+   * The raid directory information input format class for the Collector MapReduce job.
    */
   private static class RaidDirInfoInputFormat extends InputFormat {
     @Override
-    public List<InputSplit> getSplits(JobContext context)
-        throws IOException, InterruptedException {
+    public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
-      String rootDirs = conf.get(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY);
+      String rootDirs = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY);
       if (rootDirs == null || rootDirs.isEmpty()) {
-        throw new IOException(
-            HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY
-                + " isn't configured");
+        throw new IOException(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY
+            + " isn't configured");
       }
 
       String[] dirs = rootDirs.split(",");
@@ -193,8 +178,8 @@ public class Collector {
     }
 
     @Override
-    public RecordReader createRecordReader(InputSplit split,
-        TaskAttemptContext context) throws IOException, InterruptedException {
+    public RecordReader createRecordReader(InputSplit split, TaskAttemptContext context)
+        throws IOException, InterruptedException {
       RaidDirInfoReader reader = new RaidDirInfoReader();
       reader.initialize(split, context);
       return reader;
@@ -204,12 +189,12 @@ public class Collector {
   /**
    * The raid directory information split class.
    */
-  private static class RaidDirInfoSplit extends InputSplit
-      implements Writable {
+  private static class RaidDirInfoSplit extends InputSplit implements Writable {
 
     private Path rootDir;
 
-    public RaidDirInfoSplit() {}
+    public RaidDirInfoSplit() {
+    }
 
     public RaidDirInfoSplit(Path rootDir) {
       this.rootDir = rootDir;
@@ -253,14 +238,14 @@ public class Collector {
     private int totalNum;
 
     @Override
-    public void initialize(InputSplit split, TaskAttemptContext context)
-        throws IOException, InterruptedException {
-      this.split = (RaidDirInfoSplit)split;
+    public void initialize(InputSplit split, TaskAttemptContext context) throws IOException,
+        InterruptedException {
+      this.split = (RaidDirInfoSplit) split;
       this.conf = context.getConfiguration();
       this.fs = FileSystem.get(this.conf);
       this.raidFileTimeWindow = this.conf.getLong(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT);
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT);
       this.dirs = traverseDirectoryTree(this.split.getRootDir());
       this.totalNum = this.dirs.size();
     }
@@ -291,8 +276,7 @@ public class Collector {
     }
 
     /**
-     * Depth first traverses the specified directory tree to get all raidable
-     * files.
+     * Depth first traverses the specified directory tree to get all raidable files.
      */
     private Queue<Path> traverseDirectoryTree(Path rootDir) {
       Preconditions.checkArgument(rootDir != null);
@@ -347,9 +331,8 @@ public class Collector {
       long currentTimeMs = System.currentTimeMillis();
       long fileModTime = fileStatus.getModificationTime();
       if (fs instanceof DistributedFileSystem) {
-        DistributedFileSystem dfs = (DistributedFileSystem)fs;
-        if ((fileModTime + raidFileTimeWindow < currentTimeMs)
-            && dfs.isFileClosed(file)) {
+        DistributedFileSystem dfs = (DistributedFileSystem) fs;
+        if ((fileModTime + raidFileTimeWindow < currentTimeMs) && dfs.isFileClosed(file)) {
           return true;
         }
       } else {

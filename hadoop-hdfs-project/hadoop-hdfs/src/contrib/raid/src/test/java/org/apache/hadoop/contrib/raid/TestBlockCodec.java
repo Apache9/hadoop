@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.contrib.raid;
 
@@ -74,32 +67,70 @@ public class TestBlockCodec {
 
   @Test
   public void testIsFileEncodable() throws Exception {
-    dfs.getConf().setInt(
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 4000);
+    dfs.getConf().setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 4000);
     BlockCodec codec = new BlockCodec(dfs.getConf());
 
     Path path = new Path("/test");
     dfs.mkdirs(path);
     Assert.assertFalse(codec.isFileEncodable(dfs.getFileStatus(path)));
+    Assert.assertFalse(codec.isFileEncodable(path));
 
     path = new Path("/test.txt");
     dfs.create(path).close();
     Assert.assertFalse(codec.isFileEncodable(dfs.getFileStatus(path)));
+    Assert.assertFalse(codec.isFileEncodable(path));
 
     Thread.sleep(5000);
     Assert.assertTrue(codec.isFileEncodable(dfs.getFileStatus(path)));
+    Assert.assertTrue(codec.isFileEncodable(path));
+  }
+
+  @Test(expected = IOException.class)
+  public void testEstimateSavingDir() throws Exception {
+    dfs.getConf().setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 1000);
+    BlockCodec codec = new BlockCodec(dfs.getConf());
+
+    Path path = new Path("/test");
+    dfs.mkdirs(path);
+    codec.estimateSaving(path);
+  }
+
+  @Test(expected = IOException.class)
+  public void testEstimateSavingNewFile() throws Exception {
+    dfs.getConf().setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 4000);
+    BlockCodec codec = new BlockCodec(dfs.getConf());
+
+    Path path = new Path("/test.txt");
+    dfs.create(path).close();
+    codec.estimateSaving(path);
+  }
+
+  @Test
+  public void testEstimateSaving() throws Exception {
+    Path file = new Path("/text.txt");
+    int blockSize = 1048576;
+    int fileLen = blockSize * 10 - 100;
+    DFSTestUtil.createFile(dfs, file, 1024, fileLen, blockSize, (short) 3,
+      System.currentTimeMillis());
+    Thread.sleep(4000);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY, 6);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY, 3);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 1000);
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    BlockCodec codec = new BlockCodec(conf);
+    long expected = 12582612;
+    long result = codec.estimateSaving(file);
+    Assert.assertTrue(expected == result);
   }
 
   @Test
   public void testGetErasures() throws Exception {
-    Map<Integer, OutputStream> dataErasures =
-        new HashMap<Integer, OutputStream>();
+    Map<Integer, OutputStream> dataErasures = new HashMap<Integer, OutputStream>();
     dataErasures.put(1, new ByteArrayOutputStream(10));
     dataErasures.put(2, new ByteArrayOutputStream(10));
     dataErasures.put(3, new ByteArrayOutputStream(10));
 
-    Map<Integer, OutputStream> codingErasures =
-        new HashMap<Integer, OutputStream>();
+    Map<Integer, OutputStream> codingErasures = new HashMap<Integer, OutputStream>();
     codingErasures.put(4, new ByteArrayOutputStream(10));
     codingErasures.put(5, new ByteArrayOutputStream(10));
     codingErasures.put(6, new ByteArrayOutputStream(10));
@@ -116,8 +147,7 @@ public class TestBlockCodec {
     }
 
     for (Map.Entry<Integer, OutputStream> entry : codingErasures.entrySet()) {
-      Assert.assertTrue(Arrays.binarySearch(erasures, (entry.getKey() % 3 + 6))
-          >= 0);
+      Assert.assertTrue(Arrays.binarySearch(erasures, (entry.getKey() % 3 + 6)) >= 0);
     }
   }
 
@@ -128,12 +158,12 @@ public class TestBlockCodec {
     BlockCodec codec = new BlockCodec(conf);
 
     int totalBlockNum = 22;
-    int[] corruptedBlocks = {0, 7, 10, 21, 25, 33};
+    int[] corruptedBlocks = { 0, 7, 10, 21, 25, 33 };
     Map<Integer, OutputStream>[] dataBlocksGroup = new Map[4];
     Map<Integer, OutputStream>[] codingBlocksGroup = new Map[4];
 
-    codec.partitionErasureBlocks(corruptedBlocks, totalBlockNum,
-        dataBlocksGroup, codingBlocksGroup);
+    codec
+        .partitionErasureBlocks(corruptedBlocks, totalBlockNum, dataBlocksGroup, codingBlocksGroup);
     for (int i = 0; i < corruptedBlocks.length; ++i) {
       if (corruptedBlocks[i] < totalBlockNum) {
         // data blocks
@@ -144,8 +174,7 @@ public class TestBlockCodec {
         // coding blocks
         int groupId = (corruptedBlocks[i] - totalBlockNum) / 3;
         Assert.assertNotNull(codingBlocksGroup[groupId]);
-        Assert.assertNotNull(codingBlocksGroup[groupId].get(corruptedBlocks[i]
-            - totalBlockNum));
+        Assert.assertNotNull(codingBlocksGroup[groupId].get(corruptedBlocks[i] - totalBlockNum));
       }
     }
   }
@@ -162,19 +191,17 @@ public class TestBlockCodec {
     dfs.create(codingFile).close();
     int groupNo = 2;
 
-    Map<Integer, OutputStream> dataErasures =
-        new HashMap<Integer, OutputStream>();
+    Map<Integer, OutputStream> dataErasures = new HashMap<Integer, OutputStream>();
     dataErasures.put(12, new ByteArrayOutputStream(10));
     dataErasures.put(13, new ByteArrayOutputStream(10));
     FSDataInputStream[] dataIns = new FSDataInputStream[6];
 
-    Map<Integer, OutputStream> codingErasures =
-        new HashMap<Integer, OutputStream>();
+    Map<Integer, OutputStream> codingErasures = new HashMap<Integer, OutputStream>();
     codingErasures.put(6, new ByteArrayOutputStream(10));
     FSDataInputStream[] codingIns = new FSDataInputStream[3];
 
-    codec.constructBlockInputStreams(file, groupNo, dataErasures,
-        codingErasures, dataIns, codingIns);
+    codec.constructBlockInputStreams(file, groupNo, dataErasures, codingErasures, dataIns,
+      codingIns);
 
     for (Map.Entry<Integer, OutputStream> entry : dataErasures.entrySet()) {
       int blockIdx = entry.getKey();
@@ -192,17 +219,15 @@ public class TestBlockCodec {
   @Test
   public void testEncodeAndDecodeBlocksThroughStream() throws Exception {
     Path file = new Path("/text.txt");
-    int blockSize = (int)(BLOCK_SIZE);
+    int blockSize = (int) (BLOCK_SIZE);
     int fileLen = blockSize * 10 - 100;
-    DFSTestUtil.createFile(dfs, file, 1024, fileLen, blockSize, (short)1,
-        System.currentTimeMillis());
+    DFSTestUtil.createFile(dfs, file, 1024, fileLen, blockSize, (short) 1,
+      System.currentTimeMillis());
     FileStatus fileStatus = dfs.getFileStatus(file);
     Thread.sleep(1000);
 
-    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY,
-        DATA_BLOCK_NUM);
-    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
-        CODING_BLOCK_NUM);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY, DATA_BLOCK_NUM);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY, CODING_BLOCK_NUM);
     conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 1000);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
     BlockCodec codec = new BlockCodec(conf);
@@ -211,97 +236,85 @@ public class TestBlockCodec {
     encodeAndCheckFile(codec, file, fileLen);
 
     // Decode and check
-    int totalBlockNum = (int)((fileStatus.getLen() - 1) / BLOCK_SIZE + 1);
+    int totalBlockNum = (int) ((fileStatus.getLen() - 1) / BLOCK_SIZE + 1);
     // Case 0
-    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0,
-        new int[] {1}, new int[] {});
+    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0, new int[] { 1 }, new int[] {});
 
     // Case 1
-    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0,
-        new int[] {1}, new int[] {1});
+    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0, new int[] { 1 }, new int[] { 1 });
 
     // Case 2
-    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 1,
-        new int[] {9}, new int[] {3});
+    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 1, new int[] { 9 }, new int[] { 3 });
 
     // Case 3
-    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0,
-        new int[] {1, 2}, new int[] {1});
+    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0, new int[] { 1, 2 },
+      new int[] { 1 });
 
     // Case 4
-    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0,
-        new int[] {1}, new int[] {1, 2});
+    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0, new int[] { 1 }, new int[] { 1,
+        2 });
 
     // Case 5
-    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0,
-        new int[] {1, 2, 3}, new int[] {});
+    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 0, new int[] { 1, 2, 3 },
+      new int[] {});
 
     // Case 6
-    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 1,
-        new int[] {8, 9}, new int[] {3});
+    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 1, new int[] { 8, 9 },
+      new int[] { 3 });
 
     // Case 7
-    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 1,
-        new int[] {7, 8, 9}, new int[] {});
+    decodeAndCheckBlock(codec, file, fileStatus, totalBlockNum, 1, new int[] { 7, 8, 9 },
+      new int[] {});
   }
 
-  void encodeAndCheckFile(BlockCodec codec, Path file, long fileLen)
-      throws Exception {
+  void encodeAndCheckFile(BlockCodec codec, Path file, long fileLen) throws Exception {
     codec.encode(file);
     Path codingFile = BlockCodec.getCodingFile(file);
     Assert.assertTrue(dfs.exists(codingFile));
     FileStatus codingFileStatus = dfs.getFileStatus(codingFile);
-    int codingBlockNum = (int)((fileLen - 1) / BLOCK_SIZE / DATA_BLOCK_NUM + 1);
-    Assert.assertEquals(codingBlockNum * CODING_BLOCK_NUM * BLOCK_SIZE,
-        codingFileStatus.getLen());
+    int codingBlockNum = (int) ((fileLen - 1) / BLOCK_SIZE / DATA_BLOCK_NUM + 1);
+    Assert.assertEquals(codingBlockNum * CODING_BLOCK_NUM * BLOCK_SIZE, codingFileStatus.getLen());
   }
 
-  void decodeAndCheckBlock(BlockCodec codec, Path file, FileStatus fileStatus,
-      int totalBlockNum, int groupNo, int[] corruptedData,
-      int[] corruptedCoding) throws Exception {
-    Assert.assertTrue(corruptedData.length + corruptedCoding.length
-        <= CODING_BLOCK_NUM);
+  void decodeAndCheckBlock(BlockCodec codec, Path file, FileStatus fileStatus, int totalBlockNum,
+      int groupNo, int[] corruptedData, int[] corruptedCoding) throws Exception {
+    Assert.assertTrue(corruptedData.length + corruptedCoding.length <= CODING_BLOCK_NUM);
 
-    Map<Integer, OutputStream> dataErasures =
-        new HashMap<Integer, OutputStream>();
+    Map<Integer, OutputStream> dataErasures = new HashMap<Integer, OutputStream>();
     for (int i = 0; i < corruptedData.length; ++i) {
-      dataErasures.put(corruptedData[i],
-          new ByteArrayOutputStream((int)BLOCK_SIZE));
+      dataErasures.put(corruptedData[i], new ByteArrayOutputStream((int) BLOCK_SIZE));
     }
 
-    Map<Integer, OutputStream> codingErasures =
-        new HashMap<Integer, OutputStream>();
+    Map<Integer, OutputStream> codingErasures = new HashMap<Integer, OutputStream>();
     for (int i = 0; i < corruptedCoding.length; ++i) {
-      codingErasures.put(corruptedCoding[i],
-          new ByteArrayOutputStream((int)BLOCK_SIZE));
+      codingErasures.put(corruptedCoding[i], new ByteArrayOutputStream((int) BLOCK_SIZE));
     }
 
-    codec.decodeBlocks(file, fileStatus, totalBlockNum, groupNo,
-        BLOCK_SIZE, dataErasures, codingErasures);
+    codec.decodeBlocks(file, fileStatus, totalBlockNum, groupNo, BLOCK_SIZE, dataErasures,
+      codingErasures);
 
     // Check the decoded data
     for (int i = 0; i < corruptedData.length; ++i) {
-      int dataLen = (int)BLOCK_SIZE;
+      int dataLen = (int) BLOCK_SIZE;
       if (corruptedData[i] == totalBlockNum - 1) {
-        dataLen = (int)((fileStatus.getLen() - 1) % BLOCK_SIZE + 1);
+        dataLen = (int) ((fileStatus.getLen() - 1) % BLOCK_SIZE + 1);
       }
 
       byte[] buffer = new byte[dataLen];
       FSDataInputStream dataIn = dfs.open(file);
       dataIn.read(BLOCK_SIZE * corruptedData[i], buffer, 0, buffer.length);
-      byte[] result = ((ByteArrayOutputStream)(
-          dataErasures.get(corruptedData[i]))).toByteArray();
+      byte[] result = ((ByteArrayOutputStream) (dataErasures.get(corruptedData[i]))).toByteArray();
       Assert.assertArrayEquals(buffer, Arrays.copyOfRange(result, 0, dataLen));
       dataIn.close();
     }
 
     // check the decoded coding
     for (int i = 0; i < corruptedCoding.length; ++i) {
-      byte[] buffer = new byte[(int)BLOCK_SIZE];
+      byte[] buffer = new byte[(int) BLOCK_SIZE];
       FSDataInputStream codingIn = dfs.open(BlockCodec.getCodingFile(file));
       codingIn.read(BLOCK_SIZE * corruptedCoding[i], buffer, 0, buffer.length);
-      byte[] result = ((ByteArrayOutputStream)(
-          codingErasures.get(corruptedCoding[i]))).toByteArray();
+      byte[] result = ((ByteArrayOutputStream) (codingErasures.get(corruptedCoding[i])))
+          .toByteArray();
       Assert.assertArrayEquals(buffer, result);
       codingIn.close();
     }
@@ -312,8 +325,8 @@ public class TestBlockCodec {
     Path file = new Path("/text2.txt");
     int blockSize = 1048576;
     int fileLen = blockSize * 10 - 100;
-    DFSTestUtil.createFile(dfs, file, 1024, fileLen, blockSize, (short)3,
-        System.currentTimeMillis());
+    DFSTestUtil.createFile(dfs, file, 1024, fileLen, blockSize, (short) 3,
+      System.currentTimeMillis());
     Thread.sleep(1000);
 
     conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY, 6);
@@ -323,18 +336,17 @@ public class TestBlockCodec {
     BlockCodec codec = new BlockCodec(conf);
 
     FileStatus status = dfs.getFileStatus(file);
-    Assert.assertEquals((short)3, status.getReplication());
+    Assert.assertEquals((short) 3, status.getReplication());
 
     // Encode the file
     codec.encode(file);
     Path codingFile = BlockCodec.getCodingFile(file);
     Assert.assertTrue(dfs.exists(codingFile));
     FileStatus codingFileStatus = dfs.getFileStatus(codingFile);
-    Assert.assertEquals(codingFileStatus.getBlockSize() * 2 * 3,
-        codingFileStatus.getLen());
+    Assert.assertEquals(codingFileStatus.getBlockSize() * 2 * 3, codingFileStatus.getLen());
 
     status = dfs.getFileStatus(file);
-    Assert.assertEquals((short)1, status.getReplication());
+    Assert.assertEquals((short) 1, status.getReplication());
 
     byte[] fileContent = DFSTestUtil.readFileBuffer(dfs, file);
     Assert.assertEquals(fileLen, fileContent.length);
@@ -343,18 +355,17 @@ public class TestBlockCodec {
 
     // Corrupt 1 data block and 1 coding block
     LocatedBlock block = getBlock(file, 1, blockSize);
-    dfsClient.reportBadBlocks(new LocatedBlock[]{block});
+    dfsClient.reportBadBlocks(new LocatedBlock[] { block });
     block = getBlock(codingFile, 1, blockSize);
-    dfsClient.reportBadBlocks(new LocatedBlock[]{block});
+    dfsClient.reportBadBlocks(new LocatedBlock[] { block });
 
     // Decode and check
-    int[] corruptedBlocks = {1, 10 + 1};
+    int[] corruptedBlocks = { 1, 10 + 1 };
     codec.decode(file, corruptedBlocks);
 
     byte[] decodedFileContent = DFSTestUtil.readFileBuffer(dfs, file);
     Assert.assertEquals(fileLen, decodedFileContent.length);
-    byte[] decodedCodingFileContent = DFSTestUtil.readFileBuffer(
-        dfs, codingFile);
+    byte[] decodedCodingFileContent = DFSTestUtil.readFileBuffer(dfs, codingFile);
     Assert.assertEquals(blockSize * 3 * 2, decodedCodingFileContent.length);
 
     // Verify the data
@@ -362,12 +373,10 @@ public class TestBlockCodec {
     Assert.assertArrayEquals(codingContent, decodedCodingFileContent);
   }
 
-  private LocatedBlock getBlock(Path file, int idx, long blockSize)
-      throws Exception {
+  private LocatedBlock getBlock(Path file, int idx, long blockSize) throws Exception {
     NameNode nn = dfsCluster.getNameNode();
     DFSClient dfsClient = new DFSClient(nn.getNameNodeAddress(), conf);
-    LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(),
-        blockSize * idx, blockSize);
+    LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(), blockSize * idx, blockSize);
     Assert.assertEquals(1, blocks.getLocatedBlocks().size());
     return blocks.getLocatedBlocks().get(0);
   }
@@ -381,8 +390,8 @@ public class TestBlockCodec {
     String blockFile = null;
     FileSystem fs = FileSystem.getLocal(new Configuration());
     do {
-      blockFile = dataDir + "/data" + (dirIdx++) + "/current/" + bpId +
-          "/current/finalized/blk_" + blockId;
+      blockFile = dataDir + "/data" + (dirIdx++) + "/current/" + bpId + "/current/finalized/blk_"
+          + blockId;
       if (fs.exists(new Path(blockFile))) {
         break;
       }
@@ -397,8 +406,8 @@ public class TestBlockCodec {
     Path file = new Path("/text3.txt");
     int blockSize = 1048576;
     int fileLen = blockSize * 10 - 100;
-    DFSTestUtil.createFile(dfs, file, 1024, fileLen, blockSize, (short)3,
-        System.currentTimeMillis());
+    DFSTestUtil.createFile(dfs, file, 1024, fileLen, blockSize, (short) 3,
+      System.currentTimeMillis());
     Thread.sleep(1000);
 
     conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY, 6);
@@ -408,18 +417,17 @@ public class TestBlockCodec {
     BlockCodec codec = new BlockCodec(conf);
 
     FileStatus status = dfs.getFileStatus(file);
-    Assert.assertEquals((short)3, status.getReplication());
+    Assert.assertEquals((short) 3, status.getReplication());
 
     // Encode the file
     codec.encode(file);
     Path codingFile = BlockCodec.getCodingFile(file);
     Assert.assertTrue(dfs.exists(codingFile));
     FileStatus codingFileStatus = dfs.getFileStatus(codingFile);
-    Assert.assertEquals(codingFileStatus.getBlockSize() * 2 * 3,
-        codingFileStatus.getLen());
+    Assert.assertEquals(codingFileStatus.getBlockSize() * 2 * 3, codingFileStatus.getLen());
 
     status = dfs.getFileStatus(file);
-    Assert.assertEquals((short)1, status.getReplication());
+    Assert.assertEquals((short) 1, status.getReplication());
 
     byte[] fileContent = DFSTestUtil.readFileBuffer(dfs, file);
     Assert.assertEquals(fileLen, fileContent.length);
@@ -428,7 +436,7 @@ public class TestBlockCodec {
 
     // Corrupt 1 data block
     LocatedBlock block = getBlock(file, 1, blockSize);
-    dfsClient.reportBadBlocks(new LocatedBlock[]{block});
+    dfsClient.reportBadBlocks(new LocatedBlock[] { block });
 
     // Try to read data of the corrupted block
     long offset = blockSize + 10;
@@ -436,8 +444,7 @@ public class TestBlockCodec {
     byte[] data = codec.decode(file, offset, length);
     Assert.assertNotNull(data);
     Assert.assertArrayEquals(
-        Arrays.copyOfRange(fileContent, (int)offset, (int)(offset + length)),
-        data);
+      Arrays.copyOfRange(fileContent, (int) offset, (int) (offset + length)), data);
   }
 
   @Test
