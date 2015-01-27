@@ -246,6 +246,23 @@ public class MRAppMaster extends CompositeService {
     LOG.info("Created MRAppMaster for application " + applicationAttemptId);
   }
 
+  private void handleInterruptedCommit(Configuration conf) throws IOException {
+    LOG.info("handleInterruptedCommit");
+    String user = UserGroupInformation.getCurrentUser().getShortUserName();
+    Path startCommitFile = MRApps.getStartJobCommitFile(conf, user, jobId);
+    Path endCommitSuccessFile =
+        MRApps.getEndJobCommitSuccessFile(conf, user, jobId);
+    Path endCommitFailureFile =
+        MRApps.getEndJobCommitFailureFile(conf, user, jobId);
+    FileSystem fs = getFileSystem(conf);
+    if (fs.exists(startCommitFile) &&
+        !fs.exists(endCommitFailureFile) &&
+        !fs.exists(endCommitSuccessFile)) {
+      fs.delete(startCommitFile, false);
+      LOG.warn("if exists startCommitFile and not exists endCommitFailureFile nor endCommitSuccessFile, delete startCommitFile");
+    }
+  }
+
   @Override
   protected void serviceInit(final Configuration conf) throws Exception {
     // create the job classloader if enabled
@@ -280,6 +297,7 @@ public class MRAppMaster extends CompositeService {
       String user = UserGroupInformation.getCurrentUser().getShortUserName();
       Path stagingDir = MRApps.getStagingAreaDir(conf, user);
       FileSystem fs = getFileSystem(conf);
+      handleInterruptedCommit(conf);
       boolean stagingExists = fs.exists(stagingDir);
       Path startCommitFile = MRApps.getStartJobCommitFile(conf, user, jobId);
       boolean commitStarted = fs.exists(startCommitFile);
@@ -308,10 +326,16 @@ public class MRAppMaster extends CompositeService {
         if (commitSuccess) {
           shutDownMessage = "We crashed after successfully committing. Recovering.";
           forcedState = JobStateInternal.SUCCEEDED;
+          LOG.warn(shutDownMessage);
+          LOG.warn("forcedState = " + forcedState.toString());
         } else if (commitFailure) {
           shutDownMessage = "We crashed after a commit failure.";
           forcedState = JobStateInternal.FAILED;
+          LOG.fatal(shutDownMessage);
+          LOG.fatal("forcedState = " + forcedState.toString());
         } else {
+          //this code cannot be reached for call handleInterruptedCommit()
+          LOG.fatal("this code cannot be reached for call handleInterruptedCommit()");
           //The commit is still pending, commit error
           shutDownMessage = "We crashed durring a commit";
           forcedState = JobStateInternal.ERROR;
