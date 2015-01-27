@@ -74,7 +74,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private long overUsedFreespaceThreshold;
   private boolean randomlyDelete;
   private Random rand;
-  
+  private int reservedBlockNumPerStorage;
+
   /**
    * A miss of that many heartbeats is tolerated for replica deletion policy.
    */
@@ -111,6 +112,9 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
         conf.getBoolean(DFSConfigKeys.DFS_NAMENODE_REPLICA_DELETE_RANDOMLY,
             DFSConfigKeys.DFS_NAMENODE_REPLICA_DELETE_RANDOMLY_DEFAULT);
     this.rand = new Random();
+    this.reservedBlockNumPerStorage = conf.getInt(
+        DFSConfigKeys.DFS_DATANODE_RESERVED_SPACE_BLOCK_NUM_KEY,
+        HdfsConstants.MIN_BLOCKS_FOR_WRITE);
   }
 
   @Override
@@ -837,8 +841,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       }
     }
 
-    
-    final long requiredSize = blockSize * HdfsConstants.MIN_BLOCKS_FOR_WRITE;
+    final long requiredSize = blockSize * reservedBlockNumPerStorage;
     final long scheduledSize = blockSize * node.getBlocksScheduled(storage.getStorageType());
     final long remaining = node.getRemaining(storage.getStorageType());
     if (requiredSize > remaining - scheduledSize) {

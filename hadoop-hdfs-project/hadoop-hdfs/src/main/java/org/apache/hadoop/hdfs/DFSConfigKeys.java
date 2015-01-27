@@ -902,4 +902,5 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.namenode.max.concurrent.getcontentsummary";
   public static final int DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY_DEFAULT =
       64;
+  public static final String  DFS_DATANODE_RESERVED_SPACE_BLOCK_NUM_KEY = "dfs.datanode.reserved.space.block.number";
 }
