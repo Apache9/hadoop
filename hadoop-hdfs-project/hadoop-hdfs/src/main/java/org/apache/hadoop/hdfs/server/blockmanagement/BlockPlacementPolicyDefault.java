@@ -73,7 +73,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private FSClusterStats stats;
   protected long heartbeatInterval;   // interval for DataNode heartbeats
   private long staleInterval;   // interval used to identify stale DataNodes
-  
+  private int reservedBlockNumPerStorage;
+
   /**
    * A miss of that many heartbeats is tolerated for replica deletion policy.
    */
@@ -103,6 +104,9 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     this.staleInterval = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_STALE_DATANODE_INTERVAL_KEY, 
         DFSConfigKeys.DFS_NAMENODE_STALE_DATANODE_INTERVAL_DEFAULT);
+    this.reservedBlockNumPerStorage = conf.getInt(
+        DFSConfigKeys.DFS_DATANODE_RESERVED_SPACE_BLOCK_NUM_KEY,
+        HdfsConstants.MIN_BLOCKS_FOR_WRITE);
   }
 
   @Override
@@ -623,7 +627,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       }
     }
     
-    final long requiredSize = blockSize * HdfsConstants.MIN_BLOCKS_FOR_WRITE;
+    final long requiredSize = blockSize * reservedBlockNumPerStorage;
     final long scheduledSize = blockSize * node.getBlocksScheduled();
     if (requiredSize > storage.getRemaining() - scheduledSize) {
       logNodeIsNotChosen(storage, "the node does not have enough space ");
