@@ -19,7 +19,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.google.common.base.Preconditions;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -34,11 +33,12 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.BlockMissingException;
 import org.apache.hadoop.hdfs.BlockOutputStream;
 import org.apache.hadoop.hdfs.DFSClient;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.xiaomi.infra.ec.ErasureCodec;
 import com.xiaomi.infra.ec.ErasureCodec.Algorithm;
 
@@ -56,13 +56,14 @@ public class BlockCodec {
   private final int codingBlocksNum;
   private final ErasureCodec codec;
   private final DFSClient dfsClient;
+  private final int stripSize;
+  private final int wordSize;
+  private final int codecBufSize;
 
   private static final Path RAID_ROOT = new Path("/raid");
   private static final String CODING_FILE_SUFFIX = ".ec";
   private static final String TEMP_CODINF_FILE_SUFFIX = ".tmp";
   private static final String DECODE_LOCK_FILE_SUFFIX = ".lock";
-  private static final int STRIPE_SIZE = 4096;
-  private static final int WORD_SIZE = 8;
   private static final byte COMPLEMENT_BYTE = (byte) 1;
   private static final OutputStream DUMMY_STREAM = new ByteArrayOutputStream(1);
 
@@ -73,12 +74,19 @@ public class BlockCodec {
       HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_DEFAULT);
     this.codingBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
       HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_DEFAULT);
+    this.stripSize = conf.getInt(HdfsRaidConfigKeys.HDFS_RAID_CODEC_STRIP_SIZE,
+      HdfsRaidConfigKeys.HDFS_RAID_CODEC_STRIP_SIZE_DEFAULT);
+    this.wordSize = conf.getInt(HdfsRaidConfigKeys.HDFS_RAID_CODEC_WORD_SIZE,
+      HdfsRaidConfigKeys.HDFS_RAID_CODEC_WORD_SIZE_DEFAULT);
+    this.codecBufSize = conf.getInt(HdfsRaidConfigKeys.HDFS_RAID_CODEC_CODE_BUF_SIZE,
+      HdfsRaidConfigKeys.HDFS_RAID_CODEC_CODE_BUF_SIZE_DEFAULT);
+    Preconditions.checkState(((codecBufSize % stripSize) == 0) && (codecBufSize > stripSize));
     this.conf = conf;
     this.fs = FileSystem.get(conf);
     checkRaidRoot();
 
     this.codec = new ErasureCodec.Builder(Algorithm.Reed_Solomon).dataBlockNum(dataBlocksNum)
-        .codingBlockNum(codingBlocksNum).wordSize(WORD_SIZE).build();
+        .codingBlockNum(codingBlocksNum).wordSize(wordSize).build();
     if (fs instanceof DistributedFileSystem) {
       this.dfsClient = ((DistributedFileSystem) fs).getClient();
     } else {
@@ -95,38 +103,67 @@ public class BlockCodec {
     if (!isFileEncodable(fileStatus)) {
       throw new IOException("File " + file + " is not encodable, try later");
     }
-
     // Get the block locations of the file
     long fileLen = fileStatus.getLen();
     BlockLocation[] locations = fs.getFileBlockLocations(fileStatus, 0, fileLen);
-    Preconditions.checkState(fileStatus.getBlockSize() % STRIPE_SIZE == 0,
-      "Block size must be multiple of " + STRIPE_SIZE);
+    Preconditions.checkState(fileStatus.getBlockSize() % stripSize == 0,
+      "Block size must be multiple of " + stripSize);
 
     // Create temporary coding file output stream
     Path codingFile = getCodingFile(file);
-    Path tmpCodingFile = new Path(codingFile.toString() + TEMP_CODINF_FILE_SUFFIX);
-    FSDataOutputStream codingOut = fs.create(tmpCodingFile, true, conf.getInt(
-      CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY,
-      CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT), fs
-        .getDefaultReplication(tmpCodingFile), fileStatus.getBlockSize());
 
+    FSDataOutputStream[] codingOuts = new FSDataOutputStream[codingBlocksNum];
+    Path[] tmpCodingFiles = new Path[codingBlocksNum];
     // Encode the blocks
     int roundNum = (locations.length - 1) / dataBlocksNum + 1;
     for (int r = 0; r < roundNum; ++r) {
-      encodeBlocks(file, fileStatus, locations.length, codingOut, r * dataBlocksNum,
-        Math.min(dataBlocksNum, locations.length - r * dataBlocksNum));
-    }
+      try {
+        for (int i = 0; i < codingBlocksNum; i++) {
+          tmpCodingFiles[i] = new Path(codingFile.toString() + TEMP_CODINF_FILE_SUFFIX + r + "_"
+              + i);
+          codingOuts[i] = fs.create(tmpCodingFiles[i], true, conf.getInt(
+            CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY,
+            CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT), fs
+              .getDefaultReplication(tmpCodingFiles[i]), fileStatus.getBlockSize());
+        }
 
-    // Rename the tmp coding file to formal coding file
-    try {
-      codingOut.close();
-      if (!fs.rename(tmpCodingFile, codingFile)) {
-        LOG.error("Rename " + tmpCodingFile + " to " + codingFile + " failed");
-        throw new IOException("Rename " + tmpCodingFile + " to " + codingFile + " failed");
+        encodeBlocks(file, fileStatus, locations.length, codingOuts, r * dataBlocksNum,
+          Math.min(dataBlocksNum, locations.length - r * dataBlocksNum));
+
+        for (int i = 0; i < codingBlocksNum; i++) {
+          codingOuts[i].close();
+        }
+
+        // Concat tmp coding files to formal coding file
+        if (r == 0) {
+          Path[] concatSrcs = new Path[codingBlocksNum - 1];
+          for (int i = 0; i < codingBlocksNum - 1; i++) {
+            concatSrcs[i] = tmpCodingFiles[i + 1];
+          }
+          if (codingBlocksNum > 1) {
+            fs.concat(tmpCodingFiles[0], concatSrcs);
+          }
+          if (fs.rename(tmpCodingFiles[0], codingFile) == false) {
+            LOG.error("Rename " + tmpCodingFiles[0] + " to " + codingFile + " failed");
+            throw new IOException("Rename " + tmpCodingFiles[0] + " to " + codingFile + " failed");
+          }
+        } else {
+          fs.concat(codingFile, tmpCodingFiles);
+        }
+
+      } catch (IOException ioe) {
+        // Fail to encoding. Delete the coding file.
+        if (fs.exists(codingFile)) {
+          fs.delete(codingFile, false);
+        }
+        break;
+      } finally {
+        for (int i = 0; i < codingBlocksNum; i++) {
+          if (fs.exists(tmpCodingFiles[i])) {
+            fs.delete(tmpCodingFiles[i], false);
+          }
+        }
       }
-    } finally {
-      // Remove the tmp coding file if it still exists
-      fs.delete(tmpCodingFile, true);
     }
 
     // Change the data and coding file's replica number
@@ -192,8 +229,8 @@ public class BlockCodec {
       FileStatus fileStatus = fs.getFileStatus(file);
       BlockLocation[] locations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
       long blockSize = fileStatus.getBlockSize();
-      long adjustedOffset = adjustOffset(offset % blockSize, STRIPE_SIZE);
-      long adjustedLength = adjustLength(length, STRIPE_SIZE);
+      long adjustedOffset = adjustOffset(offset % blockSize, stripSize);
+      long adjustedLength = adjustLength(length, stripSize);
       int blockIdx = (int) (offset / blockSize);
       int groupNo = blockIdx / dataBlocksNum;
 
@@ -230,25 +267,34 @@ public class BlockCodec {
   /**
    * Encodes a specified group of blocks.
    */
-  void encodeBlocks(Path file, FileStatus fileStatus, int totalBlockNum,
-      FSDataOutputStream codingOut, int start, int len) throws IOException {
+  private void encodeBlocks(Path file, FileStatus fileStatus, int totalBlockNum,
+      FSDataOutputStream[] codingOuts, int start, int len) throws IOException {
+    Preconditions.checkState(codingOuts.length == codingBlocksNum);
     FSDataInputStream[] dataIns = new FSDataInputStream[len];
     try {
       for (int i = 0; i < dataIns.length; ++i) {
         dataIns[i] = fs.open(file);
       }
-
-      byte[][] result = new byte[codingBlocksNum][(int) fileStatus.getBlockSize()];
-      byte[][] data = new byte[dataBlocksNum][STRIPE_SIZE];
+      byte[][] result;
+      byte[][] data;
+      // OutOfMemoryError has been thrown when doing UT.
+      // Try to catch it rather than silent failure.
+      try {
+        result = new byte[codingBlocksNum][codecBufSize];
+        data = new byte[dataBlocksNum][stripSize];
+      } catch (Throwable t) {
+        throw new IOException("Unable to get memory for encoding");
+      }
       long blockSize = fileStatus.getBlockSize();
       boolean isLastGroup = (totalBlockNum == (start + len));
       long lastBlockLen = (fileStatus.getLen() - 1) % blockSize + 1;
-
-      for (int r = 0; r < blockSize / STRIPE_SIZE; ++r) {
+      int codecBufIndex = 0;
+      int codecBufWriteSentry = codecBufSize / stripSize;
+      for (int r = 0; r < blockSize / stripSize; ++r) {
         // Read next stripe of data
         for (int i = 0; i < dataIns.length; ++i) {
           long startPos = (start + i) * blockSize;
-          long pos = startPos + r * STRIPE_SIZE;
+          long pos = startPos + r * stripSize;
           if (isLastGroup && (i == dataIns.length - 1) && lastBlockLen != blockSize) {
             // Process the last block whose length is smaller than 'blockSize'
             if (pos + data[i].length < fileStatus.getLen()) {
@@ -266,7 +312,6 @@ public class BlockCodec {
             dataIns[i].read(pos, data[i], 0, data[i].length);
           }
         }
-
         // If not enough data blocks, fill 0s
         if (dataIns.length < dataBlocksNum) {
           for (int i = dataIns.length; i < dataBlocksNum; ++i) {
@@ -277,11 +322,16 @@ public class BlockCodec {
         // Copy the coding stripe to the result buffer
         byte[][] coding = codec.encode(data);
         for (int i = 0; i < coding.length; ++i) {
-          System.arraycopy(coding[i], 0, result[i], r * STRIPE_SIZE, coding[i].length);
+          System.arraycopy(coding[i], 0, result[i], codecBufIndex * stripSize, coding[i].length);
+        }
+        codecBufIndex += 1;
+        if (codecBufIndex == codecBufWriteSentry) {
+          writeEncodedData(codingOuts, result, codecBufIndex);
+          codecBufIndex = 0;
         }
       }
 
-      writeEncodedData(codingOut, result);
+      writeEncodedData(codingOuts, result, codecBufIndex);
     } finally {
       closeStreams(dataIns);
     }
@@ -300,18 +350,18 @@ public class BlockCodec {
   void decodeData(Path file, FileStatus fileStatus, int totalBlockNum, int groupNo, long blockSize,
       long offset, long length, Map<Integer, OutputStream> dataErasures,
       Map<Integer, OutputStream> codingErasures) throws IOException {
-    Preconditions.checkArgument(offset % STRIPE_SIZE == 0);
-    Preconditions.checkArgument(length > 0 && length % STRIPE_SIZE == 0);
+    Preconditions.checkArgument(offset % stripSize == 0);
+    Preconditions.checkArgument(length > 0 && length % stripSize == 0);
     FSDataInputStream[] dataIns = new FSDataInputStream[dataBlocksNum];
     FSDataInputStream[] codingIns = new FSDataInputStream[codingBlocksNum];
     try {
       constructBlockInputStreams(file, groupNo, dataErasures, codingErasures, dataIns, codingIns);
 
-      byte[][] data = new byte[dataBlocksNum][STRIPE_SIZE];
-      byte[][] coding = new byte[codingBlocksNum][STRIPE_SIZE];
+      byte[][] data = new byte[dataBlocksNum][stripSize];
+      byte[][] coding = new byte[codingBlocksNum][stripSize];
       int[] erasures = getErasures(dataErasures, codingErasures);
       // Construct the corrupted blocks
-      for (int r = 0; r < length / STRIPE_SIZE; ++r) {
+      for (int r = 0; r < length / stripSize; ++r) {
         // Read next stripe of data
         int count = readDataStripe(file, fileStatus, totalBlockNum, groupNo, offset, r,
           dataErasures, dataIns, data);
@@ -341,7 +391,7 @@ public class BlockCodec {
       int blockIdx = groupNo * dataBlocksNum + i;
       if (blockIdx < totalBlockNum && dataErasures.get(blockIdx) == null) {
         try {
-          int pos = (int) (blockIdx * blockSize + offset + roundNo * STRIPE_SIZE);
+          int pos = (int) (blockIdx * blockSize + offset + roundNo * stripSize);
           if (blockIdx == totalBlockNum - 1 && lastBlockLen != blockSize) {
             // Process the last block whose length is smaller than block size
             if (pos + data[i].length < fileStatus.getLen()) {
@@ -385,7 +435,7 @@ public class BlockCodec {
       int blockIdx = groupNo * codingBlocksNum + i;
       if (readStripeCount < dataBlocksNum - dataStripeCount && codingErasures.get(blockIdx) == null) {
         try {
-          long pos = blockIdx * blockSize + offset + roundNo * STRIPE_SIZE;
+          long pos = blockIdx * blockSize + offset + roundNo * stripSize;
           codingIns[i].read(pos, coding[i], 0, coding[i].length);
         } catch (IOException e) {
           if (isBlockCorrupted(e)) {
@@ -447,9 +497,10 @@ public class BlockCodec {
     }
   }
 
-  void writeEncodedData(OutputStream out, byte[][] data) throws IOException {
+  void writeEncodedData(OutputStream[] outs, byte[][] data, int strips) throws IOException {
+    Preconditions.checkState(outs.length == data.length);
     for (int i = 0; i < data.length; ++i) {
-      out.write(data[i]);
+      outs[i].write(data[i], 0, stripSize * strips);
     }
   }
 
@@ -490,7 +541,7 @@ public class BlockCodec {
     long blockSize = fileStatus.getBlockSize();
     for (int i = 0; i < data.length; ++i) {
       int blockIdx = groupNo * dataBlocksNum + i;
-      long pos = blockIdx * blockSize + offset + roundNo * STRIPE_SIZE;
+      long pos = blockIdx * blockSize + offset + roundNo * stripSize;
       OutputStream out = dataErasures.get(blockIdx);
       if (out != null) {
         if (blockIdx + 1 == totalBlockNum) {
@@ -605,6 +656,17 @@ public class BlockCodec {
     return new Path(RAID_ROOT.toString() + file + CODING_FILE_SUFFIX);
   }
 
+  public static boolean isCodingFile(Path file) {
+    String src = file.toUri().getPath();
+    return src.startsWith(RAID_ROOT.toString()) && src.endsWith(CODING_FILE_SUFFIX);
+  }
+
+  public static Path getCodingFileSource(Path file) {
+    Preconditions.checkArgument(isCodingFile(file));
+    String s = file.toUri().getPath();
+    return new Path(s.substring(RAID_ROOT.toString().length(), s.lastIndexOf(CODING_FILE_SUFFIX)));
+  }
+
   public static Path getRaidRoot() {
     return RAID_ROOT;
   }
@@ -661,7 +723,18 @@ public class BlockCodec {
     return false;
   }
 
-  public static int getStripeSize() {
-    return STRIPE_SIZE;
+  public int getStripeSize() {
+    return stripSize;
   }
+
+  @VisibleForTesting
+  public static String getCodingFIlePrefix() {
+    return RAID_ROOT.toString();
+  }
+
+  @VisibleForTesting
+  public static String getCodingFileSuffix() {
+    return CODING_FILE_SUFFIX;
+  }
+
 }

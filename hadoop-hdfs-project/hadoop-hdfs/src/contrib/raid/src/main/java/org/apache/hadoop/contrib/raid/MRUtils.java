@@ -10,6 +10,7 @@
  */
 package org.apache.hadoop.contrib.raid;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
@@ -41,8 +42,12 @@ public class MRUtils {
     out.close();
   }
 
-  public static String readJobId(Configuration conf, Path file) throws IOException {
+  public static String readJobId(Configuration conf, Path file) throws IOException,
+      FileNotFoundException {
     FileSystem fs = FileSystem.get(conf);
+    if (!fs.exists(file)) {
+      throw new FileNotFoundException();
+    }
     FSDataInputStream in = fs.open(file);
     byte[] buffer = new byte[1024];
     int readLen = in.read(buffer);

@@ -91,6 +91,23 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
       <artifactId>protobuf-java</artifactId>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+    	<groupId>org.apache.hadoop</groupId>
+    	<artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+    	<scope>test</scope>
+    	<type>test-jar</type>
+    </dependency>
+    <dependency>
+    	<groupId>org.apache.hadoop</groupId>
+    	<artifactId>hadoop-yarn-server-tests</artifactId>
+    	<scope>test</scope>
+    	<type>test-jar</type>
+    </dependency>
+    <dependency>
+    	<groupId>org.apache.hadoop</groupId>
+    	<artifactId>hadoop-mapreduce-client-hs</artifactId>
+    	<scope>provided</scope>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

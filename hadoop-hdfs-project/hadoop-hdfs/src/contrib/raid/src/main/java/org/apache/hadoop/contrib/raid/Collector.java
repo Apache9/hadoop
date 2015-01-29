@@ -14,19 +14,13 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
-import java.util.Stack;
 
-import com.google.common.base.Preconditions;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.contrib.raid.RaidTask.RaidTaskUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -44,6 +38,8 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
+
+import com.google.common.base.Preconditions;
 
 /**
  * A Collector is used to collect the information of files that need encoding and decoding. It will
@@ -246,7 +242,29 @@ public class Collector {
       this.raidFileTimeWindow = this.conf.getLong(
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT);
-      this.dirs = traverseDirectoryTree(this.split.getRootDir());
+      this.dirs = RaidTaskUtils.traverseDirectoryTree(fs, this.split.getRootDir(),
+        new RaidTaskUtils.Filter() {
+          public boolean check(Path file) throws IOException {
+            if (!fs.isFile(file)) {
+              return false;
+            }
+
+            FileStatus fileStatus = fs.getFileStatus(file);
+            long currentTimeMs = System.currentTimeMillis();
+            long fileModTime = fileStatus.getModificationTime();
+            if (fs instanceof DistributedFileSystem) {
+              DistributedFileSystem dfs = (DistributedFileSystem) fs;
+              if ((fileModTime + raidFileTimeWindow < currentTimeMs) && dfs.isFileClosed(file)) {
+                return true;
+              }
+            } else {
+              if (fileModTime + raidFileTimeWindow < currentTimeMs) {
+                return true;
+              }
+            }
+            return false;
+          }
+        });
       this.totalNum = this.dirs.size();
     }
 
@@ -273,94 +291,6 @@ public class Collector {
 
     @Override
     public void close() throws IOException {
-    }
-
-    /**
-     * Depth first traverses the specified directory tree to get all raidable files.
-     */
-    private Queue<Path> traverseDirectoryTree(Path rootDir) {
-      Preconditions.checkArgument(rootDir != null);
-      Stack<Path> stack = new Stack<Path>();
-      Set<Path> visited = new HashSet<Path>();
-      Map<Path, ChildrenInfo> childrenInfos = new HashMap<Path, ChildrenInfo>();
-      Queue<Path> result = new LinkedList<Path>();
-
-      stack.add(rootDir);
-      visited.add(rootDir);
-      while (!stack.isEmpty()) {
-        Path path = null;
-        try {
-          path = stack.peek();
-
-          ChildrenInfo childrenInfo = childrenInfos.get(path);
-          if (childrenInfo == null) {
-            FileStatus[] children = fs.listStatus(path);
-            childrenInfo = new ChildrenInfo(children);
-            childrenInfos.put(path, childrenInfo);
-          }
-
-          if (fs.isDirectory(path) && childrenInfo.hasNextChild()) {
-            FileStatus nextChild = childrenInfo.nextChild();
-            if (!visited.contains(nextChild.getPath())) {
-              visited.add(nextChild.getPath());
-              stack.add(nextChild.getPath());
-            }
-          } else {
-            if (checkFile(path)) {
-              result.add(new Path(path.toUri().getPath()));
-            }
-            stack.pop();
-          }
-        } catch (IOException e) {
-          stack.pop();
-          LOG.warn("Error occured while processing path " + path, e);
-        }
-      }
-      return result;
-    }
-
-    /**
-     * Checks whether the specified is raidable.
-     */
-    private boolean checkFile(Path file) throws IOException {
-      if (!fs.isFile(file)) {
-        return false;
-      }
-
-      FileStatus fileStatus = fs.getFileStatus(file);
-      long currentTimeMs = System.currentTimeMillis();
-      long fileModTime = fileStatus.getModificationTime();
-      if (fs instanceof DistributedFileSystem) {
-        DistributedFileSystem dfs = (DistributedFileSystem) fs;
-        if ((fileModTime + raidFileTimeWindow < currentTimeMs) && dfs.isFileClosed(file)) {
-          return true;
-        }
-      } else {
-        if (fileModTime + raidFileTimeWindow < currentTimeMs) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    private static class ChildrenInfo {
-      private int nextChildId = 0;
-      private final FileStatus[] children;
-
-      public ChildrenInfo(FileStatus[] children) {
-        this.children = children;
-      }
-
-      public boolean hasNextChild() {
-        if (children == null || children.length == 0) {
-          return false;
-        }
-        return nextChildId < children.length;
-      }
-
-      public FileStatus nextChild() {
-        return children[nextChildId++];
-      }
     }
   }
 }

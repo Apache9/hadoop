@@ -38,7 +38,7 @@ public class ClientRaidnodeProtocolServerSideTranslatorPB implements ClientRaidn
     if (policy == null) return null;
     List<PolicyInfoProto> pips = new LinkedList<PolicyInfoProto>();
     for (PolicyEntry pe : policy.getPolicyEntries()) {
-      PolicyInfoProto pip = PolicyInfoProto.newBuilder().setPath(pe.getPath())
+      PolicyInfoProto pip = PolicyInfoProto.newBuilder().setPath(pe.getPathStr())
           .setInterval(pe.getInterval()).build();
       pips.add(pip);
     }

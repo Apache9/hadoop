@@ -12,6 +12,8 @@ package org.apache.hadoop.contrib.raid;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -24,6 +26,8 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.contrib.raid.ClientRaidnodeProtocolProtos.ClientRaidnodeProtocolService;
+import org.apache.hadoop.contrib.raid.RaidTask.CollectRaidInfoTask;
+import org.apache.hadoop.contrib.raid.RaidTask.ZombieSweeperTask;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
@@ -47,6 +51,14 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   private final BlockCodec codec;
   private RPC.Server ipcServer;
   private Policy policy;
+  // TBD: Implement metrics.
+  private long encodeTaskDone;
+  private long zombieSweeperTaskDone;
+  private long fixerTaskDone;
+  private boolean shouldRun;
+  private Timer lastEncodeTimer;
+  private Timer lastZombieSweeperTimer;
+  private Timer lastFixerTimer;
 
   private static final int TASK_QUEUE_CAPACITY = 1024;
   private static final int CORE_POOL_SIZE = 4;
@@ -66,6 +78,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
       createThreadFactory("CallbackExecutorThread"));
 
     this.codec = new BlockCodec(this.conf);
+    this.shouldRun = true;
   }
 
   private void initIpcServer(Configuration conf) throws IOException {
@@ -90,7 +103,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   // TBD: Implement the logic of reload policy when users change policies.
   private void initPolicy(Configuration conf) throws IOException {
     policy = new Policy(conf);
-    policy.parsePolicy();
+    policy.loadPolicy(conf);
   }
 
   public <R> void submitTask(RaidTask<R> task) {
@@ -102,31 +115,87 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
     }
   }
 
+  public void scheduleEncodeTask(final long delay) {
+    lastEncodeTimer = new Timer();
+    lastEncodeTimer.schedule(new TimerTask() {
+      public void run() {
+        try {
+          CollectRaidInfoTask task = new CollectRaidInfoTask(RaidNode.this, getPolicyInfos(null),
+              conf);
+          submitTask(task);
+        } catch (IOException ioe) {
+          // TBD: We should stop RaidNode if we retried too many times and still fail.
+          scheduleEncodeTask(delay);
+        }
+      }
+    }, delay);
+  }
+
+  public void shutDownEncodeTask() {
+    if (lastEncodeTimer != null) {
+      lastEncodeTimer.cancel();
+    }
+  }
+
+  public void scheduleZombieSweeperTask(long delay) {
+    lastZombieSweeperTimer = new Timer();
+    lastZombieSweeperTimer.schedule(new TimerTask() {
+      public void run() {
+        // TBD: Use configuration to set/get raid root directory.
+        ZombieSweeperTask task = new ZombieSweeperTask(RaidNode.this, BlockCodec.getRaidRoot(),
+            conf);
+        submitTask(task);
+      }
+    }, delay);
+  }
+
+  public void shutDownZombieSweeperTask() {
+    if (lastZombieSweeperTimer != null) {
+      lastZombieSweeperTimer.cancel();
+    }
+  }
+
+  public void scheduleFixerTask(long delay) {
+
+  }
+
+  public void shutDownFixerTask() {
+
+  }
+
   public void start() throws IOException {
+
     // Initialize the policy
     initPolicy(conf);
-
-    // Submit a CollectRaidInfoTask to trigger the batch job
-
-    // TBD: Need to handle bootstrap logic (i.e. the first time
-    // the RaidNode is kicked off will throw FileNotFoundException
-    // in cons of CollectRaidInfoTask.
-    // Temporary mask off the code to make unit test code happy.
-    // Will revist when adding different monitor threads in RaidNode.
-    /**
-     * CollectRaidInfoTask task = new CollectRaidInfoTask(this, conf); submitTask(task);
-     */
-
-    // Start the CorruptedBlockMonitor
-
-    // Start the orphan file cleaner
 
     // Start the IPC server
     initIpcServer(conf);
     ipcServer.start();
+
+    // Start the encoding task
+    // The collect task itself will scan the policies and figure out when to schedule the real
+    // job, so pass in 0 as delay.
+    scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
+
+    // Start the fixer
+    scheduleFixerTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT));
+
+    // Start the orphan file cleaner
+    scheduleZombieSweeperTask(conf.getLong(
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL_DEFAULT));
   }
 
   public void stop() {
+
+    shutDownZombieSweeperTask();
+
+    shutDownFixerTask();
+
+    shutDownEncodeTask();
+
     if (ipcServer != null) {
       ipcServer.stop();
     }
@@ -151,6 +220,10 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
     };
   }
 
+  public boolean shouldRun() {
+    return shouldRun;
+  }
+
   @Override
   // ClientRaidnodeProtocol
   public Policy getPolicyInfos(String cookie) throws IOException {
@@ -158,9 +231,39 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   }
 
   @VisibleForTesting
-  // ONLY for testing now
+  // Only for testing now
   public void setPolicy(Policy policy) {
     this.policy = policy;
+  }
+
+  @VisibleForTesting
+  // Only for testing
+  public long getEncodeTaskDone() {
+    return encodeTaskDone;
+  }
+
+  @VisibleForTesting
+  // Only for testing
+  public long getZombieSweeperTaskDone() {
+    return zombieSweeperTaskDone;
+  }
+
+  @VisibleForTesting
+  // Only for testing
+  public long getFixerTaskDone() {
+    return fixerTaskDone;
+  }
+
+  public void increaseEncodeTaskDone() {
+    encodeTaskDone += 1;
+  }
+
+  public void increaseZombieSweeperTaskDone() {
+    zombieSweeperTaskDone += 1;
+  }
+
+  public void increaseFixerTaskDone() {
+    fixerTaskDone += 1;
   }
 
   public static void main(String[] args) throws IOException {
@@ -168,7 +271,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
     RaidNode raidNode = new RaidNode(conf);
     raidNode.start();
 
-    while (true) {
+    while (raidNode.shouldRun()) {
       try {
         Thread.sleep(1000);
       } catch (InterruptedException e) {

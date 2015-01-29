@@ -12,6 +12,12 @@ package org.apache.hadoop.contrib.raid;
 
 public class HdfsRaidConfigKeys {
 
+  /**
+   * The BLOCKS_NUM and CODING_BLOCKS_NUM should not be changed in one HDFS otherwise the decoding
+   * would fail since the coding might use different K/C to encode a file. At this point, make it
+   * configurable for debug/tuning purpose. TBD: Make BLOCKS_NUM and CODING_BLOCK_NUM immutable in
+   * one HDFS.
+   */
   public static final String HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY = "hdfs.raidnode.raid.data.blocks.num";
   public static final int HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_DEFAULT = 6;
 
@@ -28,9 +34,56 @@ public class HdfsRaidConfigKeys {
   /** Comma separated directories that need to do raid */
   public static final String HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY = "hdfs.raidnode.raidable.root.dirs";
 
+  /**
+   * The format of policy looks like: /p/a/t/h/1:3600 /p/a/t/h/2:7600
+   */
+  public static final String HDFS_RAIDNODE_RAID_POLICY_KEY = "hdfs.raidnode.policy.dirs";
+
+  public static final String HDFS_RAIDNODE_RAID_POLICY_RELOAD_INTERVAL = "hdfs.raidnode.policy.reload.interval";
+
+  public static final long HDFS_RAIDNODE_RAID_POLICY_RELOAD_INTERVAL_DEFAULT = 600 * 1000l; // default
+                                                                                            // to 10
+                                                                                            // mins
+
+  /**
+   * To define the frequency of zombie sweeper.
+   */
+  public static final String HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL = "hdfs.raidnode.zombie.sweeper.interval";
+
+  public static final long HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL_DEFAULT = 7 * 24 * 3600 * 1000l; // Once
+                                                                                                  // a
+                                                                                                  // week
+
+  /**
+   * To define the frequency of encoder.
+   */
+  public static final String HDFS_RAIDNODE_ENCODE_INTERVAL = "hdfs.raidnode.encode.interval";
+  public static final long HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT = 24 * 3600 * 1000l;
+
+  /**
+   * To define the frequency of fixer. The interval of fixer should be short since fixer is to fix
+   * potential block lost issue. What's the best balance between perf and data availability?
+   * (Ideally it should be the same as the duration of a corrupted block being fixed by NN.)
+   */
+  public static final String HDFS_RAIDNODE_FIXER_INTERVAL = "hdfs.raidnode.fixer.internal";
+  public static final long HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT = 3600 * 1000l; // subject to change
+
   /** Time of how long a file can be encoded after it is closed. */
   public static final String HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS = "hdfs.raidnode.raid.file.time.window.ms";
   public static final long HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT = 24 * 3600 * 1000l;
+
+  public static final String HDFS_RAID_CODEC_STRIP_SIZE = "hdfs.raid.codec.strip.size";
+  public static final int HDFS_RAID_CODEC_STRIP_SIZE_DEFAULT = 4096;
+
+  public static final String HDFS_RAID_CODEC_WORD_SIZE = "hdfs.raid.codec.word.size";
+  public static final int HDFS_RAID_CODEC_WORD_SIZE_DEFAULT = 8;
+
+  /**
+   * The buffer size used to hold coding result data before write out to HDFS. The value must be
+   * dividable by STRIP_SIZE and can up to HDFS's block size.
+   */
+  public static final String HDFS_RAID_CODEC_CODE_BUF_SIZE = "hdfs.raid.codec.buf.size";
+  public static final int HDFS_RAID_CODEC_CODE_BUF_SIZE_DEFAULT = 67108864; // 64M
 
   public static final String HDFS_RAIDNODE_DECODE_BLOCK_RETRY_TIMES_KEY = "hdfs.raidnode.decode.block.retry.times";
   public static final int HDFS_RAIDNODE_DECODE_BLOCK_RETRY_TIMES_DEFAULT = 3;

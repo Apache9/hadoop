@@ -21,9 +21,13 @@ import java.util.LinkedList;
 import java.util.List;
 
 import com.google.common.base.Preconditions;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.contrib.raid.Collector.TaskType;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -44,6 +48,8 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
  * by the Collector{@link Collector}. It will use a MapReduce job to do the work.
  */
 public class Coder {
+
+  private static final Log LOG = LogFactory.getLog(Coder.class);
 
   public enum CounterName {
     EncodeSuccess, EncodeFail, DecodeSuccess, DecodeFail, InvalidTaskType
@@ -162,6 +168,8 @@ public class Coder {
   /**
    * The raid file information input format class.
    */
+  // TBD: Load balance - creating splits according to blocks to be encoded.
+  // Collecting task should also put the file blocks information in its result file
   private static class RaidFileInfoInputFormat extends InputFormat {
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {

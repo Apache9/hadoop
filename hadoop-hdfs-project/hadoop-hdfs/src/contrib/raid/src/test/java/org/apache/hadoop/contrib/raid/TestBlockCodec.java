@@ -18,7 +18,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -83,6 +82,24 @@ public class TestBlockCodec {
     Thread.sleep(5000);
     Assert.assertTrue(codec.isFileEncodable(dfs.getFileStatus(path)));
     Assert.assertTrue(codec.isFileEncodable(path));
+  }
+
+  @Test
+  public void testIsCodingFile() {
+    Path notCodingFile1 = new Path(BlockCodec.getCodingFIlePrefix() + "/abc");
+    Path notCodingFile2 = new Path("/abc" + BlockCodec.getCodingFileSuffix());
+    Path notCodingFile3 = new Path("/abc");
+
+    Assert.assertFalse(BlockCodec.isCodingFile(notCodingFile1));
+    Assert.assertFalse(BlockCodec.isCodingFile(notCodingFile2));
+    Assert.assertFalse(BlockCodec.isCodingFile(notCodingFile3));
+  }
+
+  @Test
+  public void testGetCodingFileSource() {
+    Path cf = new Path(BlockCodec.getCodingFIlePrefix() + "/abc" + BlockCodec.getCodingFileSuffix());
+    Path src = BlockCodec.getCodingFileSource(cf);
+    Assert.assertTrue(src.toUri().getPath().equals("/abc"));
   }
 
   @Test(expected = IOException.class)
@@ -448,8 +465,9 @@ public class TestBlockCodec {
   }
 
   @Test
-  public void testAdjustLength() {
-    int eps = BlockCodec.getStripeSize();
+  public void testAdjustLength() throws IOException {
+    BlockCodec codec = new BlockCodec(dfs.getConf());
+    int eps = codec.getStripeSize();
     Assert.assertEquals(0, BlockCodec.adjustLength(0, eps));
     Assert.assertEquals(eps, BlockCodec.adjustLength(eps, eps));
     Assert.assertEquals(eps, BlockCodec.adjustLength(1, eps));
@@ -458,8 +476,9 @@ public class TestBlockCodec {
   }
 
   @Test
-  public void testAdjustOffset() {
-    int eps = BlockCodec.getStripeSize();
+  public void testAdjustOffset() throws IOException {
+    BlockCodec codec = new BlockCodec(dfs.getConf());
+    int eps = codec.getStripeSize();
     Assert.assertEquals(0, BlockCodec.adjustOffset(0, eps));
     Assert.assertEquals(0, BlockCodec.adjustOffset(1, eps));
     Assert.assertEquals(0, BlockCodec.adjustOffset(eps - 1, eps));

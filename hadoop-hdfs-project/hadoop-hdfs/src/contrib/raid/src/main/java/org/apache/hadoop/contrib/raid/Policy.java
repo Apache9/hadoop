@@ -11,11 +11,10 @@
 
 package org.apache.hadoop.contrib.raid;
 
-import java.lang.String;
-import java.util.List;
-import java.util.LinkedList;
-import java.lang.IllegalArgumentException;
 import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -28,10 +27,21 @@ public class Policy {
   // Used for communication between RaidShell/RaidNode to
   // pass policy information.
   private String cookie;
+  // TBD: To decide the policy should be auto reloaded at fixed frequency or should be only
+  // refreshed per user's request from RaidShell.
+  private long lastLoadTicks;
+  private ReentrantReadWriteLock lock;
 
   public Policy(Configuration conf) {
+    this(new LinkedList<PolicyEntry>(), conf);
+  }
+
+  public Policy(List<PolicyEntry> peList, Configuration conf) {
     this.conf = conf;
-    this.peList = new LinkedList<PolicyEntry>();
+    this.peList = peList;
+    cookie = null;
+    lastLoadTicks = 0;
+    lock = new ReentrantReadWriteLock();
   }
 
   // At this point of time, one policy is supposed to be a
@@ -54,8 +64,12 @@ public class Policy {
       System.out.println("  scan every " + interval + " seconds.");
     }
 
-    public String getPath() {
+    public String getPathStr() {
       return appliedDir.toString();
+    }
+
+    public Path getPath() {
+      return appliedDir;
     }
 
     public long getInterval() {
@@ -68,7 +82,7 @@ public class Policy {
         return true;
       }
       if (anObject instanceof PolicyEntry) {
-        if (appliedDir.toString().equals(((PolicyEntry) anObject).getPath().toString())
+        if (appliedDir.toString().equals(((PolicyEntry) anObject).getPathStr())
             && interval == ((PolicyEntry) anObject).getInterval()) {
           return true;
         }
@@ -77,17 +91,64 @@ public class Policy {
     }
   }
 
-  // TBD: Add the logic to implement parsing policies.
-  public void parsePolicy() throws IOException {
+  // TBD: Implement more elegant logic to parse policies.
+  private void parsePolicy() throws IOException {
+    String rawPolicyStr = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_POLICY_KEY);
+    if (rawPolicyStr != null) {
+      String[] policyStrs = rawPolicyStr.trim().split("\\s+");
+      for (String policy : policyStrs) {
+        String[] policyInfo = policy.split(":");
+        if (policyInfo.length != 2) {
+          throw new IOException("Incorrect policy format");
+        }
+        try {
+          long interval = Long.parseLong(policyInfo[1]);
+          addNewPolicy(policyInfo[0], interval);
+        } catch (NumberFormatException e) {
+          throw new IOException("Incorrect interval value, it should be an integer");
+        }
+      }
+    }
+  }
+
+  public void loadPolicy(Configuration conf) throws IOException {
+    long currTicks = System.currentTimeMillis();
+    long reloadInterval = conf.getLong(
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_POLICY_RELOAD_INTERVAL,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_POLICY_RELOAD_INTERVAL_DEFAULT);
+    if (currTicks - lastLoadTicks > reloadInterval) {
+      // Should use a java timer to do auto- reload?
+      lock.writeLock().lock();
+      try {
+        this.conf = conf;
+        this.peList = new LinkedList<PolicyEntry>();
+        parsePolicy();
+        this.lastLoadTicks = currTicks;
+      } finally {
+        lock.writeLock().unlock();
+      }
+    }
   }
 
   // TBD: Add logic to handle cookie in case of too large packet issue
   public Policy getPolicyInfos(String cookie) {
-    return this;
+    Policy res = null;
+    lock.readLock().lock();
+    res = new Policy(this.peList, this.conf);
+    lock.readLock().unlock();
+    return res;
   }
 
   public List<PolicyEntry> getPolicyEntries() {
     return peList;
+  }
+
+  public List<Path> getCandidateDirs() {
+    List<Path> res = new LinkedList<Path>();
+    for (PolicyEntry pe : peList) {
+      res.add(pe.getPath());
+    }
+    return res;
   }
 
   public String getCookie() {

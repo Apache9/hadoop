@@ -12,26 +12,25 @@ package org.apache.hadoop.contrib.raid;
 
 import java.io.IOException;
 
+import junit.framework.Assert;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.fs.Path;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class TestRaidShell {
+public class TestRaidNode {
 
-  private static Configuration conf;
-  private static RaidShell shell;
+  private static Configuration conf, rdConf;
+  private static RaidNode rd;
   private static MiniDFSCluster dfsCluster;
   private static FileSystem dfs;
-  private static RaidNode rd;
 
   @BeforeClass
-  public static void setUpClass() throws IOException {
+  public static void setUpClass() throws Exception {
     conf = new Configuration();
     dfsCluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
     dfsCluster.waitActive();
@@ -39,33 +38,28 @@ public class TestRaidShell {
     if (!(dfs instanceof DistributedFileSystem)) {
       throw new IOException("Non-distributed filesystem not supported");
     }
+
     dfs.getConf().set(HdfsRaidConfigKeys.HDFS_RAIDNODE_IPC_ADDRESS_KEY, "127.0.0.1:12345");
-    rd = new RaidNode(dfs.getConf());
-    rd.start();
-    shell = new RaidShell(dfs.getConf());
+    rdConf = dfs.getConf();
+    rd = new RaidNode(rdConf);
   }
 
   @AfterClass
-  public static void tearDownClass() {
+  public static void tearDownClass() throws Exception {
     rd.stop();
-    if (dfsCluster != null) {
-      dfsCluster.shutdown();
-    }
   }
 
   @Test
-  public void testGetPolicyInfos() throws Exception {
-    Policy policy = new Policy(conf);
-    rd.setPolicy(policy);
-    Policy clPolicy = shell.getPolicy();
-    Assert.assertTrue(policy.equals(clPolicy));
-    policy.addNewPolicy("/test1", 36000);
-    clPolicy = shell.getPolicy();
-    clPolicy.showPolicy();
-    Assert.assertTrue(policy.equals(clPolicy));
-    policy.addNewPolicy("/test2", 72000);
-    clPolicy = shell.getPolicy();
-    clPolicy.showPolicy();
-    Assert.assertTrue(policy.equals(clPolicy));
+  public void testThreadsKickedNumber() throws Exception {
+    final long encodeInterval = 2000;
+    final long zombieSweeperInterval = 1000;
+    final long fixerInterval = 1500;
+    rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL, encodeInterval);
+    rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL, zombieSweeperInterval);
+    rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL, fixerInterval);
+    rd.start();
+    Thread.sleep(8500);
+    Assert.assertTrue(rd.getEncodeTaskDone() == (8500 / encodeInterval));
+    Assert.assertTrue(rd.getZombieSweeperTaskDone() == (8500 / zombieSweeperInterval));
   }
 }
