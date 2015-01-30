@@ -408,6 +408,57 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     }
   }
 
+  /**
+   * Task to do fixer work.
+   */
+  public static class FixerTask extends RaidTask<TaskResult> {
+
+    private final Configuration conf;
+    private final Fixer fixer;
+
+    public FixerTask(RaidNode raidNode, Configuration conf) throws IOException {
+      super(raidNode);
+      this.conf = conf;
+
+      String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY);
+      Preconditions.checkNotNull(resultDir);
+      Path resultDirPath = new Path(resultDir + "/" + System.currentTimeMillis());
+
+      fixer = new Fixer(resultDirPath, conf);
+    }
+
+    @Override
+    public TaskResult call() throws Exception {
+
+      long startTimeMs = System.currentTimeMillis();
+      fixer.run();
+      long endTimeMs = System.currentTimeMillis();
+
+      TaskResult result = new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
+
+      return result;
+    }
+
+    @Override
+    public void onSuccess(TaskResult result) {
+      LOG.info("Fixer task finished successfully, timeConsumedMs=" + result.getTimeConsumedMs());
+
+      raidNode.increaseFixerTaskDone();
+      raidNode.scheduleFixerTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT));
+    }
+
+    @Override
+    public void onFailure(Throwable t) {
+      LOG.warn("Fixer task failed", t);
+
+      raidNode.increaseFixerTaskDone();
+      raidNode.scheduleFixerTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT));
+    }
+
+  }
+
   public static class RaidTaskUtils {
 
     public static interface Filter {
@@ -476,6 +527,46 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         }
       }
       return result;
+    }
+
+    public static class FixerItem implements Comparable<FixerItem> {
+      private Path file;
+      private int group;
+
+      public FixerItem(Path file, int group) {
+        this.file = file;
+        this.group = group;
+      }
+
+      public Path getFile() {
+        return file;
+      }
+
+      public int getGroup() {
+        return group;
+      }
+
+      @Override
+      public int compareTo(FixerItem item) {
+        int res = file.toString().compareTo(item.getFile().toString());
+        if (res == 0) {
+          res = (group - item.getGroup());
+        }
+        return res;
+      }
+
+      @Override
+      public boolean equals(Object o) {
+        if (this == o) {
+          return true;
+        }
+
+        if (!(o instanceof FixerItem)) {
+          return false;
+        }
+
+        return (compareTo((FixerItem) o) == 0);
+      }
     }
   }
 }

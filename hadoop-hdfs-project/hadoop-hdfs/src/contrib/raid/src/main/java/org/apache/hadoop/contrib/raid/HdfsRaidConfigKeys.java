@@ -27,9 +27,13 @@ public class HdfsRaidConfigKeys {
   public static final String HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY = "hdfs.raidnode.coder.map.task.num";
   public static final int HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT = 1;
 
+  public static final String HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_KEY = "hdfs.raidnode.fixer.map.task.num";
+  public static final int HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_DEFAULT = 1;
+
   public static final String HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY = "hdfs.raidnode.collector.result.dir";
   public static final String HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY = "hdfs.raidnode.collector.result.file";
   public static final String HDFS_RAIDNODE_CODER_RESULT_DIR_KEY = "hdfs.raidnode.coder.result.dir";
+  public static final String HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY = "hdfs.raidnode.fixer.result.dir";
 
   /** Comma separated directories that need to do raid */
   public static final String HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY = "hdfs.raidnode.raidable.root.dirs";

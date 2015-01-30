@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.contrib.raid.ClientRaidnodeProtocolProtos.ClientRaidnodeProtocolService;
 import org.apache.hadoop.contrib.raid.RaidTask.CollectRaidInfoTask;
+import org.apache.hadoop.contrib.raid.RaidTask.FixerTask;
 import org.apache.hadoop.contrib.raid.RaidTask.ZombieSweeperTask;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
@@ -155,12 +156,25 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
     }
   }
 
-  public void scheduleFixerTask(long delay) {
-
+  public void scheduleFixerTask(final long delay) {
+    lastFixerTimer = new Timer();
+    lastFixerTimer.schedule(new TimerTask() {
+      public void run() {
+        try {
+          FixerTask task = new FixerTask(RaidNode.this, conf);
+          submitTask(task);
+        } catch (IOException ioe) {
+          // TBD: We should stop RaidNode if we retried too many times and still fail?
+          scheduleFixerTask(delay);
+        }
+      }
+    }, delay);
   }
 
   public void shutDownFixerTask() {
-
+    if (lastFixerTimer != null) {
+      lastFixerTimer.cancel();
+    }
   }
 
   public void start() throws IOException {

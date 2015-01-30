@@ -40,6 +40,8 @@ public class TestRaidNode {
     }
 
     dfs.getConf().set(HdfsRaidConfigKeys.HDFS_RAIDNODE_IPC_ADDRESS_KEY, "127.0.0.1:12345");
+    // Prevent fixer fail from checking output dir.
+    dfs.getConf().set(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY, "/raid/fixer");
     rdConf = dfs.getConf();
     rd = new RaidNode(rdConf);
   }
@@ -53,7 +55,9 @@ public class TestRaidNode {
   public void testThreadsKickedNumber() throws Exception {
     final long encodeInterval = 2000;
     final long zombieSweeperInterval = 1000;
-    final long fixerInterval = 1500;
+    // Fixer itself would take some cycles to get corrupt list. Make its interval
+    // a little bit larger so that the drift would not make the case fail.
+    final long fixerInterval = 3000;
     rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL, encodeInterval);
     rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL, zombieSweeperInterval);
     rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL, fixerInterval);
@@ -61,5 +65,6 @@ public class TestRaidNode {
     Thread.sleep(8500);
     Assert.assertTrue(rd.getEncodeTaskDone() == (8500 / encodeInterval));
     Assert.assertTrue(rd.getZombieSweeperTaskDone() == (8500 / zombieSweeperInterval));
+    Assert.assertTrue(rd.getFixerTaskDone() == (8500 / fixerInterval));
   }
 }

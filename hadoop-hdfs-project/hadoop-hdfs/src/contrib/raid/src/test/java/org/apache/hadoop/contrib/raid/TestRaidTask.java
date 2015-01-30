@@ -11,16 +11,24 @@
 package org.apache.hadoop.contrib.raid;
 
 import java.io.IOException;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.contrib.raid.RaidTask.CollectRaidInfoTask;
+import org.apache.hadoop.contrib.raid.RaidTask.FixerTask;
+import org.apache.hadoop.contrib.raid.RaidTask.RaidTaskUtils;
 import org.apache.hadoop.contrib.raid.RaidTask.ZombieSweeperTask;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.mapred.MiniMRClientCluster;
 import org.apache.hadoop.mapred.MiniMRClientClusterFactory;
 import org.junit.AfterClass;
@@ -33,12 +41,25 @@ public class TestRaidTask {
   private static Configuration conf;
   private static MiniDFSCluster dfsCluster;
   private static MiniMRClientCluster mrCluster;
+  private static DFSClient dfsClient;
   private static FileSystem dfs;
   private static RaidNode rd;
+  final private static String collectResult = "/raid/collect";
+  final private static String coderResult = "/raid/coder";
+  final private static String fixerResult = "/raid/fixer";
+
+  // The interval to mark DN dead is : 2*hbRecheckInterval+10*1000*heartBeatInterval. Pls refer
+  // DatanodeManager
+  final private static long heartBeatInterval = 1l;
+  final private static int hbRecheckInterval = 3000;
+  final private static long deadShowup = 2 * hbRecheckInterval + 10 * 1000 * heartBeatInterval;
 
   @BeforeClass
   public static void setUpClass() throws Exception {
     conf = new Configuration();
+    // To make DN dead detection quickly
+    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, heartBeatInterval);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, hbRecheckInterval);
 
     dfsCluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
     dfsCluster.waitActive();
@@ -47,7 +68,11 @@ public class TestRaidTask {
       throw new IOException("Non-distributed filesystem not supported");
     }
 
+    dfsClient = ((DistributedFileSystem) dfs).getClient();
+
     dfs.getConf().set(HdfsRaidConfigKeys.HDFS_RAIDNODE_IPC_ADDRESS_KEY, "127.0.0.1:12345");
+    // To prevent fixer from being scheduled by RaidNode automatically
+    dfs.getConf().setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL, 24 * 3600 * 1000);
     rd = new RaidNode(dfs.getConf());
     rd.start();
 
@@ -79,8 +104,9 @@ public class TestRaidTask {
         out.close();
       }
     }
-    dfs.mkdirs(new Path("/raid/collect"));
-    dfs.mkdirs(new Path("/raid/coder"));
+    dfs.mkdirs(new Path(collectResult));
+    dfs.mkdirs(new Path(coderResult));
+    dfs.mkdirs(new Path(fixerResult));
   }
 
   private Policy setupPolicy() {
@@ -122,8 +148,8 @@ public class TestRaidTask {
     Thread.sleep(3000);
     // In case that MapReduce task out of memory during encoding
     jobConf.setInt(HdfsRaidConfigKeys.HDFS_RAID_CODEC_CODE_BUF_SIZE, 16 * 1024 * 1024);
-    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY, "/raid/collect");
-    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY, "/raid/coder");
+    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY, collectResult);
+    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY, coderResult);
 
     CollectRaidInfoTask crti = new CollectRaidInfoTask(rd, policy, jobConf);
     rd.submitTask(crti);
@@ -139,17 +165,17 @@ public class TestRaidTask {
     verifyResult();
   }
 
-  // Use encoded files left by last test case.
+  // Use encoded files left by the encode test case.
   @Test
   public void testZombieSweeper() throws Exception {
     final Path file = new Path("/0/1/f");
     final Path codingFile = BlockCodec.getCodingFile(file);
+    final Thread self = Thread.currentThread();
     Assert.assertTrue(dfs.exists(file));
     Assert.assertTrue(dfs.exists(codingFile));
     dfs.delete(file, false);
     Thread.sleep(1000);
     Assert.assertTrue(dfs.exists(codingFile));
-    final Thread self = Thread.currentThread();
 
     final class TstZombieSweeperTask extends ZombieSweeperTask {
       public boolean success;
@@ -178,7 +204,6 @@ public class TestRaidTask {
         success = false;
         t.printStackTrace();
         self.interrupt();
-        Assert.assertTrue(success);
       }
     }
     TstZombieSweeperTask zst = new TstZombieSweeperTask(rd, BlockCodec.getRaidRoot(), conf);
@@ -190,5 +215,109 @@ public class TestRaidTask {
     }
     Assert.assertTrue(zst.success);
     Assert.assertTrue(zst.numOfCleanedZombie() == 1);
+  }
+
+  // Use encoded files left by the encode test case.
+  @Test
+  public void testFixerTaskWithCorruptBlocks() throws Exception {
+    final Path file = new Path("/0/2/f");
+    final Thread self = Thread.currentThread();
+    LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(), 0);
+    LocatedBlock[] lblks = new LocatedBlock[blocks.getLocatedBlocks().size()];
+    blocks.getLocatedBlocks().toArray(lblks);
+
+    // Mark this file's block as corrupted
+    dfsClient.reportBadBlocks(lblks);
+    blocks = dfsClient.getLocatedBlocks(file.toString(), 0);
+    lblks = new LocatedBlock[blocks.getLocatedBlocks().size()];
+    blocks.getLocatedBlocks().toArray(lblks);
+    for (LocatedBlock blk : lblks) {
+      Assert.assertTrue(blk.isCorrupt());
+    }
+
+    final class TstFixerTask extends FixerTask {
+      public boolean success;
+
+      private TstFixerTask(RaidNode rd, Configuration conf) throws IOException {
+        super(rd, conf);
+        success = false;
+      }
+
+      @Override
+      public void onSuccess(TaskResult result) {
+        super.onSuccess(result);
+        success = true;
+        // Sleep a while so that NN can get DN's reporting
+        try {
+          LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(), 0);
+
+          LocatedBlock[] lblks = new LocatedBlock[blocks.getLocatedBlocks().size()];
+          blocks.getLocatedBlocks().toArray(lblks);
+
+          for (LocatedBlock blk : lblks) {
+            Assert.assertFalse(blk.isCorrupt());
+            if (blk.isCorrupt()) {
+              success = false;
+              break;
+            }
+          }
+        } catch (Exception e) {
+          // Simply mark task as fail
+          success = false;
+          e.printStackTrace();
+        }
+        self.interrupt();
+      }
+
+      @Override
+      public void onFailure(Throwable t) {
+        success = false;
+        t.printStackTrace();
+        self.interrupt();
+      }
+    }
+
+    // Get configuration
+    Configuration jobConf = new Configuration(mrCluster.getConfig());
+    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY, fixerResult);
+
+    TstFixerTask ft = new TstFixerTask(rd, jobConf);
+    rd.submitTask(ft);
+
+    try {
+      Thread.sleep(60000); // 60 seconds
+    } catch (InterruptedException ie) {
+      // Ignore
+    }
+
+    Assert.assertTrue(ft.success);
+  }
+
+  // Test that if some DNs are stopped we can get a corrupt list.
+  // TBD: After block placement policy work is done, add test case to verify that we can use Fixer
+  // to fix blocks which are hosted by the dead DN.
+  @Test
+  public void testGetCorruptList() throws Exception {
+    Map<RaidTaskUtils.FixerItem, Set<Integer>> fixerInfo = Fixer.collectFixerInfo(dfs.getConf());
+    Assert.assertTrue(fixerInfo.entrySet().size() == 0);
+    int numDNs = dfsCluster.getDataNodes().size();
+
+    for (int i = 0; i < numDNs - 1; i++) {
+      dfsCluster.stopDataNode(i);
+    }
+
+    Thread.sleep(deadShowup + 6000);
+
+    fixerInfo = Fixer.collectFixerInfo(dfs.getConf());
+    // Dump fixerInfo and DFSck output to see if their outputs are consistent.
+    /**
+     * for (Map.Entry<RaidTaskUtils.FixerItem, Set<Integer>> entry : fixerInfo.entrySet()) {
+     * StringBuilder sb = new StringBuilder();
+     * sb.append(entry.getKey().getFile().toString()).append("\t"); for (int blk : entry.getValue())
+     * { sb.append("\t").append(blk); } System.out.println(sb.toString()); }
+     * System.out.println("\n\n Runing fsck : \n"); DFSck fsck = new DFSck(dfs.getConf());
+     * fsck.run(new String[] { "-list-corruptfileblocks", "-blocks", "-locations" });
+     */
+    Assert.assertTrue(fixerInfo.entrySet().size() != 0);
   }
 }

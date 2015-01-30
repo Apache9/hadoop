@@ -727,6 +727,10 @@ public class BlockCodec {
     return stripSize;
   }
 
+  public int getCodingBlocksNum() {
+    return codingBlocksNum;
+  }
+
   @VisibleForTesting
   public static String getCodingFIlePrefix() {
     return RAID_ROOT.toString();
