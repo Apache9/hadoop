@@ -25,7 +25,7 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
-import org.htrace.Span;
+import org.apache.htrace.Span;
 
 /****************************************************************
  * DFSPacket is used by DataStreamer and DFSOutputStream.

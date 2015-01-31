@@ -59,8 +59,8 @@ public void receiveSpan(Span span);
 
 +----
   <property>
-    <name>hadoop.trace.spanreceiver.classes</name>
-    <value>org.htrace.impl.LocalFileSpanReceiver</value>
+    <name>hadoop.htrace.spanreceiver.classes</name>
+    <value>org.apache.htrace.impl.LocalFileSpanReceiver</value>
   </property>
   <property>
     <name>hadoop.local-file-span-receiver.path</name>
@@ -110,7 +110,49 @@ public void receiveSpan(Span span);
 
 ** Turning on tracing by HTrace API
 
-  In order to turn on Dapper-like tracing,
+** Dynamic update of tracing configuration
+
+  You can use <<<hadoop trace>>> command to see and update the tracing configuration of each servers.
+  You must specify IPC server address of namenode or datanode by <<<-host>>> option.
+  You need to run the command against all servers if you want to update the configuration of all servers.
+
+  <<<hadoop trace -list>>> shows list of loaded span receivers associated with the id.
+
++----
+  $ hadoop trace -list -host 192.168.56.2:9000
+  ID  CLASS
+  1   org.apache.htrace.impl.LocalFileSpanReceiver
+
+  $ hadoop trace -list -host 192.168.56.2:50020
+  ID  CLASS
+  1   org.apache.htrace.impl.LocalFileSpanReceiver
++----
+
+  <<<hadoop trace -remove>>> removes span receiver from server.
+  <<<-remove>>> options takes id of span receiver as argument.
+
++----
+  $ hadoop trace -remove 1 -host 192.168.56.2:9000
+  Removed trace span receiver 1
++----
+
+  <<<hadoop trace -add>>> adds span receiver to server.
+  You need to specify the class name of span receiver as argument of <<<-class>>> option.
+  You can specify the configuration associated with span receiver by <<<-Ckey=value>>> options.
+
++----
+  $ hadoop trace -add -class LocalFileSpanReceiver -Chadoop.htrace.local-file-span-receiver.path=/tmp/htrace.out -host 192.168.56.2:9000
+  Added trace span receiver 2 with configuration hadoop.htrace.local-file-span-receiver.path = /tmp/htrace.out
+
+  $ hadoop trace -list -host 192.168.56.2:9000
+  ID  CLASS
+  2   org.apache.htrace.impl.LocalFileSpanReceiver
++----
+
+
+** Starting tracing spans by HTrace API
+
+  In order to trace,
   you will need to wrap the traced logic with <<tracing span>> as shown below.
   When there is running tracing spans,
   the tracing information is propagated to servers along with RPC requests.
@@ -120,9 +162,9 @@ public void receiveSpan(Span span);
 +----
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.tracing.SpanReceiverHost;
-import org.htrace.Sampler;
-import org.htrace.Trace;
-import org.htrace.TraceScope;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 
 ...
 
@@ -149,9 +191,9 @@ import org.apache.hadoop.fs.FsShell;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.tracing.SpanReceiverHost;
 import org.apache.hadoop.util.ToolRunner;
-import org.htrace.Sampler;
-import org.htrace.Trace;
-import org.htrace.TraceScope;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 
 public class TracingFsShell {
   public static void main(String argv[]) throws Exception {

@@ -1,12 +1,13 @@
 Hadoop Change Log
 
-Release 2.4.1 - UNRELEASED
+Release hadoop-2.4.0-mdh2
 
   INCOMPATIBLE CHANGES
 
   NEW FEATURES
 
   IMPROVEMENTS
+    HADOOP-11498. Bump the version of HTrace to 3.1.0-incubating (Masatake Iwasaki via Colin P. McCabe)
 
   OPTIMIZATIONS
 
