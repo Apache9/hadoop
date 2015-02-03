@@ -425,8 +425,10 @@ public class YARNRunner implements ClientProtocol {
     vargs.add(mrAppMasterUserOptions);
     
     vargs.add(MRJobConfig.APPLICATION_MASTER_CLASS);
-    vargs.add("1>/dev/null");
-    vargs.add("2>/dev/null");
+    vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
+        Path.SEPARATOR + ApplicationConstants.STDOUT);
+    vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
+        Path.SEPARATOR + ApplicationConstants.STDERR);
 
 
     Vector<String> vargsFinal = new Vector<String>(8);
