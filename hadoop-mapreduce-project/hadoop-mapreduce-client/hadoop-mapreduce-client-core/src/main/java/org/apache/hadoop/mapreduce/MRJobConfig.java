@@ -447,6 +447,10 @@ public interface MRJobConfig {
   public static final String MR_AM_LOG_BACKUPS =
       MR_AM_PREFIX + "container.log.backups";
   public static final int DEFAULT_MR_AM_LOG_BACKUPS = 0;
+  
+  public static final String MR_AM_STDOUT_FORBID =
+      MR_AM_PREFIX + "container.stdout.forbid";
+  public static final boolean DEFAULT_MR_AM_STD_FORBID = false;
 
   /**The number of splits when reporting progress in MR*/
   public static final String MR_AM_NUM_PROGRESS_SPLITS = 
@@ -761,6 +765,10 @@ public interface MRJobConfig {
   public static final String TASK_LOG_BACKUPS =
       MR_PREFIX + "task.container.log.backups";
   public static final int DEFAULT_TASK_LOG_BACKUPS = 0; // don't roll
+  
+  public static final String TASK_STDOUT_FORBID =
+      MR_PREFIX + "task.container.stdout.forbid";
+  public static final boolean DEFAULT_TASK_STDOUT_FORBID = false; // don't forbid stdout
 
   public static final String WORKFLOW_NAME = "mapreduce.workflow.name";
   

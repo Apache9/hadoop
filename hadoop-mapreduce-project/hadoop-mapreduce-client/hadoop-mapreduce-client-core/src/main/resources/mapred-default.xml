@@ -1007,6 +1007,12 @@
 </property>
 
 <property>
+  <name>yarn.app.mapreduce.task.container.stdout.forbid</name>
+  <value>false</value>
+  <description>To forbid stdout of task</description>
+</property>
+
+<property>
   <name>yarn.app.mapreduce.am.container.log.backups</name>
   <value>0</value>
   <description>Number of backup files for the ApplicationMaster logs when using
@@ -1017,6 +1023,12 @@
     mapreduce.task.userlog.limit.kb and
     yarn.app.mapreduce.am.container.log.backups are greater than zero.
   </description>
+</property>
+
+<property>
+  <name>yarn.app.mapreduce.am.container.stdout.forbid</name>
+  <value>false</value>
+  <description>to forbid stdout of MapReduceAM</description>
 </property>
 
 <property>

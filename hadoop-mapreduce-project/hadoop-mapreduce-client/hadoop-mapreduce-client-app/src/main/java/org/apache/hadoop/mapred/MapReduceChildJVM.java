@@ -231,7 +231,11 @@ public class MapReduceChildJVM {
 
     // Finally add the jvmID
     vargs.add(String.valueOf(jvmID.getId()));
-    vargs.add("1>" + getTaskLogFile(TaskLog.LogName.STDOUT));
+    if(conf.getBoolean(MRJobConfig.TASK_STDOUT_FORBID, MRJobConfig.DEFAULT_TASK_STDOUT_FORBID)){
+      vargs.add("1>/dev/null");
+    }else{
+      vargs.add("1>" + getTaskLogFile(TaskLog.LogName.STDOUT));
+    }
     vargs.add("2>" + getTaskLogFile(TaskLog.LogName.STDERR));
 
     // Final commmand

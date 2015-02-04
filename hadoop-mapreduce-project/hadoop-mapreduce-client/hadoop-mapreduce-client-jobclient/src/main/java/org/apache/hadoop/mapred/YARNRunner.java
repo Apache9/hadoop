@@ -438,8 +438,13 @@ public class YARNRunner implements ClientProtocol {
     }
 
     vargs.add(MRJobConfig.APPLICATION_MASTER_CLASS);
-    vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
-        Path.SEPARATOR + ApplicationConstants.STDOUT);
+    if(conf.getBoolean(MRJobConfig.MR_AM_STDOUT_FORBID, MRJobConfig.DEFAULT_MR_AM_STD_FORBID)){
+      vargs.add("1>/dev/null");
+    }else{
+      vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
+          Path.SEPARATOR + ApplicationConstants.STDOUT);
+    }
+
     vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR +
         Path.SEPARATOR + ApplicationConstants.STDERR);
 
