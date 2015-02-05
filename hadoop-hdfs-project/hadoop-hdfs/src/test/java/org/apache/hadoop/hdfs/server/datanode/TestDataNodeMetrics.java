@@ -186,4 +186,32 @@ public class TestDataNodeMetrics {
       }
     }
   }
+
+  @Test
+  public void testSlowWriteDataToDiskMetrics() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final int interval = 1;
+    conf.set(DFSConfigKeys.DFS_METRICS_PERCENTILES_INTERVALS_KEY, "" + interval);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
+    try {
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      List<DataNode> datanodes = cluster.getDataNodes();
+      DataNode datanode = datanodes.get(0);
+      Path testFile = new Path("/testSlowWriteDataToDiskMetrics.txt");
+      FSDataOutputStream fout = fs.create(testFile);
+      BlockReceiver.SLOW_LOG_THRESHOLD_MS = -1;
+      fout.write(new byte[1]);
+      fout.close();
+      MetricsRecordBuilder dnMetrics = getMetrics(datanode.getMetrics().name());
+      assertCounter("SlowWriteDataToDiskMsNumOps", 1L, dnMetrics);
+      // Wait for at least 1 rollover
+      Thread.sleep((interval + 1) * 1000);
+      String sec = interval + "s";
+      assertQuantileGauges("SlowWriteDataToDiskMs" + sec, dnMetrics);
+      assertQuantileGauges("SlowWriteDataToDiskMs" + sec, dnMetrics);
+    } finally {
+      if (cluster != null) {cluster.shutdown();}
+    }
+  }
 }

@@ -56,7 +56,6 @@ import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -71,7 +70,8 @@ class BlockReceiver implements Closeable {
   @VisibleForTesting
   static long CACHE_DROP_LAG_BYTES = 8 * 1024 * 1024;
 
-  private static final int SLOW_LOG_THRESHOLD_MS = 100;
+  @VisibleForTesting
+  static int SLOW_LOG_THRESHOLD_MS = 100;
   private DataInputStream in = null; // from where data are read
   private DataChecksum clientChecksum; // checksum used by client
   private DataChecksum diskChecksum; // checksum we write to disk
@@ -374,7 +374,7 @@ class BlockReceiver implements Closeable {
     long end = System.nanoTime();
     if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
       LOG.info("flushOrSync cost:" + (end - begin) + "ns, isSync:" + isSync + ", flushTotalNanos="
-          + flushTotalNanos);
+          + flushTotalNanos + ", volume:" + datanode.data.getVolume(block));
     }
   }
 
@@ -506,7 +506,8 @@ class BlockReceiver implements Closeable {
         mirrorOut.flush();
         long t2 = Time.monotonicNow();
         if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
-          LOG.info("write the packet to the mirror cost:" + (t2 - t1) + "ms");
+          LOG.info("write the packet to the mirror cost:" + (t2 - t1) + "ms, volume:"
+              + datanode.data.getVolume(block));
         }
       } catch (IOException e) {
         handleMirrorOutError(e);
@@ -603,7 +604,8 @@ class BlockReceiver implements Closeable {
           long t2 = Time.monotonicNow();
           if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
             LOG.info("BlockReceiver write data to disk cost:"
-                + (t2 - t1) + "ms");
+                + (t2 - t1) + "ms, volume: " + datanode.data.getVolume(block));
+            datanode.metrics.addSlowWriteDataToDiskMs(t2 - t1);
           }
 
           // If this is a partial chunk, then verify that this is the only
@@ -705,7 +707,8 @@ class BlockReceiver implements Closeable {
         lastCacheManagementOffset = offsetInBlock;
         long t2 =  Time.monotonicNow();
         if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
-          LOG.info("dropOsCacheBehindWriter cost:" + (t2 - t1) + "ms");
+          LOG.info("dropOsCacheBehindWriter cost:" + (t2 - t1) + "ms, volume:"
+              + datanode.data.getVolume(block));
         }
       }
     } catch (Throwable t) {

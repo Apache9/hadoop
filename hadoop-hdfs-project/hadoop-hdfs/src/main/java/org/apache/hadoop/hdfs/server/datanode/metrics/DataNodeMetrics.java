@@ -90,7 +90,8 @@ public class DataNodeMetrics {
   final MutableQuantiles[] sendDataPacketBlockedOnNetworkNanosQuantiles;
   @Metric MutableRate sendDataPacketTransferNanos;
   final MutableQuantiles[] sendDataPacketTransferNanosQuantiles;
-  
+  @Metric MutableRate slowWriteDataToDiskMs;
+  final MutableQuantiles[] slowWriteDataToDiskMsQuantiles;
 
   final MetricsRegistry registry = new MetricsRegistry("datanode");
   final String name;
@@ -105,7 +106,8 @@ public class DataNodeMetrics {
     fsyncNanosQuantiles = new MutableQuantiles[len];
     sendDataPacketBlockedOnNetworkNanosQuantiles = new MutableQuantiles[len];
     sendDataPacketTransferNanosQuantiles = new MutableQuantiles[len];
-    
+    slowWriteDataToDiskMsQuantiles = new MutableQuantiles[len];
+
     for (int i = 0; i < len; i++) {
       int interval = intervals[i];
       packetAckRoundTripTimeNanosQuantiles[i] = registry.newQuantiles(
@@ -125,6 +127,9 @@ public class DataNodeMetrics {
           "sendDataPacketTransferNanos" + interval + "s", 
           "Time reading from disk and writing to network while sending " +
           "a packet in ns", "ops", "latency", interval);
+      slowWriteDataToDiskMsQuantiles[i] = registry.newQuantiles(
+        "slowWriteDataToDiskMs" + interval + "s", 
+        "Time slow writing a packet to disk in ms", "ops", "latency", interval);
     }
   }
 
@@ -276,6 +281,13 @@ public class DataNodeMetrics {
     sendDataPacketTransferNanos.add(latencyNanos);
     for (MutableQuantiles q : sendDataPacketTransferNanosQuantiles) {
       q.add(latencyNanos);
+    }
+  }
+
+  public void addSlowWriteDataToDiskMs(long latencyMs) {
+    slowWriteDataToDiskMs.add(latencyMs);
+    for (MutableQuantiles q : slowWriteDataToDiskMsQuantiles) {
+      q.add(latencyMs);
     }
   }
 }
