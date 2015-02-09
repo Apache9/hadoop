@@ -173,8 +173,13 @@ public class DFSZKFailoverController extends ZKFailoverController {
         new HdfsConfiguration(), args);
     DFSZKFailoverController zkfc = DFSZKFailoverController.create(
         parser.getConfiguration());
-    
-    System.exit(zkfc.run(parser.getRemainingArgs()));
+    int retCode = 0;
+    try {
+      retCode = zkfc.run(parser.getRemainingArgs());
+    } catch (Exception e) {
+      LOG.warn("", e);
+    }
+    System.exit(retCode);
   }
 
   @Override
