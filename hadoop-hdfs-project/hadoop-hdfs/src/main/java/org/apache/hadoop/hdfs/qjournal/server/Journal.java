@@ -371,10 +371,13 @@ public class Journal implements Closeable {
     // "catching up" with the rest. Hence we do not need to fsync.
     boolean isLagging = lastTxnId <= committedTxnId.get();
     boolean shouldFsync = !isLagging;
-    
-    curSegment.writeRaw(records, 0, records.length);
-    curSegment.setReadyToFlush();
     Stopwatch sw = new Stopwatch();
+    sw.start();
+    curSegment.writeRaw(records, 0, records.length);
+    sw.stop();
+    metrics.addWrite(sw.elapsedTime(TimeUnit.MICROSECONDS));
+    curSegment.setReadyToFlush();
+    sw.reset();
     sw.start();
     curSegment.flush(shouldFsync);
     sw.stop();
