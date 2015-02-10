@@ -53,6 +53,7 @@ class JournalMetrics {
   };
   
   final MutableQuantiles[] syncsQuantiles;
+  final MutableQuantiles[] writesQuantiles;
   
   private final Journal journal;
 
@@ -65,6 +66,13 @@ class JournalMetrics {
       syncsQuantiles[i] = registry.newQuantiles(
           "syncs" + interval + "s",
           "Journal sync time", "ops", "latencyMicros", interval);
+    }
+    writesQuantiles = new MutableQuantiles[QUANTILE_INTERVALS.length];
+    for (int i = 0; i < writesQuantiles.length; i++) {
+      int interval = QUANTILE_INTERVALS[i];
+      writesQuantiles[i] = registry.newQuantiles(
+          "writes" + interval + "s",
+          "Journal write time", "ops", "latencyMicros", interval);
     }
   }
   
@@ -112,6 +120,12 @@ class JournalMetrics {
   
   void addSync(long us) {
     for (MutableQuantiles q : syncsQuantiles) {
+      q.add(us);
+    }
+  }
+
+  void addWrite(long us) {
+    for (MutableQuantiles q : writesQuantiles) {
       q.add(us);
     }
   }
