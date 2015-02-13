@@ -14,17 +14,26 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
+import java.util.TreeMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.contrib.raid.RaidTask.RaidTaskUtils;
+import org.apache.hadoop.contrib.raid.RaidTask.TaskPurpose;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
@@ -37,6 +46,7 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.util.StringUtils;
 
 import com.google.common.base.Preconditions;
@@ -47,24 +57,22 @@ import com.google.common.base.Preconditions;
  */
 public class Collector {
 
-  public enum TaskType {
-    Encode, Decode
-  }
-
   private static final Log LOG = LogFactory.getLog(Collector.class);
 
   private final List<Path> rootDirs;
   private final Path resultDir;
   private final Configuration conf;
   private Job job;
+  private TaskPurpose purpose;
 
-  public Collector(List<Path> rootDirs, Path resultDir, Configuration conf) {
+  public Collector(List<Path> rootDirs, Path resultDir, TaskPurpose purpose, Configuration conf) {
     Preconditions.checkArgument(rootDirs != null && rootDirs.size() > 0);
     Preconditions.checkNotNull(resultDir);
     Preconditions.checkNotNull(conf);
     this.rootDirs = rootDirs;
     this.resultDir = resultDir;
     this.conf = conf;
+    this.purpose = purpose;
   }
 
   /**
@@ -72,9 +80,10 @@ public class Collector {
    */
   public void run() throws IOException, ClassNotFoundException, InterruptedException {
     String strRootDirs = StringUtils.arrayToString(getStrDirs(rootDirs));
-    conf.set(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY, strRootDirs);
+    conf.set(HdfsRaidConfigKeys.HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY, strRootDirs);
+    conf.setEnum(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_TASK_TYPE, purpose);
 
-    job = Job.getInstance(conf, "RaidNode-Collector");
+    job = Job.getInstance(conf, "RaidNode-Collector-" + purpose.toString());
     job.setJarByClass(Collector.class);
     job.setMapperClass(CollectorMapper.class);
     job.setReducerClass(CollectorReducer.class);
@@ -87,7 +96,7 @@ public class Collector {
 
     job.setNumReduceTasks(1);
     job.submit();
-    MRUtils.writeJobId(conf, getJobIdFilePath(), getJobId());
+    MRUtils.writeJobId(conf, getJobIdFilePath(purpose), getJobId());
 
     if (!job.waitForCompletion(true)) {
       throw new IOException("Wait for job completion failed");
@@ -99,9 +108,9 @@ public class Collector {
     return job.getJobID().toString();
   }
 
-  public static Path getJobIdFilePath() {
+  public static Path getJobIdFilePath(TaskPurpose purpose) {
     Path raidRoot = BlockCodec.getRaidRoot();
-    return new Path(raidRoot.toString() + "/" + "collector.jobid");
+    return new Path(raidRoot.toString() + "/" + purpose.toString() + "collector.jobid");
   }
 
   private String[] getStrDirs(List<Path> dirs) {
@@ -120,22 +129,151 @@ public class Collector {
   public static class CollectorMapper extends Mapper<Object, Text, Text, Text> {
 
     private FileSystem fs;
+    private NetworkTopology topology;
+    private int dataBlocksNum;
+    private int codingBlocksNum;
+    private boolean shuffleBlksAmongRacks;
+    private TaskPurpose purpose;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
       fs = FileSystem.get(conf);
+      purpose = conf.getEnum(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_TASK_TYPE,
+        TaskPurpose.InvalidType);
+
+      if (purpose == TaskPurpose.InvalidType) {
+        throw new IOException("Unknow task type for CollectorMapper");
+      }
+
+      if (purpose == TaskPurpose.BlockMover) {
+        topology = new NetworkTopology();
+        if (!(fs instanceof DistributedFileSystem)) {
+          throw new IOException("The file system is not a distributed file system");
+        }
+        DatanodeInfo[] liveNodes = ((DistributedFileSystem) fs).getClient().datanodeReport(
+          DatanodeReportType.LIVE);
+        for (DatanodeInfo di : liveNodes) {
+          topology.add(di);
+        }
+
+        dataBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_DEFAULT);
+        codingBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_DEFAULT);
+        shuffleBlksAmongRacks = conf.getBoolean(
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_SHUFFLE_RACKS,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_SHUFFLE_RACKS_DEFAULT);
+      }
     }
 
     @Override
     protected void map(Object key, Text value, Context context) throws IOException,
         InterruptedException {
-      // Currently, only encode task is collected. Decode is triggered on
-      // demand and may be supported in the future.
-      Path codingFile = BlockCodec.getCodingFile(new Path(value.toString()));
-      if (!fs.exists(codingFile)) {
-        context.write(value, new Text(TaskType.Encode.name()));
+      Path file = new Path(value.toString());
+
+      if (purpose == TaskPurpose.BlockMover) {
+
+        if (!BlockCodec.isCodingFile(file)) {
+          // This is not a coding file in the /raid directory, which might be a temporary or other
+          // meta files. Just skip it.
+          return;
+        }
+        // This is scanning coding files, which is used to collect blocks that need to be moved.
+        Path sourceFile = BlockCodec.getCodingFileSource(file);
+        if (!fs.exists(sourceFile)) {
+          // Zombie coding file. Nothing to do.
+          return;
+        }
+
+        FileStatus sourceStatus = fs.getFileStatus(sourceFile);
+        FileStatus fileStatus = fs.getFileStatus(file);
+        int groupNum = (int) ((sourceStatus.getLen() + sourceStatus.getBlockSize() - 1) / sourceStatus
+            .getBlockSize());
+
+        if (!((DistributedFileSystem) fs).isFileClosed(file)) {
+          // The encoding is on-going. Do nothing.
+          return;
+        }
+
+        if (groupNum * codingBlocksNum * fileStatus.getBlockSize() != fileStatus.getLen()) {
+          StringBuilder sb = new StringBuilder();
+          sb.append("Something goes wrong - the expected coding file size is ")
+              .append(groupNum * codingBlocksNum * fileStatus.getBlockSize())
+              .append(" whereas actually is ").append(fileStatus.getLen());
+          throw new IOException(sb.toString());
+        }
+
+        LocatedBlocks sourceBlks = ((DistributedFileSystem) fs).getClient().getLocatedBlocks(
+          sourceFile.toString(), 0, sourceStatus.getLen());
+        LocatedBlocks codingBlks = ((DistributedFileSystem) fs).getClient().getLocatedBlocks(
+          file.toString(), 0, fileStatus.getLen());
+        Map<Integer, Set<LocatedBlock>> groupToLoc = new TreeMap<Integer, Set<LocatedBlock>>();
+
+        for (LocatedBlock loc : sourceBlks.getLocatedBlocks()) {
+          int blkIndex = (int) (loc.getStartOffset() / sourceStatus.getBlockSize());
+          int groupIndex = blkIndex / dataBlocksNum;
+          if (groupToLoc.containsKey(groupIndex)) {
+            groupToLoc.get(groupIndex).add(loc);
+          } else {
+            Set<LocatedBlock> locs = new HashSet<LocatedBlock>();
+            locs.add(loc);
+            groupToLoc.put(groupIndex, locs);
+          }
+        }
+
+        for (LocatedBlock loc : codingBlks.getLocatedBlocks()) {
+          int blkIndex = (int) (loc.getStartOffset() / fileStatus.getBlockSize());
+          int groupIndex = blkIndex / codingBlocksNum;
+          if (groupToLoc.containsKey(groupIndex)) {
+            groupToLoc.get(groupIndex).add(loc);
+          } else {
+            Set<LocatedBlock> locs = new HashSet<LocatedBlock>();
+            locs.add(loc);
+            groupToLoc.put(groupIndex, locs);
+          }
+        }
+
+        for (Map.Entry<Integer, Set<LocatedBlock>> entry : groupToLoc.entrySet()) {
+          if (needMove(entry)) {
+            context.write(new Text(sourceFile.toString()), new Text(entry.getKey().toString()));
+          }
+        }
+
+      } else if (purpose == TaskPurpose.Encode) {
+        // This is scanning source files, which is used to collect files to be encoded.
+        Path codingFile = BlockCodec.getCodingFile(file);
+        if (!fs.exists(codingFile)) {
+          // TBD: Change this to write out group index to be encoded
+          context.write(value, new Text("Encode"));
+        }
       }
+    }
+
+    private boolean needMove(Map.Entry<Integer, Set<LocatedBlock>> grpLocs) {
+      for (LocatedBlock lb : grpLocs.getValue()) {
+        // If this group contains corrupt blocks or the replication is not 1 yet, skip this group.
+        // It may be handled next time.
+        if (lb.isCorrupt() || (lb.getLocations().length != 1)) {
+          return false;
+        }
+      }
+      for (LocatedBlock lb : grpLocs.getValue()) {
+        for (LocatedBlock tmpLb : grpLocs.getValue()) {
+          if (tmpLb == lb) {
+            continue;
+          }
+          if ((lb.getLocations()[0]).equals(tmpLb.getLocations()[0])) {
+            return true;
+          }
+          if (shuffleBlksAmongRacks) {
+            if (topology.isOnSameRack(lb.getLocations()[0], tmpLb.getLocations()[0])) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
     }
   }
 
@@ -159,9 +297,9 @@ public class Collector {
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
-      String rootDirs = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY);
+      String rootDirs = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY);
       if (rootDirs == null || rootDirs.isEmpty()) {
-        throw new IOException(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY
+        throw new IOException(HdfsRaidConfigKeys.HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY
             + " isn't configured");
       }
 
@@ -232,6 +370,7 @@ public class Collector {
     private Queue<Path> dirs;
     private long raidFileTimeWindow;
     private int totalNum;
+    private TaskPurpose purpose;
 
     @Override
     public void initialize(InputSplit split, TaskAttemptContext context) throws IOException,
@@ -242,6 +381,8 @@ public class Collector {
       this.raidFileTimeWindow = this.conf.getLong(
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT);
+      this.purpose = conf.getEnum(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_TASK_TYPE,
+        TaskPurpose.InvalidType);
       this.dirs = RaidTaskUtils.traverseDirectoryTree(fs, this.split.getRootDir(),
         new RaidTaskUtils.Filter() {
           public boolean check(Path file) throws IOException {
@@ -249,17 +390,28 @@ public class Collector {
               return false;
             }
 
-            FileStatus fileStatus = fs.getFileStatus(file);
-            long currentTimeMs = System.currentTimeMillis();
-            long fileModTime = fileStatus.getModificationTime();
-            if (fs instanceof DistributedFileSystem) {
-              DistributedFileSystem dfs = (DistributedFileSystem) fs;
-              if ((fileModTime + raidFileTimeWindow < currentTimeMs) && dfs.isFileClosed(file)) {
-                return true;
+            if (purpose == TaskPurpose.Encode) {
+              FileStatus fileStatus = fs.getFileStatus(file);
+              long currentTimeMs = System.currentTimeMillis();
+              long fileModTime = fileStatus.getModificationTime();
+              if (fs instanceof DistributedFileSystem) {
+                DistributedFileSystem dfs = (DistributedFileSystem) fs;
+                if ((fileModTime + raidFileTimeWindow < currentTimeMs) && dfs.isFileClosed(file)) {
+                  return true;
+                }
+              } else {
+                if (fileModTime + raidFileTimeWindow < currentTimeMs) {
+                  return true;
+                }
               }
-            } else {
-              if (fileModTime + raidFileTimeWindow < currentTimeMs) {
-                return true;
+            } else if (purpose == TaskPurpose.BlockMover) {
+              if (BlockCodec.isCodingFile(file)) {
+                if (fs instanceof DistributedFileSystem) {
+                  DistributedFileSystem dfs = (DistributedFileSystem) fs;
+                  if (dfs.isFileClosed(file)) {
+                    return true;
+                  }
+                }
               }
             }
             return false;

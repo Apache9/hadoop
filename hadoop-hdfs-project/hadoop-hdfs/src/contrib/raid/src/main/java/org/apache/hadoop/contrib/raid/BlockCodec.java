@@ -15,8 +15,10 @@ import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
@@ -34,6 +36,7 @@ import org.apache.hadoop.hdfs.BlockMissingException;
 import org.apache.hadoop.hdfs.BlockOutputStream;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 
@@ -178,6 +181,8 @@ public class BlockCodec {
     FSDataOutputStream lockOut = beginDecoding(fs, file);
     Map<Integer, OutputStream>[] erasuredDataInfos = null;
     Map<Integer, OutputStream>[] erasuredCodingInfos = null;
+    Map<Integer, List<LocatedBlock>> dataGrpLocs = null;
+    Map<Integer, List<LocatedBlock>> codingGrpLocs = null;
     try {
       FileStatus fileStatus = fs.getFileStatus(file);
       long fileLen = fileStatus.getLen();
@@ -190,10 +195,14 @@ public class BlockCodec {
       int groupNum = (locations.length - 1) / dataBlocksNum + 1;
       erasuredDataInfos = new Map[groupNum];
       erasuredCodingInfos = new Map[groupNum];
+      dataGrpLocs = new HashMap<Integer, List<LocatedBlock>>();
+      codingGrpLocs = new HashMap<Integer, List<LocatedBlock>>();
       partitionErasureBlocks(corruptedBlocks, locations.length, erasuredDataInfos,
         erasuredCodingInfos);
-      constructBlockOutputStreams(file, erasuredDataInfos);
-      constructBlockOutputStreams(codingFile, erasuredCodingInfos);
+      constructGroupLocation(file, corruptedBlocks, dataGrpLocs);
+      constructGroupLocation(codingFile, corruptedBlocks, codingGrpLocs);
+      constructBlockOutputStreams(file, erasuredDataInfos, dataGrpLocs, codingGrpLocs);
+      constructBlockOutputStreams(codingFile, erasuredCodingInfos, dataGrpLocs, codingGrpLocs);
 
       // Decode blocks within each group
       for (int i = 0; i < groupNum; ++i) {
@@ -589,16 +598,71 @@ public class BlockCodec {
     }
   }
 
-  void constructBlockOutputStreams(Path file, Map<Integer, OutputStream>[] blocksGroups)
-      throws IOException {
+  void constructGroupLocation(Path file, int[] corruptedBlocks,
+      Map<Integer, List<LocatedBlock>> blkLocs) throws IOException {
     FileStatus fileStatus = fs.getFileStatus(file);
-    long blockSize = fileStatus.getBlockSize();
+    int blksPerGrp = isCodingFile(file) ? codingBlocksNum : dataBlocksNum;
+    long bytesPerGrp = blksPerGrp * fileStatus.getBlockSize();
+    for (int i = 0; i < corruptedBlocks.length; i++) {
+      int grpIdx = corruptedBlocks[i] / blksPerGrp;
+      if (!blkLocs.containsKey(grpIdx)) {
+        LocatedBlocks blks = dfsClient.getLocatedBlocks(file.toString(), grpIdx * bytesPerGrp,
+          bytesPerGrp);
+        blkLocs.put(grpIdx, blks.getLocatedBlocks());
+      }
+    }
+  }
+
+  void constructBlockOutputStreams(Path file, Map<Integer, OutputStream>[] blocksGroups,
+      Map<Integer, List<LocatedBlock>> dataLocs, Map<Integer, List<LocatedBlock>> codingLocs)
+      throws IOException {
+    boolean codingFile = isCodingFile(file);
+    int blksPerGrp = codingFile ? codingBlocksNum : dataBlocksNum;
     for (Map<Integer, OutputStream> group : blocksGroups) {
       for (Map.Entry<Integer, OutputStream> entry : group.entrySet()) {
         int blockIdx = entry.getKey();
-        LocatedBlock block = getBlock(file, blockSize, blockIdx);
-        BlockOutputStream stream = BlockOutputStream.createStream(dfsClient, block,
-          block.getLocations());
+        int grpIdx = blockIdx / blksPerGrp;
+        int offInGrp = blockIdx % blksPerGrp;
+        LocatedBlock block = null;
+        if (codingFile) {
+          block = codingLocs.get(grpIdx).get(offInGrp);
+        } else {
+          block = dataLocs.get(grpIdx).get(offInGrp);
+        }
+        ArrayList<DatanodeInfo> grpDis = new ArrayList<DatanodeInfo>();
+        for (LocatedBlock dloc : dataLocs.get(grpIdx)) {
+          for (DatanodeInfo di : dloc.getLocations()) {
+            // Raid file's replication should be 1, which implies following check would always pass
+            if (!grpDis.contains(di)) {
+              grpDis.add(di);
+            }
+          }
+        }
+        for (LocatedBlock cloc : codingLocs.get(grpIdx)) {
+          for (DatanodeInfo di : cloc.getLocations()) {
+            // Raid file's replication should be 1, which implies following check would always pass
+            if (!grpDis.contains(di)) {
+              grpDis.add(di);
+            }
+          }
+        }
+        DatanodeInfo[] dis = new DatanodeInfo[0];
+        BlockOutputStream stream = null;
+        try {
+          stream = BlockOutputStream.createStream(dfsClient, block, grpDis.toArray(dis));
+        } catch (IOException ioe1) {
+          // Try again with smaller excludedNodes
+          LOG.warn("Fail to create BlockOutputStream, will try again with smaller set of excluded nodes");
+          try {
+            stream = BlockOutputStream.createStream(dfsClient, block, block.getLocations());
+          } catch (IOException ioe2) {
+            // TBD: Should we try with empty excluded nodes?
+            LOG.warn(
+              "Still fail to create BlockOutputStream even with smaller set of excluded nodes",
+              ioe2);
+            throw ioe2;
+          }
+        }
         entry.setValue(stream);
       }
     }
@@ -656,9 +720,13 @@ public class BlockCodec {
     return new Path(RAID_ROOT.toString() + file + CODING_FILE_SUFFIX);
   }
 
+  public static boolean isCodingFile(String file) {
+    return file.startsWith(RAID_ROOT.toString()) && file.endsWith(CODING_FILE_SUFFIX);
+  }
+
   public static boolean isCodingFile(Path file) {
     String src = file.toUri().getPath();
-    return src.startsWith(RAID_ROOT.toString()) && src.endsWith(CODING_FILE_SUFFIX);
+    return isCodingFile(src);
   }
 
   public static Path getCodingFileSource(Path file) {
@@ -725,6 +793,10 @@ public class BlockCodec {
 
   public int getStripeSize() {
     return stripSize;
+  }
+
+  public int getDataBlocksNum() {
+    return dataBlocksNum;
   }
 
   public int getCodingBlocksNum() {

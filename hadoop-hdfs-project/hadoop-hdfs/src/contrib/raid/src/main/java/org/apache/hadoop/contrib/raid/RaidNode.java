@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.contrib.raid.ClientRaidnodeProtocolProtos.ClientRaidnodeProtocolService;
 import org.apache.hadoop.contrib.raid.RaidTask.CollectRaidInfoTask;
 import org.apache.hadoop.contrib.raid.RaidTask.FixerTask;
+import org.apache.hadoop.contrib.raid.RaidTask.TaskPurpose;
 import org.apache.hadoop.contrib.raid.RaidTask.ZombieSweeperTask;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
@@ -56,10 +57,12 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   private long encodeTaskDone;
   private long zombieSweeperTaskDone;
   private long fixerTaskDone;
+  private long moverTaskDone;
   private boolean shouldRun;
   private Timer lastEncodeTimer;
   private Timer lastZombieSweeperTimer;
   private Timer lastFixerTimer;
+  private Timer lastMoverTimer;
 
   private static final int TASK_QUEUE_CAPACITY = 1024;
   private static final int CORE_POOL_SIZE = 4;
@@ -122,7 +125,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
       public void run() {
         try {
           CollectRaidInfoTask task = new CollectRaidInfoTask(RaidNode.this, getPolicyInfos(null),
-              conf);
+              TaskPurpose.Encode, conf);
           submitTask(task);
         } catch (IOException ioe) {
           // TBD: We should stop RaidNode if we retried too many times and still fail.
@@ -174,6 +177,28 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   public void shutDownFixerTask() {
     if (lastFixerTimer != null) {
       lastFixerTimer.cancel();
+    }
+  }
+
+  public void scheduleMoverTask(final long delay) {
+    lastMoverTimer = new Timer();
+    lastMoverTimer.schedule(new TimerTask() {
+      public void run() {
+        try {
+          CollectRaidInfoTask task = new CollectRaidInfoTask(RaidNode.this, getPolicyInfos(null),
+              TaskPurpose.BlockMover, conf);
+          submitTask(task);
+        } catch (IOException ioe) {
+          // TBD: We should stop RaidNode if we retried too many times and still fail.
+          scheduleMoverTask(delay);
+        }
+      }
+    }, delay);
+  }
+
+  public void shutDownMoverTask() {
+    if (lastMoverTimer != null) {
+      lastMoverTimer.cancel();
     }
   }
 
@@ -268,6 +293,12 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
     return fixerTaskDone;
   }
 
+  @VisibleForTesting
+  // Only for testing
+  public long getMoverTaskDone() {
+    return moverTaskDone;
+  }
+
   public void increaseEncodeTaskDone() {
     encodeTaskDone += 1;
   }
@@ -278,6 +309,10 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
 
   public void increaseFixerTaskDone() {
     fixerTaskDone += 1;
+  }
+
+  public void increaseMoverTaskDone() {
+    moverTaskDone += 1;
   }
 
   public static void main(String[] args) throws IOException {

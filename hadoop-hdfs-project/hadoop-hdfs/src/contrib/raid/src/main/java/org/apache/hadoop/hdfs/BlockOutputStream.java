@@ -19,10 +19,12 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.BufferOverflowException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
@@ -49,6 +51,7 @@ import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
@@ -91,18 +94,30 @@ public class BlockOutputStream extends FSOutputSummer {
     ChecksumOpt checksumOpt = dfsClient.getConf().defaultChecksumOpt;
     DataChecksum checksum = DataChecksum.newDataChecksum(checksumOpt.getChecksumType(),
       checksumOpt.getBytesPerChecksum());
+    BlockOutputStream res = null;
 
     Token<BlockTokenIdentifier> accessToken = block.getBlockToken();
     DatanodeInfo[] datanodes = getAvailableNodes(dfsClient, excludedNodes);
+    if (datanodes.length == 0) {
+      throw new IOException("None available nodes for creating BlockOutputStream");
+    }
+    NetworkTopology clusterMap = NetworkTopology.getInstance(dfsClient.getConfiguration());
     CachingStrategy cachingStrategy = CachingStrategy.newDefaultStrategy();
+    for (DatanodeInfo di : datanodes) {
+      clusterMap.add(di);
+    }
+    for (DatanodeInfo edi : excludedNodes) {
+      clusterMap.add(edi);
+    }
 
-    return new BlockOutputStream(dfsClient, block, checksum, accessToken, datanodes,
-        cachingStrategy);
+    return new BlockOutputStream(dfsClient, block, checksum, accessToken, datanodes, excludedNodes,
+        clusterMap, cachingStrategy);
   }
 
   private BlockOutputStream(DFSClient dfsClient, LocatedBlock block, DataChecksum checksum,
       Token<BlockTokenIdentifier> accessToken, DatanodeInfo[] datanodes,
-      CachingStrategy cachingStrategy) throws IOException {
+      DatanodeInfo[] excludedDns, NetworkTopology clusterMap, CachingStrategy cachingStrategy)
+      throws IOException {
     super(checksum, checksum.getBytesPerChecksum(), checksum.getChecksumSize());
     this.dfsClient = dfsClient;
     this.block = block;
@@ -121,16 +136,55 @@ public class BlockOutputStream extends FSOutputSummer {
       HdfsRaidConfigKeys.HDFS_RAIDNODE_DECODE_BLOCK_RETRY_TIMES_KEY,
       HdfsRaidConfigKeys.HDFS_RAIDNODE_DECODE_BLOCK_RETRY_TIMES_DEFAULT);
     int retryCount = retryTimes;
+    int reservedBlockNumPerStorage = this.dfsClient.getConfiguration().getInt(
+      DFSConfigKeys.DFS_DATANODE_RESERVED_SPACE_BLOCK_NUM_KEY, HdfsConstants.MIN_BLOCKS_FOR_WRITE);
+    long blockSize = this.dfsClient.getConfiguration().getLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
+      DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
+    final long requiredSize = reservedBlockNumPerStorage * blockSize;
+    ArrayList<DatanodeInfo> triedNodes = new ArrayList<DatanodeInfo>();
+
     while (retryCount > 0) {
+      List<DatanodeInfo> firstTargetSet = new ArrayList<DatanodeInfo>();
+      List<DatanodeInfo> secondTargetSet = new ArrayList<DatanodeInfo>();
+      // First try target on rack which is not the same as any of the excluded nodes. If we cannot
+      // find such a target, try node which is not on the same node as any of the excluded nodes.
+      for (DatanodeInfo di : datanodes) {
+        boolean inExcludedRacks = false;
+        if ((di.getRemaining() > requiredSize) && (!triedNodes.contains(di))) {
+          secondTargetSet.add(di);
+          for (DatanodeInfo edi : excludedDns) {
+            if (clusterMap.isOnSameRack(di, edi)) {
+              inExcludedRacks = true;
+              break;
+            }
+          }
+          if (!inExcludedRacks) {
+            firstTargetSet.add(di);
+          }
+        }
+      }
+
+      Random rand = new Random();
+      DatanodeInfo target = null;
+      if (firstTargetSet.size() > 0) {
+        target = firstTargetSet.get(rand.nextInt(firstTargetSet.size()));
+      } else if (secondTargetSet.size() > 0) {
+        target = secondTargetSet.get(rand.nextInt(secondTargetSet.size()));
+      }
+      if (target == null) {
+        throw new IOException("Cannot find a target to create BlockOutputStream");
+      }
+      triedNodes.add(target);
       try {
         long oldGS = block.getBlock().getGenerationStamp();
-        createBlockOutputStream(this.datanodes[currentNodeIdx], ++oldGS);
+        createBlockOutputStream(target, ++oldGS);
         break;
       } catch (IOException e) {
         LOG.warn("Create block output stream failed", e);
-        // TBD: Choose DN with max free space and also satisfy the block place policy
-        currentNodeIdx = (currentNodeIdx + 1) % this.datanodes.length;
         --retryCount;
+        if (retryCount == 0) {
+          throw e;
+        }
       }
     }
   }

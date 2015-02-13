@@ -30,6 +30,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.util.ReflectionUtils;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -154,6 +157,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     }
   }
 
+  // TBD: Make it a piggyback job of CollectRaidInfoTask for Mover.
   public static class ZombieSweeperTask extends RaidTask<TaskResult> {
 
     private final Path dirToSweep;
@@ -230,43 +234,85 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     }
   }
 
+  public static enum TaskPurpose {
+    Encode, BlockMover, InvalidType
+  }
+
   /**
-   * Task to collect information of files need to encode and decode.
+   * Task to collect information of files need to encode or need to adjust blocks layout.
    */
   public static class CollectRaidInfoTask extends RaidTask<TaskResult> {
 
     private final Configuration conf;
     private Collector collector;
-    private String lastBatchRaidTaskId;
+    private String lastRealWorkTaskId;
     private String lastCollectRaidInfoTaskId;
     private Path resultDirPath;
     private boolean nothingToDo;
+    private TaskPurpose purpose;
 
-    public CollectRaidInfoTask(RaidNode raidNode, Policy policy, Configuration conf)
-        throws IOException {
+    public CollectRaidInfoTask(RaidNode raidNode, Policy policy, TaskPurpose purpose,
+        Configuration conf) throws IOException {
       super(raidNode);
-      this.conf = conf;
+      this.conf = new Configuration(conf);
+      this.purpose = purpose;
       try {
-        this.lastBatchRaidTaskId = MRUtils.readJobId(this.conf, Coder.getJobIdFilePath());
+        if (purpose == TaskPurpose.Encode) {
+          this.lastRealWorkTaskId = MRUtils.readJobId(this.conf, Coder.getJobIdFilePath());
+        } else if (purpose == TaskPurpose.BlockMover) {
+          this.lastRealWorkTaskId = MRUtils.readJobId(this.conf, Mover.getJobIdFilePath());
+        }
       } catch (FileNotFoundException e) {
-        this.lastBatchRaidTaskId = null;
+        this.lastRealWorkTaskId = null;
       }
 
       try {
-        this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf, Collector.getJobIdFilePath());
+        this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf,
+          Collector.getJobIdFilePath(purpose));
       } catch (FileNotFoundException e) {
         this.lastCollectRaidInfoTaskId = null;
       }
 
-      List<Path> rootDirs = policy.getCandidateDirs();
+      List<Path> rootDirs = null;
+
+      // TBD: Go deeper in the path to dispatch directories among map tasks so that it has a higher
+      // possibility of load balance.
+      if (purpose == TaskPurpose.Encode) {
+        rootDirs = policy.getCandidateDirs();
+      } else if (purpose == TaskPurpose.BlockMover) {
+        rootDirs = new LinkedList<Path>();
+        rootDirs.add(BlockCodec.getRaidRoot());
+      }
 
       if (rootDirs.size() != 0) {
         String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY);
         Preconditions.checkNotNull(resultDir);
-        resultDirPath = new Path(resultDir + "/" + System.currentTimeMillis());
-        this.collector = new Collector(rootDirs, resultDirPath, conf);
+        resultDirPath = new Path(resultDir + "/" + purpose.toString() + System.currentTimeMillis());
+        this.collector = new Collector(rootDirs, resultDirPath, purpose, conf);
         nothingToDo = false;
       } else {
+        nothingToDo = true;
+      }
+
+      if (nothingToDo) {
+        return;
+      }
+
+      // If the number of live nodes is too small, we should not kick-off any Encode or Mover tasks.
+      FileSystem fs = FileSystem.get(conf);
+      if (!(fs instanceof DistributedFileSystem)) {
+        IOException ioe = new IOException("Non-distributed filesystem is not supported");
+        LOG.warn("Non-distributed filesystem is cnofigured", ioe);
+        throw ioe;
+      }
+      DatanodeInfo[] liveNodes = ((DistributedFileSystem) fs).getClient().datanodeReport(
+        DatanodeReportType.LIVE);
+      int dataBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_DEFAULT);
+      int codingBlocksNum = conf.getInt(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_DEFAULT);
+      if (liveNodes.length < dataBlocksNum + codingBlocksNum) {
         nothingToDo = true;
       }
     }
@@ -275,8 +321,8 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public TaskResult call() throws Exception {
       long startTimeMs = System.currentTimeMillis();
       // Ensure that legacy tasks are killed
-      if (this.lastBatchRaidTaskId != null) {
-        MRUtils.killJob(conf, lastBatchRaidTaskId);
+      if (this.lastRealWorkTaskId != null) {
+        MRUtils.killJob(conf, lastRealWorkTaskId);
       }
       if (this.lastCollectRaidInfoTaskId != null) {
         MRUtils.killJob(conf, lastCollectRaidInfoTaskId);
@@ -292,34 +338,41 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
     @Override
     public void onSuccess(TaskResult result) {
-      LOG.info("Collect raid info task success, timeConsumedMs=" + result.getTimeConsumedMs());
-
+      LOG.info("Collect raid info task success, timeConsumedMs=" + result.getTimeConsumedMs()
+          + " purpose is " + purpose.toString());
       try {
         // Start the batch raid task
         if (!nothingToDo) {
-          BatchRaidTask task = new BatchRaidTask(raidNode, resultDirPath, conf);
+          BatchRaidTask task = new BatchRaidTask(raidNode, resultDirPath, purpose, conf);
           raidNode.submitTask(task);
         } else {
-          raidNode.increaseEncodeTaskDone();
-          raidNode.scheduleEncodeTask(conf.getLong(
-            HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
-            HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
+          reKickTask();
         }
       } catch (IOException e) {
-        raidNode.increaseEncodeTaskDone();
-        raidNode.scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
-        LOG.fatal("Cannot start batch raid task", e);
+        LOG.error("Cannot start task for " + purpose.toString(), e);
+        reKickTask();
       }
     }
 
     @Override
     public void onFailure(Throwable t) {
-      LOG.error("Collect raid info task failed", t);
-      raidNode.increaseEncodeTaskDone();
-      // Should we retry a little bit earlier?
-      raidNode.scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
+      LOG.error("Collect raid info task failed purpose is " + purpose.toString(), t);
+      reKickTask();
+    }
+
+    private void reKickTask() {
+      switch (purpose) {
+      case Encode:
+        raidNode.increaseEncodeTaskDone();
+        raidNode.scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
+        break;
+      case BlockMover:
+        raidNode.increaseMoverTaskDone();
+        raidNode.scheduleMoverTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_INTERVAL,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_INTERVAL_DEFAULT));
+        break;
+      }
     }
 
     private List<Path> convertPaths(String[] paths) {
@@ -341,27 +394,52 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
     private final String lastCollectRaidInfoTaskId;
     private final Configuration conf;
-    private final Coder coder;
+    private Coder coder = null;
+    private Mover mover = null;
     private final Path collectResultDir;
     private final FileSystem fs;
+    private final TaskPurpose purpose;
 
-    public BatchRaidTask(RaidNode raidNode, Path collectResultDir, Configuration conf)
-        throws IOException {
+    public BatchRaidTask(RaidNode raidNode, Path collectResultDir, TaskPurpose purpose,
+        Configuration conf) throws IOException {
       super(raidNode);
       this.conf = conf;
-      this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf, Collector.getJobIdFilePath());
+      this.purpose = purpose;
+      this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf,
+        Collector.getJobIdFilePath(purpose));
       this.collectResultDir = collectResultDir;
       this.fs = FileSystem.get(this.conf);
 
-      String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY);
+      String resultDir = null;
+      switch (purpose) {
+      case Encode:
+        resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY);
+        break;
+      case BlockMover:
+        resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_RESULT_DIR_KEY);
+        break;
+      default:
+        throw new IOException("Unknow task type");
+      }
+
       Preconditions.checkNotNull(resultDir);
       Path resultDirPath = new Path(resultDir + "/" + System.currentTimeMillis());
 
-      int mapTaskNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
-
-      this.coder = new Coder(new Path(this.collectResultDir.toString() + "/part-r-00000"),
-          mapTaskNum, resultDirPath, conf);
+      // TBD: Put constants to a seprated file named HdfsRaidConstants.java
+      switch (purpose) {
+      case Encode:
+        this.coder = new Coder(new Path(this.collectResultDir.toString() + "/part-r-00000"),
+            conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
+              HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT), resultDirPath, conf);
+        break;
+      case BlockMover:
+        this.mover = new Mover(new Path(this.collectResultDir.toString() + "/part-r-00000"),
+            conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MAP_TASK_NUM_KEY,
+              HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MAP_TASK_NUM_DEFAULT), resultDirPath, conf);
+        break;
+      default:
+        throw new IOException("Unknow task type");
+      }
     }
 
     @Override
@@ -369,13 +447,24 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       long startTimeMs = System.currentTimeMillis();
       // Ensure that last collect task is successful
       Path successFile = new Path(collectResultDir.toString() + "/" + "_SUCCESS");
+      // TBD: Put all this kind of constant to a file named HdfsRaidConstants.java
       Path resultFile = new Path(collectResultDir.toString() + "/part-r-00000");
       if (!fs.exists(successFile) || !fs.exists(resultFile)) {
         throw new IOException("The last collect task is failed, "
             + "can't start the batch raid task.");
       }
 
-      coder.run();
+      switch (purpose) {
+      case Encode:
+        coder.run();
+        break;
+      case BlockMover:
+        mover.run();
+        break;
+      default:
+        throw new IllegalArgumentException("Unknown task type");
+      }
+
       long endTimeMs = System.currentTimeMillis();
       TaskResult result = new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
 
@@ -386,25 +475,34 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public void onSuccess(TaskResult result) {
       LOG.info("Batch raid task finished successfully, timeConsumedMs="
           + result.getTimeConsumedMs());
-
-      raidNode.increaseEncodeTaskDone();
-      raidNode.scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
+      reKickTask();
     }
 
     @Override
     public void onFailure(Throwable t) {
       LOG.warn("Batch raid task failed", t);
-
-      raidNode.increaseEncodeTaskDone();
-      raidNode.scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
+      reKickTask();
     }
 
     private void startCollectTask() throws IOException {
       CollectRaidInfoTask task = new CollectRaidInfoTask(raidNode, raidNode.getPolicyInfos(null),
-          conf);
+          purpose, conf);
       raidNode.submitTask(task);
+    }
+
+    private void reKickTask() {
+      switch (purpose) {
+      case Encode:
+        raidNode.increaseEncodeTaskDone();
+        raidNode.scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
+        break;
+      case BlockMover:
+        raidNode.increaseMoverTaskDone();
+        raidNode.scheduleMoverTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_INTERVAL,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_INTERVAL_DEFAULT));
+        break;
+      }
     }
   }
 
@@ -456,7 +554,6 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       raidNode.scheduleFixerTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT));
     }
-
   }
 
   public static class RaidTaskUtils {

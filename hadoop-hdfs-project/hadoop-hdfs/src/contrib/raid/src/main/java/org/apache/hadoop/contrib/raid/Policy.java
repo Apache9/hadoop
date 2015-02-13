@@ -116,7 +116,7 @@ public class Policy {
     long reloadInterval = conf.getLong(
       HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_POLICY_RELOAD_INTERVAL,
       HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_POLICY_RELOAD_INTERVAL_DEFAULT);
-    if (currTicks - lastLoadTicks > reloadInterval) {
+    if ((currTicks - lastLoadTicks > reloadInterval) || (lastLoadTicks == 0)) {
       // Should use a java timer to do auto- reload?
       lock.writeLock().lock();
       try {
@@ -149,6 +149,15 @@ public class Policy {
       res.add(pe.getPath());
     }
     return res;
+  }
+
+  public boolean isRaidCandidate(String path) {
+    for (PolicyEntry pe : peList) {
+      if (path.startsWith(pe.getPathStr())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public String getCookie() {

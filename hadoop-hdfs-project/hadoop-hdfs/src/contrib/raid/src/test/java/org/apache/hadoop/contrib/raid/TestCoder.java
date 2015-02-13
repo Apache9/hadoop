@@ -11,17 +11,13 @@
 package org.apache.hadoop.contrib.raid;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.contrib.raid.Coder.CoderMapper;
 import org.apache.hadoop.contrib.raid.Coder.CounterName;
-import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mrunit.mapreduce.MapDriver;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestCoder {
@@ -47,7 +43,8 @@ public class TestCoder {
     Coder coder = new Coder(collectResultFile, 1, outputPath, conf);
     conf.set("mapreduce.framework.name", "local");
     coder.run();
-    Assert.assertEquals(2l, coder.getCounter(CounterName.InvalidTaskType).getValue());
+    Assert.assertEquals(2l, coder.getCounter(CounterName.EncodeSuccess).getValue()
+        + coder.getCounter(CounterName.EncodeFail).getValue());
 
     dfsCluster.shutdown();
   }

@@ -20,14 +20,10 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
-import com.google.common.base.Preconditions;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.contrib.raid.Collector.TaskType;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -42,6 +38,8 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+import com.google.common.base.Preconditions;
 
 /**
  * A Coder is used to do the encoding and decoding jobs according to the files information collected
@@ -137,30 +135,12 @@ public class Coder {
       String info = value.toString();
       String[] tokens = info.split("\t");
       Path file = new Path(tokens[0].trim());
-
-      TaskType taskType = null;
+      // TBD: The second token should be the group num to be encoded
       try {
-        taskType = TaskType.valueOf(tokens[1].trim());
-        switch (taskType) {
-        case Encode:
-          blockCodec.encode(file);
-          encodeSuccess.increment(1);
-          break;
-        case Decode:
-          decodeSuccess.increment(1);
-          break;
-        }
-      } catch (IllegalArgumentException e) {
-        invalidTaskType.increment(1);
+        blockCodec.encode(file);
+        encodeSuccess.increment(1);
       } catch (Exception e) {
-        switch (taskType) {
-        case Encode:
-          encodeFail.increment(1);
-          break;
-        case Decode:
-          decodeFail.increment(1);
-          break;
-        }
+        encodeFail.increment(1);
       }
     }
   }

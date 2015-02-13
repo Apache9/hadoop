@@ -11,6 +11,7 @@
 package org.apache.hadoop.contrib.raid;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -18,6 +19,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.contrib.raid.RaidTask.CollectRaidInfoTask;
 import org.apache.hadoop.contrib.raid.RaidTask.FixerTask;
 import org.apache.hadoop.contrib.raid.RaidTask.RaidTaskUtils;
+import org.apache.hadoop.contrib.raid.RaidTask.TaskPurpose;
 import org.apache.hadoop.contrib.raid.RaidTask.ZombieSweeperTask;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -47,6 +49,8 @@ public class TestRaidTask {
   final private static String collectResult = "/raid/collect";
   final private static String coderResult = "/raid/coder";
   final private static String fixerResult = "/raid/fixer";
+  final private static String moverResult = "/raid/mover";
+  final private static long blockSize = 1024 * 1024;
 
   // The interval to mark DN dead is : 2*hbRecheckInterval+10*1000*heartBeatInterval. Pls refer
   // DatanodeManager
@@ -54,14 +58,23 @@ public class TestRaidTask {
   final private static int hbRecheckInterval = 3000;
   final private static long deadShowup = 2 * hbRecheckInterval + 10 * 1000 * heartBeatInterval;
 
+  // Make the group a little bit small so that the UT would not take too much time
+  final static int dataBlocksNum = 3;
+  final static int codingBlocksNum = 2;
+
   @BeforeClass
   public static void setUpClass() throws Exception {
     conf = new Configuration();
     // To make DN dead detection quickly
     conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, heartBeatInterval);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, hbRecheckInterval);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY, dataBlocksNum);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY, codingBlocksNum);
+    // Set the block size to a small value so that the test can finish in a short time
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
 
-    dfsCluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+    dfsCluster = new MiniDFSCluster.Builder(conf).numDataNodes(dataBlocksNum + codingBlocksNum)
+        .build();
     dfsCluster.waitActive();
     dfs = dfsCluster.getFileSystem();
     if (!(dfs instanceof DistributedFileSystem)) {
@@ -107,6 +120,7 @@ public class TestRaidTask {
     dfs.mkdirs(new Path(collectResult));
     dfs.mkdirs(new Path(coderResult));
     dfs.mkdirs(new Path(fixerResult));
+    dfs.mkdirs(new Path(moverResult));
   }
 
   private Policy setupPolicy() {
@@ -151,7 +165,7 @@ public class TestRaidTask {
     jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY, collectResult);
     jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY, coderResult);
 
-    CollectRaidInfoTask crti = new CollectRaidInfoTask(rd, policy, jobConf);
+    CollectRaidInfoTask crti = new CollectRaidInfoTask(rd, policy, TaskPurpose.Encode, jobConf);
     rd.submitTask(crti);
 
     // Wait job done
@@ -291,6 +305,132 @@ public class TestRaidTask {
     }
 
     Assert.assertTrue(ft.success);
+  }
+
+  // Make some blocks on the same node and then let mover to fix it
+  private void setupBlockPlacement(Path file) throws Exception {
+    Assert.assertTrue(BlockCodec.isFileEncoded(dfs, file));
+    Path codingFile = BlockCodec.getCodingFile(file);
+
+    waitNNReduceReplica(file, codingFile);
+
+    LocatedBlocks dataBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(
+      file.toString(), 0);
+    LocatedBlocks codingBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(
+      codingFile.toString(), 0);
+
+    // Simply move blocks in the first raid group
+    Assert.assertTrue(dataBlks.getLocatedBlocks().size() >= 1);
+    Assert.assertTrue(codingBlks.getLocatedBlocks().size() >= 1);
+    int connectTimeout = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_CONNECT_TIMEOUT,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_CONNECT_TIMEOUT_DEFAULT);
+    int moveTimeout = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MOVEONEBLOCK_TIMEOUT,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MOVEONEBLOCK_TIMEOUT_DEFAULT);
+
+    if (!codingBlks.getLocatedBlocks().get(1).getLocations()[0].equals(dataBlks.getLocatedBlocks()
+        .get(0).getLocations()[0])) {
+      Mover.moveOneBlock(connectTimeout, moveTimeout, codingBlks.getLocatedBlocks().get(1),
+        dataBlks.getLocatedBlocks().get(0).getLocations()[0]);
+    }
+
+    waitNNReduceReplica(file, codingFile);
+
+    // Verify the moveOneBlock actually do its job
+    dataBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(file.toString(), 0);
+    codingBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(codingFile.toString(),
+      0);
+
+    Assert.assertTrue(codingBlks.getLocatedBlocks().get(1).getLocations()[0].equals(dataBlks
+        .getLocatedBlocks().get(0).getLocations()[0]));
+  }
+
+  private void checkBlockPlacement(Path file) throws Exception {
+    Assert.assertTrue(BlockCodec.isFileEncoded(dfs, file));
+    Path codingFile = BlockCodec.getCodingFile(file);
+
+    waitNNReduceReplica(file, codingFile);
+
+    LocatedBlocks dataBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(
+      file.toString(), 0);
+    LocatedBlocks codingBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(
+      codingFile.toString(), 0);
+
+    // Check that the first raid group now is distributed on different nodes
+    int numDataBlks = dataBlks.getLocatedBlocks().size();
+    numDataBlks = (numDataBlks > dataBlocksNum) ? dataBlocksNum : numDataBlks;
+    int numCodingBlks = codingBlks.getLocatedBlocks().size();
+    numCodingBlks = (numCodingBlks > codingBlocksNum) ? codingBlocksNum : numCodingBlks;
+    boolean satisfyRaidPlace = true;
+
+    Set<LocatedBlock> blks = new HashSet<LocatedBlock>();
+    blks.addAll(dataBlks.getLocatedBlocks());
+    blks.addAll(codingBlks.getLocatedBlocks());
+
+    for (LocatedBlock blk : blks) {
+      for (LocatedBlock tmpBlk : blks) {
+        if (tmpBlk == blk) {
+          continue;
+        }
+        if (tmpBlk.getLocations()[0].equals(blk.getLocations()[0])) {
+          satisfyRaidPlace = false;
+        }
+      }
+    }
+
+    Assert.assertTrue(satisfyRaidPlace);
+  }
+
+  private void waitNNReduceReplica(Path file, Path codingFile) throws Exception {
+    Assert.assertTrue(dfs.getFileStatus(file).getReplication() == 1);
+    Assert.assertTrue(dfs.getFileStatus(codingFile).getReplication() == 1);
+    LocatedBlocks dataBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(
+      file.toString(), 0);
+    LocatedBlocks codingBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(
+      codingFile.toString(), 0);
+    int numDataBlks = dataBlks.getLocatedBlocks().size();
+    int numCodingBlks = codingBlks.getLocatedBlocks().size();
+    // Wait until all replicas has been reduced by NN
+    for (int i = 0; i < numDataBlks; i++) {
+      while (dataBlks.getLocatedBlocks().get(i).getLocations().length != 1) {
+        Thread.sleep(1000);
+        dataBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(file.toString(), 0);
+      }
+    }
+    for (int i = 0; i < numCodingBlks; i++) {
+      while (codingBlks.getLocatedBlocks().get(i).getLocations().length != 1) {
+        Thread.sleep(1000);
+        codingBlks = ((DistributedFileSystem) dfs).getClient().getLocatedBlocks(
+          codingFile.toString(), 0);
+      }
+    }
+  }
+
+  // Use encoded files left by the encode test case.
+  @Test
+  public void testCollectorAndMover() throws Exception {
+    // Set up fs env
+    Path file = new Path("/1/0/f");
+    setupBlockPlacement(file);
+
+    // Get configuration
+    Configuration jobConf = new Configuration(mrCluster.getConfig());
+    // In case that MapReduce task out of memory during encoding
+    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY, collectResult);
+    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_RESULT_DIR_KEY, moverResult);
+
+    CollectRaidInfoTask crti = new CollectRaidInfoTask(rd, new Policy(conf),
+        TaskPurpose.BlockMover, jobConf);
+    rd.submitTask(crti);
+
+    // Wait job done
+    long jobDone = rd.getMoverTaskDone();
+    while (jobDone != 1) {
+      Thread.sleep(1000);
+      jobDone = rd.getMoverTaskDone();
+    }
+
+    // Verify mover result
+    checkBlockPlacement(file);
   }
 
   // Test that if some DNs are stopped we can get a corrupt list.

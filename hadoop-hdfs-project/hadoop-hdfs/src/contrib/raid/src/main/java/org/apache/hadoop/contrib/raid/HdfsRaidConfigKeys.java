@@ -30,13 +30,20 @@ public class HdfsRaidConfigKeys {
   public static final String HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_KEY = "hdfs.raidnode.fixer.map.task.num";
   public static final int HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_DEFAULT = 1;
 
+  public static final String HDFS_RAIDNODE_MOVER_MAP_TASK_NUM_KEY = "hdfs.raidnode.mover.map.task.num";
+  public static final int HDFS_RAIDNODE_MOVER_MAP_TASK_NUM_DEFAULT = 1;
+
   public static final String HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY = "hdfs.raidnode.collector.result.dir";
   public static final String HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY = "hdfs.raidnode.collector.result.file";
   public static final String HDFS_RAIDNODE_CODER_RESULT_DIR_KEY = "hdfs.raidnode.coder.result.dir";
+  public static final String HDFS_RAIDNODE_MOVER_RESULT_DIR_KEY = "hdfs.raidnode.mover.result.dir";
   public static final String HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY = "hdfs.raidnode.fixer.result.dir";
 
-  /** Comma separated directories that need to do raid */
-  public static final String HDFS_RAIDNODE_RAIDABLE_ROOT_DIRS_KEY = "hdfs.raidnode.raidable.root.dirs";
+  /** Comma separated directories that need to do raid or scan for block moving */
+  public static final String HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY = "hdfs.raidnode.scan.root.dirs";
+
+  // This is used to pass task type information to Map/Reduce.
+  public static final String HDFS_RAIDNODE_RAID_TASK_TYPE = "hdfs.raidnode.raid.task.type";
 
   /**
    * The format of policy looks like: /p/a/t/h/1:3600 /p/a/t/h/2:7600
@@ -71,6 +78,24 @@ public class HdfsRaidConfigKeys {
    */
   public static final String HDFS_RAIDNODE_FIXER_INTERVAL = "hdfs.raidnode.fixer.internal";
   public static final long HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT = 3600 * 1000l; // subject to change
+
+  public static final String HDFS_RAIDNODE_MOVER_INTERVAL = "hdfs.raidnode.mover.interval";
+  public static final long HDFS_RAIDNODE_MOVER_INTERVAL_DEFAULT = 2 * 3600 * 1000l; // Temporary -
+                                                                                    // subject to
+                                                                                    // change
+
+  public static final String HDFS_RAIDNODE_MOVER_SHUFFLE_RACKS = "hdfs.raidnode.mover.shuffle.racks";
+  public static final boolean HDFS_RAIDNODE_MOVER_SHUFFLE_RACKS_DEFAULT = false;
+
+  public static final String HDFS_RAIDNODE_MOVER_CONNECT_TIMEOUT = "hdfs.raidnode.mover.connect.timeout";
+  public static final int HDFS_RAIDNODE_MOVER_CONNECT_TIMEOUT_DEFAULT = 60 * 1000; // 60 secs
+
+  public static final String HDFS_RAIDNODE_MOVER_MOVEONEBLOCK_TIMEOUT = "hdfs.raidnode.mover.moveoneblock.timeout";
+  public static final int HDFS_RAIDNODE_MOVER_MOVEONEBLOCK_TIMEOUT_DEFAULT = 20 * 60 * 1000; // 20mins.
+                                                                                             // The
+                                                                                             // same
+                                                                                             // as
+                                                                                             // balancer.
 
   /** Time of how long a file can be encoded after it is closed. */
   public static final String HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS = "hdfs.raidnode.raid.file.time.window.ms";
