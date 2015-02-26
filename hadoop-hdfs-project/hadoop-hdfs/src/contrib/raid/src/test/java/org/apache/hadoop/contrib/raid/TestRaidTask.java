@@ -33,6 +33,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.mapred.MiniMRClientCluster;
 import org.apache.hadoop.mapred.MiniMRClientClusterFactory;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -90,6 +91,14 @@ public class TestRaidTask {
     rd.start();
 
     mrCluster = MiniMRClientClusterFactory.create(TestRaidTask.class, 3, dfs.getConf());
+
+    Map<String, String> env = System.getenv();
+    String ldPath = env.get("LD_LIBRARY_PATH");
+    String origPath = mrCluster.getConfig().get(MRJobConfig.MAPRED_ADMIN_USER_ENV,
+      MRJobConfig.DEFAULT_MAPRED_ADMIN_USER_ENV);
+    ldPath = origPath + ":" + ldPath;
+
+    mrCluster.getConfig().set(MRJobConfig.MAPRED_ADMIN_USER_ENV, ldPath);
     mrCluster.start();
   }
 

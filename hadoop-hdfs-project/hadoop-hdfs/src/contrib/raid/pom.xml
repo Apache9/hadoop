@@ -19,9 +19,9 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project</artifactId>
+    <artifactId>hadoop-project-dist</artifactId>
     <version>2.4.0-mdh2.1-SNAPSHOT</version>
-    <relativePath>../../../../../hadoop-project</relativePath>
+    <relativePath>../../../../../hadoop-project-dist</relativePath>
   </parent>
 
   <groupId>org.apache.hadoop.contrib</groupId>
@@ -34,15 +34,11 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <properties>
     <hadoop.component>hdfs</hadoop.component>
     <hadoop.common.build.dir>${basedir}/../../../../../hadoop-common-project/hadoop-common/target</hadoop.common.build.dir>
+    <hdfs.raid.codec.lib>/dev/null</hdfs.raid.codec.lib>
   </properties>
 
   <dependencies>
-    <dependency>
-      <groupId>com.xiaomi.infra</groupId>
-      <artifactId>java-erasure</artifactId>
-      <version>1.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
+      <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
       <scope>provided</scope>
@@ -108,6 +104,11 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
     	<artifactId>hadoop-mapreduce-client-hs</artifactId>
     	<scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>com.sun.jna</groupId>
+      <artifactId>jna</artifactId>
+      <version>3.0.9</version>
+    </dependency>
   </dependencies>
   <build>
     <plugins>
@@ -154,7 +155,109 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
           </execution>
         </executions>
       </plugin>
-
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>dist</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-assembly-plugin</artifactId>
+            <dependencies>
+              <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-assemblies</artifactId>
+                <version>${project.version}</version>
+              </dependency>
+            </dependencies>
+            <executions>
+              <execution>
+                <id>dist</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>single</goal>
+                </goals>
+                <configuration>
+                  <finalName>${project.artifactId}-${project.version}</finalName>
+                  <appendAssemblyId>false</appendAssemblyId>
+                  <attach>false</attach>
+                  <!--<descriptorRefs>
+                    <descriptorRef>hadoop-hdfs-raid-dist</descriptorRef>
+                  </descriptorRefs>-->
+                  <descriptors>
+                    <descriptor>../../../../../hadoop-assemblies/src/main/resources/assemblies/hadoop-hdfs-raid-dist.xml</descriptor>
+                  </descriptors>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>native</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>make</id>
+                <phase>compile</phase>
+                <goals><goal>run</goal></goals>
+                <configuration>
+                  <target>
+                    <!-- copy native coding libraries -->
+                    <echo file="${project.build.directory}/native_copycodeclibs.sh">
+                      run() {
+                        echo "\$ ${@}"
+                        "${@}"
+                        res=$?
+                        if [ $res != 0 ]; then
+                          echo
+                          echo "Failed!"
+                          echo
+                          exit $res
+                        fi
+                      }
+
+                      echo "Remove legacy codec library"
+                      run rm -rf ${project.build.directory}/native/target/usr/local/lib
+                      echo "Create codec directory"
+                      run mkdir -p ${project.build.directory}/native/target/usr/local/lib
+                      if [ ${hdfs.raid.codec.lib} = "/dev/null" ]; then
+                          echo
+                          echo "Failed!"
+                          echo "hdfs.raid.codec.lib should be specifid for raid package"
+                          echo "using -Dhdfs.raid.codec.lib=path_to_codec_lib"
+                          echo
+                          exit 1 
+                      fi
+                      run cp -r ${hdfs.raid.codec.lib}/* ${project.build.directory}/native/target/usr/local/lib
+                      
+                    </echo>
+                    <exec executable="sh" dir="${project.build.directory}" failonerror="true">
+                      <arg line="./native_copycodeclibs.sh"/>
+                    </exec>
+
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 </project>
