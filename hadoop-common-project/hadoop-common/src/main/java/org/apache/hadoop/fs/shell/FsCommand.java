@@ -59,6 +59,7 @@ abstract public class FsCommand extends Command {
     factory.registerCommands(Touch.class);
     factory.registerCommands(SnapshotCommands.class);
     factory.registerCommands(XAttrCommands.class);
+    factory.registerCommands(TtlCommands.class);
   }
 
   protected FsCommand() {}

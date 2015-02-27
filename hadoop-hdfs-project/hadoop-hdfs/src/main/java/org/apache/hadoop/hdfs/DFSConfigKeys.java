@@ -756,4 +756,30 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String IGNORE_SECURE_PORTS_FOR_TESTING_KEY =
       "ignore.secure.ports.for.testing";
   public static final boolean IGNORE_SECURE_PORTS_FOR_TESTING_DEFAULT = false;
+
+  // ttl related configuration items
+  public static final String HDFS_TTLMANAGER_ENABLE_TRASH_KEY =
+      "hdfs.ttlmanager.ttl.enable.trash";
+  public static final boolean HDFS_TTLMANAGER_ENABLE_TRASH_DEFAULT = true;
+  public static final String HDFS_TTLMANAGER_TTL_ROUND_INTERVAL_MS = "" +
+      "hdfs.ttlmanager.ttl.round.interval.ms";
+  public static final long HDFS_TTLMANAGER_TTL_ROUND_INTERVAL_MS_DEFAULT =
+      2 * 60 * 60 * 1000; // 2 hours
+  public static final String HDFS_TTLMANAGER_DELETE_EMPTY_DIRECTORY_KEY =
+      "hdfs.ttlmanager.delete.empty.directory";
+  public static final boolean HDFS_TTLMANAGER_DELETE_EMPTY_DIRECTORY_DEFAULT =
+      true;
+  public static final String HDFS_TTLMANAGER_WORKER_CORE_POOL_SIZE_KEY =
+      "hdfs.ttlmanager.worker.core.pool.size";
+  public static final int HDFS_TTLMANAGER_WORKER_CORE_POOL_SIZE_DEFAULT = 1;
+  public static final String HDFS_TTLMANAGER_WORKER_MAX_POOL_SIZE_KEY =
+      "hdfs.ttlmanager.worker.max.pool.size";
+  public static final int HDFS_TTLMANAGER_WORKER_MAX_POOL_SIZE_DEFAULT = 10;
+  public static final String HDFS_TTLMANAGER_WORKER_POOL_KEEPALIVE_MS_KEY =
+      "hdfs.ttlmanager.worker.pool.keepalive.ms";
+  public static final long HDFS_TTLMANAGER_WORKER_POOL_KEEPALIVE_MS_DEFAULT =
+      60 * 1000;
+  public static final String HDFS_TTLMANAGER_WORKER_QUEUE_CAPACITY_KEY =
+      "hdfs.ttlmanager.worker.queue.capacity";
+  public static final int HDFS_TTLMANAGER_WORKER_QUEUE_CAPACITY_DEFAULT = 1024;
 }
