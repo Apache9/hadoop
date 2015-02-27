@@ -122,9 +122,7 @@ public class FairScheduler extends
 
   private static final Log LOG = LogFactory.getLog(FairScheduler.class);
   
-  private static final ResourceCalculator RESOURCE_CALCULATOR =
-      new DefaultResourceCalculator();
-  
+
   // Value that container assignment methods return when a container is
   // reserved
   public static final Resource CONTAINER_RESERVED = Resources.createResource(-1);
@@ -133,6 +131,8 @@ public class FairScheduler extends
   protected long updateInterval;
   private final int UPDATE_DEBUG_FREQUENCY = 5;
   private int updatesToSkipForDebug = UPDATE_DEBUG_FREQUENCY;
+
+  private ResourceCalculator resourceCalculator;
 
   @VisibleForTesting
   Thread updateThread;
@@ -357,7 +357,7 @@ public class FairScheduler extends
     for (FSLeafQueue sched : queueMgr.getLeafQueues()) {
       Resources.addTo(resToPreempt, resToPreempt(sched, curTime));
     }
-    if (Resources.greaterThan(RESOURCE_CALCULATOR, clusterResource, resToPreempt,
+    if (Resources.greaterThan(resourceCalculator, clusterResource, resToPreempt,
         Resources.none())) {
       preemptResources(resToPreempt);
     }
@@ -388,7 +388,7 @@ public class FairScheduler extends
       RMContainer container = warnedIter.next();
       if ((container.getState() == RMContainerState.RUNNING ||
               container.getState() == RMContainerState.ALLOCATED) &&
-          Resources.greaterThan(RESOURCE_CALCULATOR, clusterResource,
+          Resources.greaterThan(resourceCalculator, clusterResource,
               toPreempt, Resources.none())) {
         warnOrKillContainer(container);
         Resources.subtractFrom(toPreempt, container.getContainer().getResource());
@@ -405,7 +405,7 @@ public class FairScheduler extends
         }
       }
 
-      while (Resources.greaterThan(RESOURCE_CALCULATOR, clusterResource,
+      while (Resources.greaterThan(resourceCalculator, clusterResource,
           toPreempt, Resources.none())) {
         RMContainer container =
             getQueueManager().getRootQueue().preemptContainer();
@@ -479,20 +479,20 @@ public class FairScheduler extends
     Resource resDueToMinShare = Resources.none();
     Resource resDueToFairShare = Resources.none();
     if (curTime - sched.getLastTimeAtMinShare() > minShareTimeout) {
-      Resource target = Resources.min(RESOURCE_CALCULATOR, clusterResource,
+      Resource target = Resources.min(resourceCalculator, clusterResource,
           sched.getMinShare(), sched.getDemand());
-      resDueToMinShare = Resources.max(RESOURCE_CALCULATOR, clusterResource,
+      resDueToMinShare = Resources.max(resourceCalculator, clusterResource,
           Resources.none(), Resources.subtract(target, sched.getResourceUsage()));
     }
     if (curTime - sched.getLastTimeAtFairShareThreshold() > fairShareTimeout) {
-      Resource target = Resources.min(RESOURCE_CALCULATOR, clusterResource,
+      Resource target = Resources.min(resourceCalculator, clusterResource,
           sched.getFairShare(), sched.getDemand());
-      resDueToFairShare = Resources.max(RESOURCE_CALCULATOR, clusterResource,
+      resDueToFairShare = Resources.max(resourceCalculator, clusterResource,
           Resources.none(), Resources.subtract(target, sched.getResourceUsage()));
     }
-    Resource resToPreempt = Resources.max(RESOURCE_CALCULATOR, clusterResource,
+    Resource resToPreempt = Resources.max(resourceCalculator, clusterResource,
         resDueToMinShare, resDueToFairShare);
-    if (Resources.greaterThan(RESOURCE_CALCULATOR, clusterResource,
+    if (Resources.greaterThan(resourceCalculator, clusterResource,
         resToPreempt, Resources.none())) {
       String message = "Should preempt " + resToPreempt + " res for queue "
           + sched.getName() + ": resDueToMinShare = " + resDueToMinShare
@@ -1025,7 +1025,7 @@ public class FairScheduler extends
       if (!nodes.containsKey(n2)) {
         return -1;
       }
-      return RESOURCE_CALCULATOR.compare(clusterResource,
+      return resourceCalculator.compare(clusterResource,
               nodes.get(n2).getAvailableResource(),
               nodes.get(n1).getAvailableResource());
     }
@@ -1098,8 +1098,8 @@ public class FairScheduler extends
     return super.getApplicationAttempt(appAttemptId);
   }
 
-  public static ResourceCalculator getResourceCalculator() {
-    return RESOURCE_CALCULATOR;
+  public ResourceCalculator getResourceCalculator() {
+    return resourceCalculator;
   }
 
   /**
@@ -1239,6 +1239,7 @@ public class FairScheduler extends
     synchronized (this) {
       this.conf = new FairSchedulerConfiguration(conf);
       validateConf(this.conf);
+      resourceCalculator = this.conf.getResourceCalculator();
       minimumAllocation = this.conf.getMinimumAllocation();
       initMaximumResourceCapability(this.conf.getMaximumAllocation());
       incrAllocation = this.conf.getIncrementAllocation();

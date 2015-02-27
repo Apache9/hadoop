@@ -28,9 +28,12 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Evolving;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
+import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
+import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 @Private
@@ -122,6 +125,12 @@ public class FairSchedulerConfiguration extends Configuration {
   /** Maximum number of containers to assign on each check-in. */
   protected static final String MAX_ASSIGN = CONF_PREFIX + "max.assign";
   protected static final int DEFAULT_MAX_ASSIGN = -1;
+
+  protected static final String RESOURCE_CALCULATOR_CLASS =
+      CONF_PREFIX + "resource-calculator";
+
+  protected static final Class<? extends ResourceCalculator>
+      DEFAULT_RESOURCE_CALCULATOR_CLASS = DefaultResourceCalculator.class;
 
   /** The update interval for calculating resources in FairScheduler .*/
   public static final String UPDATE_INTERVAL_MS =
@@ -255,7 +264,17 @@ public class FairSchedulerConfiguration extends Configuration {
   public long getUpdateInterval() {
     return getLong(UPDATE_INTERVAL_MS, DEFAULT_UPDATE_INTERVAL_MS);
   }
-  
+
+  public ResourceCalculator getResourceCalculator() {
+    return ReflectionUtils.newInstance(
+        getClass(
+            RESOURCE_CALCULATOR_CLASS,
+            DEFAULT_RESOURCE_CALCULATOR_CLASS,
+            ResourceCalculator.class),
+        this
+    );
+  }
+
   private static int findResource(String val, String units)
     throws AllocationConfigurationException {
     Pattern pattern = Pattern.compile("(\\d+) ?" + units);
