@@ -982,6 +982,18 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     assertEquals("root.somequeue", scheduler.getSchedulerApp(appId).getQueueName());
     appId = createSchedulingRequest(1024, "default", "otheruser");
     assertEquals("root.default", scheduler.getSchedulerApp(appId).getQueueName());
+
+    // test reject non-default and non-existed requested queue
+    rules = new ArrayList<QueuePlacementRule>();
+    rules.add(new QueuePlacementRule.Specified().initialize(false, null));
+    rules.add(new QueuePlacementRule.Default().initialize(true, null));
+    scheduler.getAllocationConfiguration().placementPolicy =
+        new QueuePlacementPolicy(rules, configuredQueues, conf);
+    appId = createSchedulingRequest(1024, "default", "otheruser");
+    assertEquals("root.default", scheduler.getSchedulerApp(appId).getQueueName());
+    appId = createSchedulingRequest(1024, "non-default", "otheruser");
+    // rejected by scheduler
+    assertNull(scheduler.getSchedulerApp(appId));
   }
 
   @Test

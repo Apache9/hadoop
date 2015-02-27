@@ -313,7 +313,12 @@ public abstract class QueuePlacementRule {
     @Override
     protected String getQueueForApp(String requestedQueue, String user,
         Groups groups, Map<FSQueueType, Set<String>> configuredQueues) {
-      return defaultQueueName;
+      if (requestedQueue.equals(YarnConfiguration.DEFAULT_QUEUE_NAME)) {
+        return defaultQueueName;
+      } else {
+        // reject
+        return null;
+      }
     }
 
     @Override
