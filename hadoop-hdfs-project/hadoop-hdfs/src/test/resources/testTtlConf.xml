@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="testConf.xsl"?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<configuration>
+  <!-- Normal mode is test. To run just the commands and dump the output
+       to the log, set it to nocompare -->
+  <mode>test</mode>
+
+  <!--  Comparator types:
+           ExactComparator
+           SubstringComparator
+           RegexpComparator
+           TokenComparator
+           -->
+  <tests>
+    <test>
+      <description>setTtl : set ttl on a file</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl 123456 /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output></expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set ttl on a directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output></expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : get ttl of a file</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl 123456 /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 123456</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : get ttl of a directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 123456</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : child file override parent directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
+        <command>-fs NAMENODE -touchz /dir1/file1</command>
+        <command>-fs NAMENODE -setTtl 123457 /dir1/file1</command>
+        <command>-fs NAMENODE -getTtl /dir1/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 123457</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : child file inherits parent directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
+        <command>-fs NAMENODE -touchz /dir1/file1</command>
+        <command>-fs NAMENODE -getTtl /dir1/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 123456 [Inherits from</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : get ttl of a file w/o ttl</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set 0 for a file w/ ttl to clear ttl</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl 123456 /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+        <command>-fs NAMENODE -setTtl 0 /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>
+        getTtl : get ttl of a file and print in human readable fashion
+      </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl 123456 /file1</command>
+        <command>-fs NAMENODE -getTtl -h /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: Friday, 27-Mar-70 17:36:00 UTC</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set ttl use a relative number</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl 10M /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output></expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : get a ttl set by the relative number</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl 10M /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>Effective TTL: \d+(\n)*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+  </tests>
+</configuration>
