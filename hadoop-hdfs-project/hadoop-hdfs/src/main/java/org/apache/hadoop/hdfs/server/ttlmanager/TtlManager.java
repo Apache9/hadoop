@@ -43,6 +43,7 @@ public class TtlManager extends Thread {
   private final Worker worker;
   private final Map<String, Policy> policies = new HashMap<String, Policy>();
   private final ScheduledExecutorService scheduler;
+  TtlMetrics  metrics;
 
   public TtlManager(Configuration conf) {
     super(TtlManager.class.getName());
@@ -69,10 +70,16 @@ public class TtlManager extends Thread {
         return thread;
       }
     });
+    
+    this.metrics = TtlMetrics.create(); 
   }
 
   public void registerPolicy(Policy policy) {
     policies.put(policy.getName(), policy);
+  }
+  
+  TtlMetrics getMetrics() {
+    return metrics;
   }
 
   @Override
@@ -84,6 +91,7 @@ public class TtlManager extends Thread {
         if (!policy.isEnabled()) {
           continue;
         }
+        metrics.incrTtlScheduledTask();
         schedulePolicyTask(policy);
       }
 
@@ -136,7 +144,7 @@ public class TtlManager extends Thread {
       throws InterruptedException, IOException {
     Configuration conf = new HdfsConfiguration();
     TtlManager ttlManager = new TtlManager(conf);
-    ttlManager.registerPolicy(new TtlPolicy(conf));
+    ttlManager.registerPolicy(new TtlPolicy(conf, ttlManager.getMetrics()));
     ttlManager.start();
 
     while (true) {

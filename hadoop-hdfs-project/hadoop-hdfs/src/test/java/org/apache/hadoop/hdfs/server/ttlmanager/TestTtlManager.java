@@ -146,5 +146,6 @@ public class TestTtlManager {
 
     Assert.assertEquals(5, policy1.getSuccessCount());
     Assert.assertTrue(policy2.getSuccessCount() > 1);
+    Assert.assertTrue(ttlManager.getMetrics().ttlScheduledTask.value()==6);
   }
 }

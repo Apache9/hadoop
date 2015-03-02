@@ -764,7 +764,7 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String HDFS_TTLMANAGER_TTL_ROUND_INTERVAL_MS = "" +
       "hdfs.ttlmanager.ttl.round.interval.ms";
   public static final long HDFS_TTLMANAGER_TTL_ROUND_INTERVAL_MS_DEFAULT =
-      2 * 60 * 60 * 1000; // 2 hours
+      24 * 60 * 60 * 1000; // 24 hours
   public static final String HDFS_TTLMANAGER_DELETE_EMPTY_DIRECTORY_KEY =
       "hdfs.ttlmanager.delete.empty.directory";
   public static final boolean HDFS_TTLMANAGER_DELETE_EMPTY_DIRECTORY_DEFAULT =

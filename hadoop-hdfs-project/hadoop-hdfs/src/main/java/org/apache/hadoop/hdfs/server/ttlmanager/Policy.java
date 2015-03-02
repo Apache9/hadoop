@@ -41,7 +41,7 @@ public abstract class Policy<R> extends Configured {
   protected final FileSystem fs;
   protected long delayMs = 0;
   protected long periodMs = 0;
-
+  
   protected Policy(Configuration conf) throws IOException {
     this.setConf(conf);
     this.fs = FileSystem.get(conf);

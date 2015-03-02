@@ -60,7 +60,7 @@ public class TestTtlPolicy {
 
   @Before
   public void setUp() throws Exception {
-    ttlPolicy = new TtlPolicy(conf);
+    ttlPolicy = new TtlPolicy(conf, TtlMetrics.create());
   }
 
   @After
@@ -107,6 +107,15 @@ public class TestTtlPolicy {
     Assert.assertTrue(dfs.exists(new Path("/user/test1/dir")));
     Assert.assertTrue(dfs.exists(new Path("/user/test2")));
     Assert.assertTrue(dfs.exists(new Path("/user/test3")));
+  }
+  
+  @Test
+  public void testTtlPolicyMetrics() throws Exception {
+    createTestDirectoryTree();
+    setTtl(new Path("/user/test1"), "12345");
+    ttlPolicy.traverseDirectoryTree(new Path("/"));
+    
+    Assert.assertTrue(ttlPolicy.getMetrics().filesDeletedByTTL.value()==3);
   }
 
   @Test

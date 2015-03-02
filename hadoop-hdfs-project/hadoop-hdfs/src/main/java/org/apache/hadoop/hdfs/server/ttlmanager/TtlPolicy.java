@@ -35,6 +35,9 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.ttlmanager.TtlPolicy.TtlTaskResult;
+import com.google.common.annotations.VisibleForTesting;
+
+
 
 /**
  * TtlPolicy defines how the TTL of each file and directory will be processed.
@@ -48,8 +51,9 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
   private long roundIntervalMs = 0;
   private boolean deleteEmptyDirectory;
   private boolean enableTrash;
+  private TtlMetrics metrics;
 
-  public TtlPolicy(Configuration conf) throws IOException {
+  public TtlPolicy(Configuration conf, TtlMetrics metrics) throws IOException {
     super(conf);
     roundIntervalMs = conf.getLong(
         DFSConfigKeys.HDFS_TTLMANAGER_TTL_ROUND_INTERVAL_MS,
@@ -60,6 +64,8 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
     enableTrash = conf.getBoolean(
         DFSConfigKeys.HDFS_TTLMANAGER_ENABLE_TRASH_KEY,
         DFSConfigKeys.HDFS_TTLMANAGER_ENABLE_TRASH_DEFAULT);
+    
+    this.metrics = metrics;
   }
 
   @Override
@@ -70,6 +76,11 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
   @Override
   public Type getType() {
     return Type.ONE_SHOT;
+  }
+  
+  @VisibleForTesting
+  public TtlMetrics getMetrics() {
+    return metrics;
   }
 
   @Override
@@ -87,13 +98,15 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
   @Override
   public void onSuccess(TtlTaskResult result) {
     long consumedTime = result.getConsumedTimeMs();
+    
     if (consumedTime < roundIntervalMs) {
       delayMs = roundIntervalMs - consumedTime;
     } else {
       // Clear the last delay time
       delayMs = 0;
     }
-
+    
+    metrics.addTtlDurationInMs(consumedTime);
     // Enable the next round
     enable();
   }
@@ -101,6 +114,10 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
   @Override
   public void onFailure(Throwable t) {
     LOG.error("Error occurred during task processing", t);
+    metrics.incrTtlFailedTask();
+    // Try again later. There might be transient errors.
+    delayMs = roundIntervalMs;
+    enable();
   }
 
   /**
@@ -183,6 +200,7 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
    */
   void ProcessTtlInfos(Path path, List<TtlInfo> ttlInfos) {
     TtlInfo effectiveTtl = null;
+    metrics.incrFilesScannedByTTL();
     // Get the effective ttl information
     for (TtlInfo info : ttlInfos) {
       if (info != null && info.getTtl() > 0) {
@@ -198,8 +216,10 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
           if (deleteEmptyDirectory || !fs.isDirectory(path)) {
             if (enableTrash) {
               Trash.moveToAppropriateTrash(fs, path, fs.getConf());
+              metrics.incrFilesDeletedByTTL();
             } else {
               fs.delete(path, false);
+              metrics.incrFilesDeletedByTTL();
             }
           }
         } catch (IOException e) {
