@@ -353,15 +353,22 @@ public class KerberosAuthenticationHandler implements AuthenticationHandler {
             GSSContext gssContext = null;
             GSSCredential gssCreds = null;
             try {
-              gssCreds = gssManager.createCredential(
-                  gssManager.createName(
-                      KerberosUtil.getServicePrincipal("HTTP", serverName),
-                      KerberosUtil.getOidInstance("NT_GSS_KRB5_PRINCIPAL")),
-                  GSSCredential.INDEFINITE_LIFETIME,
-                  new Oid[]{
-                    KerberosUtil.getOidInstance("GSS_SPNEGO_MECH_OID"),
-                    KerberosUtil.getOidInstance("GSS_KRB5_MECH_OID")},
-                  GSSCredential.ACCEPT_ONLY);
+              try {
+                gssCreds = gssManager.createCredential(
+                    gssManager.createName(
+                        KerberosUtil.getServicePrincipal("HTTP", serverName),
+                        KerberosUtil.getOidInstance("NT_GSS_KRB5_PRINCIPAL")),
+                    GSSCredential.INDEFINITE_LIFETIME,
+                    new Oid[]{
+                      KerberosUtil.getOidInstance("GSS_SPNEGO_MECH_OID"),
+                      KerberosUtil.getOidInstance("GSS_KRB5_MECH_OID")},
+                    GSSCredential.ACCEPT_ONLY);
+              } catch (Throwable t) {
+                // Xiaomi: we are using short principal of HTTP/hdfs@REALM for our clusters.
+                // The required principal is in form of HTTP/ip_addr@REALM. Catch the exception 
+                // so that we can fallthrough to the behavior of 2.4.
+                LOG.warn("Failed to get server credential " + t.getMessage(), t);
+              }
               gssContext = gssManager.createContext(gssCreds);
               byte[] serverToken = gssContext.acceptSecContext(clientToken, 0, clientToken.length);
               if (serverToken != null && serverToken.length > 0) {

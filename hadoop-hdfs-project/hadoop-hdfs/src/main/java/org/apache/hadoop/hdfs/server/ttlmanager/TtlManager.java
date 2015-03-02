@@ -31,6 +31,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation;
 
 /**
  * TtlManager is used to manage the TtlPolicy{@link TtlPolicy}, and can be
@@ -143,6 +145,9 @@ public class TtlManager extends Thread {
   public static void main(String[] args)
       throws InterruptedException, IOException {
     Configuration conf = new HdfsConfiguration();
+    UserGroupInformation.setConfiguration(conf);
+    SecurityUtil.login(conf, DFSConfigKeys.DFS_TTLMANAGER_KEYTAB_FILE_KEY,
+        DFSConfigKeys.DFS_TTLMANAGER_KERBEROS_PRINCIPAL_KEY);
     TtlManager ttlManager = new TtlManager(conf);
     ttlManager.registerPolicy(new TtlPolicy(conf, ttlManager.getMetrics()));
     ttlManager.start();
