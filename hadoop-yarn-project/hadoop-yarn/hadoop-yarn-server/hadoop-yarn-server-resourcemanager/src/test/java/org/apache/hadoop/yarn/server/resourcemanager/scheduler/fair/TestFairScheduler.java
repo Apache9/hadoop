@@ -935,6 +935,7 @@ public class TestFairScheduler extends FairSchedulerTestBase {
   
   @Test
   public void testQueuePlacementWithPolicy() throws Exception {
+    conf.set(FairSchedulerConfiguration.ACL_PROXY_USERS, "proxy1,proxy2");
     conf.setClass(CommonConfigurationKeys.HADOOP_SECURITY_GROUP_MAPPING,
         SimpleGroupsMapping.class, GroupMappingServiceProvider.class);
     scheduler.init(conf);
@@ -968,7 +969,14 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     assertEquals("root.user5subgroup2", scheduler.getSchedulerApp(appId).getQueueName());
     appId = createSchedulingRequest(1024, "default", "otheruser");
     assertEquals("root.default", scheduler.getSchedulerApp(appId).getQueueName());
-    
+    // test policy with ACL proxy user
+    appId = createSchedulingRequest(1024, "user1@somequeue", "proxy1");
+    assertEquals("root.somequeue", scheduler.getSchedulerApp(appId).getQueueName());
+    appId = createSchedulingRequest(1024, "user1@default", "proxy2");
+    assertEquals("root.user1", scheduler.getSchedulerApp(appId).getQueueName());
+    appId = createSchedulingRequest(1024, "user3@default", "proxy1");
+    assertEquals("root.user3group", scheduler.getSchedulerApp(appId).getQueueName());
+
     // test without specified as first rule
     rules = new ArrayList<QueuePlacementRule>();
     rules.add(new QueuePlacementRule.User().initialize(false, null));
@@ -992,6 +1000,11 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     appId = createSchedulingRequest(1024, "default", "otheruser");
     assertEquals("root.default", scheduler.getSchedulerApp(appId).getQueueName());
     appId = createSchedulingRequest(1024, "non-default", "otheruser");
+    // rejected by scheduler
+    assertNull(scheduler.getSchedulerApp(appId));
+    appId = createSchedulingRequest(1024, "otheruser@default", "proxy1");
+    assertEquals("root.default", scheduler.getSchedulerApp(appId).getQueueName());
+    appId = createSchedulingRequest(1024, "otheruser@non-default", "proxy2");
     // rejected by scheduler
     assertNull(scheduler.getSchedulerApp(appId));
   }

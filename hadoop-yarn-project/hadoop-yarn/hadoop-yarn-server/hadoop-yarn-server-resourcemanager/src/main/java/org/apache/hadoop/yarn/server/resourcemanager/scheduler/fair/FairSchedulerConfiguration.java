@@ -132,6 +132,8 @@ public class FairSchedulerConfiguration extends Configuration {
   protected static final Class<? extends ResourceCalculator>
       DEFAULT_RESOURCE_CALCULATOR_CLASS = DefaultResourceCalculator.class;
 
+  protected static final String ACL_PROXY_USERS = CONF_PREFIX + "acl.proxy.users";
+
   /** The update interval for calculating resources in FairScheduler .*/
   public static final String UPDATE_INTERVAL_MS =
       CONF_PREFIX + "update-interval-ms";
@@ -225,7 +227,7 @@ public class FairSchedulerConfiguration extends Configuration {
   
   public String getEventlogDir() {
     return get(EVENT_LOG_DIR, new File(System.getProperty("hadoop.log.dir",
-    		"/tmp/")).getAbsolutePath() + File.separator + "fairscheduler");
+               "/tmp/")).getAbsolutePath() + File.separator + "fairscheduler");
   }
   
   public int getPreemptionInterval() {

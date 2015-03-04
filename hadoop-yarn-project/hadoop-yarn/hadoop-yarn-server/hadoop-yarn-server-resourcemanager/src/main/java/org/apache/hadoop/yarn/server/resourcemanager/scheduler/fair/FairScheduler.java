@@ -81,7 +81,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEv
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.SystemClock;
-import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.DominantResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
@@ -119,6 +118,7 @@ public class FairScheduler extends
   private QueueManager queueMgr;
   private volatile Clock clock;
   private boolean usePortForNodeName;
+  private Set<String> aclProxyUsers;
 
   private static final Log LOG = LogFactory.getLog(FairScheduler.class);
   
@@ -193,6 +193,7 @@ public class FairScheduler extends
     allocsLoader = new AllocationFileLoaderService();
     queueMgr = new QueueManager(this);
     maxRunningEnforcer = new MaxRunningAppsEnforcer(this);
+    aclProxyUsers = new HashSet<String>();
   }
 
   private void validateConf(Configuration conf) {
@@ -576,6 +577,15 @@ public class FairScheduler extends
    */
   protected synchronized void addApplication(ApplicationId applicationId,
       String queueName, String user, boolean isAppRecovering) {
+    String realUser = user;
+    if (aclProxyUsers.contains(user)) {
+      String[] queueArray = parseProxyQueueName(queueName);
+      if (queueArray != null) {
+        realUser = new String(queueArray[0]);
+        queueName = new String(queueArray[1]);
+      }
+    }
+
     if (queueName == null || queueName.isEmpty()) {
       String message = "Reject application " + applicationId +
               " submitted by user " + user + " with an empty queue name.";
@@ -597,13 +607,14 @@ public class FairScheduler extends
     }
 
     RMApp rmApp = rmContext.getRMApps().get(applicationId);
-    FSLeafQueue queue = assignToQueue(rmApp, queueName, user);
+    FSLeafQueue queue = assignToQueue(rmApp, queueName, realUser);
+
     if (queue == null) {
       return;
     }
 
     // Enforce ACLs
-    UserGroupInformation userUgi = UserGroupInformation.createRemoteUser(user);
+    UserGroupInformation userUgi = UserGroupInformation.createRemoteUser(realUser);
 
     if (!queue.hasAccess(QueueACL.SUBMIT_APPLICATIONS, userUgi)
         && !queue.hasAccess(QueueACL.ADMINISTER_QUEUE, userUgi)) {
@@ -630,6 +641,16 @@ public class FairScheduler extends
     } else {
       rmContext.getDispatcher().getEventHandler()
         .handle(new RMAppEvent(applicationId, RMAppEventType.APP_ACCEPTED));
+    }
+  }
+
+  private String[] parseProxyQueueName(String queueName) {
+    String[] array = queueName.split("@");
+    // Expected proxy queue format: real_user@real_queue
+    if (array.length == 2) {
+      return array;
+    } else {
+      return null;
     }
   }
 
@@ -690,9 +711,11 @@ public class FairScheduler extends
     String appRejectMsg = null;
 
     try {
+      String requestQueue = queueName;
       QueuePlacementPolicy placementPolicy = allocConf.getPlacementPolicy();
       queueName = placementPolicy.assignAppToQueue(queueName, user);
       if (queueName == null) {
+        LOG.warn("Application is rejected, queue: " + requestQueue + ", user: " + user);
         appRejectMsg = "Application rejected by queue placement policy";
       } else {
         queue = queueMgr.getLeafQueue(queueName, true);
@@ -1240,6 +1263,7 @@ public class FairScheduler extends
       this.conf = new FairSchedulerConfiguration(conf);
       validateConf(this.conf);
       resourceCalculator = this.conf.getResourceCalculator();
+      LOG.info("Using resource calculator: " + resourceCalculator.getClass().getName());
       minimumAllocation = this.conf.getMinimumAllocation();
       initMaximumResourceCapability(this.conf.getMaximumAllocation());
       incrAllocation = this.conf.getIncrementAllocation();
@@ -1259,6 +1283,11 @@ public class FairScheduler extends
       preemptionInterval = this.conf.getPreemptionInterval();
       waitTimeBeforeKill = this.conf.getWaitTimeBeforeKill();
       usePortForNodeName = this.conf.getUsePortForNodeName();
+
+      LOG.info("ACL proxy users: " + conf.getTrimmedStrings(FairSchedulerConfiguration.ACL_PROXY_USERS));
+      for (String aclProxyUser : conf.getTrimmedStrings(FairSchedulerConfiguration.ACL_PROXY_USERS)) {
+        aclProxyUsers.add(aclProxyUser);
+      }
 
       updateInterval = this.conf.getUpdateInterval();
       if (updateInterval < 0) {
