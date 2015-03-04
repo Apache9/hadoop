@@ -142,7 +142,8 @@ public class TtlCommands extends FsCommand {
         "can use 'M'(minute), 'h'(hour), 'd'(day), 'w'(week), and 'm'(month) " +
         "as a suffix to specify relative value for convenience.\n" +
         "<ttl> The ttl value to set.\n" +
-        "<path> The file or directory.\n";
+        "<path> The file or directory.\n" +
+        " For e.g: \"-setTtl 1h /test\" will set ttl of path /test to be 1 hour later.\n";
 
     private static final Map<String, Integer> SUFFIX_MAP =
         new HashMap<String, Integer>();
@@ -159,7 +160,6 @@ public class TtlCommands extends FsCommand {
     @Override
     protected void processOptions(LinkedList<String> args) throws IOException {
       String ttlValue = StringUtils.popFirstNonOption(args);
-      ttl = parseTtlFromString(ttlValue);
 
       if (args.isEmpty()) {
         throw new HadoopIllegalArgumentException("<path> is missing.");
@@ -167,6 +167,8 @@ public class TtlCommands extends FsCommand {
       if (args.size() > 1) {
         throw new HadoopIllegalArgumentException("Too many arguments.");
       }
+      
+      ttl = parseTtlFromString(ttlValue);
     }
 
     private int parseTtlFromString(String value) {

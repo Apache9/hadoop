@@ -47,11 +47,13 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
   private static final Log LOG = LogFactory.getLog(TtlPolicy.class);
   private static final String NAME = "TTL";
   private static final String TTL_XATTR_NAME = "user.ttl";
+  private static final Path TRASH = new Path(".Trash/");
 
   private long roundIntervalMs = 0;
   private boolean deleteEmptyDirectory;
   private boolean enableTrash;
   private TtlMetrics metrics;
+  private Path  trash;
 
   public TtlPolicy(Configuration conf, TtlMetrics metrics) throws IOException {
     super(conf);
@@ -66,6 +68,7 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
         DFSConfigKeys.HDFS_TTLMANAGER_ENABLE_TRASH_DEFAULT);
     
     this.metrics = metrics;
+    this.trash = new Path(fs.getHomeDirectory(), TRASH);
   }
 
   @Override
@@ -119,7 +122,11 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
     delayMs = roundIntervalMs;
     enable();
   }
-
+  
+  private boolean isInTrash(Path path) {
+    return fs.makeQualified(path).toString().startsWith(trash.toString());
+  }
+  
   /**
    * Depth first traverse the specified directory tree, and process the ttl
    * for each of the files and directories. Note that here we can't guarantee
@@ -152,7 +159,7 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
         if (fs.isDirectory(path) && childrenInfo.hasNextChild()) {
           // Process the next child
           FileStatus nextChild = childrenInfo.nextChild();
-          if (!visited.contains(nextChild.getPath())) {
+          if (!visited.contains(nextChild.getPath()) && !isInTrash(nextChild.getPath())) {
             ttlInfos.add(getTtlInfo(nextChild.getPath()));
             visited.add(nextChild.getPath());
             stack.push(nextChild.getPath());
@@ -213,20 +220,24 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
       int currentMin = (int)(System.currentTimeMillis() / 1000 / 60);
       if (effectiveTtl.getTtl() <= currentMin) {
         try {
-          if (deleteEmptyDirectory || !fs.isDirectory(path)) {
+          // Delete a non-directory file or a directory which is neither the root nor a non-empty directory
+          if (!fs.isDirectory(path) ||
+            (deleteEmptyDirectory && !path.isRoot() && (fs.listStatus(path).length == 0))) {
             if (enableTrash) {
               Trash.moveToAppropriateTrash(fs, path, fs.getConf());
               metrics.incrFilesDeletedByTTL();
+              LOG.info("Move ttl expired path " + path + " to trash successful, " +
+                      "ttl comes from path " + effectiveTtl.getPath() + ", the ttl is " + effectiveTtl.getTtl()) ;
             } else {
               fs.delete(path, false);
               metrics.incrFilesDeletedByTTL();
+              LOG.info("Delete ttl expired path " + path + " successful, " +
+                      "ttl comes from path " + effectiveTtl.getPath() + ", the ttl is " + effectiveTtl.getTtl()) ;
             }
           }
         } catch (IOException e) {
           LOG.warn("Delete ttl expired path " + path + " failed", e);
         }
-        LOG.info("Delete ttl expired path " + path + " successful, " +
-            "ttl comes from path " + effectiveTtl.getPath()) ;
       } else {
         LOG.debug("Ttl for path " + path + " isn't expired");
       }

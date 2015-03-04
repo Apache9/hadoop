@@ -151,9 +151,15 @@ public class TtlManager extends Thread {
     TtlManager ttlManager = new TtlManager(conf);
     ttlManager.registerPolicy(new TtlPolicy(conf, ttlManager.getMetrics()));
     ttlManager.start();
+    int logRateLimit = 0;
 
     while (true) {
-      LOG.info("TtlManager is running");
+      // Print a log every hour
+      if (logRateLimit == 3600) {
+        LOG.info("TtlManager is running");
+        logRateLimit = 0;
+      }
+      logRateLimit++;
       try {
         Thread.sleep(1000);
       } catch (InterruptedException e) {
