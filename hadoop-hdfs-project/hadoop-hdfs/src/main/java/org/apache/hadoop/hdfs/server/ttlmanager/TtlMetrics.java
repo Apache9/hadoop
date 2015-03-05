@@ -59,6 +59,10 @@ class TtlMetrics {
   String getName() {
     return "Ttl";
   }
+  
+  public void shutDown() {
+    DefaultMetricsSystem.shutdown();
+  }
  
  public void incrTtlScheduledTask() {
    ttlScheduledTask.incr();

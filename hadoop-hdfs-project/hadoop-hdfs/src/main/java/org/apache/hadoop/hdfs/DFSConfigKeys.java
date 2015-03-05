@@ -566,8 +566,7 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String  DFS_NAMENODE_STARTUP_KEY = "dfs.namenode.startup";
   public static final String  DFS_DATANODE_KEYTAB_FILE_KEY = "dfs.datanode.keytab.file";
   public static final String  DFS_DATANODE_KERBEROS_PRINCIPAL_KEY = "dfs.datanode.kerberos.principal";
-  public static final String  DFS_TTLMANAGER_KEYTAB_FILE_KEY = "dfs.ttlmanager.keytab.file";
-  public static final String  DFS_TTLMANAGER_KERBEROS_PRINCIPAL_KEY = "dfs.ttlmanager.kerberos.principal";
+
   @Deprecated
   public static final String  DFS_DATANODE_USER_NAME_KEY = DFS_DATANODE_KERBEROS_PRINCIPAL_KEY;
   public static final String  DFS_DATANODE_SHARED_FILE_DESCRIPTOR_PATHS = "dfs.datanode.shared.file.descriptor.paths";
@@ -760,6 +759,24 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final boolean IGNORE_SECURE_PORTS_FOR_TESTING_DEFAULT = false;
 
   // ttl related configuration items
+  public static final String  DFS_TTLMANAGER_KEYTAB_FILE_KEY = 
+      "dfs.ttlmanager.keytab.file";
+  public static final String  DFS_TTLMANAGER_KERBEROS_PRINCIPAL_KEY = 
+      "dfs.ttlmanager.kerberos.principal";
+  public static final String  DFS_TTLMANAGER_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = 
+      "dfs.ttlmanager.kerberos.internal.spnego.principal";
+  public static final String  DFS_TTLMANAGER_HTTP_ADDRESS_KEY = 
+      "dfs.ttlmanager.http-address";
+  public static final int     DFS_TTLMANAGER_HTTP_PORT_DEFAULT = 8482;
+  public static final String  DFS_TTLMANAGER_HTTP_ADDRESS_DEFAULT = 
+      "0.0.0.0:" + DFS_TTLMANAGER_HTTP_PORT_DEFAULT;
+  public static final String  DFS_TTLMANAGER_HTTPS_ADDRESS_KEY = 
+      "dfs.ttlmanager.https-address";
+  public static final int     DFS_TTLMANAGER_HTTPS_PORT_DEFAULT = 8483;
+  public static final String  DFS_TTLMANAGER_HTTPS_ADDRESS_DEFAULT = 
+      "0.0.0.0:" + DFS_TTLMANAGER_HTTPS_PORT_DEFAULT;
+    
+
   public static final String HDFS_TTLMANAGER_ENABLE_TRASH_KEY =
       "hdfs.ttlmanager.ttl.enable.trash";
   public static final boolean HDFS_TTLMANAGER_ENABLE_TRASH_DEFAULT = true;

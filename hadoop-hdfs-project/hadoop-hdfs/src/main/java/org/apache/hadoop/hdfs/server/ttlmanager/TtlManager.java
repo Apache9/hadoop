@@ -25,14 +25,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.net.InetSocketAddress;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.http.HttpServer2;
+import org.apache.hadoop.hdfs.DFSUtil;
 
 /**
  * TtlManager is used to manage the TtlPolicy{@link TtlPolicy}, and can be
@@ -46,6 +51,7 @@ public class TtlManager extends Thread {
   private final Map<String, Policy> policies = new HashMap<String, Policy>();
   private final ScheduledExecutorService scheduler;
   TtlMetrics  metrics;
+  private HttpServer2 httpServer;
 
   public TtlManager(Configuration conf) {
     super(TtlManager.class.getName());
@@ -142,17 +148,57 @@ public class TtlManager extends Thread {
     }, policy.getDelayMs(), policy.getPeriodMs(), TimeUnit.MILLISECONDS);
   }
 
+  private void startHttpServer(Configuration conf) throws IOException {
+    final String httpAddrString =  conf.get(
+        DFSConfigKeys.DFS_TTLMANAGER_HTTP_ADDRESS_KEY,
+        DFSConfigKeys.DFS_TTLMANAGER_HTTP_ADDRESS_DEFAULT);
+    InetSocketAddress httpAddr = NetUtils.createSocketAddr(httpAddrString,
+        DFSConfigKeys.DFS_TTLMANAGER_HTTP_PORT_DEFAULT,
+        DFSConfigKeys.DFS_TTLMANAGER_HTTP_ADDRESS_KEY);
+
+    final String httpsAddrString = conf.get(
+        DFSConfigKeys.DFS_TTLMANAGER_HTTPS_ADDRESS_KEY,
+        DFSConfigKeys.DFS_TTLMANAGER_HTTPS_ADDRESS_DEFAULT);
+    InetSocketAddress httpsAddr = NetUtils.createSocketAddr(httpsAddrString);
+	  
+    HttpServer2.Builder builder = DFSUtil.httpServerTemplateForNNAndJN(conf,
+        httpAddr, httpsAddr, "ttlmanager",
+        DFSConfigKeys.DFS_TTLMANAGER_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY,
+        DFSConfigKeys.DFS_TTLMANAGER_KEYTAB_FILE_KEY);
+	  
+    httpServer = builder.build();
+    httpServer.start();	  
+  }
+  
+  private void stopHttpServer() throws IOException {
+    if (httpServer != null) {
+      try {
+        httpServer.stop();
+      } catch (Exception e) {
+        throw new IOException(e);   	  
+      }
+    }
+  }
+  
+  
   public static void main(String[] args)
       throws InterruptedException, IOException {
+
     Configuration conf = new HdfsConfiguration();
     UserGroupInformation.setConfiguration(conf);
     SecurityUtil.login(conf, DFSConfigKeys.DFS_TTLMANAGER_KEYTAB_FILE_KEY,
-        DFSConfigKeys.DFS_TTLMANAGER_KERBEROS_PRINCIPAL_KEY);
+    DFSConfigKeys.DFS_TTLMANAGER_KERBEROS_PRINCIPAL_KEY);
+    DefaultMetricsSystem.initialize("ttlmanager");
     TtlManager ttlManager = new TtlManager(conf);
-    ttlManager.registerPolicy(new TtlPolicy(conf, ttlManager.getMetrics()));
+    try {
+      ttlManager.startHttpServer(conf);    
+    } catch (Exception e) {
+      LOG.warn("Fail to start http server " + e.getMessage(), e);  
+    } 
+    ttlManager.registerPolicy(new TtlPolicy(conf, ttlManager.getMetrics()));	  
     ttlManager.start();
-    int logRateLimit = 0;
 
+    int logRateLimit = 0;
     while (true) {
       // Print a log every hour
       if (logRateLimit == 3600) {
@@ -169,6 +215,10 @@ public class TtlManager extends Thread {
 
     ttlManager.interrupt();
     ttlManager.join();
+    ttlManager.stopHttpServer();
+    if (ttlManager.getMetrics() != null) {
+      ttlManager.getMetrics().shutDown();
+    }
     LOG.info("TtlManager is stopped");
   }
 }
