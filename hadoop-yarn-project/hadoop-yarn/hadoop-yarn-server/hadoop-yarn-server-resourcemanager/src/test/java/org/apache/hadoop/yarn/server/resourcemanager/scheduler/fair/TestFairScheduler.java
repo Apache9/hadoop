@@ -999,14 +999,42 @@ public class TestFairScheduler extends FairSchedulerTestBase {
         new QueuePlacementPolicy(rules, configuredQueues, conf);
     appId = createSchedulingRequest(1024, "default", "otheruser");
     assertEquals("root.default", scheduler.getSchedulerApp(appId).getQueueName());
-    appId = createSchedulingRequest(1024, "non-default", "otheruser");
-    // rejected by scheduler
-    assertNull(scheduler.getSchedulerApp(appId));
     appId = createSchedulingRequest(1024, "otheruser@default", "proxy1");
     assertEquals("root.default", scheduler.getSchedulerApp(appId).getQueueName());
-    appId = createSchedulingRequest(1024, "otheruser@non-default", "proxy2");
-    // rejected by scheduler
-    assertNull(scheduler.getSchedulerApp(appId));
+  }
+
+  @Test
+  public void testQueuePlacementWithPolicyForDefaultRule() throws IOException {
+    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+    conf.setClass(CommonConfigurationKeys.HADOOP_SECURITY_GROUP_MAPPING,
+        SimpleGroupsMapping.class, GroupMappingServiceProvider.class);
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"default\">");
+    out.println("<minResources>1024mb,0vcores</minResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"default-queue\">");
+    out.println("<minResources>1024mb,0vcores</minResources>");
+    out.println("</queue>");
+    out.println("<queuePlacementPolicy>");
+    out.println("<rule name=\"specified\" create=\"false\" />");
+    out.println("<rule name=\"default\" queue=\"default-queue\" reject-non-default-queue=\"true\" />");
+    out.println("</queuePlacementPolicy>");
+    out.println("</allocations>");
+    out.close();
+
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, resourceManager.getRMContext());
+    RMApp rmApp1 = new MockRMApp(0, 0, RMAppState.NEW);
+
+    FSLeafQueue leafQueue = scheduler.assignToQueue(rmApp1, "root.default", "user1");
+    assertEquals("root.default", leafQueue.getName());
+    leafQueue = scheduler.assignToQueue(rmApp1, "default", "user1");
+    assertEquals("root.default-queue", leafQueue.getName());
+    leafQueue = scheduler.assignToQueue(rmApp1, "root.not-existed-queue", "user1");
+    assertNull(leafQueue);
   }
 
   @Test

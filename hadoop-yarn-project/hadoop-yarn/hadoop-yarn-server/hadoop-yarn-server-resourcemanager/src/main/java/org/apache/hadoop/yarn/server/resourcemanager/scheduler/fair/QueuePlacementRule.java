@@ -286,6 +286,7 @@ public abstract class QueuePlacementRule {
   public static class Default extends QueuePlacementRule {
     @VisibleForTesting
     String defaultQueueName;
+    boolean rejectNonDefaultQueueRequest;
 
     @Override
     public QueuePlacementRule initialize(boolean create,
@@ -307,13 +308,18 @@ public abstract class QueuePlacementRule {
       } else {
         defaultQueueName = "root." + YarnConfiguration.DEFAULT_QUEUE_NAME;
       }
+
+      rejectNonDefaultQueueRequest = false;
+      if (el.getAttribute("reject-non-default") != null) {
+        rejectNonDefaultQueueRequest = Boolean.parseBoolean(el.getAttribute("reject-non-default-queue"));
+      }
       super.initializeFromXml(el);
     }
 
     @Override
     protected String getQueueForApp(String requestedQueue, String user,
         Groups groups, Map<FSQueueType, Set<String>> configuredQueues) {
-      if (requestedQueue.equals(YarnConfiguration.DEFAULT_QUEUE_NAME)) {
+      if (!rejectNonDefaultQueueRequest || requestedQueue.equals(YarnConfiguration.DEFAULT_QUEUE_NAME)) {
         return defaultQueueName;
       } else {
         // reject
