@@ -349,6 +349,8 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
           EnumSet.of(
               RMAppAttemptEventType.UNREGISTERED,
               RMAppAttemptEventType.STATUS_UPDATE,
+              RMAppAttemptEventType.LAUNCHED,
+              RMAppAttemptEventType.LAUNCH_FAILED,
             // should be fixed to reject container allocate request at Final
             // Saving in scheduler
               RMAppAttemptEventType.CONTAINER_ALLOCATED,
