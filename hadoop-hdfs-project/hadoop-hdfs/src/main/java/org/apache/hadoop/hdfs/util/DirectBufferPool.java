@@ -26,6 +26,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -44,7 +46,8 @@ import com.google.common.annotations.VisibleForTesting;
  */
 @InterfaceAudience.Private
 public class DirectBufferPool {
-
+  private static final Log LOG = LogFactory.getLog(DirectBufferPool.class);
+  
   // Essentially implement a multimap with weak values.
   final ConcurrentMap<Integer, Queue<WeakReference<ByteBuffer>>> buffersBySize =
     new ConcurrentHashMap<Integer, Queue<WeakReference<ByteBuffer>>>();
@@ -56,26 +59,42 @@ public class DirectBufferPool {
    * allocates a new one.
    */
   public ByteBuffer getBuffer(int size) {
-    Queue<WeakReference<ByteBuffer>> list = buffersBySize.get(size);
-    if (list == null) {
-      // no available buffers for this size
+    try {
+      Queue<WeakReference<ByteBuffer>> list = buffersBySize.get(size);
+      if (list == null) {
+        // no available buffers for this size
+        ByteBuffer buffer = ByteBuffer.allocateDirect(size);
+        usingMemoryBytes.addAndGet(size);
+        return buffer;
+      }
+
+      WeakReference<ByteBuffer> ref;
+      while ((ref = list.poll()) != null) {
+        ByteBuffer b = ref.get();
+        if (b != null) {
+          usingMemoryBytes.addAndGet(size);
+          return b;
+        }
+      }
+
       ByteBuffer buffer = ByteBuffer.allocateDirect(size);
       usingMemoryBytes.addAndGet(size);
       return buffer;
+    } catch (OutOfMemoryError e) {
+      LOG.error("OOM when getBuffer : " + bufferPoolStateToString(), e);
+      throw e;
     }
-    
-    WeakReference<ByteBuffer> ref;
-    while ((ref = list.poll()) != null) {
-      ByteBuffer b = ref.get();
-      if (b != null) {
-        usingMemoryBytes.addAndGet(size);
-        return b;
-      }
+  }
+  
+  public String bufferPoolStateToString() {
+    StringBuilder builder = new StringBuilder();
+    builder.append("PooledMemoryMB=" + getPooledMemoryMB() + ", UsingMemoryMB="
+        + getUsingMemoryMB() + "\n");
+    for (Entry<Integer, Queue<WeakReference<ByteBuffer>>> bufferBySize : buffersBySize.entrySet()) {
+      builder.append("Pooled bufferSize=" + bufferBySize.getKey() + " : count="
+          + bufferBySize.getValue().size() + "\n");
     }
-
-    ByteBuffer buffer =  ByteBuffer.allocateDirect(size);
-    usingMemoryBytes.addAndGet(size);
-    return buffer;
+    return builder.toString();
   }
   
   /**
