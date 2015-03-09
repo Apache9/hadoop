@@ -1,0 +1,62 @@
+下面记录了利用minos进行HDFS2.4到2.6升级以及启动TTL service的步骤。
+
+Part 1: HDFS 2.4 to 2.6 upgrade
+
+Step 1: 联系业务部门，请业务部门备份重要数据，以防万一.
+Step 2: 以防万一，最好暂停HDFS之上的服务，如HBASE/Yarn等.
+Step 3: 修改相应机群config文件的version/package_name/revision/timestamp字段为新的2.6的package的信息.
+Step 4: 执行HDFS rolling upgrade命令 -
+        ./deploy shell hdfs CLUSTER_NAME dfsadmin -rollingUpgrade prepare
+        × CLUSTER_NAME为所要升级的机群名
+        通过如下命令查看prepare是否完成
+        ./deploy shell hdfs CLUSTER_NAME dfsadmin -rollingUpgrade query
+        如看到 "Proceed with rolling upgrade"，表示prepare已完成，可以继续下面的步骤.
+Step 5: 在相应机群配置文件的namenode域增加额外的启动参数 -
+        extra_args='''
+           -rollingUpgrade started
+        '''
+Step 6: 升级NameNode，首先通过http确认哪个是standby哪个是active，首先升级standby
+        假设第二个namenode是standby，则执行
+        ./deploy restart hdfs CLUSTER_NAME--job namenode --task 1 --update_config --update_package
+        等待一分钟左右，通过HTTP确认standby已经启动并已运行新的package.
+        然后升级active namenode, 假如task 0是active namenode，则执行
+        ./deploy restart hdfs CLUSTER_NAME --job namenode --task 0 --update_config --update_package
+        等待一分钟左右，通过HTTP确认active NN已经启动并已运行新的package, 启动以后它应该变成了standby.
+Step 7: 升级DataNode， 逐个DataNode执行下面的命令：
+        ./deploy shell hdfs CLUSTER_NAME dfsadmin -shutdownDatanode DN_IP:DN_PORT upgrade
+        ./deploy restart hdfs CLUSTER_NAME --job datanode --task DN_TASK_INDEX --update_config --update_package
+        等所有DN升级完成后，通过NN的HTTP页面的datanodes tag确认所有的DN已升级为新的package.
+Step 8: 去掉Step 5中对配置文件的改动.
+Step 9: 运行HDFS的finalize命令 -
+        ./deploy shell hdfs CLUSTER_NAME dfsadmin -rollingUpgrade finalize
+Step 10: 升级JournalNode, 逐个journalnode运行 -
+        ./deploy restart hdfs CLUSTER_NAME --job journalnode --task JN_TASK_INDEX --update_config --update_package
+        升级两个JN中间稍等1分钟左右，完成后可通过JournalNode HTTP的journalstatus.jsp确认JournalNode是否已运行新的package.
+Step 11: 升级ZKFC， 逐个ZKFC运行 -
+        ./deploy restart hdfs CLUSTER_NAME--job zkfc --task  ZKFC_TASK_INDEX --update_config --update_package
+        升级两个ZKFC中间稍等1分钟左右.
+Step 12: 重新启动HDFS之上的服务，如yarn/hbase等.
+Step 13: 机群启动之后如无异常，将step 3中对配置文件的改动check in到infra的代码库中.
+
+
+Part 2: 成功升级之后，可以按如下步骤部署TTL service
+Step 1: 在机群配置文件中如下三处增加TTL相关配置-
+        a 在jobs里头增加ttlmanager
+        b 增加ttlmanager相关的启动参数，如
+            [ttlmanager]
+              base_port=PORT
+              host.1=IP  # HOST_NAME
+
+            [[arguments]]
+              jvm_args='''
+              -Xmx2048m
+              -Xms2048m
+              -Xmn512m
+              -XX:MaxDirectMemorySize=1024m
+              -XX:MaxPermSize=256m
+              '''
+        c 在[[hdfs-site.xml]]中增加如下选项 -
+            dfs.ttlmanager.http-address=0.0.0.0:%{ttlmanager.base_port+1}
+Step 2: bootstrap ttlmanager
+        ./deploy bootstrap hdfs CLUSTER_NAME --job ttlmanager
+Step 3: 确认TTL服务正常运行后，将step 1中的改动check in到infra代码库中.
