@@ -14,6 +14,7 @@ Release 2.4.0-mdh2
     HDFS-7055. Add tracing to DFSInputStream (cmccabe)
     HDFS-7189. Add trace spans for DFSClient metadata operations. (Colin P. McCabe via yliu)
     HDFS-7855. Separate class Packet from DFSOutputStream. Contributed by Li Bo.
+    HDFS-7054. Make DFSOutputStream tracing more fine-grained (cmccabe)
 
   OPTIMIZATIONS
 

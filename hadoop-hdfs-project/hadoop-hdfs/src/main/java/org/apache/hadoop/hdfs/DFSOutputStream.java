@@ -87,8 +87,11 @@ import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
 
+import org.htrace.NullScope;
+import org.htrace.Sampler;
 import org.htrace.Span;
 import org.htrace.Trace;
+import org.htrace.TraceInfo;
 import org.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -235,22 +238,9 @@ public class DFSOutputStream extends FSOutputSummer
     /** Append on an existing block? */
     private final boolean isAppend;
 
-    private final Span traceSpan;
-
-    /**
-     * Default construction for file create
-     */
-    private DataStreamer() {
-      this(null);
-    }
-
-    /**
-     * construction with tracing info
-     */
-    private DataStreamer(Span span) {
+    private DataStreamer(HdfsFileStatus stat, ExtendedBlock block) {
       isAppend = false;
       stage = BlockConstructionStage.PIPELINE_SETUP_CREATE;
-      traceSpan = span;
     }
     
     /**
@@ -261,10 +251,9 @@ public class DFSOutputStream extends FSOutputSummer
      * @throws IOException if error occurs
      */
     private DataStreamer(LocatedBlock lastBlock, HdfsFileStatus stat,
-        int bytesPerChecksum, Span span) throws IOException {
+        int bytesPerChecksum) throws IOException {
       isAppend = true;
       stage = BlockConstructionStage.PIPELINE_SETUP_APPEND;
-      traceSpan = span;
       block = lastBlock.getBlock();
       bytesSent = block.getNumBytes();
       accessToken = lastBlock.getBlockToken();
@@ -352,12 +341,8 @@ public class DFSOutputStream extends FSOutputSummer
     @Override
     public void run() {
       long lastPacket = Time.now();
-      TraceScope traceScope = null;
-      if (traceSpan != null) {
-        traceScope = Trace.continueSpan(traceSpan);
-      }
+      TraceScope scope = NullScope.INSTANCE;
       while (!streamerClosed && dfsClient.clientRunning) {
-
         // if the Responder encountered an error, shutdown Responder
         if (hasError && response != null) {
           try {
@@ -401,11 +386,18 @@ public class DFSOutputStream extends FSOutputSummer
             // get packet to be sent.
             if (dataQueue.isEmpty()) {
               one = createHeartbeatPacket();  // heartbeat packet
+              assert one != null;
             } else {
               one = dataQueue.getFirst(); // regular data packet
+              long parents[] = one.getTraceParents();
+              if (parents.length > 0) {
+                scope = Trace.startSpan("dataStreamer", new TraceInfo(0, parents[0]));
+                // TODO: use setParents API once it's available from HTrace 3.2
+//                scope = Trace.startSpan("dataStreamer", Sampler.ALWAYS);
+//                scope.getSpan().setParents(parents);
+              }
             }
           }
-          assert one != null;
 
           // get new block from namenode.
           if (stage == BlockConstructionStage.PIPELINE_SETUP_CREATE) {
@@ -450,9 +442,12 @@ public class DFSOutputStream extends FSOutputSummer
           }
           
           // send the packet
+          Span span = null;
           synchronized (dataQueue) {
             // move packet from dataQueue to ackQueue
             if (!one.isHeartbeatPacket()) {
+              span = scope.detach();
+              one.setTraceSpan(span);
               dataQueue.removeFirst();
               ackQueue.addLast(one);
               dataQueue.notifyAll();
@@ -465,6 +460,7 @@ public class DFSOutputStream extends FSOutputSummer
           }
 
           // write out data to remote datanode
+          TraceScope writeScope = Trace.startSpan("writeTo", span);
           try {
             one.writeTo(blockStream);
             blockStream.flush();   
@@ -477,6 +473,8 @@ public class DFSOutputStream extends FSOutputSummer
             // will be taken out then.
             tryMarkPrimaryDatanodeFailed();
             throw e;
+          } finally {
+            writeScope.close();
           }
           lastPacket = Time.now();
           
@@ -524,10 +522,9 @@ public class DFSOutputStream extends FSOutputSummer
             // Not a datanode issue
             streamerClosed = true;
           }
+        } finally {
+          scope.close();
         }
-      }
-      if (traceScope != null) {
-        traceScope.close();
       }
       closeInternal();
     }
@@ -682,6 +679,7 @@ public class DFSOutputStream extends FSOutputSummer
         setName("ResponseProcessor for block " + block);
         PipelineAck ack = new PipelineAck();
 
+        TraceScope scope = NullScope.INSTANCE;
         while (!responderClosed && dfsClient.clientRunning && !isLastPacketInBlock) {
           // process responses from datanodes.
           try {
@@ -754,6 +752,8 @@ public class DFSOutputStream extends FSOutputSummer
             block.setNumBytes(one.getLastByteOffsetBlock());
 
             synchronized (dataQueue) {
+              scope = Trace.continueSpan(one.getTraceSpan());
+              one.setTraceSpan(null);
               lastAckedSeqno = seqno;
               ackQueue.removeFirst();
               dataQueue.notifyAll();
@@ -776,6 +776,8 @@ public class DFSOutputStream extends FSOutputSummer
               }
               responderClosed = true;
             }
+          } finally {
+            scope.close();
           }
         }
       }
@@ -836,6 +838,12 @@ public class DFSOutputStream extends FSOutputSummer
           // a client waiting on close() will be aware that the flush finished.
           synchronized (dataQueue) {
             DFSPacket endOfBlockPacket = dataQueue.remove();  // remove the end of block packet
+            Span span = endOfBlockPacket.getTraceSpan();
+            if (span != null) {
+              // Close any trace span associated with this Packet
+              TraceScope scope = Trace.continueSpan(span);
+              scope.close();
+            }
             assert endOfBlockPacket.isLastPacketInBlock();
             assert lastAckedSeqno == endOfBlockPacket.getSeqno() - 1;
             lastAckedSeqno = endOfBlockPacket.getSeqno();
@@ -1523,11 +1531,7 @@ public class DFSOutputStream extends FSOutputSummer
     computePacketChunkSize(dfsClient.getConf().writePacketSize,
         checksum.getBytesPerChecksum());
 
-    Span traceSpan = null;
-    if (Trace.isTracing()) {
-      traceSpan = Trace.startSpan(this.getClass().getSimpleName()).detach();
-    }
-    streamer = new DataStreamer(traceSpan);
+    streamer = new DataStreamer(stat, null);
     if (favoredNodes != null && favoredNodes.length != 0) {
       streamer.setFavoredNodes(favoredNodes);
     }
@@ -1537,26 +1541,32 @@ public class DFSOutputStream extends FSOutputSummer
       FsPermission masked, EnumSet<CreateFlag> flag, boolean createParent,
       short replication, long blockSize, Progressable progress, int buffersize,
       DataChecksum checksum, String[] favoredNodes) throws IOException {
-    final HdfsFileStatus stat;
+    TraceScope scope =
+        dfsClient.getPathTraceScope("newStreamForCreate", src);
     try {
-      stat = dfsClient.namenode.create(src, masked, dfsClient.clientName,
-          new EnumSetWritable<CreateFlag>(flag), createParent, replication,
-          blockSize);
-    } catch(RemoteException re) {
-      throw re.unwrapRemoteException(AccessControlException.class,
-                                     DSQuotaExceededException.class,
-                                     FileAlreadyExistsException.class,
-                                     FileNotFoundException.class,
-                                     ParentNotDirectoryException.class,
-                                     NSQuotaExceededException.class,
-                                     SafeModeException.class,
-                                     UnresolvedPathException.class,
-                                     SnapshotAccessControlException.class);
+      final HdfsFileStatus stat;
+      try {
+        stat = dfsClient.namenode.create(src, masked, dfsClient.clientName,
+            new EnumSetWritable<CreateFlag>(flag), createParent, replication,
+            blockSize);
+      } catch(RemoteException re) {
+        throw re.unwrapRemoteException(AccessControlException.class,
+                                       DSQuotaExceededException.class,
+                                       FileAlreadyExistsException.class,
+                                       FileNotFoundException.class,
+                                       ParentNotDirectoryException.class,
+                                       NSQuotaExceededException.class,
+                                       SafeModeException.class,
+                                       UnresolvedPathException.class,
+                                       SnapshotAccessControlException.class);
+      }
+      final DFSOutputStream out = new DFSOutputStream(dfsClient, src, stat,
+          flag, progress, checksum, favoredNodes);
+      out.start();
+      return out;
+    } finally {
+      scope.close();
     }
-    final DFSOutputStream out = new DFSOutputStream(dfsClient, src, stat,
-        flag, progress, checksum, favoredNodes);
-    out.start();
-    return out;
   }
 
   static DFSOutputStream newStreamForCreate(DFSClient dfsClient, String src,
@@ -1574,31 +1584,32 @@ public class DFSOutputStream extends FSOutputSummer
     this(dfsClient, src, progress, stat, checksum);
     initialFileSize = stat.getLen(); // length of file when opened
 
-    Span traceSpan = null;
-    if (Trace.isTracing()) {
-      traceSpan = Trace.startSpan(this.getClass().getSimpleName()).detach();
-    }
-
     // The last partial block of the file has to be filled.
     if (lastBlock != null) {
       // indicate that we are appending to an existing block
       bytesCurBlock = lastBlock.getBlockSize();
-      streamer = new DataStreamer(lastBlock, stat,
-          checksum.getBytesPerChecksum(), traceSpan);
+      streamer = new DataStreamer(lastBlock, stat, checksum.getBytesPerChecksum());
     } else {
       computePacketChunkSize(dfsClient.getConf().writePacketSize,
           checksum.getBytesPerChecksum());
-      streamer = new DataStreamer(traceSpan);
+      streamer = new DataStreamer(stat,
+          lastBlock != null ? lastBlock.getBlock() : null);
     }
   }
 
   static DFSOutputStream newStreamForAppend(DFSClient dfsClient, String src,
       int buffersize, Progressable progress, LocatedBlock lastBlock,
       HdfsFileStatus stat, DataChecksum checksum) throws IOException {
-    final DFSOutputStream out = new DFSOutputStream(dfsClient, src,
-        progress, lastBlock, stat, checksum);
-    out.start();
-    return out;
+    TraceScope scope =
+        dfsClient.getPathTraceScope("newStreamForAppend", src);
+    try {
+      final DFSOutputStream out = new DFSOutputStream(dfsClient, src,
+          progress, lastBlock, stat, checksum);
+      out.start();
+      return out;
+    } finally {
+      scope.close();
+    }
   }
 
   private void computePacketChunkSize(int psize, int csize) {
@@ -1616,6 +1627,7 @@ public class DFSOutputStream extends FSOutputSummer
   private void queueCurrentPacket() {
     synchronized (dataQueue) {
       if (currentPacket == null) return;
+      currentPacket.addTraceParent(Trace.currentSpan());
       dataQueue.addLast(currentPacket);
       lastQueuedSeqno = currentPacket.getSeqno();
       if (DFSClient.LOG.isDebugEnabled()) {
@@ -1630,23 +1642,38 @@ public class DFSOutputStream extends FSOutputSummer
     synchronized (dataQueue) {
       try {
       // If queue is full, then wait till we have enough space
-      while (!closed && dataQueue.size() + ackQueue.size()  > MAX_PACKETS) {
+        boolean firstWait = true;
         try {
-          dataQueue.wait();
-        } catch (InterruptedException e) {
-          // If we get interrupted while waiting to queue data, we still need to get rid
-          // of the current packet. This is because we have an invariant that if
-          // currentPacket gets full, it will get queued before the next writeChunk.
-          //
-          // Rather than wait around for space in the queue, we should instead try to
-          // return to the caller as soon as possible, even though we slightly overrun
-          // the MAX_PACKETS length.
-          Thread.currentThread().interrupt();
-          break;
+          while (!closed && dataQueue.size() + ackQueue.size() > MAX_PACKETS) {
+            if (firstWait) {
+              Span span = Trace.currentSpan();
+              if (span != null) {
+                span.addTimelineAnnotation("dataQueue.wait");
+              }
+              firstWait = false;
+            }
+            try {
+              dataQueue.wait();
+            } catch (InterruptedException e) {
+              // If we get interrupted while waiting to queue data, we still need to get rid
+              // of the current packet. This is because we have an invariant that if
+              // currentPacket gets full, it will get queued before the next writeChunk.
+              //
+              // Rather than wait around for space in the queue, we should instead try to
+              // return to the caller as soon as possible, even though we slightly overrun
+              // the MAX_PACKETS length.
+              Thread.currentThread().interrupt();
+              break;
+            }
+          }
+        } finally {
+          Span span = Trace.currentSpan();
+          if ((span != null) && (!firstWait)) {
+            span.addTimelineAnnotation("end.wait");
+          }
         }
-      }
-      checkClosed();
-      queueCurrentPacket();
+        checkClosed();
+        queueCurrentPacket();
       } catch (ClosedChannelException e) {
       }
     }
@@ -1656,6 +1683,17 @@ public class DFSOutputStream extends FSOutputSummer
   @Override
   protected synchronized void writeChunk(byte[] b, int offset, int len, byte[] checksum) 
                                                         throws IOException {
+    TraceScope scope =
+        dfsClient.getPathTraceScope("DFSOutputStream#writeChunk", src);
+    try {
+      writeChunkImpl(b, offset, len, checksum);
+    } finally {
+      scope.close();
+    }
+  }
+
+  private synchronized void writeChunkImpl(byte[] b, int offset, int len,
+          byte[] checksum) throws IOException {
     dfsClient.checkOpen();
     checkClosed();
 
@@ -1752,7 +1790,13 @@ public class DFSOutputStream extends FSOutputSummer
   }
 
   public void hflush(EnumSet<SyncFlag> syncFlags) throws IOException {
-    flushOrSync(false, syncFlags);
+    TraceScope scope =
+        dfsClient.getPathTraceScope("hflush", src);
+    try {
+      flushOrSync(false, syncFlags);
+    } finally {
+      scope.close();
+    }
   }
 
   /**
@@ -1774,7 +1818,13 @@ public class DFSOutputStream extends FSOutputSummer
   }
   
   public void hsync(EnumSet<SyncFlag> syncFlags) throws IOException {
-    flushOrSync(true, syncFlags);
+    TraceScope scope =
+        dfsClient.getPathTraceScope("hsync", src);
+    try {
+      flushOrSync(true, syncFlags);
+    } finally {
+      scope.close();
+    }
   }
 
   /**
@@ -1957,35 +2007,40 @@ public class DFSOutputStream extends FSOutputSummer
   }
 
   private void waitForAckedSeqno(long seqno) throws IOException {
-    if (DFSClient.LOG.isDebugEnabled()) {
-      DFSClient.LOG.debug("Waiting for ack for: " + seqno);
-    }
+    TraceScope scope = Trace.startSpan("waitForAckedSeqno", Sampler.NEVER);
     try {
-      long t1 = Time.monotonicNow();
-      synchronized (dataQueue) {
-        while (!closed) {
-          checkClosed();
-          if (lastAckedSeqno >= seqno) {
-            break;
-          }
-          try {
-            dataQueue.wait(1000); // when we receive an ack, we notify on
-                                  // dataQueue
-          } catch (InterruptedException ie) {
-            throw new InterruptedIOException(
-                "Interrupted while waiting for data to be acknowledged by pipeline");
+      if (DFSClient.LOG.isDebugEnabled()) {
+        DFSClient.LOG.debug("Waiting for ack for: " + seqno);
+      }
+      long begin = Time.monotonicNow();
+      try {
+        synchronized (dataQueue) {
+          while (!closed) {
+            checkClosed();
+            if (lastAckedSeqno >= seqno) {
+              break;
+            }
+            try {
+              dataQueue.wait(1000); // when we receive an ack, we notify on
+              // dataQueue
+            } catch (InterruptedException ie) {
+              throw new InterruptedIOException(
+                  "Interrupted while waiting for data to be acknowledged by pipeline");
+            }
           }
         }
+        checkClosed();
+      } catch (ClosedChannelException e) {
       }
-      long t2 = Time.monotonicNow();
-      if (t2 - t1 > dfsClient.getConf().slowLogThresholdMs) {
+      long duration = Time.monotonicNow() - begin;
+      if (duration > dfsClient.getConf().slowLogThresholdMs) {
         DatanodeInfo[] nodes = getPipeline();
-        DFSClient.LOG.info("waitForAckedSeqno cost: " + (t2 - t1)
-            + " ms, pipeline: "
-            + ((nodes == null) ? "[]" : Arrays.asList(nodes)));
+        DFSClient.LOG.warn("Slow waitForAckedSeqno took " + duration
+            + " ms (threshold=" + dfsClient.getConf().slowLogThresholdMs +  "ms)"
+            + " ms, pipeline: " + ((nodes == null) ? "[]" : Arrays.asList(nodes)));
       }
-      checkClosed();
-    } catch (ClosedChannelException e) {
+    } finally {
+      scope.close();
     }
   }
 
@@ -2064,6 +2119,16 @@ public class DFSOutputStream extends FSOutputSummer
    */
   @Override
   public synchronized void close() throws IOException {
+    TraceScope scope =
+        dfsClient.getPathTraceScope("DFSOutputStream#close", src);
+    try {
+      closeImpl();
+    } finally {
+      scope.close();
+    }
+  }
+
+  private synchronized void closeImpl() throws IOException {
     boolean recoverOnCloseException =
         dfsClient.getConfiguration().getBoolean(
             DFSConfigKeys.DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION,
