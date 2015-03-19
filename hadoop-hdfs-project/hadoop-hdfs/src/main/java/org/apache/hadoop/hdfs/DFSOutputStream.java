@@ -798,10 +798,11 @@ public class DFSOutputStream extends FSOutputSummer
             long t1 = Time.monotonicNow();
             ack.readFields(blockReplyStream);
             long t2 = Time.monotonicNow();
-            if (t2 - t1 > dfsClient.getConf().slowLogThresholdMs &&
-                ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
+            if (t2 - t1 > dfsClient.getConf().slowLogThresholdMs
+                && ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
               DFSClient.LOG.info("ResponseProcessorReadAckCost:" + (t2 - t1) + "ms,ack:" + ack
-                  + ",targets:" + Arrays.asList(targets));
+                  + ",targets:" + Arrays.asList(targets)
+                  + "(CAUTION: this is expected once small write request/size occured)");
             } else if (DFSClient.LOG.isDebugEnabled()) {
               DFSClient.LOG.debug("DFSClient " + ack);
             }

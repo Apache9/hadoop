@@ -454,7 +454,7 @@ class BlockReceiver implements Closeable {
   private int receivePacket() throws IOException {
     // read the next packet
     packetReceiver.receiveNextPacket(in);
-
+    long receivePacketStart = Time.monotonicNow();
     PacketHeader header = packetReceiver.getHeader();
     if (LOG.isDebugEnabled()){
       LOG.debug("Receiving one packet for block " + block +
@@ -664,7 +664,10 @@ class BlockReceiver implements Closeable {
     if (throttler != null) { // throttle I/O
       throttler.throttle(len);
     }
-    
+    long receivePacketEnd = Time.monotonicNow();
+    if (receivePacketEnd - receivePacketStart > SLOW_LOG_THRESHOLD_MS) {
+      LOG.info("receivePacket cost:" + (receivePacketEnd - receivePacketStart) + "ms");
+    }
     return lastPacketInBlock?-1:len;
   }
 
