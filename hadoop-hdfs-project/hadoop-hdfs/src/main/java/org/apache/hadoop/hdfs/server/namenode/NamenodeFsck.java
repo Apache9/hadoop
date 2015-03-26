@@ -427,6 +427,18 @@ public class NamenodeFsck {
       report.append(i + ". " + blkName + " len=" + block.getNumBytes());
       if (liveReplicas == 0) {
         report.append(" MISSING!");
+        if ((showLocations || showRacks) && (locs != null)) {
+            StringBuilder sb = new StringBuilder(" Recorded locations [");
+            for (int j = 0; j < locs.length; j++) {
+              if (j > 0) { sb.append(", "); }
+              if (showRacks)
+                sb.append(NodeBase.getPath(locs[j]));
+              else
+                sb.append(locs[j]);
+            }
+            sb.append(']');
+            report.append(" " + sb.toString());
+        }
         res.addMissing(block.toString(), block.getNumBytes());
         missing++;
         missize += block.getNumBytes();
