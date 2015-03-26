@@ -31,41 +31,7 @@
            -->
   <tests>
     <test>
-      <description>setTtl : set ttl on a file</description>
-      <test-commands>
-        <command>-fs NAMENODE -touchz /file1</command>
-        <command>-fs NAMENODE -setTtl 123456 /file1</command>
-      </test-commands>
-      <cleanup-commands>
-        <command>-fs NAMENODE -rm /file1</command>
-      </cleanup-commands>
-      <comparators>
-        <comparator>
-          <type>ExactComparator</type>
-          <expected-output></expected-output>
-        </comparator>
-      </comparators>
-    </test>
-
-    <test>
-      <description>setTtl : set ttl on a directory</description>
-      <test-commands>
-        <command>-fs NAMENODE -mkdir /dir1</command>
-        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
-      </test-commands>
-      <cleanup-commands>
-        <command>-fs NAMENODE -rm -R /dir1</command>
-      </cleanup-commands>
-      <comparators>
-        <comparator>
-          <type>ExactComparator</type>
-          <expected-output></expected-output>
-        </comparator>
-      </comparators>
-    </test>
-
-    <test>
-      <description>getTtl : get ttl of a file</description>
+      <description>Ttl : set and get ttl on a file</description>
       <test-commands>
         <command>-fs NAMENODE -touchz /file1</command>
         <command>-fs NAMENODE -setTtl 123456 /file1</command>
@@ -76,14 +42,152 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>SubstringComparator</type>
-          <expected-output>Effective TTL: 123456</expected-output>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456.</expected-output>
         </comparator>
       </comparators>
     </test>
 
     <test>
-      <description>getTtl : get ttl of a directory</description>
+      <description>Ttl : set and get ttl on a file with sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 123456 /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time.</expected-output>
+       </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set ttl on a file with keepEmptyDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -keepEmptyDir 123456 /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>setTtl:.*: Is not a directory.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set ttl on a file with keepEmptySubDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -keepEmptySubDir 123456 /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>setTtl:.*: Is not a directory.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set ttl on a file with sinceLastWrite keepEmptyDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir 123456 /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>setTtl:.*: Is not a directory.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set ttl on a file with sinceLastWrite keepEmptySubDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptySubDir 123456 /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>setTtl:.*: Is not a directory.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set ttl on a file with keepEmptyDir keepEmptySubDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -keepEmptyDir -keepEmptySubDir 123456 /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>setTtl:.*: Is not a directory.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set ttl on a file with sinceLastWrite keepEmptyDir keepEmptySubDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 123456 /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>setTtl:.*: Is not a directory.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set ttl on a file with keepEmptyDir keepEmptySubDir and then read</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -keepEmptyDir -keepEmptySubDir 123456 /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 0.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory</description>
       <test-commands>
         <command>-fs NAMENODE -mkdir /dir1</command>
         <command>-fs NAMENODE -setTtl 123456 /dir1</command>
@@ -94,11 +198,156 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>SubstringComparator</type>
-          <expected-output>Effective TTL: 123456</expected-output>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456.</expected-output>
         </comparator>
       </comparators>
     </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory with sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory with keepEmptyDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -keepEmptyDir 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456. Empty dir will be kept whereas empty sub dir will not be kept.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory with keepEmptySubDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -keepEmptySubDir 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456. Empty sub dir will be kept whereas itself will not be kept if empty.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory with sinceLastWrite keepEmptyDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time. Empty dir will be kept whereas empty sub dir will not be kept.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory with sinceLastWrite keepEmptySubDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptySubDir 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time. Empty sub dir will be kept whereas itself will not be kept if empty.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory with keepEmptyDir keepEmptySubDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -keepEmptyDir -keepEmptySubDir 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456. Both empty dir and empty sub dir will be kept.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set and get ttl on a directory with sinceLastWrite keepEmptyDir keepEmptySubDir</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time. Both empty dir and empty sub dir will be kept.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
 
     <test>
       <description>getTtl : child file override parent directory</description>
@@ -121,6 +370,66 @@
     </test>
 
     <test>
+      <description>getTtl : child file with extra option override parent directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
+        <command>-fs NAMENODE -touchz /dir1/file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 123457 /dir1/file1</command>
+        <command>-fs NAMENODE -getTtl /dir1/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123457. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : child file override parent directory with extra option</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 123456 /dir1</command>
+        <command>-fs NAMENODE -touchz /dir1/file1</command>
+        <command>-fs NAMENODE -setTtl 123457 /dir1/file1</command>
+        <command>-fs NAMENODE -getTtl /dir1/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123457.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : child file with extra option override parent directory with extra option</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 123456 /dir1</command>
+        <command>-fs NAMENODE -touchz /dir1/file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 123457 /dir1/file1</command>
+        <command>-fs NAMENODE -getTtl /dir1/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 123457. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
       <description>getTtl : child file inherits parent directory</description>
       <test-commands>
         <command>-fs NAMENODE -mkdir /dir1</command>
@@ -134,7 +443,26 @@
       <comparators>
         <comparator>
           <type>SubstringComparator</type>
-          <expected-output>Effective TTL: 123456 [Inherits from</expected-output>
+          <expected-output>Effective TTL: 123456. Inherits from</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>getTtl : child file inherits parent directory with extra option</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 123456 /dir1</command>
+        <command>-fs NAMENODE -touchz /dir1/file1</command>
+        <command>-fs NAMENODE -getTtl /dir1/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time. Inherits from</expected-output>
         </comparator>
       </comparators>
     </test>
@@ -177,6 +505,66 @@
     </test>
 
     <test>
+      <description>setTtl : set 0 for a file w/ ttl w/ extra option to clear ttl</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 123456 /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+        <command>-fs NAMENODE -setTtl 0 /file1</command>
+        <command>-fs NAMENODE -getTtl /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set 0 for a dir w/ ttl to clear ttl</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+        <command>-fs NAMENODE -setTtl 0 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>setTtl : set 0 for a dir w/ ttl w/ extra option to clear ttl</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+        <command>-fs NAMENODE -setTtl 0 /dir1</command>
+        <command>-fs NAMENODE -getTtl /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
       <description>
         getTtl : get ttl of a file and print in human readable fashion
       </description>
@@ -195,6 +583,88 @@
         </comparator>
       </comparators>
     </test>
+
+    <test>
+      <description>
+        getTtl : get ttl of a file and print in human readable fashion
+      </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 10 /file1</command>
+        <command>-fs NAMENODE -getTtl -h /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 10 minutes. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>
+        getTtl : get ttl of a directory and print in human readable fashion
+      </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl 123456 /dir1</command>
+        <command>-fs NAMENODE -getTtl -h /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: Friday, 27-Mar-70 17:36:00 UTC</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>
+        getTtl : get ttl of a directory w/ extra options and print in human readable fashion
+      </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 10 /dir1</command>
+        <command>-fs NAMENODE -getTtl -h /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 10 minutes. TTL will be applied from the last modification time. Both empty dir and empty sub dir will be kept.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>
+        getTtl : get ttl of a file inherited from a directory w/ extra options and print in human readable fashion
+      </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -touchz /dir1/file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 10 /dir1</command>
+        <command>-fs NAMENODE -getTtl -h /dir1/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm -R /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 10 minutes. TTL will be applied from the last modification time. Inherits from</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
 
     <test>
       <description>setTtl : set ttl use a relative number</description>
@@ -226,10 +696,157 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>Effective TTL: \d+(\n)*</expected-output>
+          <expected-output>Effective TTL: \d+\.(\n)*</expected-output>
         </comparator>
       </comparators>
     </test>
+
+    <test>
+      <description>Ttl : set ttl use a relative number and then get it w/ sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 54781M /file1</command>
+        <command>-fs NAMENODE -getTtl -h /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 1 month 1 week 1 day 1 hour 1 minute. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set ttl use a relative number and then get it w/ sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 109562 /file1</command>
+        <command>-fs NAMENODE -getTtl -h /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 2 months 2 weeks 2 days 2 hours 2 minutes. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set ttl use a relative number h and then get it w/ sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 1h /file1</command>
+        <command>-fs NAMENODE -getTtl -h /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 1 hour. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set ttl use a relative number h and then get it w/ sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 1d /file1</command>
+        <command>-fs NAMENODE -getTtl -h /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 1 day. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set ttl use a relative number h and then get it w/ sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 1w /file1</command>
+        <command>-fs NAMENODE -getTtl -h /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 1 week. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set ttl use a relative number h and then get it w/ sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz /file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite 1m /file1</command>
+        <command>-fs NAMENODE -getTtl -h /file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 1 month. TTL will be applied from the last modification time.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+
+    <test>
+      <description>Ttl : set ttl on dir use a relative number and then get it w/ sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -touchz /dir1/file1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 54781M /dir1</command>
+        <command>-fs NAMENODE -getTtl -h /dir1/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>SubstringComparator</type>
+          <expected-output>Effective TTL: 1 month 1 week 1 day 1 hour 1 minute. TTL will be applied from the last modification time. Inherits from</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
+    <test>
+      <description>Ttl : set ttl on dir use a relative number and then get it w/ sinceLastWrite</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir /dir1</command>
+        <command>-fs NAMENODE -setTtl -sinceLastWrite -keepEmptyDir -keepEmptySubDir 54781M /dir1</command>
+        <command>-fs NAMENODE -getTtl -h /dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm /dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>ExactComparator</type>
+          <expected-output>Effective TTL: 1 month 1 week 1 day 1 hour 1 minute. TTL will be applied from the last modification time. Both empty dir and empty sub dir will be kept.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+
 
   </tests>
 </configuration>

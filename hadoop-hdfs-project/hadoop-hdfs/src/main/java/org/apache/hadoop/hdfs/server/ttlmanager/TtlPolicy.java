@@ -34,7 +34,9 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.server.ttlmanager.TtlPolicy.TtlTaskResult;
+
 import com.google.common.annotations.VisibleForTesting;
 
 
@@ -47,10 +49,10 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
   private static final Log LOG = LogFactory.getLog(TtlPolicy.class);
   private static final String NAME = "TTL";
   private static final String TTL_XATTR_NAME = "user.ttl";
+  private static final String TTL_XATTR_PROPERTY = "user.ttlproperty";
   private static final Path TRASH = new Path(".Trash/");
 
   private long roundIntervalMs = 0;
-  private boolean deleteEmptyDirectory;
   private boolean enableTrash;
   private TtlMetrics metrics;
   private Path  trash;
@@ -60,9 +62,6 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
     roundIntervalMs = conf.getLong(
         DFSConfigKeys.HDFS_TTLMANAGER_TTL_ROUND_INTERVAL_MS,
         DFSConfigKeys.HDFS_TTLMANAGER_TTL_ROUND_INTERVAL_MS_DEFAULT);
-    deleteEmptyDirectory = conf.getBoolean(
-        DFSConfigKeys.HDFS_TTLMANAGER_DELETE_EMPTY_DIRECTORY_KEY,
-        DFSConfigKeys.HDFS_TTLMANAGER_DELETE_EMPTY_DIRECTORY_DEFAULT);
     enableTrash = conf.getBoolean(
         DFSConfigKeys.HDFS_TTLMANAGER_ENABLE_TRASH_KEY,
         DFSConfigKeys.HDFS_TTLMANAGER_ENABLE_TRASH_DEFAULT);
@@ -186,17 +185,69 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
    */
   TtlInfo getTtlInfo(Path path) {
     try {
-      byte[] value = fs.getXAttr(path, TTL_XATTR_NAME);
-      if (value != null) {
-        int ttl = ByteBuffer.wrap(value).asIntBuffer().get();
+      Map<String, byte[]> ttlValue = fs.getXAttrs(path);
+      if (ttlValue.get(TTL_XATTR_NAME) != null) {
+        int ttl =
+            ByteBuffer.wrap(ttlValue.get(TTL_XATTR_NAME)).asIntBuffer().get();
         if (ttl > 0) {
-          return new TtlInfo(path, ttl);
+          int property = 0;
+          if (ttlValue.get(TTL_XATTR_PROPERTY) != null) {
+            property =
+                ByteBuffer.wrap(ttlValue.get(TTL_XATTR_PROPERTY)).asIntBuffer()
+                    .get();
+          }
+          return new TtlInfo(path, ttl, property);
         }
       }
     } catch (IOException e) {
       LOG.warn("Get ttl failed for path " + path);
     }
     return null;
+  }
+
+  private boolean isTtlExpire(FileStatus status, Path file, TtlInfo ti)
+      throws IOException {
+    int currentMin = (int) (System.currentTimeMillis() / 1000 / 60);
+    if (!ti.sinceLastWrite()) {
+      return (ti.getTtl() < currentMin);
+    } else {
+      int fileModTime = (int) (status.getModificationTime() / 1000 / 60);
+      if (fileModTime + ti.getTtl() < currentMin) {
+        if (!status.isDirectory() && (fs instanceof DistributedFileSystem)) {
+          if (!((DistributedFileSystem) fs).isFileClosed(file)) {
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    }
+  }
+
+  private boolean shouldDeleteByTtl(Path file, TtlInfo ti) throws IOException {
+    FileStatus status = fs.getFileStatus(file);
+    if (!isTtlExpire(status, file, ti)) {
+      return false;
+    }
+    if (status.isDirectory()) {
+      // Root and non-empty directory cannot be deleted
+      if (file.isRoot() || (fs.listStatus(file).length != 0)) {
+        return false;
+      }
+      if (fs.makeQualified(ti.getPath()).toString()
+          .equals(fs.makeQualified(file).toString())) {
+        // The TTL is not inherited
+        if (ti.keepEmptyDir()) {
+          return false;
+        }
+      } else {
+        // The TTL is inherited
+        if (ti.keepEmptySubDir()) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /**
@@ -216,13 +267,11 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
     }
 
     if (effectiveTtl != null) {
-      // Process the ttl of the current path
-      int currentMin = (int)(System.currentTimeMillis() / 1000 / 60);
-      if (effectiveTtl.getTtl() <= currentMin) {
-        try {
-          // Delete a non-directory file or a directory which is neither the root nor a non-empty directory
-          if (!fs.isDirectory(path) ||
-            (deleteEmptyDirectory && !path.isRoot() && (fs.listStatus(path).length == 0))) {
+      try {
+        if (shouldDeleteByTtl(path, effectiveTtl)) {
+          try {
+            // Delete a non-directory file or a directory which is neither the
+            // root nor a non-empty directory
             if (enableTrash) {
               Trash.moveToAppropriateTrash(fs, path, fs.getConf());
               metrics.incrFilesDeletedByTTL();
@@ -234,12 +283,15 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
               LOG.info("Delete ttl expired path " + path + " successful, " +
                       "ttl comes from path " + effectiveTtl.getPath() + ", the ttl is " + effectiveTtl.getTtl()) ;
             }
+          } catch (IOException e) {
+            LOG.warn("Delete ttl expired path " + path + " failed", e);
           }
-        } catch (IOException e) {
-          LOG.warn("Delete ttl expired path " + path + " failed", e);
+        } else {
+          LOG.debug("Path " + path
+              + " should not be deleted by TTL according to configuration.");
         }
-      } else {
-        LOG.debug("Ttl for path " + path + " isn't expired");
+      } catch (IOException e) {
+        LOG.warn("Fail to handle TTL for path" + path, e);
       }
     } else {
       if (LOG.isDebugEnabled()) {
@@ -255,10 +307,15 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
   static class TtlInfo {
     private final Path path;
     private final int ttl;
+    private final int property;
+    private static final int SINCELASTWRITE = 0x1;
+    private static final int KEEPEMPTYDIR = 0x2;
+    private static final int KEEPEMPTYSUBDIR = 0x4;
 
-    public TtlInfo(Path path, int ttl) {
+    public TtlInfo(Path path, int ttl, int property) {
       this.path = path;
       this.ttl = ttl;
+      this.property = property;
     }
 
     public Path getPath() {
@@ -267,6 +324,23 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
 
     public int getTtl() {
       return ttl;
+    }
+
+    public boolean sinceLastWrite() {
+      return ((property & SINCELASTWRITE) != 0);
+    }
+
+    public boolean keepEmptyDir() {
+      return ((property & KEEPEMPTYDIR) != 0);
+    }
+
+    public boolean keepEmptySubDir() {
+      return ((property & KEEPEMPTYSUBDIR) != 0);
+    }
+
+    @VisibleForTesting
+    public int getProperty() {
+      return property;
     }
   }
 
