@@ -151,7 +151,7 @@ public class TtlCommands extends FsCommand {
                 new SimpleDateFormat("EEEE, dd-MMM-yy HH:mm:ss z", Locale.US);
             format.setTimeZone(TimeZone.getTimeZone("UTC"));
             String formatedTtl = format.format(new Date(ttl * 60l * 1000));
-            sb.append(formatedTtl);
+            sb.append(formatedTtl).append(".");
           } else {
             int tmpTtl = ttl;
             Integer minsPerMon = SUFFIX_MAP.get("m"), minsPerWeek =
@@ -219,7 +219,7 @@ public class TtlCommands extends FsCommand {
       } else {
         sb.append("0.");
       }
-      out.print(sb.toString());
+      out.println(sb.toString());
     }
   }
 

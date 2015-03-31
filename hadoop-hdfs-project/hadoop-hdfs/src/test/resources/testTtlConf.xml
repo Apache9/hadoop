@@ -24,7 +24,7 @@
   <mode>test</mode>
 
   <!--  Comparator types:
-           ExactComparator
+           SubstringComparator
            SubstringComparator
            RegexpComparator
            TokenComparator
@@ -42,7 +42,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456.</expected-output>
         </comparator>
       </comparators>
@@ -60,7 +60,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time.</expected-output>
        </comparator>
       </comparators>
@@ -180,7 +180,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 0.</expected-output>
         </comparator>
       </comparators>
@@ -198,7 +198,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456.</expected-output>
         </comparator>
       </comparators>
@@ -216,7 +216,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456.</expected-output>
         </comparator>
       </comparators>
@@ -234,7 +234,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -252,7 +252,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456. Empty dir will be kept whereas empty sub dir will not be kept.</expected-output>
         </comparator>
       </comparators>
@@ -270,7 +270,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456. Empty sub dir will be kept whereas itself will not be kept if empty.</expected-output>
         </comparator>
       </comparators>
@@ -288,7 +288,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time. Empty dir will be kept whereas empty sub dir will not be kept.</expected-output>
         </comparator>
       </comparators>
@@ -306,7 +306,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time. Empty sub dir will be kept whereas itself will not be kept if empty.</expected-output>
         </comparator>
       </comparators>
@@ -324,7 +324,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456. Both empty dir and empty sub dir will be kept.</expected-output>
         </comparator>
       </comparators>
@@ -342,7 +342,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123456. TTL will be applied from the last modification time. Both empty dir and empty sub dir will be kept.</expected-output>
         </comparator>
       </comparators>
@@ -383,7 +383,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123457. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -403,7 +403,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123457.</expected-output>
         </comparator>
       </comparators>
@@ -423,7 +423,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 123457. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -598,7 +598,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 10 minutes. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -638,7 +638,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 10 minutes. TTL will be applied from the last modification time. Both empty dir and empty sub dir will be kept.</expected-output>
         </comparator>
       </comparators>
@@ -677,7 +677,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output></expected-output>
         </comparator>
       </comparators>
@@ -713,7 +713,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 1 month 1 week 1 day 1 hour 1 minute. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -731,7 +731,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 2 months 2 weeks 2 days 2 hours 2 minutes. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -749,7 +749,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 1 hour. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -767,7 +767,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 1 day. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -785,7 +785,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 1 week. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -803,7 +803,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 1 month. TTL will be applied from the last modification time.</expected-output>
         </comparator>
       </comparators>
@@ -841,7 +841,7 @@
       </cleanup-commands>
       <comparators>
         <comparator>
-          <type>ExactComparator</type>
+          <type>SubstringComparator</type>
           <expected-output>Effective TTL: 1 month 1 week 1 day 1 hour 1 minute. TTL will be applied from the last modification time. Both empty dir and empty sub dir will be kept.</expected-output>
         </comparator>
       </comparators>
