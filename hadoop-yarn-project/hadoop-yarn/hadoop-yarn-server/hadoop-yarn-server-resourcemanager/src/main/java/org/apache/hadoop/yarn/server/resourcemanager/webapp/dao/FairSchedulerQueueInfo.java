@@ -28,28 +28,31 @@ import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlSeeAlso;
 import javax.xml.bind.annotation.XmlTransient;
 
+import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceType;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.AllocationConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSLeafQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.DominantResourceFairnessPolicy;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlSeeAlso({FairSchedulerLeafQueueInfo.class})
-public class FairSchedulerQueueInfo {  
+public class FairSchedulerQueueInfo {
   private int maxApps;
+  private ResourceType dominantResourceType;
   
   @XmlTransient
-  private float fractionMemUsed;
+  private float fractionResourcesUsed;
   @XmlTransient
-  private float fractionMemSteadyFairShare;
+  private float fractionResourcesSteadyFairShare;
   @XmlTransient
-  private float fractionMemFairShare;
+  private float fractionResourcesFairShare;
   @XmlTransient
-  private float fractionMemMinShare;
+  private float fractionResourcesMinShare;
   @XmlTransient
-  private float fractionMemMaxShare;
+  private float fractionResourcesMaxShare;
   
   private ResourceInfo minResources;
   private ResourceInfo maxResources;
@@ -57,12 +60,12 @@ public class FairSchedulerQueueInfo {
   private ResourceInfo steadyFairResources;
   private ResourceInfo fairResources;
   private ResourceInfo clusterResources;
-  
+
   private String queueName;
   private String schedulingPolicy;
   
   private Collection<FairSchedulerQueueInfo> childQueues;
-  
+
   public FairSchedulerQueueInfo() {
   }
   
@@ -75,8 +78,10 @@ public class FairSchedulerQueueInfo {
     clusterResources = new ResourceInfo(scheduler.getClusterResource());
     
     usedResources = new ResourceInfo(queue.getResourceUsage());
-    fractionMemUsed = (float)usedResources.getMemory() /
-        clusterResources.getMemory();
+
+    updateDominantResourceType();
+
+    fractionResourcesUsed = resourceInfoRatio(usedResources, clusterResources);
 
     steadyFairResources = new ResourceInfo(queue.getSteadyFairShare());
     fairResources = new ResourceInfo(queue.getFairShare());
@@ -86,12 +91,10 @@ public class FairSchedulerQueueInfo {
         Resources.componentwiseMin(queue.getMaxShare(),
             scheduler.getClusterResource()));
 
-    fractionMemSteadyFairShare =
-        (float)steadyFairResources.getMemory() / clusterResources.getMemory();
-    fractionMemFairShare = (float) fairResources.getMemory()
-        / clusterResources.getMemory();
-    fractionMemMinShare = (float)minResources.getMemory() / clusterResources.getMemory();
-    fractionMemMaxShare = (float)maxResources.getMemory() / clusterResources.getMemory();
+    fractionResourcesSteadyFairShare = resourceInfoRatio(steadyFairResources, clusterResources);
+    fractionResourcesFairShare = resourceInfoRatio(fairResources, clusterResources);
+    fractionResourcesMinShare = resourceInfoRatio(minResources, clusterResources);
+    fractionResourcesMaxShare = resourceInfoRatio(maxResources, clusterResources);
     
     maxApps = allocConf.getQueueMaxApps(queueName);
     
@@ -105,19 +108,46 @@ public class FairSchedulerQueueInfo {
       }
     }
   }
-  
+
+  private void updateDominantResourceType() {
+    if (schedulingPolicy.equals(DominantResourceFairnessPolicy.NAME)
+        && ((float)usedResources.getvCores() / clusterResources.getvCores()
+            > (float)usedResources.getMemory() / clusterResources.getMemory())) {
+      dominantResourceType = ResourceType.CPU;
+    } else {
+      dominantResourceType = ResourceType.MEMORY;
+    }
+  }
+
+  private float resourceInfoRatio(ResourceInfo a, ResourceInfo b) {
+    float ratio;
+    if (dominantResourceType == ResourceType.CPU) {
+      ratio = b.getvCores() == 0 ? 0 : (float)a.getvCores() / b.getvCores();
+    } else {
+      ratio = b.getMemory() == 0 ? 0 : (float)a.getMemory() / b.getMemory();
+    }
+    return Math.min(1, ratio);
+  }
+
+  /**
+   * Returns the dominant resource type of used resources
+   */
+  public ResourceType getDominantResourceType() {
+    return dominantResourceType;
+  }
+
   /**
    * Returns the steady fair share as a fraction of the entire cluster capacity.
    */
-  public float getSteadyFairShareMemoryFraction() {
-    return fractionMemSteadyFairShare;
+  public float getSteadyFairShareResourcesFraction() {
+    return fractionResourcesSteadyFairShare;
   }
 
   /**
    * Returns the fair share as a fraction of the entire cluster capacity.
    */
-  public float getFairShareMemoryFraction() {
-    return fractionMemFairShare;
+  public float getFairShareResourcesFraction() {
+    return fractionResourcesFairShare;
   }
 
   /**
@@ -158,16 +188,16 @@ public class FairSchedulerQueueInfo {
    * Returns the queue's min share in as a fraction of the entire
    * cluster capacity.
    */
-  public float getMinShareMemoryFraction() {
-    return fractionMemMinShare;
+  public float getMinShareResourcesFraction() {
+    return fractionResourcesMinShare;
   }
   
   /**
    * Returns the memory used by this queue as a fraction of the entire 
    * cluster capacity.
    */
-  public float getUsedMemoryFraction() {
-    return fractionMemUsed;
+  public float getUsedResourcesFraction() {
+    return fractionResourcesUsed;
   }
   
   /**
@@ -175,7 +205,7 @@ public class FairSchedulerQueueInfo {
    * capacity.
    */
   public float getMaxResourcesFraction() {
-    return fractionMemMaxShare;
+    return fractionResourcesMaxShare;
   }
   
   /**

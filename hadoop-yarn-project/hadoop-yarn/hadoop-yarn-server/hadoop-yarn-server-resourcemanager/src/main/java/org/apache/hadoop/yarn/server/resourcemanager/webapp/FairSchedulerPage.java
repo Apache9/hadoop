@@ -48,6 +48,7 @@ public class FairSchedulerPage extends RmView {
   static final String Q_INSTANTANEOUS_FS = "left:0%;background:none;border:1px dashed rgba(0,0,0,1)";
   static final String Q_OVER = "background:rgba(255, 140, 0, 0.8)";
   static final String Q_UNDER = "background:rgba(50, 205, 50, 0.8)";
+  static final String DOMINANT_RESOURCES_TYPE = "Dominant Resources Type";
   static final String STEADY_FAIR_SHARE = "Steady Fair Share";
   static final String INSTANTANEOUS_FAIR_SHARE = "Instantaneous Fair Share";
   @RequestScoped
@@ -97,13 +98,15 @@ public class FairSchedulerPage extends RmView {
       UL<Hamlet> ul = html.ul("#pq");
       for (FairSchedulerQueueInfo info : subQueues) {
         float capacity = info.getMaxResourcesFraction();
-        float steadyFairShare = info.getSteadyFairShareMemoryFraction();
-        float instantaneousFairShare = info.getFairShareMemoryFraction();
-        float used = info.getUsedMemoryFraction();
+        float steadyFairShare = info.getSteadyFairShareResourcesFraction();
+        float instantaneousFairShare = info.getFairShareResourcesFraction();
+        float used = info.getUsedResourcesFraction();
+        String dominantResourceType = info.getDominantResourceType().name();
         LI<UL<Hamlet>> li = ul.
           li().
             a(_Q).$style(width(capacity * Q_MAX_WIDTH)).
-              $title(join(join(STEADY_FAIR_SHARE + ":", percent(steadyFairShare)),
+              $title(join(join(DOMINANT_RESOURCES_TYPE + ":", dominantResourceType),
+                  join("\n" + STEADY_FAIR_SHARE + ":", percent(steadyFairShare)),
                   join(" " + INSTANTANEOUS_FAIR_SHARE + ":", percent(instantaneousFairShare)))).
               span().$style(join(Q_GIVEN, ";font-size:1px;", width(steadyFairShare / capacity))).
                 _('.')._().
@@ -157,7 +160,7 @@ public class FairSchedulerPage extends RmView {
       } else {
         FairSchedulerInfo sinfo = new FairSchedulerInfo(fs);
         fsqinfo.qinfo = sinfo.getRootQueueInfo();
-        float used = fsqinfo.qinfo.getUsedMemoryFraction();
+        float used = fsqinfo.qinfo.getUsedResourcesFraction();
 
         ul.
           li().$style("margin-bottom: 1em").
