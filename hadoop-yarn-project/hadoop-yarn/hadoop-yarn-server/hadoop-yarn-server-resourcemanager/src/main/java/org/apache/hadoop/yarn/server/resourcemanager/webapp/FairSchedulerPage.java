@@ -97,9 +97,9 @@ public class FairSchedulerPage extends RmView {
       UL<Hamlet> ul = html.ul("#pq");
       for (FairSchedulerQueueInfo info : subQueues) {
         float capacity = info.getMaxResourcesFraction();
-        float steadyFairShare = info.getSteadyFairShareResourcesFraction();
-        float instantaneousFairShare = info.getFairShareResourcesFraction();
-        float used = info.getUsedResourcesFraction();
+        float steadyFairShare = info.getSteadyFairShareMemoryFraction();
+        float instantaneousFairShare = info.getFairShareMemoryFraction();
+        float used = info.getUsedMemoryFraction();
         LI<UL<Hamlet>> li = ul.
           li().
             a(_Q).$style(width(capacity * Q_MAX_WIDTH)).
@@ -157,7 +157,7 @@ public class FairSchedulerPage extends RmView {
       } else {
         FairSchedulerInfo sinfo = new FairSchedulerInfo(fs);
         fsqinfo.qinfo = sinfo.getRootQueueInfo();
-        float used = fsqinfo.qinfo.getUsedResourcesFraction();
+        float used = fsqinfo.qinfo.getUsedMemoryFraction();
 
         ul.
           li().$style("margin-bottom: 1em").
