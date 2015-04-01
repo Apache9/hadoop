@@ -96,6 +96,21 @@ public class FairSchedulerPage extends RmView {
     public void render(Block html) {
       Collection<FairSchedulerQueueInfo> subQueues = fsqinfo.qinfo.getChildQueues();
       UL<Hamlet> ul = html.ul("#pq");
+
+      ResponseInfo ri = info("\'" + fsqinfo.qinfo.getQueueName() + "\' Queue Status").
+          _("Used Resources:", fsqinfo.qinfo.getUsedResources().toString()).
+          _("Min Resources:", fsqinfo.qinfo.getMinResources().toString()).
+          _("Max Resources:", fsqinfo.qinfo.getMaxResources().toString());
+      int maxApps = fsqinfo.qinfo.getMaxApplications();
+      if (maxApps < Integer.MAX_VALUE) {
+        ri._("Max Running Applications:", fsqinfo.qinfo.getMaxApplications());
+      }
+      ri._(STEADY_FAIR_SHARE + ":", fsqinfo.qinfo.getSteadyFairShare().toString());
+      ri._(INSTANTANEOUS_FAIR_SHARE + ":", fsqinfo.qinfo.getFairShare().toString());
+      ul.li()._(InfoBlock.class)._();
+
+      ri.clear();
+
       for (FairSchedulerQueueInfo info : subQueues) {
         float capacity = info.getMaxResourcesFraction();
         float steadyFairShare = info.getSteadyFairShareResourcesFraction();
