@@ -1027,7 +1027,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
         dir.fsImage.editLog.openForWrite();
       }
-      
+
+      // Enable quota checks.
+      dir.enableQuotaChecks();
       if (haEnabled) {
         // Renew all of the leases before becoming active.
         // This is because, while we were in standby mode,
@@ -1135,6 +1137,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     
     blockManager.setPostponeBlocksFromFuture(true);
 
+    // Disable quota checks while in standby.
+    dir.disableQuotaChecks();
     editLogTailer = new EditLogTailer(this, conf);
     editLogTailer.start();
     if (standbyShouldCheckpoint) {
@@ -2378,7 +2382,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       
       final DatanodeDescriptor clientNode = 
           blockManager.getDatanodeManager().getDatanodeByHost(clientMachine);
-      return prepareFileForWrite(src, myFile, holder, clientMachine, clientNode,
+      return prepareFileForWrite(src, iip, myFile, holder, clientMachine, clientNode,
           true, iip.getLatestSnapshotId(), logRetryCache);
     } catch (IOException ie) {
       NameNode.stateChangeLog.warn("DIR* NameSystem.append: " +ie.getMessage());
@@ -2402,10 +2406,11 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    * @throws UnresolvedLinkException
    * @throws IOException
    */
-  LocatedBlock prepareFileForWrite(String src, INodeFile file,
+  LocatedBlock prepareFileForWrite(String src, INodesInPath iip, INodeFile file,
       String leaseHolder, String clientMachine, DatanodeDescriptor clientNode,
       boolean writeToEditLog, int latestSnapshot, boolean logRetryCache)
       throws IOException {
+    final long delta = verifyQuotaForUCBlock(file, iip);
     file = file.recordModification(latestSnapshot);
     final INodeFile cons = file.toUnderConstruction(leaseHolder, clientMachine,
         clientNode);
@@ -2414,10 +2419,58 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         .getClientName(), src);
     
     LocatedBlock ret = blockManager.convertLastBlockToUnderConstruction(cons);
+    if (ret != null && delta != 0) {
+      Preconditions.checkState(delta >= 0,
+          "appending to a block with size larger than the preferred block size");
+      dir.writeLock();
+      try {
+        dir.updateCountNoQuotaCheck(iip, iip.getINodes().length - 1, 0, delta);
+      } finally {
+        dir.writeUnlock();
+      }
+    }
+
     if (writeToEditLog) {
       getEditLog().logOpenFile(src, cons, logRetryCache);
     }
     return ret;
+  }
+
+  /**
+   * Verify quota when using the preferred block size for UC block. This is
+   * usually used by append and truncate
+   * @throws QuotaExceededException when violating the storage quota
+   * @return expected quota usage update. null means no change or no need to
+   *         update quota usage later
+   */
+  private long verifyQuotaForUCBlock(INodeFile file, INodesInPath iip)
+      throws QuotaExceededException {
+    if (!dir.isReady() || dir.shouldSkipQuotaChecks()) {
+      // Do not check quota if editlog is still being processed
+      return 0;
+    }
+    if (file.getLastBlock() != null) {
+      final long delta = computeQuotaDeltaForUCBlock(file);
+      dir.readLock();
+      try {
+        FSDirectory.verifyQuota(iip.getINodes(), iip.getINodes().length - 1, 0, delta, null);
+        return delta;
+      } finally {
+        dir.readUnlock();
+      }
+    }
+    return 0;
+  }
+
+  /** Compute quota change for converting a complete block to a UC block */
+  private long computeQuotaDeltaForUCBlock(INodeFile file) {
+    final BlockInfo lastBlock = file.getLastBlock();
+    if (lastBlock != null) {
+      final long diff = file.getPreferredBlockSize() - lastBlock.getNumBytes();
+      final short repl = file.getBlockReplication();
+      return diff * repl; 
+    }
+    return 0;
   }
 
   /**
@@ -2775,7 +2828,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       // doesn't match up with what we think is the last block. There are
       // four possibilities:
       // 1) This is the first block allocation of an append() pipeline
-      //    which started appending exactly at a block boundary.
+      //    which started appending exactly at or exceeding the block boundary.
       //    In this case, the client isn't passed the previous block,
       //    so it makes the allocateBlock() call with previous=null.
       //    We can distinguish this since the last block of the file
@@ -2800,7 +2853,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       BlockInfo penultimateBlock = pendingFile.getPenultimateBlock();
       if (previous == null &&
           lastBlockInFile != null &&
-          lastBlockInFile.getNumBytes() == pendingFile.getPreferredBlockSize() &&
+          lastBlockInFile.getNumBytes() >= pendingFile.getPreferredBlockSize() &&
           lastBlockInFile.isComplete()) {
         // Case 1
         if (NameNode.stateChangeLog.isDebugEnabled()) {

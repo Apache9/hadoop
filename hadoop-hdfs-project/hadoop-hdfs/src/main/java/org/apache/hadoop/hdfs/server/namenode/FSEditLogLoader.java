@@ -371,7 +371,7 @@ public class FSEditLogLoader {
             FSNamesystem.LOG.debug("Reopening an already-closed file " +
                 "for append");
           }
-          LocatedBlock lb = fsNamesys.prepareFileForWrite(path,
+          LocatedBlock lb = fsNamesys.prepareFileForWrite(path, iip,
               oldFile, addCloseOp.clientName, addCloseOp.clientMachine, null,
               false, iip.getLatestSnapshotId(), false);
           newFile = INodeFile.valueOf(fsDir.getINode(path),
