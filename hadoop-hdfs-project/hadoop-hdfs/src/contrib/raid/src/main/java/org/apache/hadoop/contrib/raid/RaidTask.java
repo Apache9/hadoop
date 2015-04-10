@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -173,8 +174,10 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     @Override
     public TaskResult call() throws Exception {
       long startTimeMs = System.currentTimeMillis();
+      raidNode.getMetrics().incrZombieSweeperTaskScheduled();
       sweepDirectory(dirToSweep);
       long endTimeMs = System.currentTimeMillis();
+      raidNode.getMetrics().addZombieSweeperDurationInMs(endTimeMs - startTimeMs);
       return new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
     }
 
@@ -192,6 +195,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public void onFailure(Throwable t) {
       LOG.info("ZombieSweeper fail to cleanup orphan coding files ");
       ReflectionUtils.logThreadInfo(LOG, "Thread dump from ZombieSweeperTask:onFailure", 1000);
+      raidNode.getMetrics().incrZombieSweeperTaskFailed();
       raidNode.increaseZombieSweeperTaskDone();
       raidNode.scheduleZombieSweeperTask(conf.getLong(
         HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL,
@@ -202,7 +206,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       final FileSystem fs = FileSystem.get(conf);
       Queue<Path> toCleanup = RaidTask.RaidTaskUtils.traverseDirectoryTree(fs, dirToSweep,
         new RaidTaskUtils.Filter() {
-          public boolean check(Path file) throws IOException {
+          public boolean check(Path file, RaidMetrics metrics) throws IOException {
             if (fs.isDirectory(file)) {
               return false;
             }
@@ -219,11 +223,13 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       for (Path orphanFile : toCleanup) {
         try {
           fs.delete(orphanFile, false);
+          raidNode.getMetrics().incrZombieFilesSweeped();
           LOG.info("Cleaned a zombie file " + orphanFile.toString());
           cleanedFiles++;
         } catch (IOException ioe) {
           // Log a message and try to delete other zombie files
           LOG.warn("Fail to delete zombie file " + orphanFile.toString(), ioe);
+          raidNode.getMetrics().incrFailedSweeping();
         }
       }
     }
@@ -284,11 +290,21 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         rootDirs.add(BlockCodec.getRaidRoot());
       }
 
+      // Eliminate empty dirs
+      FileSystem fs = FileSystem.get(conf);
+      Iterator<Path> it = rootDirs.iterator();
+      while (it.hasNext()) {
+        Path dir = it.next();
+        if (!fs.exists(dir) || !fs.isDirectory(dir) || fs.listStatus(dir).length == 0) {
+          it.remove();
+        }
+      }
+
       if (rootDirs.size() != 0) {
         String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY);
         Preconditions.checkNotNull(resultDir);
         resultDirPath = new Path(resultDir + "/" + purpose.toString() + System.currentTimeMillis());
-        this.collector = new Collector(rootDirs, resultDirPath, purpose, conf);
+
         nothingToDo = false;
       } else {
         nothingToDo = true;
@@ -299,7 +315,6 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       }
 
       // If the number of live nodes is too small, we should not kick-off any Encode or Mover tasks.
-      FileSystem fs = FileSystem.get(conf);
       if (!(fs instanceof DistributedFileSystem)) {
         IOException ioe = new IOException("Non-distributed filesystem is not supported");
         LOG.warn("Non-distributed filesystem is cnofigured", ioe);
@@ -315,6 +330,10 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       if (liveNodes.length < dataBlocksNum + codingBlocksNum) {
         nothingToDo = true;
       }
+
+      if (!nothingToDo) {
+        this.collector = new Collector(rootDirs, resultDirPath, purpose, conf);
+      }
     }
 
     @Override
@@ -328,11 +347,16 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         MRUtils.killJob(conf, lastCollectRaidInfoTaskId);
       }
 
+      raidNode.getMetrics().incrCollectorTaskScheduled();
       // Run the collector
       if (!nothingToDo) {
         collector.run();
+      } else {
+        raidNode.getMetrics().incrIdleCollectorTaskScheduled();
       }
+
       long endTimeMs = System.currentTimeMillis();
+      raidNode.getMetrics().addCollectorDurationInMs(endTimeMs - startTimeMs);
       return new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
     }
 
@@ -340,6 +364,17 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public void onSuccess(TaskResult result) {
       LOG.info("Collect raid info task success, timeConsumedMs=" + result.getTimeConsumedMs()
           + " purpose is " + purpose.toString());
+      try {
+        if (collector != null) {
+            raidNode.getMetrics().incrFilesScannedForCoder(
+            collector.getCounter(Collector.CounterName.FilesScannedForCoder).getValue());
+            raidNode.getMetrics().incrFilesScannedForMover(
+            collector.getCounter(Collector.CounterName.FilesScannedForMover).getValue());
+        }
+      } catch (IOException ioe) {
+        // Just ignore
+      }
+
       try {
         // Start the batch raid task
         if (!nothingToDo) {
@@ -357,6 +392,17 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     @Override
     public void onFailure(Throwable t) {
       LOG.error("Collect raid info task failed purpose is " + purpose.toString(), t);
+      raidNode.getMetrics().incrCollectorTaskFailed();
+      try {
+        if (collector != null) {
+            raidNode.getMetrics().incrFilesScannedForCoder(
+            collector.getCounter(Collector.CounterName.FilesScannedForCoder).getValue());
+            raidNode.getMetrics().incrFilesScannedForMover(
+            collector.getCounter(Collector.CounterName.FilesScannedForMover).getValue());
+        }
+      } catch (IOException ioe) {
+        // Just ignore
+      }
       reKickTask();
     }
 
@@ -454,20 +500,25 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
             + "can't start the batch raid task.");
       }
 
+      long endTimeMs;
       switch (purpose) {
       case Encode:
+        raidNode.getMetrics().incrCoderTaskScheduled();
         coder.run();
+        endTimeMs = System.currentTimeMillis();
+        raidNode.getMetrics().addCoderDurationInMs(endTimeMs - startTimeMs);
         break;
       case BlockMover:
+        raidNode.getMetrics().incrMoverTaskScheduled();
         mover.run();
+        endTimeMs = System.currentTimeMillis();
+        raidNode.getMetrics().addMoverDurationInMs(endTimeMs - startTimeMs);
         break;
       default:
         throw new IllegalArgumentException("Unknown task type");
       }
 
-      long endTimeMs = System.currentTimeMillis();
       TaskResult result = new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
-
       return result;
     }
 
@@ -475,12 +526,74 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public void onSuccess(TaskResult result) {
       LOG.info("Batch raid task finished successfully, timeConsumedMs="
           + result.getTimeConsumedMs());
+
+      if (coder != null) {
+        try {
+          raidNode.getMetrics().incrFilesCoded(
+            coder.getCounter(Coder.CounterName.EncodeFiles).getValue());
+          raidNode.getMetrics().incrBytesCoded(
+            coder.getCounter(Coder.CounterName.EncodeBytes).getValue());
+          raidNode.getMetrics().incrFailedCoding(
+            coder.getCounter(Coder.CounterName.EncodeFail).getValue());
+        } catch (IOException ioe) {
+          // Just ignore
+        }
+      }
+
+      if (mover != null) {
+        try {
+          raidNode.getMetrics().incrBlocksMoved(
+            mover.getCounter(Mover.CounterName.MovedBlocks).getValue());
+          raidNode.getMetrics().incrFailedBuildingMovingMap(
+            mover.getCounter(Mover.CounterName.FailedBuildingMovingMap).getValue());
+          raidNode.getMetrics().incrFailedMoving(
+            mover.getCounter(Mover.CounterName.FailedMoving).getValue());
+        } catch (IOException ioe) {
+          // Just ignore
+        }
+      }
+
       reKickTask();
     }
 
     @Override
     public void onFailure(Throwable t) {
       LOG.warn("Batch raid task failed", t);
+      switch (purpose) {
+      case Encode:
+        raidNode.getMetrics().incrCoderTaskFailed();
+        break;
+      case BlockMover:
+        raidNode.getMetrics().incrMoverTaskFailed();
+      default:
+        assert false : "Unknown task type";
+      }
+      // There may be some partial success encoding
+      if (coder != null) {
+        try {
+          raidNode.getMetrics().incrFilesCoded(
+            coder.getCounter(Coder.CounterName.EncodeFiles).getValue());
+          raidNode.getMetrics().incrBytesCoded(
+            coder.getCounter(Coder.CounterName.EncodeBytes).getValue());
+          raidNode.getMetrics().incrFailedCoding(
+            coder.getCounter(Coder.CounterName.EncodeFail).getValue());
+        } catch (IOException ioe) {
+          // Just ignore
+        }
+      }
+
+      if (mover != null) {
+        try {
+          raidNode.getMetrics().incrBlocksMoved(
+            mover.getCounter(Mover.CounterName.MovedBlocks).getValue());
+          raidNode.getMetrics().incrFailedBuildingMovingMap(
+            mover.getCounter(Mover.CounterName.FailedBuildingMovingMap).getValue());
+          raidNode.getMetrics().incrFailedMoving(
+            mover.getCounter(Mover.CounterName.FailedMoving).getValue());
+        } catch (IOException ioe) {
+          // Just ignore
+        }
+      }
       reKickTask();
     }
 
@@ -529,11 +642,12 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public TaskResult call() throws Exception {
 
       long startTimeMs = System.currentTimeMillis();
+      raidNode.getMetrics().incrFixerTaskScheduled();
       fixer.run();
       long endTimeMs = System.currentTimeMillis();
+      raidNode.getMetrics().addFixerDurationInMs(endTimeMs - startTimeMs);
 
       TaskResult result = new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
-
       return result;
     }
 
@@ -541,6 +655,16 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public void onSuccess(TaskResult result) {
       LOG.info("Fixer task finished successfully, timeConsumedMs=" + result.getTimeConsumedMs());
 
+      if (fixer != null) {
+        try {
+          raidNode.getMetrics().incrBlocksFixed(
+            fixer.getCounter(Fixer.CounterName.FixedBlocks).getValue());
+          raidNode.getMetrics().incrFailedFixing(
+            fixer.getCounter(Fixer.CounterName.FixFail).getValue());
+        } catch (IOException ioe) {
+          // Just ignore
+        }
+      }
       raidNode.increaseFixerTaskDone();
       raidNode.scheduleFixerTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT));
@@ -551,6 +675,17 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       LOG.warn("Fixer task failed", t);
 
       raidNode.increaseFixerTaskDone();
+      raidNode.getMetrics().incrFixerTaskFailed();
+      if (fixer != null) {
+        try {
+          raidNode.getMetrics().incrBlocksFixed(
+            fixer.getCounter(Fixer.CounterName.FixedBlocks).getValue());
+          raidNode.getMetrics().incrFailedFixing(
+            fixer.getCounter(Fixer.CounterName.FixFail).getValue());
+        } catch (IOException ioe) {
+          // Just ignore
+        }
+      }
       raidNode.scheduleFixerTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT));
     }
@@ -558,8 +693,14 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
   public static class RaidTaskUtils {
 
+    private static RaidMetrics metrics;
+
+    public static void setMetrics(RaidMetrics m) {
+      metrics = m;
+    }
+
     public static interface Filter {
-      public boolean check(Path file) throws IOException;
+      public boolean check(Path file, RaidMetrics m) throws IOException;
     }
 
     private static class ChildrenInfo {
@@ -598,22 +739,23 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         Path path = null;
         try {
           path = stack.peek();
+          boolean isDirectory = fs.isDirectory(path);
 
           ChildrenInfo childrenInfo = childrenInfos.get(path);
-          if (childrenInfo == null) {
+          if (childrenInfo == null && isDirectory) {
             FileStatus[] children = fs.listStatus(path);
             childrenInfo = new ChildrenInfo(children);
             childrenInfos.put(path, childrenInfo);
           }
 
-          if (fs.isDirectory(path) && childrenInfo.hasNextChild()) {
+          if (isDirectory && childrenInfo.hasNextChild()) {
             FileStatus nextChild = childrenInfo.nextChild();
             if (!visited.contains(nextChild.getPath())) {
               visited.add(nextChild.getPath());
               stack.add(nextChild.getPath());
             }
           } else {
-            if (filter.check(path)) {
+            if (filter.check(path, metrics)) {
               result.add(new Path(path.toUri().getPath()));
             }
             stack.pop();

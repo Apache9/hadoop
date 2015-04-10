@@ -43,7 +43,7 @@ public class TestCoder {
     Coder coder = new Coder(collectResultFile, 1, outputPath, conf);
     conf.set("mapreduce.framework.name", "local");
     coder.run();
-    Assert.assertEquals(2l, coder.getCounter(CounterName.EncodeSuccess).getValue()
+    Assert.assertEquals(2l, coder.getCounter(CounterName.EncodeFiles).getValue()
         + coder.getCounter(CounterName.EncodeFail).getValue());
 
     dfsCluster.shutdown();

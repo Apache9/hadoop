@@ -55,6 +55,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
@@ -83,6 +84,10 @@ public class Mover {
   private final Path outputPath;
   private final Configuration conf;
   private Job job;
+  
+  public enum CounterName {
+    MovedBlocks, FailedBuildingMovingMap, FailedMoving
+  }
 
   public Mover(Path collectorResultFile, int mapTaskNum, Path outputPath, Configuration conf) {
     Preconditions.checkNotNull(collectorResultFile);
@@ -93,9 +98,14 @@ public class Mover {
     this.outputPath = outputPath;
     this.conf = conf;
   }
+  
+  public Counter getCounter(CounterName name) throws IOException {
+    Preconditions.checkNotNull(job);
+    return job.getCounters().findCounter(name);
+  }
 
   public void run() throws IOException, ClassNotFoundException, InterruptedException {
-    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY, mapTaskNum);
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MAP_TASK_NUM_KEY, mapTaskNum);
     conf.set(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY,
       collectorResultFile.toString());
 
@@ -173,6 +183,10 @@ public class Mover {
     private int codingBlocksNum;
     private long requiredSize;
     private boolean shuffleBlksAmongRacks;
+    
+    private Counter movedBlocks;
+    private Counter failedBuildingMovingMap;
+    private Counter failedMoving;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -199,6 +213,10 @@ public class Mover {
       requiredSize = blockSize * reservedBlockNumPerStorage;
       shuffleBlksAmongRacks = conf.getBoolean(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_SHUFFLE_RACKS,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_SHUFFLE_RACKS_DEFAULT);
+      
+      this.movedBlocks = context.getCounter(CounterName.MovedBlocks);
+      this.failedBuildingMovingMap = context.getCounter(CounterName.FailedBuildingMovingMap);
+      this.failedMoving = context.getCounter(CounterName.FailedMoving);
     }
 
     @Override
@@ -360,7 +378,12 @@ public class Mover {
       }
 
       private void doMove() throws IOException {
-        buildMoveMap();
+        try {
+          buildMoveMap();
+        } catch (IOException ioe) {
+          failedBuildingMovingMap.increment(1);
+          throw ioe;
+        }
 
         int connectTimeout = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_CONNECT_TIMEOUT,
           HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_CONNECT_TIMEOUT_DEFAULT);
@@ -372,14 +395,20 @@ public class Mover {
         int moveTimeout = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MOVEONEBLOCK_TIMEOUT,
           HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MOVEONEBLOCK_TIMEOUT_DEFAULT);
 
-        for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapDN.entrySet()) {
-          Mover.moveOneBlock(connectTimeout, moveTimeout, moveItem.getKey(), moveItem.getValue());
-        }
-
-        if (moveMapRack != null) {
-          for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapRack.entrySet()) {
+        try {
+          for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapDN.entrySet()) {
             Mover.moveOneBlock(connectTimeout, moveTimeout, moveItem.getKey(), moveItem.getValue());
+            movedBlocks.increment(1);
           }
+
+          if (moveMapRack != null) {
+            for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapRack.entrySet()) {
+              Mover.moveOneBlock(connectTimeout, moveTimeout, moveItem.getKey(), moveItem.getValue());
+              movedBlocks.increment(1);
+            }
+          }
+        } catch (IOException ioe) {
+          failedMoving.increment(1);
         }
       }
     }

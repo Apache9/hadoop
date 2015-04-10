@@ -42,6 +42,7 @@ public class TestRaidNode {
     dfs.getConf().set(HdfsRaidConfigKeys.HDFS_RAIDNODE_IPC_ADDRESS_KEY, "127.0.0.1:12345");
     // Prevent fixer fail from checking output dir.
     dfs.getConf().set(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY, "/raid/fixer");
+    dfs.getConf().set(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY, "/raid/collector");
     rdConf = dfs.getConf();
     rd = new RaidNode(rdConf);
   }
@@ -54,17 +55,31 @@ public class TestRaidNode {
   @Test
   public void testThreadsKickedNumber() throws Exception {
     final long encodeInterval = 2000;
+    final long moverInterval = 3000;
     final long zombieSweeperInterval = 1000;
     // Fixer itself would take some cycles to get corrupt list. Make its interval
     // a little bit larger so that the drift would not make the case fail.
     final long fixerInterval = 3000;
     rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL, encodeInterval);
+    rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_INTERVAL, moverInterval);
     rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL, zombieSweeperInterval);
     rdConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL, fixerInterval);
     rd.start();
     Thread.sleep(8500);
+    // TBD: Remove these counter. Just use metrics
     Assert.assertTrue(rd.getEncodeTaskDone() == (8500 / encodeInterval));
+
+    Assert.assertTrue(rd.getMoverTaskDone() == (8500 / moverInterval));
     Assert.assertTrue(rd.getZombieSweeperTaskDone() == (8500 / zombieSweeperInterval));
-    Assert.assertTrue(rd.getFixerTaskDone() == (8500 / fixerInterval));
+    Assert.assertEquals(rd.getFixerTaskDone(), (8500 / fixerInterval));
+    Assert.assertEquals(rd.getMetrics().collectorTaskScheduled.value(), (8500 / encodeInterval)
+        + (8500 / moverInterval));
+    Assert.assertEquals(rd.getMetrics().collectorTaskScheduled.value(),
+      rd.getMetrics().idleCollectorTaskScheduled.value());
+    Assert.assertEquals(rd.getMetrics().coderTaskScheduled.value(), 0);
+    Assert.assertEquals(rd.getMetrics().moverTaskScheduled.value(), 0);
+    Assert.assertEquals(rd.getMetrics().zombieSweeperTaskScheduled.value(),
+      (8500 / zombieSweeperInterval));
+    Assert.assertEquals(rd.getMetrics().fixerTaskScheduled.value(), (8500 / fixerInterval));
   }
 }

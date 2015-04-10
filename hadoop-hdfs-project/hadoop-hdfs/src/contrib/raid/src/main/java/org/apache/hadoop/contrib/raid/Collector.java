@@ -37,6 +37,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
@@ -64,6 +65,10 @@ public class Collector {
   private final Configuration conf;
   private Job job;
   private TaskPurpose purpose;
+
+  public enum CounterName {
+    FilesScannedForCoder, FilesScannedForMover, RecordReaderCreated, ReaderInitialized
+  }
 
   public Collector(List<Path> rootDirs, Path resultDir, TaskPurpose purpose, Configuration conf) {
     Preconditions.checkArgument(rootDirs != null && rootDirs.size() > 0);
@@ -106,6 +111,11 @@ public class Collector {
   public String getJobId() {
     Preconditions.checkNotNull(job);
     return job.getJobID().toString();
+  }
+
+  public Counter getCounter(CounterName name) throws IOException {
+    Preconditions.checkNotNull(job);
+    return job.getCounters().findCounter(name);
   }
 
   public static Path getJobIdFilePath(TaskPurpose purpose) {
@@ -294,6 +304,9 @@ public class Collector {
    * The raid directory information input format class for the Collector MapReduce job.
    */
   private static class RaidDirInfoInputFormat extends InputFormat {
+
+    private Counter recordReaderCreated;
+
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
@@ -315,7 +328,9 @@ public class Collector {
     public RecordReader createRecordReader(InputSplit split, TaskAttemptContext context)
         throws IOException, InterruptedException {
       RaidDirInfoReader reader = new RaidDirInfoReader();
-      reader.initialize(split, context);
+      this.recordReaderCreated = context.getCounter(CounterName.RecordReaderCreated);
+      recordReaderCreated.increment(1);
+      // reader.initialize(split, context);
       return reader;
     }
   }
@@ -372,6 +387,10 @@ public class Collector {
     private int totalNum;
     private TaskPurpose purpose;
 
+    private Counter filesScannedForCoder;
+    private Counter filesScannedForMover;
+    private Counter readerInitialized;
+
     @Override
     public void initialize(InputSplit split, TaskAttemptContext context) throws IOException,
         InterruptedException {
@@ -383,9 +402,14 @@ public class Collector {
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT);
       this.purpose = conf.getEnum(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_TASK_TYPE,
         TaskPurpose.InvalidType);
+      this.filesScannedForCoder = context.getCounter(CounterName.FilesScannedForCoder);
+      this.filesScannedForMover = context.getCounter(CounterName.FilesScannedForMover);
+      this.readerInitialized = context.getCounter(CounterName.ReaderInitialized);
+      readerInitialized.increment(1);
       this.dirs = RaidTaskUtils.traverseDirectoryTree(fs, this.split.getRootDir(),
         new RaidTaskUtils.Filter() {
-          public boolean check(Path file) throws IOException {
+          public boolean check(Path file, RaidMetrics metrics) throws IOException {
+            assert metrics == null : "MR metrics are collected through counters";
             if (!fs.isFile(file)) {
               return false;
             }
@@ -394,6 +418,7 @@ public class Collector {
               FileStatus fileStatus = fs.getFileStatus(file);
               long currentTimeMs = System.currentTimeMillis();
               long fileModTime = fileStatus.getModificationTime();
+              filesScannedForCoder.increment(1);
               if (fs instanceof DistributedFileSystem) {
                 DistributedFileSystem dfs = (DistributedFileSystem) fs;
                 if ((fileModTime + raidFileTimeWindow < currentTimeMs) && dfs.isFileClosed(file)) {
@@ -408,6 +433,7 @@ public class Collector {
               if (BlockCodec.isCodingFile(file)) {
                 if (fs instanceof DistributedFileSystem) {
                   DistributedFileSystem dfs = (DistributedFileSystem) fs;
+                  filesScannedForMover.increment(1);
                   if (dfs.isFileClosed(file)) {
                     return true;
                   }

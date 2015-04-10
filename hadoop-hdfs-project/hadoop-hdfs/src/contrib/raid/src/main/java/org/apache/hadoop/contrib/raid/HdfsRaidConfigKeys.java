@@ -124,4 +124,17 @@ public class HdfsRaidConfigKeys {
   public static final int HDFS_RAIDNODE_IPC_DEFAULT_PORT = 60020;
   public static final String HDFS_RAIDNODE_IPC_ADRESS_DEFAULT = "0.0.0.0:"
       + HDFS_RAIDNODE_IPC_DEFAULT_PORT;
+
+  public static final String HDFS_RAIDNODE_HTTP_ADDRESS_KEY = "hdfs.raidnode.http-address";
+  public static final int HDFS_RAIDNODE_HTTP_PORT_DEFAULT = 8485;
+  public static final String HDFS_RAIDNODE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:"
+      + HDFS_RAIDNODE_HTTP_PORT_DEFAULT;
+  public static final String HDFS_RAIDNODE_HTTPS_ADDRESS_KEY = "hdfs.raidnode.https-address";
+  public static final int HDFS_RAIDNODE_HTTPS_PORT_DEFAULT = 8486;
+  public static final String HDFS_RAIDNODE_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:"
+      + HDFS_RAIDNODE_HTTPS_PORT_DEFAULT;
+
+  public static final String HDFS_RAIDNODE_KEYTAB_FILE_KEY = "hdfs.raidnode.keytab.file";
+  public static final String HDFS_RAIDNODE_KERBEROS_PRINCIPAL_KEY = "hdfs.raidnode.kerberos.principal";
+  public static final String HDFS_RAIDNODE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "hdfs.raidnode.kerberos.internal.spnego.principal";
 }

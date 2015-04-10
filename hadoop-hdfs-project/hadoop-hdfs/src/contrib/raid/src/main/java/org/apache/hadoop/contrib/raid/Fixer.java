@@ -26,7 +26,6 @@ import java.util.TreeSet;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.contrib.raid.Coder.CounterName;
 import org.apache.hadoop.contrib.raid.RaidTask.RaidTaskUtils;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -60,6 +59,10 @@ public class Fixer {
   private final Path outputPath;
   private Job job;
 
+  public enum CounterName {
+    FixedBlocks, FixFail
+  }
+  
   public Fixer(Path outputPath, Configuration conf) {
     Preconditions.checkNotNull(conf);
     this.conf = conf;
@@ -200,11 +203,16 @@ public class Fixer {
 
     private Configuration conf;
     private BlockCodec blockCodec;
+    
+    private Counter fixedBlocks;
+    private Counter fixFail;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
       this.conf = context.getConfiguration();
       this.blockCodec = new BlockCodec(this.conf);
+      this.fixedBlocks = context.getCounter(CounterName.FixedBlocks);
+      this.fixFail = context.getCounter(CounterName.FixFail);
     }
 
     @Override
@@ -226,7 +234,7 @@ public class Fixer {
       }
 
       if (blocks.length > blockCodec.getCodingBlocksNum()) {
-        // TBD : Add metrics
+        fixFail.increment(blocks.length);
         // Fail earlier if we cannot fix it.
         StringBuilder sb = new StringBuilder();
         sb.append("Detect corruption in blocks ");
@@ -242,6 +250,7 @@ public class Fixer {
 
       try {
         blockCodec.decode(file, blocks);
+        fixedBlocks.increment(blocks.length);
       } catch (Exception e) {
         // Something wrong
         StringBuilder sb = new StringBuilder();
@@ -250,6 +259,7 @@ public class Fixer {
           sb.append("\t" + blk);
         }
         LOG.warn(sb.toString(), e);
+        fixFail.increment(blocks.length);
         throw new IOException("Fail to decode");
       }
     }
@@ -265,7 +275,7 @@ public class Fixer {
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
       Map<RaidTaskUtils.FixerItem, Set<Integer>> fixerInfo = Fixer.collectFixerInfo(conf);
-      int mapTaskNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
+      int mapTaskNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_KEY,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
       List<InputSplit> result = new ArrayList<InputSplit>(mapTaskNum);
 

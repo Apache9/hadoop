@@ -186,6 +186,10 @@ public class TestRaidTask {
 
     // Verify codings
     verifyResult();
+    
+    Assert.assertEquals(rd.getMetrics().filesScannedForCoder.value(), 9);
+    Assert.assertEquals(rd.getMetrics().filesCoded.value(), 9);
+    Assert.assertEquals(rd.getMetrics().bytesCoded.value(), 9 * blockSize);
   }
 
   // Use encoded files left by the encode test case.
@@ -238,6 +242,8 @@ public class TestRaidTask {
     }
     Assert.assertTrue(zst.success);
     Assert.assertTrue(zst.numOfCleanedZombie() == 1);
+    Assert.assertEquals(rd.getMetrics().zombieFilesSweeped.value(), zst.numOfCleanedZombie());
+    Assert.assertEquals(rd.getMetrics().failedSweeping.value(), 0);
   }
 
   // Use encoded files left by the encode test case.
@@ -314,6 +320,8 @@ public class TestRaidTask {
     }
 
     Assert.assertTrue(ft.success);
+    Assert.assertEquals(rd.getMetrics().blocksFixed.value(), 1);
+    Assert.assertEquals(rd.getMetrics().failedFixing.value(), 0);
   }
 
   // Make some blocks on the same node and then let mover to fix it
@@ -387,6 +395,9 @@ public class TestRaidTask {
     }
 
     Assert.assertTrue(satisfyRaidPlace);
+    Assert.assertTrue(rd.getMetrics().blocksMoved.value() >= 1);
+    Assert.assertEquals(rd.getMetrics().filesScannedForMover.value(), 8);
+    Assert.assertEquals(rd.getMetrics().failedMoving.value(), 0);
   }
 
   private void waitNNReduceReplica(Path file, Path codingFile) throws Exception {

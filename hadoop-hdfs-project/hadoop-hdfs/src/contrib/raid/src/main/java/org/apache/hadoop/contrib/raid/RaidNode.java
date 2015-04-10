@@ -28,9 +28,12 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.contrib.raid.ClientRaidnodeProtocolProtos.ClientRaidnodeProtocolService;
 import org.apache.hadoop.contrib.raid.RaidTask.CollectRaidInfoTask;
 import org.apache.hadoop.contrib.raid.RaidTask.FixerTask;
+import org.apache.hadoop.contrib.raid.RaidTask.RaidTaskUtils;
 import org.apache.hadoop.contrib.raid.RaidTask.TaskPurpose;
 import org.apache.hadoop.contrib.raid.RaidTask.ZombieSweeperTask;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.net.NetUtils;
@@ -53,7 +56,6 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   private final BlockCodec codec;
   private RPC.Server ipcServer;
   private Policy policy;
-  // TBD: Implement metrics.
   private long encodeTaskDone;
   private long zombieSweeperTaskDone;
   private long fixerTaskDone;
@@ -63,6 +65,8 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   private Timer lastZombieSweeperTimer;
   private Timer lastFixerTimer;
   private Timer lastMoverTimer;
+  private RaidMetrics metrics;
+  private HttpServer2 httpServer;
 
   private static final int TASK_QUEUE_CAPACITY = 1024;
   private static final int CORE_POOL_SIZE = 4;
@@ -102,6 +106,20 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
         .setNumHandlers(
           conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_HANDLER_COUNT_KEY,
             HdfsRaidConfigKeys.HDFS_RAIDNODE_HANDLER_COUNT_DEFAULT)).setVerbose(false).build();
+  }
+
+  private void initMetrics() {
+    this.metrics = RaidMetrics.create();
+  }
+
+  private void shutDownMetrics() {
+    if (metrics != null) {
+      metrics.shutDown();
+    }
+  }
+
+  public RaidMetrics getMetrics() {
+    return metrics;
   }
 
   // TBD: Implement the logic of reload policy when users change policies.
@@ -202,20 +220,55 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
     }
   }
 
+  private void startHttpServer(Configuration conf) throws IOException {
+    final String httpAddrString = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_HTTP_ADDRESS_KEY,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_HTTP_ADDRESS_DEFAULT);
+    InetSocketAddress httpAddr = NetUtils.createSocketAddr(httpAddrString,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_HTTP_PORT_DEFAULT,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_HTTP_ADDRESS_KEY);
+
+    final String httpsAddrString = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_HTTPS_ADDRESS_KEY,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_HTTPS_ADDRESS_DEFAULT);
+    InetSocketAddress httpsAddr = NetUtils.createSocketAddr(httpsAddrString);
+
+    HttpServer2.Builder builder = DFSUtil.httpServerTemplateForNNAndJN(conf, httpAddr, httpsAddr,
+      "raidnode", HdfsRaidConfigKeys.HDFS_RAIDNODE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_KEYTAB_FILE_KEY);
+
+    httpServer = builder.build();
+    httpServer.start();
+  }
+
+  private void stopHttpServer() throws IOException {
+    if (httpServer != null) {
+      try {
+        httpServer.stop();
+      } catch (Exception e) {
+        throw new IOException(e);
+      }
+    }
+  }
+
   public void start() throws IOException {
 
     // Initialize the policy
+    initMetrics();
     initPolicy(conf);
 
     // Start the IPC server
     initIpcServer(conf);
     ipcServer.start();
 
+    // Set metrics of raid task before kick-off any tasks
+    RaidTaskUtils.setMetrics(metrics);
+
     // Start the encoding task
-    // The collect task itself will scan the policies and figure out when to schedule the real
-    // job, so pass in 0 as delay.
     scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,
       HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL_DEFAULT));
+
+    // Start the mover task
+    scheduleMoverTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_INTERVAL,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_INTERVAL_DEFAULT));
 
     // Start the fixer
     scheduleFixerTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_INTERVAL,
@@ -225,9 +278,11 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
     scheduleZombieSweeperTask(conf.getLong(
       HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL,
       HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL_DEFAULT));
+
+    startHttpServer(conf);
   }
 
-  public void stop() {
+  public void stop() throws IOException {
 
     shutDownZombieSweeperTask();
 
@@ -238,6 +293,10 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
     if (ipcServer != null) {
       ipcServer.stop();
     }
+
+    shutDownMetrics();
+
+    stopHttpServer();
   }
 
   public BlockCodec getCodec() {

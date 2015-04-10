@@ -24,6 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -50,7 +51,7 @@ public class Coder {
   private static final Log LOG = LogFactory.getLog(Coder.class);
 
   public enum CounterName {
-    EncodeSuccess, EncodeFail, DecodeSuccess, DecodeFail, InvalidTaskType
+    EncodeFiles, EncodeFail, EncodeBytes, DecodeSuccess, DecodeFail, InvalidTaskType
   }
 
   private final Path collectorResultFile;
@@ -112,7 +113,8 @@ public class Coder {
 
     private Configuration conf;
     private BlockCodec blockCodec;
-    private Counter encodeSuccess;
+    private Counter encodeFiles;
+    private Counter encodeBytes;
     private Counter encodeFail;
     private Counter decodeSuccess;
     private Counter decodeFail;
@@ -122,7 +124,8 @@ public class Coder {
     protected void setup(Context context) throws IOException, InterruptedException {
       this.conf = context.getConfiguration();
       this.blockCodec = new BlockCodec(this.conf);
-      this.encodeSuccess = context.getCounter(CounterName.EncodeSuccess);
+      this.encodeFiles = context.getCounter(CounterName.EncodeFiles);
+      this.encodeBytes = context.getCounter(CounterName.EncodeBytes);
       this.encodeFail = context.getCounter(CounterName.EncodeFail);
       this.decodeSuccess = context.getCounter(CounterName.DecodeSuccess);
       this.decodeFail = context.getCounter(CounterName.DecodeFail);
@@ -137,8 +140,11 @@ public class Coder {
       Path file = new Path(tokens[0].trim());
       // TBD: The second token should be the group num to be encoded
       try {
+        FileStatus status = FileSystem.get(conf).getFileStatus(file);
         blockCodec.encode(file);
-        encodeSuccess.increment(1);
+        encodeFiles.increment(1);
+        encodeBytes.increment(((status.getLen() + status.getBlockSize() - 1) / status
+            .getBlockSize()) * status.getBlockSize());
       } catch (Exception e) {
         encodeFail.increment(1);
       }

@@ -16,7 +16,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.fs.Path;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -46,7 +45,7 @@ public class TestRaidShell {
   }
 
   @AfterClass
-  public static void tearDownClass() {
+  public static void tearDownClass() throws Exception {
     rd.stop();
     if (dfsCluster != null) {
       dfsCluster.shutdown();
