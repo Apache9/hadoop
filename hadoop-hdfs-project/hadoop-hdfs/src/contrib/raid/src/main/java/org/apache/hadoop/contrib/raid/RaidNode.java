@@ -37,6 +37,8 @@ import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.Futures;
@@ -376,6 +378,9 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
 
   public static void main(String[] args) throws IOException {
     Configuration conf = new HdfsConfiguration();
+    UserGroupInformation.setConfiguration(conf);
+    SecurityUtil.login(conf, HdfsRaidConfigKeys.HDFS_RAIDNODE_KEYTAB_FILE_KEY,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_KERBEROS_PRINCIPAL_KEY);
     RaidNode raidNode = new RaidNode(conf);
     raidNode.start();
 
