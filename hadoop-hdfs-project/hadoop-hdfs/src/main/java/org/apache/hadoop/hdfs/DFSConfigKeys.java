@@ -646,4 +646,13 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NFS_KEYTAB_FILE_KEY = "dfs.nfs.keytab.file";
   public static final String DFS_NFS_USER_NAME_KEY = "dfs.nfs.kerberos.principal";
   public static final String  DFS_DATANODE_RESERVED_SPACE_BLOCK_NUM_KEY = "dfs.datanode.reserved.space.block.number";
+
+  public static final String DFS_DATANODE_OVERUSED_PERCENTAGE_THRESHOLD =
+      "dfs.datanode.overused.percentage.threshold";
+  public static final int DFS_DATANODE_OVERUSED_PERCENTAGE_THRESHOLD_DEFAULT =
+      0;
+  public static final String DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD =
+      "dfs.datanode.overused.freespace.threshold";
+  public static final long DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD_DEFAULT =
+      0; 
 }

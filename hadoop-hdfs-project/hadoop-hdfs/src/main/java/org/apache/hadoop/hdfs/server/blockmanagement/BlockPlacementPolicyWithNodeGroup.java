@@ -68,11 +68,12 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
   protected DatanodeStorageInfo chooseLocalStorage(Node localMachine,
       Set<Node> excludedNodes, long blocksize, int maxNodesPerRack,
       List<DatanodeStorageInfo> results, boolean avoidStaleNodes,
-      StorageType storageType) throws NotEnoughReplicasException {
+      boolean avoidOverUsedNodes, StorageType storageType) throws NotEnoughReplicasException {
     // if no local machine, randomly choose one node
     if (localMachine == null)
       return chooseRandom(NodeBase.ROOT, excludedNodes, 
-          blocksize, maxNodesPerRack, results, avoidStaleNodes, storageType);
+          blocksize, maxNodesPerRack, results, avoidStaleNodes, 
+          avoidOverUsedNodes, storageType);
 
     // otherwise try local machine first
     if (localMachine instanceof DatanodeDescriptor) {
@@ -81,7 +82,8 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
         for(DatanodeStorageInfo localStorage : DFSUtil.shuffle(
             localDataNode.getStorageInfos())) {
           if (addIfIsGoodTarget(localStorage, excludedNodes, blocksize,
-              maxNodesPerRack, false, results, avoidStaleNodes, storageType) >= 0) {
+              maxNodesPerRack, false, results, avoidStaleNodes,
+              avoidOverUsedNodes, storageType) >= 0) {
             return localStorage;
           }
         }
@@ -91,13 +93,15 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
     // try a node on local node group
     DatanodeStorageInfo chosenStorage = chooseLocalNodeGroup(
         (NetworkTopologyWithNodeGroup)clusterMap, localMachine, excludedNodes, 
-        blocksize, maxNodesPerRack, results, avoidStaleNodes, storageType);
+            blocksize, maxNodesPerRack, results, avoidStaleNodes, 
+            avoidOverUsedNodes, storageType);
     if (chosenStorage != null) {
       return chosenStorage;
     }
     // try a node on local rack
     return chooseLocalRack(localMachine, excludedNodes, 
-        blocksize, maxNodesPerRack, results, avoidStaleNodes, storageType);
+        blocksize, maxNodesPerRack, results, avoidStaleNodes, 
+        avoidOverUsedNodes, storageType);
   }
 
   /** @return the node of the second replica */
@@ -117,18 +121,20 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
   protected DatanodeStorageInfo chooseLocalRack(Node localMachine,
       Set<Node> excludedNodes, long blocksize, int maxNodesPerRack,
       List<DatanodeStorageInfo> results, boolean avoidStaleNodes,
+      boolean avoidOverUsedNodes,
       StorageType storageType) throws NotEnoughReplicasException {
     // no local machine, so choose a random machine
     if (localMachine == null) {
       return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
-          maxNodesPerRack, results, avoidStaleNodes, storageType);
+          maxNodesPerRack, results, avoidStaleNodes, avoidOverUsedNodes,
+          storageType);
     }
 
     // choose one from the local rack, but off-nodegroup
     try {
       final String scope = NetworkTopology.getFirstHalf(localMachine.getNetworkLocation());
       return chooseRandom(scope, excludedNodes, blocksize, maxNodesPerRack,
-          results, avoidStaleNodes, storageType);
+          results, avoidStaleNodes, avoidOverUsedNodes, storageType);
     } catch (NotEnoughReplicasException e1) {
       // find the second replica
       final DatanodeDescriptor newLocal = secondNode(localMachine, results);
@@ -136,16 +142,19 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
         try {
           return chooseRandom(
               clusterMap.getRack(newLocal.getNetworkLocation()), excludedNodes,
-              blocksize, maxNodesPerRack, results, avoidStaleNodes, storageType);
+              blocksize, maxNodesPerRack, results, avoidStaleNodes,
+              avoidOverUsedNodes, storageType);
         } catch(NotEnoughReplicasException e2) {
           //otherwise randomly choose one from the network
           return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
-              maxNodesPerRack, results, avoidStaleNodes, storageType);
+              maxNodesPerRack, results, avoidStaleNodes, avoidOverUsedNodes,
+              storageType);
         }
       } else {
         //otherwise randomly choose one from the network
         return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
-            maxNodesPerRack, results, avoidStaleNodes, storageType);
+            maxNodesPerRack, results, avoidStaleNodes, avoidOverUsedNodes,
+            storageType);
       }
     }
   }
@@ -157,7 +166,8 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
   protected void chooseRemoteRack(int numOfReplicas,
       DatanodeDescriptor localMachine, Set<Node> excludedNodes,
       long blocksize, int maxReplicasPerRack, List<DatanodeStorageInfo> results,
-      boolean avoidStaleNodes, StorageType storageType)
+      boolean avoidStaleNodes, boolean avoidOverUsedNodes,
+      StorageType storageType)
           throws NotEnoughReplicasException {
     int oldNumOfReplicas = results.size();
 
@@ -166,12 +176,14 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
     try {
       // randomly choose from remote racks
       chooseRandom(numOfReplicas, "~" + rackLocation, excludedNodes, blocksize,
-          maxReplicasPerRack, results, avoidStaleNodes, storageType);
+          maxReplicasPerRack, results, avoidStaleNodes, avoidOverUsedNodes,
+          storageType);
     } catch (NotEnoughReplicasException e) {
       // fall back to the local rack
       chooseRandom(numOfReplicas - (results.size() - oldNumOfReplicas),
           rackLocation, excludedNodes, blocksize,
-          maxReplicasPerRack, results, avoidStaleNodes, storageType);
+          maxReplicasPerRack, results, avoidStaleNodes, 
+          avoidOverUsedNodes, storageType);
     }
   }
 
@@ -185,11 +197,13 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
       NetworkTopologyWithNodeGroup clusterMap, Node localMachine,
       Set<Node> excludedNodes, long blocksize, int maxNodesPerRack,
       List<DatanodeStorageInfo> results, boolean avoidStaleNodes,
+      boolean avoidOverUsedNodes,
       StorageType storageType) throws NotEnoughReplicasException {
     // no local machine, so choose a random machine
     if (localMachine == null) {
       return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
-          maxNodesPerRack, results, avoidStaleNodes, storageType);
+          maxNodesPerRack, results, avoidStaleNodes, avoidOverUsedNodes,
+          storageType);
     }
 
     // choose one from the local node group
@@ -197,6 +211,7 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
       return chooseRandom(
           clusterMap.getNodeGroup(localMachine.getNetworkLocation()),
           excludedNodes, blocksize, maxNodesPerRack, results, avoidStaleNodes,
+          avoidOverUsedNodes,
           storageType);
     } catch (NotEnoughReplicasException e1) {
       final DatanodeDescriptor newLocal = secondNode(localMachine, results);
@@ -205,16 +220,18 @@ public class BlockPlacementPolicyWithNodeGroup extends BlockPlacementPolicyDefau
           return chooseRandom(
               clusterMap.getNodeGroup(newLocal.getNetworkLocation()),
               excludedNodes, blocksize, maxNodesPerRack, results,
-              avoidStaleNodes, storageType);
+              avoidStaleNodes, avoidOverUsedNodes, storageType);
         } catch(NotEnoughReplicasException e2) {
           //otherwise randomly choose one from the network
           return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
-              maxNodesPerRack, results, avoidStaleNodes, storageType);
+              maxNodesPerRack, results, avoidStaleNodes, avoidOverUsedNodes,
+              storageType);
         }
       } else {
         //otherwise randomly choose one from the network
         return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
-            maxNodesPerRack, results, avoidStaleNodes, storageType);
+            maxNodesPerRack, results, avoidStaleNodes, avoidOverUsedNodes,
+            storageType);
       }
     }
   }
