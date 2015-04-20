@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.mapred;
 
+import java.io.EOFException;
 import java.io.IOException;
 
 
@@ -46,15 +47,19 @@ public class SequenceFileRecordReader<K, V> implements RecordReader<K, V> {
     throws IOException {
     Path path = split.getPath();
     FileSystem fs = path.getFileSystem(conf);
-    this.in = new SequenceFile.Reader(fs, path, conf);
-    this.end = split.getStart() + split.getLength();
-    this.conf = conf;
+    try {
+      this.in = new SequenceFile.Reader(fs, path, conf);
+      this.end = split.getStart() + split.getLength();
+      this.conf = conf;
 
-    if (split.getStart() > in.getPosition())
-      in.sync(split.getStart());                  // sync to start
+      if (split.getStart() > in.getPosition())
+        in.sync(split.getStart());                  // sync to start
 
-    this.start = in.getPosition();
-    more = start < end;
+      this.start = in.getPosition();
+      more = start < end;
+    } catch (EOFException e) {
+      more = false;
+    }
   }
 
 
@@ -78,15 +83,19 @@ public class SequenceFileRecordReader<K, V> implements RecordReader<K, V> {
     
   public synchronized boolean next(K key, V value) throws IOException {
     if (!more) return false;
-    long pos = in.getPosition();
-    boolean remaining = (in.next(key) != null);
-    if (remaining) {
-      getCurrentValue(value);
-    }
-    if (pos >= end && in.syncSeen()) {
+    try {
+      long pos = in.getPosition();
+      boolean remaining = (in.next(key) != null);
+      if (remaining) {
+        getCurrentValue(value);
+      }
+      if (pos >= end && in.syncSeen()) {
+        more = false;
+      } else {
+        more = remaining;
+      }
+    } catch (EOFException e) {
       more = false;
-    } else {
-      more = remaining;
     }
     return more;
   }
@@ -94,12 +103,16 @@ public class SequenceFileRecordReader<K, V> implements RecordReader<K, V> {
   protected synchronized boolean next(K key)
     throws IOException {
     if (!more) return false;
-    long pos = in.getPosition();
-    boolean remaining = (in.next(key) != null);
-    if (pos >= end && in.syncSeen()) {
+    try {
+      long pos = in.getPosition();
+      boolean remaining = (in.next(key) != null);
+      if (pos >= end && in.syncSeen()) {
+        more = false;
+      } else {
+        more = remaining;
+      }
+    } catch (EOFException e) {
       more = false;
-    } else {
-      more = remaining;
     }
     return more;
   }
@@ -128,7 +141,7 @@ public class SequenceFileRecordReader<K, V> implements RecordReader<K, V> {
   protected synchronized void seek(long pos) throws IOException {
     in.seek(pos);
   }
-  public synchronized void close() throws IOException { in.close(); }
+  public synchronized void close() throws IOException { if (in != null) in.close(); }
   
 }
 

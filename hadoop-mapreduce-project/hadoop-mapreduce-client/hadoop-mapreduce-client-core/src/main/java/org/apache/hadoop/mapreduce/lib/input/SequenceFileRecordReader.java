@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.mapreduce.lib.input;
 
+import java.io.EOFException;
 import java.io.IOException;
 
 
@@ -51,15 +52,19 @@ public class SequenceFileRecordReader<K, V> extends RecordReader<K, V> {
     conf = context.getConfiguration();    
     Path path = fileSplit.getPath();
     FileSystem fs = path.getFileSystem(conf);
-    this.in = new SequenceFile.Reader(fs, path, conf);
-    this.end = fileSplit.getStart() + fileSplit.getLength();
+    try {
+      this.in = new SequenceFile.Reader(fs, path, conf);
+      this.end = fileSplit.getStart() + fileSplit.getLength();
 
-    if (fileSplit.getStart() > in.getPosition()) {
-      in.sync(fileSplit.getStart());                  // sync to start
+      if (fileSplit.getStart() > in.getPosition()) {
+        in.sync(fileSplit.getStart());                  // sync to start
+      }
+
+      this.start = in.getPosition();
+      more = start < end;
+    } catch (EOFException e) {
+      more = false;
     }
-
-    this.start = in.getPosition();
-    more = start < end;
   }
 
   @Override
@@ -68,14 +73,18 @@ public class SequenceFileRecordReader<K, V> extends RecordReader<K, V> {
     if (!more) {
       return false;
     }
-    long pos = in.getPosition();
-    key = (K) in.next(key);
-    if (key == null || (pos >= end && in.syncSeen())) {
+    try {
+      long pos = in.getPosition();
+      key = (K) in.next(key);
+      if (key == null || (pos >= end && in.syncSeen())) {
+        more = false;
+        key = null;
+        value = null;
+      } else {
+        value = (V) in.getCurrentValue(value);
+      }
+    } catch (EOFException e) {
       more = false;
-      key = null;
-      value = null;
-    } else {
-      value = (V) in.getCurrentValue(value);
     }
     return more;
   }
@@ -102,7 +111,7 @@ public class SequenceFileRecordReader<K, V> extends RecordReader<K, V> {
     }
   }
   
-  public synchronized void close() throws IOException { in.close(); }
+  public synchronized void close() throws IOException { if (in != null) in.close(); }
   
 }
 
