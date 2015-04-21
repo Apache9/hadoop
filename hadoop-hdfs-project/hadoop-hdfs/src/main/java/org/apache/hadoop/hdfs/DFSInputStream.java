@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs;
 
 import java.io.EOFException;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -999,6 +1000,11 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         actualGetFromOneDataNode(addressPair, block, start, end, buf, offset,
             corruptedBlockMap);
         return;
+      } catch (FileNotFoundException fnfe) {
+        // see T3714. Through we can throw exception here directly maybe.
+        // for safety, let's play with deadNode&retry:)
+        DFSClient.LOG.warn("", fnfe);
+        addToDeadNodes(addressPair.info);
       } catch (IOException e) {
         // Ignore. Already processed inside the function.
         // Loop through to try the next node.
