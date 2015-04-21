@@ -137,7 +137,7 @@ public class BlockPlacementPolicyRaid extends BlockPlacementPolicyDefault {
     List<DatanodeStorageInfo> results = new ArrayList<DatanodeStorageInfo>(chosen);
 
     try {
-      chooseRandom(numOfReplicas, NodeBase.ROOT, excludedNodes, blocksize, 1, results, true,
+      chooseRandom(numOfReplicas, NodeBase.ROOT, excludedNodes, blocksize, 1, results, true, true,
         storageType);
     } catch (NotEnoughReplicasException e1) {
       LOG.warn("Failed to place enough replicas, still need " + (numOfReplicas - results.size())
@@ -148,9 +148,9 @@ public class BlockPlacementPolicyRaid extends BlockPlacementPolicyDefault {
       }
       try {
         chooseRandom(numOfReplicas, NodeBase.ROOT, oldExcludedNodes, blocksize, 1, results, false,
-          storageType);
+          false, storageType);
       } catch (NotEnoughReplicasException e2) {
-        LOG.warn("Failed to place enough replicas even tried stale nodes, still need "
+        LOG.warn("Failed to place enough replicas even tried stale and over used nodes, still need "
             + (numOfReplicas - results.size()), e2);
       }
     }

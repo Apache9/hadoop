@@ -12,7 +12,10 @@
 package org.apache.hadoop.contrib.raid;
 
 import java.io.IOException;
+import org.apache.hadoop.security.KerberosInfo;
 
+@KerberosInfo(
+  serverPrincipal = HdfsRaidConfigKeys.HDFS_RAIDNODE_KERBEROS_PRINCIPAL_KEY)
 public interface ClientRaidnodeProtocol {
   public static final long versionID = 1L;
 

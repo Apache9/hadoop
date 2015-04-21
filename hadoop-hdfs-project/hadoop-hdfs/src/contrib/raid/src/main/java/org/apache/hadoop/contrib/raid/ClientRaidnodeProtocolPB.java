@@ -13,7 +13,10 @@ package org.apache.hadoop.contrib.raid;
 
 import org.apache.hadoop.contrib.raid.ClientRaidnodeProtocolProtos.ClientRaidnodeProtocolService;
 import org.apache.hadoop.ipc.ProtocolInfo;
+import org.apache.hadoop.security.KerberosInfo;
 
+@KerberosInfo(
+  serverPrincipal = HdfsRaidConfigKeys.HDFS_RAIDNODE_KERBEROS_PRINCIPAL_KEY)
 @ProtocolInfo(protocolName = "org.apache.hadoop.contrib.raid.ClientRaidnodeProtocol", protocolVersion = 1)
 public interface ClientRaidnodeProtocolPB extends ClientRaidnodeProtocolService.BlockingInterface {
 }

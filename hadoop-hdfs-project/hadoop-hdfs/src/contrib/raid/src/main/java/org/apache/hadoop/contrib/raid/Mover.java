@@ -425,8 +425,8 @@ public class Mover {
 
       String collectResultFile = conf
           .get(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY);
-      int mapTaskNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
+      int mapTaskNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MAP_TASK_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_MAP_TASK_NUM_DEFAULT);
       List<InputSplit> result = new ArrayList<InputSplit>(mapTaskNum);
 
       FSDataInputStream in = fs.open(new Path(collectResultFile));

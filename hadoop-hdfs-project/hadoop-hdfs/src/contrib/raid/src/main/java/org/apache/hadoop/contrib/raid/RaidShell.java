@@ -46,6 +46,7 @@ public class RaidShell extends Configured implements Tool {
     ClientRaidnodeProtocol crp = null;
     try {
       // Get policy information from raid node.
+      final UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
       InetSocketAddress rnAddr = NetUtils.createSocketAddr(conf
           .get(HdfsRaidConfigKeys.HDFS_RAIDNODE_IPC_ADDRESS_KEY));
       crp = ClientRaidnodeProtocolTranslatorPB.createClientRaidnodeProtocolProxy(rnAddr,

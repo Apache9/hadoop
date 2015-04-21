@@ -33,6 +33,7 @@ import org.apache.hadoop.contrib.raid.RaidTask.TaskPurpose;
 import org.apache.hadoop.contrib.raid.RaidTask.ZombieSweeperTask;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
@@ -108,6 +109,10 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
         .setNumHandlers(
           conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_HANDLER_COUNT_KEY,
             HdfsRaidConfigKeys.HDFS_RAIDNODE_HANDLER_COUNT_DEFAULT)).setVerbose(false).build();
+    if (conf.getBoolean(
+        CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
+      ipcServer.refreshServiceAcl(conf, new RaidACLPolicyProvider());
+    }
   }
 
   private void initMetrics() {
@@ -379,7 +384,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   public static void main(String[] args) throws IOException {
     Configuration conf = new HdfsConfiguration();
     UserGroupInformation.setConfiguration(conf);
-    SecurityUtil.login(conf, HdfsRaidConfigKeys.HDFS_RAIDNODE_KEYTAB_FILE_KEY,
+    SecurityUtil.login(conf, HdfsRaidConfigKeys.HDFS_RAIDNODE_KEYTAB_FILE_KEY, 
       HdfsRaidConfigKeys.HDFS_RAIDNODE_KERBEROS_PRINCIPAL_KEY);
     RaidNode raidNode = new RaidNode(conf);
     raidNode.start();

@@ -137,4 +137,8 @@ public class HdfsRaidConfigKeys {
   public static final String HDFS_RAIDNODE_KEYTAB_FILE_KEY = "hdfs.raidnode.keytab.file";
   public static final String HDFS_RAIDNODE_KERBEROS_PRINCIPAL_KEY = "hdfs.raidnode.kerberos.principal";
   public static final String HDFS_RAIDNODE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "hdfs.raidnode.kerberos.internal.spnego.principal";
+
+  /** RPC ACL */
+  public static final String HADOOP_SECURITY_SERVICE_AUTHORIZATION_CLIENT_RAIDNODE_PROTOCOL_ACL =
+      "security.client.raidnode.protocol.acl";
 }
