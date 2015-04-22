@@ -508,6 +508,55 @@ public class TestFairScheduler extends FairSchedulerTestBase {
   }
 
   @Test
+  public void testFairShareWithExpectedGuaranteedResources() throws IOException {
+    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+    // set queueA and queueB weight zero.
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<defaultQueueSchedulingPolicy>drf</defaultQueueSchedulingPolicy>");
+    out.println("<queue name=\"queueA\">");
+    out.println("<expectedFairShare>40vcores 60mb</expectedFairShare>");
+    out.println("<weight>5.0</weight>");  // should be ignored
+    out.println("</queue>");
+    out.println("<queue name=\"queueB\">");
+    out.println("<expectedFairShare>60vcores 40mb</expectedFairShare>");
+    out.println("<weight>3.0</weight>");
+    out.println("</queue>");
+    out.println("</allocations>");
+    out.close();
+
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, resourceManager.getRMContext());
+
+    // Add one big node (only care about aggregate capacity)
+    RMNode node1 =
+        MockNodes.newNodeInfo(1, Resources.createResource(100 * 1024, 100), 1,
+            "127.0.0.1");
+    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
+    scheduler.handle(nodeEvent1);
+
+    // Queue A wants 2 * 1024.
+    createSchedulingRequest(2 * 1024, "queueA", "user1");
+    // Queue B wants 6 * 1024
+    createSchedulingRequest(6 * 1024, "queueB", "user1");
+
+    scheduler.update();
+
+    FSLeafQueue queue = scheduler.getQueueManager().getLeafQueue(
+        "queueA", false);
+    // queueA's weight is 0.0, so its fair share should be 0.
+    assertEquals(60 * 1024, queue.getFairShare().getMemory());
+    assertEquals(40, queue.getFairShare().getVirtualCores());
+    // queueB's weight is 0.0, so its fair share should be 0.
+    queue = scheduler.getQueueManager().getLeafQueue(
+        "queueB", false);
+    assertEquals(40 * 1024, queue.getFairShare().getMemory());
+    assertEquals(60, queue.getFairShare().getVirtualCores());
+  }
+
+  @Test
   public void testSimpleHierarchicalFairShareCalculation() throws IOException {
     scheduler.init(conf);
     scheduler.start();

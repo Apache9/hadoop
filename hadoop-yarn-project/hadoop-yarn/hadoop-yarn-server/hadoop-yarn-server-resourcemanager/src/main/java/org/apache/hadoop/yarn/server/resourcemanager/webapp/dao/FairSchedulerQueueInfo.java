@@ -60,6 +60,7 @@ public class FairSchedulerQueueInfo {
   private ResourceInfo steadyFairResources;
   private ResourceInfo fairResources;
   private ResourceInfo clusterResources;
+  private ResourceInfo expectedFairShare;
 
   private String queueName;
   private String schedulingPolicy;
@@ -90,6 +91,9 @@ public class FairSchedulerQueueInfo {
     maxResources = new ResourceInfo(
         Resources.componentwiseMin(queue.getMaxShare(),
             scheduler.getClusterResource()));
+    expectedFairShare = new ResourceInfo();
+    expectedFairShare.setMemory((int) queue.getWeights().getWeight(ResourceType.MEMORY));
+    expectedFairShare.setvCores((int) queue.getWeights().getWeight(ResourceType.CPU));
 
     fractionResourcesSteadyFairShare = resourceInfoRatio(steadyFairResources, clusterResources);
     fractionResourcesFairShare = resourceInfoRatio(fairResources, clusterResources);
@@ -171,7 +175,11 @@ public class FairSchedulerQueueInfo {
   public ResourceInfo getMaxResources() {
     return maxResources;
   }
-  
+
+  public ResourceInfo getExpectedFairShare() {
+    return expectedFairShare;
+  }
+
   public int getMaxApplications() {
     return maxApps;
   }

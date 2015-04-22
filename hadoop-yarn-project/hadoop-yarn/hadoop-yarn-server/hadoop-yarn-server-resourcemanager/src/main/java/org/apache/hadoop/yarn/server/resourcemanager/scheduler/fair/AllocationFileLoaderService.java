@@ -40,6 +40,7 @@ import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceType;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.SystemClock;
@@ -409,6 +410,7 @@ public class AllocationFileLoaderService extends AbstractService {
         new HashMap<QueueACL, AccessControlList>();
     NodeList fields = element.getChildNodes();
     boolean isLeaf = true;
+    boolean hasExpectedFairShare = false;
 
     for (int j = 0; j < fields.getLength(); j++) {
       Node fieldNode = fields.item(j);
@@ -423,6 +425,14 @@ public class AllocationFileLoaderService extends AbstractService {
         String text = ((Text)field.getFirstChild()).getData().trim();
         Resource val = FairSchedulerConfiguration.parseResourceConfigValue(text);
         maxQueueResources.put(queueName, val);
+      } else if ("expectedFairShare".equals(field.getTagName())) {
+        String text = ((Text)field.getFirstChild()).getData().trim();
+        Resource val = FairSchedulerConfiguration.parseResourceConfigValue(text);
+        ResourceWeights weights = new ResourceWeights();
+        weights.setWeight(ResourceType.MEMORY, val.getMemory());
+        weights.setWeight(ResourceType.CPU, val.getVirtualCores());
+        queueWeights.put(queueName, weights);
+        hasExpectedFairShare = true;
       } else if ("maxRunningApps".equals(field.getTagName())) {
         String text = ((Text)field.getFirstChild()).getData().trim();
         int val = Integer.parseInt(text);
@@ -433,9 +443,12 @@ public class AllocationFileLoaderService extends AbstractService {
         val = Math.min(val, 1.0f);
         queueMaxAMShares.put(queueName, val);
       } else if ("weight".equals(field.getTagName())) {
-        String text = ((Text)field.getFirstChild()).getData().trim();
-        double val = Double.parseDouble(text);
-        queueWeights.put(queueName, new ResourceWeights((float)val));
+        if (!hasExpectedFairShare) {
+          // expectedFairShare element has higher priority
+          String text = ((Text)field.getFirstChild()).getData().trim();
+          double val = Double.parseDouble(text);
+          queueWeights.put(queueName, new ResourceWeights((float)val));
+        }
       } else if ("minSharePreemptionTimeout".equals(field.getTagName())) {
         String text = ((Text)field.getFirstChild()).getData().trim();
         long val = Long.parseLong(text) * 1000L;
