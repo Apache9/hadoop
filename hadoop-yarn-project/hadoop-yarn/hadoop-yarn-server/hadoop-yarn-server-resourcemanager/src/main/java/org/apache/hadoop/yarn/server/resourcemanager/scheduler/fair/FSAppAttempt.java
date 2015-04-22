@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -78,7 +79,8 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   private Resource preemptedResources = Resources.createResource(0);
   private Comparator<RMContainer> comparator =
       new FSPreemptionPolicy().getContainerComparator();
-  private final Map<RMContainer, Long> preemptionMap = new HashMap<RMContainer, Long>();
+  private final Map<RMContainer, Long> preemptionMap = new
+      ConcurrentHashMap<RMContainer, Long>();
 
   /**
    * Delay scheduling: We often want to prioritize scheduling of node-local
