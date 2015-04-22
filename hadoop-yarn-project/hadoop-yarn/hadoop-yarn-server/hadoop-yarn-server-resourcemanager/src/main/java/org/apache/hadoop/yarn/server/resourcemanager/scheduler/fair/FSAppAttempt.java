@@ -783,8 +783,12 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     synchronized (this) {
       for (Priority p : getPriorities()) {
         for (ResourceRequest r : getResourceRequests(p).values()) {
-          Resource total = Resources.multiply(r.getCapability(), r.getNumContainers());
-          Resources.addTo(demand, total);
+          if (r.getResourceName().equals(ResourceRequest.ANY)) {
+            // Only count ANY demand, avoid duplicating count
+            Resource total =
+              Resources.multiply(r.getCapability(), r.getNumContainers());
+            Resources.addTo(demand, total);
+          }
         }
       }
     }
