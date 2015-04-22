@@ -522,8 +522,17 @@ public class FairScheduler extends
           Resources.none(), Resources.subtract(target, sched.getResourceUsage()));
     }
     if (curTime - sched.getLastTimeAtFairShareThreshold() > fairShareTimeout) {
-      Resource target = Resources.min(resourceCalculator, clusterResource,
+      Resource resourceUpperBound = Resources.componentwiseMin(
           sched.getFairShare(), sched.getDemand());
+      Resource target;
+      if (resourceCalculator instanceof DominantResourceCalculator) {
+        float targetRatio = Math.min(1,
+            ((DominantResourceCalculator) resourceCalculator)
+            .getResourceAsValue(sched.getDemand(), resourceUpperBound, false));
+        target = Resources.multiply(sched.getDemand(), targetRatio);
+      } else {
+        target = resourceUpperBound;
+      }
       resDueToFairShare = Resources.max(resourceCalculator, clusterResource,
           Resources.none(), Resources.subtract(target, sched.getResourceUsage()));
     }

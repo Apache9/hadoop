@@ -80,7 +80,7 @@ public class DominantResourceCalculator extends ResourceCalculator {
    * Once we add more resources, we'll need a more complicated (and slightly
    * less performant algorithm).
    */
-  protected float getResourceAsValue(
+  public float getResourceAsValue(
       Resource clusterResource, Resource resource, boolean dominant) {
     // Just use 'dominant' resource
     return (dominant) ?

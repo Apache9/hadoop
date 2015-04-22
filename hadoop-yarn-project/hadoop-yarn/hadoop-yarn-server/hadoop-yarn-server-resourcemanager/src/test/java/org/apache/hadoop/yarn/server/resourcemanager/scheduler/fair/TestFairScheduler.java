@@ -1826,6 +1826,87 @@ public class TestFairScheduler extends FairSchedulerTestBase {
         1536, scheduler.resToPreempt(schedD, clock.getTime()).getMemory());
   }
 
+  @Test (timeout = 5000)
+  /**
+   * Tests the timing of decision to preempt tasks.
+   */
+  public void testPreemptionDecisionForMultipleResources() throws Exception {
+    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+    conf.set(FairSchedulerConfiguration.RESOURCE_CALCULATOR_CLASS,
+        "org.apache.hadoop.yarn.util.resource.DominantResourceCalculator");
+    MockClock clock = new MockClock();
+    scheduler.setClock(clock);
+
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"default\">");
+    out.println("<maxResources>0mb,0vcores</maxResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueA\">");
+    out.println("<weight>.25</weight>");
+    // We set min resources to 0, so fairshare is only related with weight
+    out.println("<minResources>0mb,0vcores</minResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueB\">");
+    out.println("<weight>.25</weight>");
+    out.println("<minResources>0mb,0vcores</minResources>");
+    out.println("</queue>");
+    out.println("<defaultFairSharePreemptionTimeout>5</defaultFairSharePreemptionTimeout>");
+    out.println("<defaultFairSharePreemptionThreshold>0.8</defaultFairSharePreemptionThreshold>");
+    out.println("<defaultQueueSchedulingPolicy>drf</defaultQueueSchedulingPolicy>");
+    out.println("</allocations>");
+    out.close();
+
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, resourceManager.getRMContext());
+
+    RMNode node1 =
+        MockNodes.newNodeInfo(1, Resources.createResource(40 * 1024, 10), 1,
+            "127.0.0.1");
+    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
+    scheduler.handle(nodeEvent1);
+
+    // Make queue B starved
+    createSchedulingRequest(20 * 1024, 10, "queueA", "user1", 1, 1);
+
+    scheduler.update();
+
+    // Sufficient node check-ins to fully schedule containers
+    for (int i = 0; i < 40; i++) {
+      NodeUpdateSchedulerEvent nodeUpdate1 = new NodeUpdateSchedulerEvent(node1);
+      scheduler.handle(nodeUpdate1);
+    }
+
+    createSchedulingRequest(10 * 1024, 5, "queueB", "user1", 1, 1);
+    // Cumulative demand is (10, 5), fairshare is (20, 5)
+
+    scheduler.update();
+
+    FSLeafQueue schedB =
+        scheduler.getQueueManager().getLeafQueue("queueB", true);
+
+    assertTrue(Resources.equals(
+        Resources.none(), scheduler.resToPreempt(schedB, clock.getTime())));
+
+    // After fairSharePreemptionTime has passed, they should want to preempt
+    // fair share. fairshare is (20, 5)
+    scheduler.update();
+    clock.tick(6);
+    assertTrue(Resources.equals(
+        Resources.createResource(10 * 1024, 5) ,
+        scheduler.resToPreempt(schedB, clock.getTime())));
+
+    createSchedulingRequest(1 * 1024, 3, "queueB", "user1", 1, 1);
+    // Cumulative demand is (11, 8), fairshare is (20, 5)
+    scheduler.update();
+    clock.tick(6);
+    assertTrue(Resources.equals(
+        Resources.createResource((int) (5.0/8 * 11 * 1024), 5) ,
+        scheduler.resToPreempt(schedB, clock.getTime())));
+  }
+
   @Test
   /**
    * Tests the various timing of decision to preempt tasks.
