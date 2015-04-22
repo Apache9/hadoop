@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 
 import org.apache.commons.logging.Log;
@@ -34,6 +35,7 @@ import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerState;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ActiveUsersManager;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
@@ -176,6 +178,28 @@ public class FSParentQueue extends FSQueue {
       }
     }
     return assigned;
+  }
+
+  @Override
+  public void clearPreemptedResources() {
+    preemptionRequestFromChildren.setMemory(0);
+    preemptionRequestFromChildren.setVirtualCores(0);
+    resourceToPreemptBetweenChildren.setMemory(0);
+    resourceToPreemptBetweenChildren.setVirtualCores(0);
+
+    for (FSQueue queue : childQueues) {
+      queue.clearPreemptedResources();
+    }
+  }
+
+  @Override
+  public void preemptResource() {
+    // Try to process preemption request for this level
+    preemptResourceBetweenChildren();
+
+    for (FSQueue queue : childQueues) {
+      queue.preemptResource();
+    }
   }
 
   @Override

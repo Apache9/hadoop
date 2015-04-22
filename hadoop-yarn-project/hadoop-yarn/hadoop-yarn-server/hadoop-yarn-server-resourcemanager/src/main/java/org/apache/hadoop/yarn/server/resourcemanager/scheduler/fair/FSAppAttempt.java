@@ -383,6 +383,12 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     Resources.addTo(preemptedResources, container.getAllocatedResource());
   }
 
+  public void removePreemption(RMContainer container) {
+    assert preemptionMap.get(container) == null;
+    preemptionMap.remove(container);
+    Resources.subtractFrom(preemptedResources, container.getAllocatedResource());
+  }
+
   public Long getContainerPreemptionTime(RMContainer container) {
     return preemptionMap.get(container);
   }

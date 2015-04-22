@@ -18,10 +18,11 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNodes;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeAddedSchedulerEvent;
@@ -35,6 +36,8 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -44,17 +47,18 @@ public class TestFairSchedulerPreemption extends FairSchedulerTestBase {
       TestFairSchedulerPreemption.class.getName() + ".xml").getAbsolutePath();
 
   private MockClock clock;
+  private RMNode node;
 
   private static class StubbedFairScheduler extends FairScheduler {
-    public int lastPreemptMemory = -1;
-
+    Set<RMContainer> preemptedContainers = new HashSet<RMContainer>();
     @Override
-    protected void preemptResources(Resource toPreempt) {
-      lastPreemptMemory = toPreempt.getMemory();
+    public void warnOrKillContainer(RMContainer container) {
+      preemptedContainers.add(container);
+      super.warnOrKillContainer(container);
     }
 
     public void resetLastPreemptResources() {
-      lastPreemptMemory = -1;
+      preemptedContainers.clear();
     }
   }
 
@@ -86,6 +90,11 @@ public class TestFairSchedulerPreemption extends FairSchedulerTestBase {
   private void startResourceManager(float utilizationThreshold) {
     conf.setFloat(FairSchedulerConfiguration.PREEMPTION_THRESHOLD,
         utilizationThreshold);
+
+    // Allow really kill container in 2nd calling of preemptTasksIfNecessary()
+    conf.setInt(FairSchedulerConfiguration.PREEMPTION_INTERVAL, 1);
+    conf.setInt(FairSchedulerConfiguration.WAIT_TIME_BEFORE_KILL, 0);
+
     resourceManager = new MockRM(conf);
     resourceManager.start();
 
@@ -97,32 +106,39 @@ public class TestFairSchedulerPreemption extends FairSchedulerTestBase {
     scheduler.updateInterval = 60 * 1000;
   }
 
-  private void registerNodeAndSubmitApp(
-      int memory, int vcores, int appContainers, int appMemory) {
-    RMNode node1 = MockNodes.newNodeInfo(
+  private void initClusterResource(int memory, int vcores) {
+    node = MockNodes.newNodeInfo(
         1, Resources.createResource(memory, vcores), 1, "node1");
-    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
+    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node);
     scheduler.handle(nodeEvent1);
 
     assertEquals("Incorrect amount of resources in the cluster",
         memory, scheduler.rootMetrics.getAvailableMB());
     assertEquals("Incorrect amount of resources in the cluster",
         vcores, scheduler.rootMetrics.getAvailableVirtualCores());
+  }
 
-    createSchedulingRequest(appMemory, "queueA", "user1", appContainers);
+  private ApplicationAttemptId createSchedulingRequestAndSchedule(
+      int memory, String queueId, String userId,
+      int numContainers, int priority) {
+    ApplicationAttemptId applicationAttemptId =
+        createSchedulingRequest(memory, queueId, userId, numContainers,
+            priority);
     scheduler.update();
+    nodemanagerHearbeat();
+    return applicationAttemptId;
+  }
+
+  private void nodemanagerHearbeat() {
     // Sufficient node check-ins to fully schedule containers
-    for (int i = 0; i < 3; i++) {
-      NodeUpdateSchedulerEvent nodeUpdate1 = new NodeUpdateSchedulerEvent(node1);
+    for (int i = 0; i < node.getTotalCapability().getMemory() / 1024; i++) {
+      NodeUpdateSchedulerEvent nodeUpdate1 = new NodeUpdateSchedulerEvent(node);
       scheduler.handle(nodeUpdate1);
     }
-    assertEquals("app1's request is not met",
-        memory - appContainers * appMemory,
-        scheduler.rootMetrics.getAvailableMB());
   }
 
   @Test
-  public void testPreemptionWithFreeResources() throws Exception {
+  public void testPreemptionForDepth1() throws Exception {
     PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
     out.println("<?xml version=\"1.0\"?>");
     out.println("<allocations>");
@@ -137,30 +153,15 @@ public class TestFairSchedulerPreemption extends FairSchedulerTestBase {
     out.println("<weight>1</weight>");
     out.println("<minResources>1024mb,0vcores</minResources>");
     out.println("</queue>");
-    out.print("<defaultMinSharePreemptionTimeout>5</defaultMinSharePreemptionTimeout>");
-    out.print("<fairSharePreemptionTimeout>10</fairSharePreemptionTimeout>");
+    out.println("<fairSharePreemptionTimeout>5</fairSharePreemptionTimeout>");
     out.println("</allocations>");
     out.close();
 
-    startResourceManager(0f);
-    // Create node with 4GB memory and 4 vcores
-    registerNodeAndSubmitApp(4 * 1024, 4, 2, 1024);
-
-    // Verify submitting another request triggers preemption
-    createSchedulingRequest(1024, "queueB", "user1", 1, 1);
-    scheduler.update();
-    clock.tick(6);
-
-    ((StubbedFairScheduler) scheduler).resetLastPreemptResources();
-    scheduler.preemptTasksIfNecessary();
-    assertEquals("preemptResources() should have been called", 1024,
-        ((StubbedFairScheduler) scheduler).lastPreemptMemory);
-
-    resourceManager.stop();
-
     startResourceManager(0.8f);
     // Create node with 4GB memory and 4 vcores
-    registerNodeAndSubmitApp(4 * 1024, 4, 3, 1024);
+    initClusterResource(4 * 1024, 4);
+
+    createSchedulingRequestAndSchedule(1024, "queueA", "user1", 3, 1);
 
     // Verify submitting another request doesn't trigger preemption
     createSchedulingRequest(1024, "queueB", "user1", 1, 1);
@@ -169,23 +170,376 @@ public class TestFairSchedulerPreemption extends FairSchedulerTestBase {
 
     ((StubbedFairScheduler) scheduler).resetLastPreemptResources();
     scheduler.preemptTasksIfNecessary();
-    assertEquals("preemptResources() should not have been called", -1,
-        ((StubbedFairScheduler) scheduler).lastPreemptMemory);
+    assertTrue("preemptResources() should not have been called",
+        ((StubbedFairScheduler) scheduler).preemptedContainers.isEmpty());
 
     resourceManager.stop();
 
     startResourceManager(0.7f);
     // Create node with 4GB memory and 4 vcores
-    registerNodeAndSubmitApp(4 * 1024, 4, 3, 1024);
+    initClusterResource(4 * 1024, 4);
+    ApplicationAttemptId applicationAttemptId =
+        createSchedulingRequestAndSchedule(1024, "queueA", "user1", 4, 1);
 
-    // Verify submitting another request triggers preemption
     createSchedulingRequest(1024, "queueB", "user1", 1, 1);
     scheduler.update();
     clock.tick(6);
 
     ((StubbedFairScheduler) scheduler).resetLastPreemptResources();
     scheduler.preemptTasksIfNecessary();
-    assertEquals("preemptResources() should have been called", 1024,
-        ((StubbedFairScheduler) scheduler).lastPreemptMemory);
+    Set<RMContainer> preemptedContainers =
+        ((StubbedFairScheduler) scheduler).preemptedContainers;
+    assertEquals("Container(s) should have been preempted", 1,
+        preemptedContainers.size());
+    for (RMContainer preemptedContainer : preemptedContainers) {
+      assertEquals(applicationAttemptId,
+          preemptedContainer.getApplicationAttemptId());
+    }
+    clock.tick(2);
+    scheduler.preemptTasksIfNecessary();
+    scheduler.update();
+    nodemanagerHearbeat();
+
+    FSQueue queueB = scheduler.getQueueManager().getQueue("queueB");
+    assertEquals(1024, queueB.getResourceUsage().getMemory());
+  }
+
+  @Test
+  public void testPreemptionForDepth2Case1() throws Exception {
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"default\">");
+    out.println("<maxResources>0mb,0vcores</maxResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueA\">");
+    out.println("<weight>1</weight>");
+    out.println("  <queue name=\"1\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("  <queue name=\"2\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("</queue>");
+    out.println("<fairSharePreemptionTimeout>5</fairSharePreemptionTimeout>");
+    out.println("<defaultFairSharePreemptionThreshold>0.8</defaultFairSharePreemptionThreshold>");
+    out.println("</allocations>");
+    out.close();
+
+    startResourceManager(0.7f);
+    // Create node with 4GB memory and 4 vcores
+    initClusterResource(4 * 1024, 4);
+    ApplicationAttemptId applicationAttemptId =
+        createSchedulingRequestAndSchedule(1024, "queueA.1", "user1", 4, 1);
+
+    createSchedulingRequest(1024, "queueA.2", "user1", 3, 1);
+    scheduler.update();
+    nodemanagerHearbeat();
+    clock.tick(6);
+
+    ((StubbedFairScheduler) scheduler).resetLastPreemptResources();
+    scheduler.preemptTasksIfNecessary();
+    Set<RMContainer> preemptedContainers =
+        ((StubbedFairScheduler) scheduler).preemptedContainers;
+    assertEquals("Container(s) should have been preempted", 2,
+        preemptedContainers.size());
+    for (RMContainer preemptedContainer : preemptedContainers) {
+      assertEquals(applicationAttemptId,
+          preemptedContainer.getApplicationAttemptId());
+    }
+    clock.tick(2);
+    scheduler.preemptTasksIfNecessary();
+
+    scheduler.update();
+    nodemanagerHearbeat();
+
+    // verify final usage
+    assertEquals(2048, scheduler.getQueueManager().getQueue("queueA.1")
+        .getResourceUsage().getMemory());
+    assertEquals(2048, scheduler.getQueueManager().getQueue("queueA.2")
+        .getResourceUsage().getMemory());
+  }
+
+  @Test
+  public void testPreemptionForDepth2Case2() throws Exception {
+    // case: A2 should only preempt from sibling A1, when other queue B is
+    // under fair share
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"default\">");
+    out.println("<maxResources>0mb,0vcores</maxResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueA\">");
+    out.println("<weight>1</weight>");
+    out.println("  <queue name=\"1\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("  <queue name=\"2\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueB\">");
+    out.println("<weight>1</weight>");
+    out.println("</queue>");
+    out.println("<fairSharePreemptionTimeout>5</fairSharePreemptionTimeout>");
+    out.println("<defaultFairSharePreemptionThreshold>0.8</defaultFairSharePreemptionThreshold>");
+    out.println("</allocations>");
+    out.close();
+
+    startResourceManager(0.7f);
+    // Create node with 4GB memory and 4 vcores
+    initClusterResource(4 * 1024, 4);
+
+    ApplicationAttemptId applicationAttemptId =
+        createSchedulingRequestAndSchedule(1024, "queueA.1", "user1", 2, 1);
+    createSchedulingRequestAndSchedule(1024, "queueB", "user1", 2, 1);
+
+    createSchedulingRequest(1024, "queueA.2", "user1", 4, 1);
+    scheduler.update();
+    nodemanagerHearbeat();
+    clock.tick(6);
+
+    ((StubbedFairScheduler) scheduler).resetLastPreemptResources();
+    scheduler.preemptTasksIfNecessary();
+    Set<RMContainer> preemptedContainers =
+        ((StubbedFairScheduler) scheduler).preemptedContainers;
+    assertEquals("Container(s) should have been preempted", 1,
+        preemptedContainers.size());
+    for (RMContainer preemptedContainer : preemptedContainers) {
+      assertEquals("Should only preempt from sibling", applicationAttemptId,
+          preemptedContainer.getApplicationAttemptId());
+    }
+    clock.tick(2);
+    scheduler.preemptTasksIfNecessary();
+
+    scheduler.update();
+    nodemanagerHearbeat();
+
+    // verify final usage
+    assertEquals(1024, scheduler.getQueueManager().getQueue("queueA.1")
+        .getResourceUsage().getMemory());
+    assertEquals(1024, scheduler.getQueueManager().getQueue("queueA.2")
+        .getResourceUsage().getMemory());
+    assertEquals(2048, scheduler.getQueueManager().getQueue("queueB")
+        .getResourceUsage().getMemory());
+  }
+
+  @Test
+  public void testPreemptionForDepth2Case3() throws Exception {
+    // case: A2 should preempt from A1 and B
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"default\">");
+    out.println("<maxResources>0mb,0vcores</maxResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueA\">");
+    out.println("<weight>1</weight>");
+    out.println("  <queue name=\"1\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("  <queue name=\"2\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueB\">");
+    out.println("<weight>1</weight>");
+    out.println("</queue>");
+    out.println("<fairSharePreemptionTimeout>5</fairSharePreemptionTimeout>");
+    out.println("<defaultFairSharePreemptionThreshold>0.8</defaultFairSharePreemptionThreshold>");
+    out.println("</allocations>");
+    out.close();
+
+    startResourceManager(0.7f);
+    initClusterResource(100 * 1024, 100);
+
+    ApplicationAttemptId applicationAttemptIdA1 =
+        createSchedulingRequestAndSchedule(1024, "queueA.1", "user1", 30, 1);
+    ApplicationAttemptId applicationAttemptIdB =
+        createSchedulingRequestAndSchedule(1024, "queueB", "user1", 70, 1);
+
+    createSchedulingRequest(1024, "queueA.2", "user1", 50, 1);
+    scheduler.update();
+    nodemanagerHearbeat();
+    clock.tick(6);
+
+    ((StubbedFairScheduler) scheduler).resetLastPreemptResources();
+    scheduler.preemptTasksIfNecessary();
+    Set<RMContainer> preemptedContainers =
+        ((StubbedFairScheduler) scheduler).preemptedContainers;
+    assertEquals("Container(s) should have been preempted", 25,
+        preemptedContainers.size());
+    int numPreemptFromQueueA1 = 0;
+    int numPreemptFromQueueB = 0;
+    for (RMContainer preemptedContainer : preemptedContainers) {
+      if (applicationAttemptIdA1.equals(
+          preemptedContainer.getApplicationAttemptId())) {
+        ++numPreemptFromQueueA1;
+      }
+      if (applicationAttemptIdB.equals(
+          preemptedContainer.getApplicationAttemptId())) {
+        ++numPreemptFromQueueB;
+      }
+    }
+
+    assertEquals("Should preempt from queueA.1", 5, numPreemptFromQueueA1);
+    assertEquals("Should preempt from queueB", 20, numPreemptFromQueueB);
+    clock.tick(2);
+    scheduler.preemptTasksIfNecessary();
+
+    scheduler.update();
+    nodemanagerHearbeat();
+
+    // verify final usage
+    assertEquals(1024 * 25, scheduler.getQueueManager().getQueue("queueA.1")
+        .getResourceUsage().getMemory());
+    assertEquals(1024 * 25, scheduler.getQueueManager().getQueue("queueA.2")
+        .getResourceUsage().getMemory());
+    assertEquals(1024 * 50, scheduler.getQueueManager().getQueue("queueB")
+        .getResourceUsage().getMemory());
+  }
+
+  @Test
+  public void testPreemptionForDepth2Case4() throws Exception {
+    // case: A2 should only preempt from A1 when parent queue A reached its max
+    // limit, even when other siblings of queue A is over fair share
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"default\">");
+    out.println("<maxResources>0mb,0vcores</maxResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueA\">");
+    out.println("<weight>1</weight>");
+    out.println("<maxResources>20480mb,20vcores</maxResources>");
+    out.println("  <queue name=\"1\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("  <queue name=\"2\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueB\">");
+    out.println("<weight>1</weight>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueC\">");
+    out.println("<weight>1</weight>");
+    out.println("</queue>");
+    out.println("<fairSharePreemptionTimeout>5</fairSharePreemptionTimeout>");
+    out.println("<defaultFairSharePreemptionThreshold>0.8</defaultFairSharePreemptionThreshold>");
+    out.println("</allocations>");
+    out.close();
+
+    startResourceManager(0.7f);
+    initClusterResource(100 * 1024, 100);
+
+    ApplicationAttemptId applicationAttemptIdA1 =
+        createSchedulingRequestAndSchedule(1024, "queueA.1", "user1", 20, 1);
+    ApplicationAttemptId applicationAttemptIdB =
+        createSchedulingRequestAndSchedule(1024, "queueB", "user1", 20, 1);
+    ApplicationAttemptId applicationAttemptIdC =
+        createSchedulingRequestAndSchedule(1024, "queueC", "user1", 60, 1);
+
+    createSchedulingRequest(1024, "queueA.2", "user1", 50, 1);
+    scheduler.update();
+    nodemanagerHearbeat();
+    clock.tick(6);
+
+    ((StubbedFairScheduler) scheduler).resetLastPreemptResources();
+    scheduler.preemptTasksIfNecessary();
+    Set<RMContainer> preemptedContainers =
+        ((StubbedFairScheduler) scheduler).preemptedContainers;
+    assertEquals("Container(s) should have been preempted", 10,
+        preemptedContainers.size());
+    for (RMContainer preemptedContainer : preemptedContainers) {
+      assertEquals("Should only preempt from A1", applicationAttemptIdA1,
+          preemptedContainer.getApplicationAttemptId());
+    }
+
+    clock.tick(2);
+    scheduler.preemptTasksIfNecessary();
+
+    scheduler.update();
+    nodemanagerHearbeat();
+
+    // verify final usage
+    assertEquals(1024 * 10, scheduler.getQueueManager().getQueue("queueA.1")
+        .getResourceUsage().getMemory());
+    assertEquals(1024 * 10, scheduler.getQueueManager().getQueue("queueA.2")
+        .getResourceUsage().getMemory());
+    assertEquals(1024 * 20, scheduler.getQueueManager().getQueue("queueB")
+        .getResourceUsage().getMemory());
+
+    // queueC is over fair share, but will not be preempted
+    assertEquals(1024 * 40, scheduler.getQueueManager().getQueue("queueC")
+        .getFairShare().getMemory());
+    assertEquals(1024 * 60, scheduler.getQueueManager().getQueue("queueC")
+        .getResourceUsage().getMemory());
+  }
+
+  @Test
+  public void testPreemptionForDepth2Case5() throws Exception {
+    // case: starved A2 should only preempt from sibling A1 when parent A is
+    // not starved
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"default\">");
+    out.println("<maxResources>0mb,0vcores</maxResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueA\">");
+    out.println("<weight>1</weight>");
+    out.println("  <queue name=\"1\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("  <queue name=\"2\">");
+    out.println("  <weight>1</weight>");
+    out.println("  </queue>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueB\">");
+    out.println("<weight>1</weight>");
+    out.println("</queue>");
+    out.println("<fairSharePreemptionTimeout>5</fairSharePreemptionTimeout>");
+    out.println("<defaultFairSharePreemptionThreshold>0.8</defaultFairSharePreemptionThreshold>");
+    out.println("</allocations>");
+    out.close();
+
+    startResourceManager(0.8f);
+    // Create node with 10GB memory and 10 vcores
+    initClusterResource(10 * 1024, 10);
+
+    ApplicationAttemptId applicationAttemptId =
+        createSchedulingRequestAndSchedule(1024, "queueA.1", "user1", 4, 1);
+    createSchedulingRequestAndSchedule(1024, "queueB", "user1", 6, 1);
+
+    createSchedulingRequest(1024, "queueA.2", "user1", 1, 1);
+    scheduler.update();
+    nodemanagerHearbeat();
+    clock.tick(6);
+
+    ((StubbedFairScheduler) scheduler).resetLastPreemptResources();
+    scheduler.preemptTasksIfNecessary();
+    Set<RMContainer> preemptedContainers =
+        ((StubbedFairScheduler) scheduler).preemptedContainers;
+    assertEquals("Container(s) should have been preempted", 1,
+        preemptedContainers.size());
+    for (RMContainer preemptedContainer : preemptedContainers) {
+      assertEquals("Should only preempt from sibling", applicationAttemptId,
+          preemptedContainer.getApplicationAttemptId());
+    }
+    clock.tick(2);
+    scheduler.preemptTasksIfNecessary();
+
+    scheduler.update();
+    nodemanagerHearbeat();
+
+    // verify final usage
+    assertEquals(1024 * 3, scheduler.getQueueManager().getQueue("queueA.1")
+        .getResourceUsage().getMemory());
+    assertEquals(1024 * 1, scheduler.getQueueManager().getQueue("queueA.2")
+        .getResourceUsage().getMemory());
+    assertEquals(1024 * 6, scheduler.getQueueManager().getQueue("queueB")
+        .getResourceUsage().getMemory());
   }
 }

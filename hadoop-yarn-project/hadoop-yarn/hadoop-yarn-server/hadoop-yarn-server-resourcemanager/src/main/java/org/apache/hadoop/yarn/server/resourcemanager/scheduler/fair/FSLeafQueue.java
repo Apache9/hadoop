@@ -337,6 +337,12 @@ public class FSLeafQueue extends FSQueue {
   }
 
   @Override
+  public void preemptResource() {
+    // Try to process preemption request for this level
+    preemptResourceBetweenChildren();
+  }
+
+  @Override
   public RMContainer preemptContainer() {
     RMContainer toBePreempted = null;
 
@@ -522,29 +528,5 @@ public class FSLeafQueue extends FSQueue {
   private boolean preemptContainerPreCheck() {
     return parent.getPolicy().checkIfUsageOverFairShare(getResourceUsage(),
         getFairShare());
-  }
-
-  /**
-   * Is a queue being starved for its min share.
-   */
-  @VisibleForTesting
-  boolean isStarvedForMinShare() {
-    return isStarved(getMinShare());
-  }
-
-  /**
-   * Is a queue being starved for its fair share threshold.
-   */
-  @VisibleForTesting
-  boolean isStarvedForFairShare() {
-    return isStarved(
-        Resources.multiply(getFairShare(), getFairSharePreemptionThreshold()));
-  }
-
-  private boolean isStarved(Resource share) {
-    Resource desiredShare = Resources.min(scheduler.getResourceCalculator(),
-        scheduler.getClusterResource(), share, getDemand());
-    return Resources.lessThan(scheduler.getResourceCalculator(),
-        scheduler.getClusterResource(), getResourceUsage(), desiredShare);
   }
 }

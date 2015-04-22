@@ -164,7 +164,10 @@ public class FairScheduler extends
   
   // Containers whose AMs have been warned that they will be preempted soon.
   private List<RMContainer> warnedContainers = new ArrayList<RMContainer>();
-  
+  // Containers preempted for which queue
+  private HashMap<FSQueue, List<RMContainer>> mapQueueToWarnedContainers =
+      new HashMap<FSQueue, List<RMContainer>>();
+
   protected boolean sizeBasedWeight; // Give larger weights to larger jobs
   protected WeightAdjuster weightAdjuster; // Can be null for no weight adjuster
   protected boolean continuousSchedulingEnabled; // Continuous Scheduling enabled or not
@@ -354,14 +357,36 @@ public class FairScheduler extends
     }
     lastPreemptCheckTime = curTime;
 
+    // clear parent's resToPreempt
+    queueMgr.getRootQueue().clearPreemptedResources();
+
+    // calculation resToPreempt
     Resource resToPreempt = Resources.clone(Resources.none());
     for (FSLeafQueue sched : queueMgr.getLeafQueues()) {
       Resources.addTo(resToPreempt, resToPreempt(sched, curTime));
     }
+
+    // do preemption
     if (Resources.greaterThan(resourceCalculator, clusterResource, resToPreempt,
         Resources.none())) {
-      preemptResources(resToPreempt);
+      preemptResource();
     }
+
+  }
+
+  private void preemptResource() {
+    long start = getClock().getTime();
+    for (FSLeafQueue queue : getQueueManager().getLeafQueues()) {
+      queue.resetPreemptedResources();
+    }
+
+    getQueueManager().getRootQueue().preemptResource();
+    // Clear preemptedResources for each app
+    for (FSLeafQueue queue : getQueueManager().getLeafQueues()) {
+      queue.clearPreemptedResources();
+    }
+    long duration = getClock().getTime() - start;
+    fsOpDurations.addPreemptCallDuration(duration);
   }
 
   /**
@@ -428,12 +453,17 @@ public class FairScheduler extends
     fsOpDurations.addPreemptCallDuration(duration);
   }
   
-  protected void warnOrKillContainer(RMContainer container) {
+  public void warnOrKillContainer(RMContainer container) {
     ApplicationAttemptId appAttemptId = container.getApplicationAttemptId();
     FSAppAttempt app = getSchedulerApp(appAttemptId);
+    if (app == null) {
+      return;
+    }
+
     FSLeafQueue queue = app.getQueue();
-    LOG.info("Preempting container (prio=" + container.getContainer().getPriority() +
-        "res=" + container.getContainer().getResource() +
+    LOG.info("Preempting container " + container + " (prio=" +
+        container.getContainer().getPriority() +
+        " res=" + container.getContainer().getResource() +
         ") from queue " + queue.getName());
     
     Long time = app.getContainerPreemptionTime(container);
@@ -450,7 +480,7 @@ public class FairScheduler extends
         // TODO: Not sure if this ever actually adds this to the list of cleanup
         // containers on the RMNode (see SchedulerNode.releaseContainer()).
         completedContainer(container, status, RMContainerEventType.KILL);
-        LOG.info("Killing container" + container +
+        LOG.info("Killing container " + container +
             " (after waiting for premption for " +
             (getClock().getTime() - time) + "ms)");
       }
@@ -458,6 +488,16 @@ public class FairScheduler extends
       // track the request in the FSAppAttempt itself
       app.addPreemption(container, getClock().getTime());
     }
+  }
+
+  public void removePreemption(RMContainer container) {
+    ApplicationAttemptId appAttemptId = container.getApplicationAttemptId();
+    FSAppAttempt app = getSchedulerApp(appAttemptId);
+    if (app == null) {
+      return;
+    }
+
+    app.removePreemption(container);
   }
 
   /**
@@ -495,6 +535,7 @@ public class FairScheduler extends
           + sched.getName() + ": resDueToMinShare = " + resDueToMinShare
           + ", resDueToFairShare = " + resDueToFairShare;
       LOG.info(message);
+      sched.getParent().updateResourceToPreempt(resToPreempt);
     }
     return resToPreempt;
   }

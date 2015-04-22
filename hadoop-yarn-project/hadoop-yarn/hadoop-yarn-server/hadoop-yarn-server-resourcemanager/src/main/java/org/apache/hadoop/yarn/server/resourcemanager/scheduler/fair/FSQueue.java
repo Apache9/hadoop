@@ -20,9 +20,13 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -35,12 +39,16 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerState;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Queue;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 @Private
 @Unstable
 public abstract class FSQueue implements Queue, Schedulable {
+  private static final Log LOG = LogFactory.getLog(
+      FSQueue.class.getName());
   private Resource fairShare = Resources.createResource(0, 0);
   private Resource steadyFairShare = Resources.createResource(0, 0);
   private final String name;
@@ -56,6 +64,11 @@ public abstract class FSQueue implements Queue, Schedulable {
   private long fairSharePreemptionTimeout = Long.MAX_VALUE;
   private long minSharePreemptionTimeout = Long.MAX_VALUE;
   private float fairSharePreemptionThreshold = 0.5f;
+
+  protected Resource preemptionRequestFromChildren = Resources.createResource(0, 0);
+  protected Resource resourceToPreemptBetweenChildren = Resources.createResource(0, 0);
+
+  protected List<RMContainer> warnedContainers = new ArrayList<RMContainer>();
 
   public FSQueue(String name, FairScheduler scheduler, FSParentQueue parent) {
     this.name = name;
@@ -91,6 +104,11 @@ public abstract class FSQueue implements Queue, Schedulable {
 
   public abstract void setPolicy(SchedulingPolicy policy)
       throws AllocationConfigurationException;
+
+  /**
+   * Preempt resource downside
+   */
+  public abstract void preemptResource();
 
   @Override
   public ResourceWeights getWeights() {
@@ -282,5 +300,116 @@ public abstract class FSQueue implements Queue, Schedulable {
   public String getDefaultNodeLabelExpression() {
     // TODO, add implementation for FS
     return null;
+  }
+
+  public void updateResourceToPreempt(Resource addedResource) {
+    if (getParent() == null || !isStarvedForFairShare()) {
+      // for root queue, or when queue is not starved: only should preempt from
+      // children
+      Resources.addTo(resourceToPreemptBetweenChildren, addedResource);
+    } else {
+      // for non root queue, divide preemption request to two part: preemption
+      // from children, and preemption from sibling
+      Resource usageResource = getResourceUsage();
+
+      Resource oldResourceAfterPreemption = Resources.add(
+          preemptionRequestFromChildren, usageResource);
+      Resources.addTo(preemptionRequestFromChildren, addedResource);
+      Resource newResourceAfterPreemption = Resources.add(
+          preemptionRequestFromChildren, usageResource);
+
+      // request above fair share should be preempted from children
+      resourceToPreemptBetweenChildren = Resources.subtract(
+          newResourceAfterPreemption, getFairShare());
+
+      // request below fair share should be preempted from sibling
+      Resource newResourceToPreemptFromSibling =
+          Resources.subtract(
+              Resources.componentwiseMin(newResourceAfterPreemption,
+                  getFairShare()),
+              Resources.componentwiseMin(oldResourceAfterPreemption,
+                  getFairShare())
+          );
+
+      // only update preemption request to parent if this current queue is starved
+      parent.updateResourceToPreempt(newResourceToPreemptFromSibling);
+    }
+    LOG.info("update resource to preempt, queue: " + getName() + ", " +
+        "preemption between children: " + resourceToPreemptBetweenChildren);
+  }
+
+  public void clearPreemptedResources() {
+    preemptionRequestFromChildren.setMemory(0);
+    preemptionRequestFromChildren.setVirtualCores(0);
+    resourceToPreemptBetweenChildren.setMemory(0);
+    resourceToPreemptBetweenChildren.setVirtualCores(0);
+  }
+
+  /**
+   * Is a queue being starved for its min share.
+   */
+  @VisibleForTesting
+  boolean isStarvedForMinShare() {
+    return isStarved(getMinShare());
+  }
+
+  /**
+   * Is a queue being starved for its fair share threshold.
+   */
+  @VisibleForTesting
+  boolean isStarvedForFairShare() {
+    return isStarved(
+        Resources.multiply(getFairShare(), getFairSharePreemptionThreshold()));
+  }
+
+  private boolean isStarved(Resource share) {
+    Resource desiredShare = Resources.min(scheduler.getResourceCalculator(),
+        scheduler.getClusterResource(), share, getDemand());
+    return Resources.lessThan(scheduler.getResourceCalculator(),
+        scheduler.getClusterResource(), getResourceUsage(), desiredShare);
+  }
+
+  protected void preemptResourceBetweenChildren() {
+    // warn or kill containers that has already been chosen to preempt
+    LOG.info("Trying to preempt resource under queue " + getName()
+        + " for resource " +
+        resourceToPreemptBetweenChildren);
+
+    Iterator<RMContainer> warnedIter = warnedContainers.iterator();
+    Resource toPreempt = Resources.clone(resourceToPreemptBetweenChildren);
+    while (warnedIter.hasNext()) {
+      RMContainer container = warnedIter.next();
+      if ((container.getState() == RMContainerState.RUNNING ||
+          container.getState() == RMContainerState.ALLOCATED) &&
+          Resources.greaterThan(scheduler.getResourceCalculator(),
+              scheduler.getClusterResource(),
+              toPreempt, Resources.none())) {
+        scheduler.warnOrKillContainer(container);
+        Resources
+            .subtractFrom(toPreempt, container.getContainer().getResource());
+      } else {
+        // container finished or preemption request is gone
+        warnedIter.remove();
+        // remove container from its original application's preempted resource
+        scheduler.removePreemption(container);
+      }
+    }
+
+    // preempt from children for remaining preemption request
+    while (Resources.greaterThan(scheduler.getResourceCalculator(),
+        scheduler.getClusterResource(),
+        toPreempt, Resources.none())) {
+      RMContainer container = preemptContainer();
+      if (container == null) {
+        break;
+      } else {
+        scheduler.warnOrKillContainer(container);
+        warnedContainers.add(container); // mark container on this queue
+        Resources.subtractFrom(
+            toPreempt, container.getContainer().getResource());
+        LOG.info("Succeeded preempt resource under queue " + getName()
+            + " from container: " + container);
+      }
+    }
   }
 }
