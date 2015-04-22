@@ -412,6 +412,11 @@ public class SchedulerApplicationAttempt {
     return currentConsumption;
   }
 
+  @Override
+  public String toString() {
+    return getApplicationAttemptId().toString();
+  }
+
   public static class ContainersAndNMTokensAllocation {
     List<Container> containerList;
     List<NMToken> nmTokenList;
