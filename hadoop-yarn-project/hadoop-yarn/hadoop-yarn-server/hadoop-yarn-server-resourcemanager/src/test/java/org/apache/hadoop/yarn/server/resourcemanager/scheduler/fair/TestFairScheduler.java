@@ -71,6 +71,7 @@ import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNodes;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
+import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.MockRMApp;
@@ -3538,12 +3539,14 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     scheduler.reinitialize(conf, resourceManager.getRMContext());
 
     // exceeds no limits
-    ApplicationAttemptId attId1 = createSchedulingRequest(1024, "queue1.sub1", "user1");
+    ApplicationAttemptId attId1 = createSchedulingRequest(1024, "queue1.sub1",
+        "user1");
     verifyAppRunnable(attId1, true);
     verifyQueueNumRunnable("queue1.sub1", 1, 0);
     clock.tick(10);
     // exceeds no limits
-    ApplicationAttemptId attId2 = createSchedulingRequest(1024, "queue1.sub3", "user1");
+    ApplicationAttemptId attId2 = createSchedulingRequest(1024, "queue1.sub3",
+        "user1");
     verifyAppRunnable(attId2, true);
     verifyQueueNumRunnable("queue1.sub3", 1, 0);
     clock.tick(10);
@@ -3553,7 +3556,8 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     verifyQueueNumRunnable("queue1.sub2", 1, 0);
     clock.tick(10);
     // exceeds queue1 limit
-    ApplicationAttemptId attId4 = createSchedulingRequest(1024, "queue1.sub2", "user1");
+    ApplicationAttemptId attId4 = createSchedulingRequest(1024, "queue1.sub2",
+        "user1");
     verifyAppRunnable(attId4, false);
     verifyQueueNumRunnable("queue1.sub2", 1, 1);
     clock.tick(10);
@@ -3591,15 +3595,16 @@ public class TestFairScheduler extends FairSchedulerTestBase {
 
   @Test (timeout = 10000)
   public void testContinuousScheduling() throws Exception {
-    // set continuous scheduling enabled
-    scheduler = new FairScheduler();
+    scheduler = (FairScheduler)resourceManager.getResourceScheduler();
+    ((ResourceManager.SchedulerEventDispatcher)
+        ((RMContextImpl)resourceManager.getRMContext())
+            .getSchedulerDispatcher()).start();
     Configuration conf = createConfiguration();
+    // set continuous scheduling enabled
     conf.setBoolean(FairSchedulerConfiguration.CONTINUOUS_SCHEDULING_ENABLED,
-            true);
-    scheduler.setRMContext(resourceManager.getRMContext());
-    scheduler.init(conf);
+        true);
+    scheduler.serviceInit(conf);
     scheduler.start();
-    scheduler.reinitialize(conf, resourceManager.getRMContext());
     Assert.assertTrue("Continuous scheduling should be enabled.",
         scheduler.isContinuousSchedulingEnabled());
 
@@ -3702,6 +3707,56 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     }
   }
 
+  @Test (timeout = 10000)
+  public void testContinuousSchedulingWithNodeReconnect() throws Exception {
+    scheduler = (FairScheduler)resourceManager.getResourceScheduler();
+    ((ResourceManager.SchedulerEventDispatcher)
+        ((RMContextImpl)resourceManager.getRMContext())
+            .getSchedulerDispatcher()).start();
+
+    // Add one node
+    RMNode node1 =
+        MockNodes.newNodeInfo(1, Resources.createResource(8 * 1024, 8), 1,
+            "127.0.0.1");
+    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
+    scheduler.handle(nodeEvent1);
+
+    // Add application request
+    ApplicationAttemptId appAttemptId = createSchedulingRequest(1024,
+        1, "queue11", "user1");
+    scheduler.update();
+
+    // Invoke the continuous scheduling once
+    scheduler.continuousSchedulingAttempt();
+
+    FSAppAttempt app = scheduler.getSchedulerApp(appAttemptId);
+
+    // check consumption after scheduling
+    Assert.assertEquals(1024, app.getCurrentConsumption().getMemory());
+    Assert.assertEquals(1, app.getCurrentConsumption().getVirtualCores());
+
+    // Remove one node
+    NodeRemovedSchedulerEvent removeNode1 = new NodeRemovedSchedulerEvent(node1);
+    scheduler.handle(removeNode1);
+
+    // check consumption after node removed
+    Assert.assertEquals(0, app.getCurrentConsumption().getMemory());
+    Assert.assertEquals(0, app.getCurrentConsumption().getVirtualCores());
+
+    // Added one node
+    NodeAddedSchedulerEvent addedNode1 = new NodeAddedSchedulerEvent(node1);
+    scheduler.handle(addedNode1);
+
+    while (app.getCurrentConsumption().equals(Resources.none())) {
+      scheduler.update();
+      scheduler.continuousSchedulingAttempt();
+    }
+
+    // check consumption after re-schSchedulerEventDispatchereduling
+    Assert.assertEquals(1024, app.getCurrentConsumption().getMemory());
+    Assert.assertEquals(1, app.getCurrentConsumption().getVirtualCores());
+  }
+
   @Test
   public void testDontAllowUndeclaredPools() throws Exception{
     conf.setBoolean(FairSchedulerConfiguration.ALLOW_UNDECLARED_POOLS, false);
@@ -3780,10 +3835,13 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     conf.setLong(FairSchedulerConfiguration.WAIT_TIME_BEFORE_KILL, 10);
     
     MockClock clock = new MockClock();
+    scheduler = (FairScheduler)resourceManager.getResourceScheduler();
+    ((ResourceManager.SchedulerEventDispatcher)
+        ((RMContextImpl)resourceManager.getRMContext())
+            .getSchedulerDispatcher()).start();
     scheduler.setClock(clock);
-    scheduler.init(conf);
+    scheduler.serviceInit(conf);
     scheduler.start();
-    scheduler.reinitialize(conf, resourceManager.getRMContext());
 
     Priority priority = Priority.newInstance(20);
     String host = "127.0.0.1";

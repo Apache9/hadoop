@@ -33,6 +33,7 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.conf.ConfigurationProvider;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.Dispatcher;
+import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter;
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
@@ -44,6 +45,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.AMLivelinessM
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.ContainerAllocationExpirer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.AMRMTokenSecretManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.DelegationTokenRenewer;
@@ -58,6 +60,7 @@ import com.google.common.annotations.VisibleForTesting;
 public class RMContextImpl implements RMContext {
 
   private Dispatcher rmDispatcher;
+  private EventHandler<SchedulerEvent> schedulerDispatcher;
 
   private final ConcurrentMap<ApplicationId, RMApp> applications
     = new ConcurrentHashMap<ApplicationId, RMApp>();
@@ -451,5 +454,16 @@ public class RMContextImpl implements RMContext {
 
   public ConcurrentMap<ApplicationId, ByteBuffer> getSystemCredentialsForApps() {
     return systemCredentials;
+  }
+
+  public void setSchedulerDispatcher(
+      EventHandler<SchedulerEvent> schedulerDispatcher) {
+    this.schedulerDispatcher = schedulerDispatcher;
+  }
+
+  @Private
+  @VisibleForTesting
+  public EventHandler<SchedulerEvent> getSchedulerDispatcher() {
+    return schedulerDispatcher;
   }
 }

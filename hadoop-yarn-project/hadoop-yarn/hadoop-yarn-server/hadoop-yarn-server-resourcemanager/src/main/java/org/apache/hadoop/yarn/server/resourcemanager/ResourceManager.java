@@ -489,6 +489,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       schedulerDispatcher = createSchedulerEventDispatcher();
       addIfService(schedulerDispatcher);
       rmDispatcher.register(SchedulerEventType.class, schedulerDispatcher);
+      rmContext.setSchedulerDispatcher(schedulerDispatcher);
 
       // Register event handler for RmAppEvents
       rmDispatcher.register(RMAppEventType.class,
