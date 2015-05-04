@@ -2853,14 +2853,14 @@ public class FSDirectory implements Closeable {
   void setAcl(String src, List<AclEntry> aclSpec) throws IOException {
     writeLock();
     try {
-      List<AclEntry> newAcl = unprotectedSetAcl(src, aclSpec);
+      List<AclEntry> newAcl = unprotectedSetAcl(src, aclSpec, false);
       fsImage.getEditLog().logSetAcl(src, newAcl);
     } finally {
       writeUnlock();
     }
   }
 
-  List<AclEntry> unprotectedSetAcl(String src, List<AclEntry> aclSpec)
+  List<AclEntry> unprotectedSetAcl(String src, List<AclEntry> aclSpec, boolean fromEdits)
       throws IOException {
     // ACL removal is logged to edits as OP_SET_ACL with an empty list.
     if (aclSpec.isEmpty()) {
@@ -2872,9 +2872,11 @@ public class FSDirectory implements Closeable {
     INodesInPath iip = rootDir.getINodesInPath4Write(normalizePath(src), true);
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
-    List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(inode);
-    List<AclEntry> newAcl = AclTransformation.replaceAclEntries(existingAcl,
-      aclSpec);
+    List<AclEntry> newAcl = aclSpec;
+    if (!fromEdits) {
+      List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(inode);
+      newAcl = AclTransformation.replaceAclEntries(existingAcl, aclSpec);
+    }
     AclStorage.updateINodeAcl(inode, newAcl, snapshotId);
     return newAcl;
   }
