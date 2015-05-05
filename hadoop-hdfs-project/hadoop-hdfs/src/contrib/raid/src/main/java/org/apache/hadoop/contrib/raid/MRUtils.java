@@ -29,7 +29,9 @@ public class MRUtils {
     try {
       JobClient jobClient = new JobClient(conf);
       RunningJob job = jobClient.getJob(id);
-      job.killJob();
+      if (job != null) {
+        job.killJob();
+      }
     } catch (IOException e) {
       // Ignored
     }

@@ -34,10 +34,14 @@ public class HdfsRaidConfigKeys {
   public static final int HDFS_RAIDNODE_MOVER_MAP_TASK_NUM_DEFAULT = 1;
 
   public static final String HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY = "hdfs.raidnode.collector.result.dir";
+  public static final String HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_DEFAULT = "/raid/collector";
   public static final String HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY = "hdfs.raidnode.collector.result.file";
   public static final String HDFS_RAIDNODE_CODER_RESULT_DIR_KEY = "hdfs.raidnode.coder.result.dir";
+  public static final String HDFS_RAIDNODE_CODER_RESULT_DIR_DEFAULT = "/raid/coder";
   public static final String HDFS_RAIDNODE_MOVER_RESULT_DIR_KEY = "hdfs.raidnode.mover.result.dir";
+  public static final String HDFS_RAIDNODE_MOVER_RESULT_DIR_DEFAULT = "/raid/mover";
   public static final String HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY = "hdfs.raidnode.fixer.result.dir";
+  public static final String HDFS_RAIDNODE_FIXER_RESULT_DIR_DEFAULT = "/raid/fixer";
 
   /** Comma separated directories that need to do raid or scan for block moving */
   public static final String HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY = "hdfs.raidnode.scan.root.dirs";
