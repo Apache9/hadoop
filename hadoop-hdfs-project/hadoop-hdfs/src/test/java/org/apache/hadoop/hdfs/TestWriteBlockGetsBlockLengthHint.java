@@ -98,11 +98,10 @@ public class TestWriteBlockGetsBlockLengthHint {
      * correctly propagate the hint to FsDatasetSpi.
      */
     @Override
-    public synchronized ReplicaHandler createRbw(
-        StorageType storageType, ExtendedBlock b, boolean allowLazyPersist)
-        throws IOException {
+    public synchronized ReplicaHandler createRbw(StorageType storageType, ExtendedBlock b,
+        boolean allowLazyPersist, XceiverStopper stopper) throws IOException {
       assertThat(b.getLocalBlock().getNumBytes(), is(EXPECTED_BLOCK_LENGTH));
-      return super.createRbw(storageType, b, allowLazyPersist);
+      return super.createRbw(storageType, b, allowLazyPersist, stopper);
     }
   }
 }

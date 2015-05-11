@@ -28,7 +28,6 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.ReplicaOutputStreams;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.util.DataChecksum;
-import org.apache.hadoop.util.StringUtils;
 
 /** 
  * This class defines a replica in a pipeline, which
@@ -42,8 +41,8 @@ public class ReplicaInPipeline extends ReplicaInfo
                         implements ReplicaInPipelineInterface {
   private long bytesAcked;
   private long bytesOnDisk;
-  private byte[] lastChecksum;  
-  private Thread writer;
+  private byte[] lastChecksum;
+  private XceiverStopper stopper;
 
   /**
    * Bytes reserved for this replica on the containing volume.
@@ -51,19 +50,20 @@ public class ReplicaInPipeline extends ReplicaInfo
    * the bytes already written to this block.
    */
   private long bytesReserved;
-  
+
   /**
    * Constructor for a zero length replica
    * @param blockId block id
    * @param genStamp replica generation stamp
    * @param vol volume where replica is located
    * @param dir directory path where block and meta files are located
+   * @param stopper used to destroy the pipeline
    * @param bytesToReserve disk space to reserve for this replica, based on
    *                       the estimated maximum block length.
    */
-  public ReplicaInPipeline(long blockId, long genStamp, 
-        FsVolumeSpi vol, File dir, long bytesToReserve) {
-    this(blockId, 0L, genStamp, vol, dir, Thread.currentThread(), bytesToReserve);
+  public ReplicaInPipeline(long blockId, long genStamp, FsVolumeSpi vol,
+      File dir, XceiverStopper stopper, long bytesToReserve) {
+    this(blockId, 0L, genStamp, vol, dir, stopper, bytesToReserve);
   }
 
   /**
@@ -71,12 +71,12 @@ public class ReplicaInPipeline extends ReplicaInfo
    * @param block a block
    * @param vol volume where replica is located
    * @param dir directory path where block and meta files are located
-   * @param writer a thread that is writing to this replica
+   * @param stopper used to destroy the pipeline
    */
-  ReplicaInPipeline(Block block, 
-      FsVolumeSpi vol, File dir, Thread writer) {
-    this( block.getBlockId(), block.getNumBytes(), block.getGenerationStamp(),
-        vol, dir, writer, 0L);
+  ReplicaInPipeline(Block block, FsVolumeSpi vol, File dir,
+      XceiverStopper stopper) {
+    this(block.getBlockId(), block.getNumBytes(), block.getGenerationStamp(),
+        vol, dir, stopper, 0L);
   }
 
   /**
@@ -86,16 +86,16 @@ public class ReplicaInPipeline extends ReplicaInfo
    * @param genStamp replica generation stamp
    * @param vol volume where replica is located
    * @param dir directory path where block and meta files are located
-   * @param writer a thread that is writing to this replica
+   * @param stopper used to destroy the pipeline
    * @param bytesToReserve disk space to reserve for this replica, based on
    *                       the estimated maximum block length.
    */
-  ReplicaInPipeline(long blockId, long len, long genStamp,
-      FsVolumeSpi vol, File dir, Thread writer, long bytesToReserve) {
+  ReplicaInPipeline(long blockId, long len, long genStamp, FsVolumeSpi vol,
+      File dir, XceiverStopper stopper, long bytesToReserve) {
     super( blockId, len, genStamp, vol, dir);
     this.bytesAcked = len;
     this.bytesOnDisk = len;
-    this.writer = writer;
+    this.stopper = stopper;
     this.bytesReserved = bytesToReserve;
   }
 
@@ -107,7 +107,7 @@ public class ReplicaInPipeline extends ReplicaInfo
     super(from);
     this.bytesAcked = from.getBytesAcked();
     this.bytesOnDisk = from.getBytesOnDisk();
-    this.writer = from.writer;
+    this.stopper = from.stopper;
     this.bytesReserved = from.bytesReserved;
   }
 
@@ -166,11 +166,15 @@ public class ReplicaInPipeline extends ReplicaInfo
   }
 
   /**
-   * Set the thread that is writing to this replica
-   * @param writer a thread writing to this replica
+   * Set the stopper used to destroy the pipeline
+   * @param stopper used to destroy the pipeline
    */
-  public void setWriter(Thread writer) {
-    this.writer = writer;
+  public void setStopper(XceiverStopper stopper) {
+    this.stopper = stopper;
+  }
+
+  public void inheritStopper(ReplicaInPipeline replica) {
+    this.stopper = replica.stopper;
   }
   
   @Override  // Object
@@ -179,22 +183,13 @@ public class ReplicaInPipeline extends ReplicaInfo
   }
   
   /**
-   * Interrupt the writing thread and wait until it dies
-   * @throws IOException the waiting is interrupted
+   * Stop the xceiver and wait until it quits.
+   * @throws IOException the waiting is interrupted or timeout
    */
-  public void stopWriter(long xceiverStopTimeout) throws IOException {
-    if (writer != null && writer != Thread.currentThread() && writer.isAlive()) {
-      writer.interrupt();
-      try {
-        writer.join(xceiverStopTimeout);
-        if (writer.isAlive()) {
-          final String msg = "Join on writer thread " + writer + " timed out";
-          DataNode.LOG.warn(msg + "\n" + StringUtils.getStackTrace(writer));
-          throw new IOException(msg);
-        }
-      } catch (InterruptedException e) {
-        throw new IOException("Waiting for writer thread is interrupted.");
-      }
+  public void stopXceiver(long xceiverStopTimeout) throws IOException {
+    if (stopper != null) {
+      stopper.stop();
+      stopper.waitUntilDone(xceiverStopTimeout);
     }
   }
   

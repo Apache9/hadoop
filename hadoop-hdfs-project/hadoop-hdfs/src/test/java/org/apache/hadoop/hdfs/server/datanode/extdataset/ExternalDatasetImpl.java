@@ -141,20 +141,20 @@ public class ExternalDatasetImpl implements FsDatasetSpi<ExternalVolumeImpl> {
   }
 
   @Override
-  public ReplicaHandler createTemporary(StorageType t, ExtendedBlock b)
+  public ReplicaHandler createTemporary(StorageType t, ExtendedBlock b, XceiverStopper stopper)
       throws IOException {
     return new ReplicaHandler(new ExternalReplicaInPipeline(), null);
   }
 
   @Override
-  public ReplicaHandler createRbw(StorageType t, ExtendedBlock b, boolean tf)
-      throws IOException {
+  public ReplicaHandler createRbw(StorageType t, ExtendedBlock b, boolean tf,
+      XceiverStopper stopper) throws IOException {
     return new ReplicaHandler(new ExternalReplicaInPipeline(), null);
   }
 
   @Override
   public ReplicaHandler recoverRbw(ExtendedBlock b, long newGS,
-      long minBytesRcvd, long maxBytesRcvd) throws IOException {
+      long minBytesRcvd, long maxBytesRcvd, XceiverStopper stopper) throws IOException {
     return new ReplicaHandler(new ExternalReplicaInPipeline(), null);
   }
 
@@ -166,13 +166,13 @@ public class ExternalDatasetImpl implements FsDatasetSpi<ExternalVolumeImpl> {
 
   @Override
   public ReplicaHandler append(ExtendedBlock b, long newGS,
-      long expectedBlockLen) throws IOException {
+      long expectedBlockLen, XceiverStopper stopper) throws IOException {
     return new ReplicaHandler(new ExternalReplicaInPipeline(), null);
   }
 
   @Override
   public ReplicaHandler recoverAppend(ExtendedBlock b, long newGS,
-      long expectedBlockLen) throws IOException {
+      long expectedBlockLen, XceiverStopper stopper) throws IOException {
     return new ReplicaHandler(new ExternalReplicaInPipeline(), null);
   }
 

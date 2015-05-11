@@ -28,30 +28,32 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
  * are created in a pipeline initiated by a dfs client.
  */
 public class ReplicaBeingWritten extends ReplicaInPipeline {
+
   /**
    * Constructor for a zero length replica
    * @param blockId block id
    * @param genStamp replica generation stamp
    * @param vol volume where replica is located
    * @param dir directory path where block and meta files are located
+   * @param stopper used to destroy the pipeline
    * @param bytesToReserve disk space to reserve for this replica, based on
    *                       the estimated maximum block length.
    */
-  public ReplicaBeingWritten(long blockId, long genStamp, 
-        FsVolumeSpi vol, File dir, long bytesToReserve) {
-    super(blockId, genStamp, vol, dir, bytesToReserve);
+  public ReplicaBeingWritten(long blockId, long genStamp, FsVolumeSpi vol,
+      File dir, XceiverStopper stopper, long bytesToReserve) {
+    super(blockId, genStamp, vol, dir, stopper, bytesToReserve);
   }
-  
+
   /**
    * Constructor
    * @param block a block
    * @param vol volume where replica is located
    * @param dir directory path where block and meta files are located
-   * @param writer a thread that is writing to this replica
+   * @param stopper used to destroy the pipeline
    */
-  public ReplicaBeingWritten(Block block, 
-      FsVolumeSpi vol, File dir, Thread writer) {
-    super( block, vol, dir, writer);
+  public ReplicaBeingWritten(Block block, FsVolumeSpi vol, File dir,
+      XceiverStopper stopper) {
+    super(block, vol, dir, stopper);
   }
 
   /**
@@ -61,13 +63,13 @@ public class ReplicaBeingWritten extends ReplicaInPipeline {
    * @param genStamp replica generation stamp
    * @param vol volume where replica is located
    * @param dir directory path where block and meta files are located
-   * @param writer a thread that is writing to this replica
+   * @param stopper used to destroy the pipeline
    * @param bytesToReserve disk space to reserve for this replica, based on
    *                       the estimated maximum block length.
    */
   public ReplicaBeingWritten(long blockId, long len, long genStamp,
-      FsVolumeSpi vol, File dir, Thread writer, long bytesToReserve) {
-    super(blockId, len, genStamp, vol, dir, writer, bytesToReserve);
+      FsVolumeSpi vol, File dir, XceiverStopper stopper, long bytesToReserve) {
+    super(blockId, len, genStamp, vol, dir, stopper, bytesToReserve);
   }
 
   /**

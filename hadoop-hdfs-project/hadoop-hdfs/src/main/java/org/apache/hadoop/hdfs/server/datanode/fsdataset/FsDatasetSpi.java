@@ -52,6 +52,7 @@ import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.server.datanode.StorageLocation;
 import org.apache.hadoop.hdfs.server.datanode.UnexpectedReplicaStateException;
+import org.apache.hadoop.hdfs.server.datanode.XceiverStopper;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.FsDatasetFactory;
 import org.apache.hadoop.hdfs.server.datanode.metrics.FSDatasetMBean;
 import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlock;
@@ -306,7 +307,7 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    * @throws IOException if an error occurs
    */
   public ReplicaHandler createTemporary(StorageType storageType,
-      ExtendedBlock b) throws IOException;
+      ExtendedBlock b, XceiverStopper stopper) throws IOException;
 
   /**
    * Creates a RBW replica and returns the meta info of the replica
@@ -315,8 +316,8 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    * @return the meta info of the replica which is being written to
    * @throws IOException if an error occurs
    */
-  public ReplicaHandler createRbw(StorageType storageType,
-      ExtendedBlock b, boolean allowLazyPersist) throws IOException;
+  public ReplicaHandler createRbw(StorageType storageType, ExtendedBlock b,
+      boolean allowLazyPersist, XceiverStopper stopper) throws IOException;
 
   /**
    * Recovers a RBW replica and returns the meta info of the replica
@@ -328,8 +329,9 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    * @return the meta info of the replica which is being written to
    * @throws IOException if an error occurs
    */
-  public ReplicaHandler recoverRbw(ExtendedBlock b,
-      long newGS, long minBytesRcvd, long maxBytesRcvd) throws IOException;
+  public ReplicaHandler recoverRbw(ExtendedBlock b, long newGS,
+      long minBytesRcvd, long maxBytesRcvd, XceiverStopper stopper)
+      throws IOException;
 
   /**
    * Covert a temporary replica to a RBW.
@@ -345,11 +347,11 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    * @param b block
    * @param newGS the new generation stamp for the replica
    * @param expectedBlockLen the number of bytes the replica is expected to have
-   * @return the meata info of the replica which is being written to
+   * @return the meta info of the replica which is being written to
    * @throws IOException
    */
   public ReplicaHandler append(ExtendedBlock b, long newGS,
-      long expectedBlockLen) throws IOException;
+      long expectedBlockLen, XceiverStopper stopper) throws IOException;
 
   /**
    * Recover a failed append to a finalized replica
@@ -361,9 +363,9 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    * @return the meta info of the replica which is being written to
    * @throws IOException
    */
-  public ReplicaHandler recoverAppend(
-      ExtendedBlock b, long newGS, long expectedBlockLen) throws IOException;
-  
+  public ReplicaHandler recoverAppend(ExtendedBlock b, long newGS,
+      long expectedBlockLen, XceiverStopper stopper) throws IOException;
+
   /**
    * Recover a failed pipeline close
    * It bumps the replica's generation stamp and finalize it if RBW replica

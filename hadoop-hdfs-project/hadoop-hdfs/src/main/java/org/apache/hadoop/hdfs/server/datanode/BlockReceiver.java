@@ -33,6 +33,7 @@ import java.io.Writer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.LinkedList;
+import java.util.concurrent.Future;
 import java.util.zip.Checksum;
 
 import org.apache.commons.logging.Log;
@@ -54,7 +55,6 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIO;
-import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -94,7 +94,9 @@ class BlockReceiver implements Closeable {
   protected final String myAddr;
   private String mirrorAddr;
   private DataOutputStream mirrorOut;
-  private Daemon responder = null;
+  private PacketResponder responder = null;
+  private Future<?> responderFuture;
+  private XceiverRunnable responderRunnable;
   private DataTransferThrottler throttler;
   private ReplicaOutputStreams streams;
   private DatanodeInfo srcDataNode = null;
@@ -135,11 +137,13 @@ class BlockReceiver implements Closeable {
   
   private boolean pinning;
 
+  private final XceiverStopper stopper;
+
   BlockReceiver(final ExtendedBlock block, final StorageType storageType,
-      final DataInputStream in,
+      final XceiverStopper stopper, final DataInputStream in,
       final String inAddr, final String myAddr,
-      final BlockConstructionStage stage, 
-      final long newGs, final long minBytesRcvd, final long maxBytesRcvd, 
+      final BlockConstructionStage stage,
+      final long newGs, final long minBytesRcvd, final long maxBytesRcvd,
       final String clientname, final DatanodeInfo srcDataNode,
       final DataNode datanode, DataChecksum requestedChecksum,
       CachingStrategy cachingStrategy,
@@ -147,6 +151,7 @@ class BlockReceiver implements Closeable {
       final boolean pinning) throws IOException {
     try{
       this.block = block;
+      this.stopper = stopper;
       this.in = in;
       this.inAddr = inAddr;
       this.myAddr = myAddr;
@@ -157,7 +162,8 @@ class BlockReceiver implements Closeable {
       this.isDatanode = clientname.length() == 0;
       this.isClient = !this.isDatanode;
       this.restartBudget = datanode.getDnConf().restartReplicaExpiry;
-      this.datanodeSlowLogThresholdMs = datanode.getDnConf().datanodeSlowIoWarningThresholdMs;
+      this.datanodeSlowLogThresholdMs =
+          datanode.getDnConf().datanodeSlowIoWarningThresholdMs;
       // For replaceBlock() calls response should be sent to avoid socketTimeout
       // at clients. So sending with the interval of 0.5 * socketTimeout
       this.responseInterval = (long) (datanode.getDnConf().socketTimeout * 0.5);
@@ -183,27 +189,33 @@ class BlockReceiver implements Closeable {
       // Open local disk out
       //
       if (isDatanode) { //replication or move
-        replicaHandler = datanode.data.createTemporary(storageType, block);
+        replicaHandler =
+            datanode.data.createTemporary(storageType, block, stopper);
       } else {
         switch (stage) {
         case PIPELINE_SETUP_CREATE:
-          replicaHandler = datanode.data.createRbw(storageType, block, allowLazyPersist);
+          replicaHandler =
+              datanode.data.createRbw(storageType, block, allowLazyPersist,
+                stopper);
           datanode.notifyNamenodeReceivingBlock(
               block, replicaHandler.getReplica().getStorageUuid());
           break;
         case PIPELINE_SETUP_STREAMING_RECOVERY:
-          replicaHandler = datanode.data.recoverRbw(
-              block, newGs, minBytesRcvd, maxBytesRcvd);
+          replicaHandler =
+              datanode.data.recoverRbw(block, newGs, minBytesRcvd,
+                maxBytesRcvd, stopper);
           block.setGenerationStamp(newGs);
           break;
         case PIPELINE_SETUP_APPEND:
-          replicaHandler = datanode.data.append(block, newGs, minBytesRcvd);
+          replicaHandler =
+              datanode.data.append(block, newGs, minBytesRcvd, stopper);
           block.setGenerationStamp(newGs);
           datanode.notifyNamenodeReceivingBlock(
               block, replicaHandler.getReplica().getStorageUuid());
           break;
         case PIPELINE_SETUP_APPEND_RECOVERY:
-          replicaHandler = datanode.data.recoverAppend(block, newGs, minBytesRcvd);
+          replicaHandler =
+              datanode.data.recoverAppend(block, newGs, minBytesRcvd, stopper);
           block.setGenerationStamp(newGs);
           datanode.notifyNamenodeReceivingBlock(
               block, replicaHandler.getReplica().getStorageUuid());
@@ -212,10 +224,11 @@ class BlockReceiver implements Closeable {
         case TRANSFER_FINALIZED:
           // this is a transfer destination
           replicaHandler =
-              datanode.data.createTemporary(storageType, block);
+              datanode.data.createTemporary(storageType, block, stopper);
           break;
-        default: throw new IOException("Unsupported stage " + stage + 
-              " while receiving block " + block + " from " + inAddr);
+        default:
+          throw new IOException("Unsupported stage " + stage
+              + " while receiving block " + block + " from " + inAddr);
         }
       }
       replicaInfo = replicaHandler.getReplica();
@@ -511,8 +524,7 @@ class BlockReceiver implements Closeable {
     
     // put in queue for pending acks, unless sync was requested
     if (responder != null && !syncBlock && !shouldVerifyChecksum()) {
-      ((PacketResponder) responder.getRunnable()).enqueue(seqno,
-          lastPacketInBlock, offsetInBlock, Status.SUCCESS);
+      responder.enqueue(seqno, lastPacketInBlock, offsetInBlock, Status.SUCCESS);
     }
 
     //First write the packet to the mirror:
@@ -558,9 +570,7 @@ class BlockReceiver implements Closeable {
           // checksum error detected locally. there is no reason to continue.
           if (responder != null) {
             try {
-              ((PacketResponder) responder.getRunnable()).enqueue(seqno,
-                  lastPacketInBlock, offsetInBlock,
-                  Status.ERROR_CHECKSUM);
+              responder.enqueue(seqno, lastPacketInBlock, offsetInBlock, Status.ERROR_CHECKSUM);
               // Wait until the responder sends back the response
               // and interrupt this thread.
               Thread.sleep(3000);
@@ -672,8 +682,7 @@ class BlockReceiver implements Closeable {
     // if sync was requested, put in queue for pending acks here
     // (after the fsync finished)
     if (responder != null && (syncBlock || shouldVerifyChecksum())) {
-      ((PacketResponder) responder.getRunnable()).enqueue(seqno,
-          lastPacketInBlock, offsetInBlock, Status.SUCCESS);
+      responder.enqueue(seqno, lastPacketInBlock, offsetInBlock, Status.SUCCESS);
     }
 
     /*
@@ -755,12 +764,11 @@ class BlockReceiver implements Closeable {
       LOG.warn("Error managing cache for writer of block " + block, t);
     }
   }
-  
+
   public void sendOOB() throws IOException, InterruptedException {
-    ((PacketResponder) responder.getRunnable()).sendOOBResponse(PipelineAck
-        .getRestartOOBStatus());
+    responder.sendOOBResponse(PipelineAck.getRestartOOBStatus());
   }
-  
+
   void receiveBlock(
       DataOutputStream mirrOut, // output to next datanode
       DataInputStream mirrIn,   // input from next datanode
@@ -780,9 +788,10 @@ class BlockReceiver implements Closeable {
 
     try {
       if (isClient && !isTransfer) {
-        responder = new Daemon(datanode.threadGroup, 
-            new PacketResponder(replyOut, mirrIn, downstreams));
-        responder.start(); // start thread to processes responses
+        responder = new PacketResponder(replyOut, mirrIn, downstreams);
+        responderRunnable = new XceiverRunnable(responder);
+        // submit task to processes responses
+        responderFuture = datanode.xceiverPool.submit(responderRunnable);
       }
 
       while (receivePacket() >= 0) { /* Receive until the last packet */ }
@@ -791,7 +800,7 @@ class BlockReceiver implements Closeable {
       // indicate responder to gracefully shutdown.
       // Mark that responder has been closed for future processing
       if (responder != null) {
-        ((PacketResponder)responder.getRunnable()).close();
+        responder.close();
         responderClosed = true;
       }
 
@@ -867,34 +876,38 @@ class BlockReceiver implements Closeable {
               // It is already going down. Ignore this.
             }
           }
-          responder.interrupt();
+          responderFuture.cancel(true);
         }
         IOUtils.closeStream(this);
         cleanupBlock();
       }
       if (responder != null) {
         try {
-          responder.interrupt();
+          responderFuture.cancel(true);
           // join() on the responder should timeout a bit earlier than the
           // configured deadline. Otherwise, the join() on this thread will
           // likely timeout as well.
           long joinTimeout = datanode.getDnConf().getXceiverStopTimeout();
-          joinTimeout = joinTimeout > 1  ? joinTimeout*8/10 : joinTimeout;
-          responder.join(joinTimeout);
-          if (responder.isAlive()) {
-            String msg = "Join on responder thread " + responder
-                + " timed out";
-            LOG.warn(msg + "\n" + StringUtils.getStackTrace(responder));
+          joinTimeout = joinTimeout > 1 ? joinTimeout * 8 / 10 : joinTimeout;
+          if (!responderRunnable.waitUntilDone(joinTimeout)) {
+            // note that, there is a chance that the runner has already begun to
+            // run other task, so the thread name and stacktrace maybe wrong.
+            Thread runner = responderRunnable.getRunner();
+            String msg = "Join on responder thread " + runner + " timed out";
+            LOG.warn(msg + "\n" +
+                (runner != null ? StringUtils.getStackTrace(runner) : "null"));
             throw new IOException(msg);
           }
         } catch (InterruptedException e) {
-          responder.interrupt();
+          responderFuture.cancel(true);
           // do not throw if shutting down for restart.
           if (!datanode.isRestarting()) {
             throw new IOException("Interrupted receiveBlock");
           }
         }
         responder = null;
+        responderRunnable = null;
+        responderFuture = null;
       }
     }
   }
@@ -1001,11 +1014,10 @@ class BlockReceiver implements Closeable {
    * Processes responses from downstream datanodes in the pipeline
    * and sends back replies to the originator.
    */
-  class PacketResponder implements Runnable, Closeable {   
+  class PacketResponder implements Runnable, Closeable {
     /** queue for packets waiting for ack - synchronization using monitor lock */
-    private final LinkedList<Packet> ackQueue = new LinkedList<Packet>(); 
-    /** the thread that spawns this responder */
-    private final Thread receiverThread = Thread.currentThread();
+    private final LinkedList<Packet> ackQueue = new LinkedList<Packet>();
+
     /** is this responder running? - synchronization using monitor lock */
     private volatile boolean running = true;
     /** input from the next downstream datanode */
@@ -1160,7 +1172,8 @@ class BlockReceiver implements Closeable {
     @Override
     public void run() {
       boolean lastPacketInBlock = false;
-      final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
+      final long startTime =
+          ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
       while (isRunning() && !lastPacketInBlock) {
         long totalAckTimeNanos = 0;
         boolean isInterrupted = false;
@@ -1267,20 +1280,28 @@ class BlockReceiver implements Closeable {
             removeAckHead();
           }
         } catch (IOException e) {
-          LOG.warn("IOException in BlockReceiver.run(): ", e);
+          LOG.warn("IOException in PacketResponder.run(): ", e);
           if (running) {
             datanode.checkDiskErrorAsync();
             LOG.info(myString, e);
             running = false;
             if (!Thread.interrupted()) { // failure not caused by interruption
-              receiverThread.interrupt();
+              try {
+                stopper.stop();
+              } catch (IOException e1) {
+                LOG.warn(myString, e1);
+              }
             }
           }
         } catch (Throwable e) {
           if (running) {
             LOG.info(myString, e);
             running = false;
-            receiverThread.interrupt();
+            try {
+              stopper.stop();
+            } catch (IOException e1) {
+              LOG.warn(myString, e1);
+            }
           }
         }
       }

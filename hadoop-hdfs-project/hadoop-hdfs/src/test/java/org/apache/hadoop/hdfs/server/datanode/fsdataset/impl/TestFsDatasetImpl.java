@@ -202,7 +202,7 @@ public class TestFsDatasetImpl {
       String bpid = BLOCK_POOL_IDS[NUM_BLOCKS % BLOCK_POOL_IDS.length];
       ExtendedBlock eb = new ExtendedBlock(bpid, i);
       try (ReplicaHandler replica =
-          dataset.createRbw(StorageType.DEFAULT, eb, false)) {
+          dataset.createRbw(StorageType.DEFAULT, eb, false, null)) {
       }
     }
     final String[] dataDirs =
@@ -294,7 +294,7 @@ public class TestFsDatasetImpl {
     when(newRef.getVolume()).thenReturn(newVolume);
     when(newVolume.getBasePath()).thenReturn("data4");
     FsVolumeImpl blockedVolume = volumeList.getVolumes().get(1);
-    doAnswer(new Answer() {
+    doAnswer(new Answer<Object>() {
       @Override
       public Object answer(InvocationOnMock invocationOnMock)
           throws Throwable {

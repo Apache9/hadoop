@@ -29,7 +29,6 @@ import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.net.PeerServer;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.util.Daemon;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -41,20 +40,18 @@ import com.google.common.annotations.VisibleForTesting;
  */
 class DataXceiverServer implements Runnable {
   public static final Log LOG = DataNode.LOG;
-  
+
   private final PeerServer peerServer;
   private final DataNode datanode;
   private final HashMap<Peer, Thread> peers = new HashMap<Peer, Thread>();
   private final HashMap<Peer, DataXceiver> peersXceiver = new HashMap<Peer, DataXceiver>();
   private boolean closed = false;
-  
+
   /**
-   * Maximal number of concurrent xceivers per node.
-   * Enforcing the limit is required in order to avoid data-node
-   * running out of memory.
+   * Maximal number of concurrent xceivers per node. Enforcing the limit is required in order to
+   * avoid data-node running out of memory.
    */
-  int maxXceiverCount =
-    DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT;
+  int maxXceiverCount;
 
   /** A manager to make sure that cluster balancing does not
    * take too much resources.
@@ -63,37 +60,36 @@ class DataXceiverServer implements Runnable {
    * the total amount of bandwidth they can use.
    */
   static class BlockBalanceThrottler extends DataTransferThrottler {
-   private int numThreads;
-   private int maxThreads;
-   
-   /**Constructor
-    * 
-    * @param bandwidth Total amount of bandwidth can be used for balancing 
-    */
-   private BlockBalanceThrottler(long bandwidth, int maxThreads) {
-     super(bandwidth);
-     this.maxThreads = maxThreads;
-     LOG.info("Balancing bandwith is "+ bandwidth + " bytes/s");
-     LOG.info("Number threads for balancing is "+ maxThreads);
-   }
-   
-   /** Check if the block move can start. 
-    * 
-    * Return true if the thread quota is not exceeded and 
-    * the counter is incremented; False otherwise.
-    */
-   synchronized boolean acquire() {
-     if (numThreads >= maxThreads) {
-       return false;
-     }
-     numThreads++;
-     return true;
-   }
-   
-   /** Mark that the move is completed. The thread counter is decremented. */
-   synchronized void release() {
-     numThreads--;
-   }
+    private int numThreads;
+    private int maxThreads;
+
+    /**
+     * Constructor
+     * @param bandwidth Total amount of bandwidth can be used for balancing
+     */
+    private BlockBalanceThrottler(long bandwidth, int maxThreads) {
+      super(bandwidth);
+      this.maxThreads = maxThreads;
+      LOG.info("Balancing bandwith is " + bandwidth + " bytes/s");
+      LOG.info("Number threads for balancing is " + maxThreads);
+    }
+
+    /**
+     * Check if the block move can start. Return true if the thread quota is not
+     * exceeded and the counter is incremented; False otherwise.
+     */
+    synchronized boolean acquire() {
+      if (numThreads >= maxThreads) {
+        return false;
+      }
+      numThreads++;
+      return true;
+    }
+
+    /** Mark that the move is completed. The thread counter is decremented. */
+    synchronized void release() {
+      numThreads--;
+    }
   }
 
   final BlockBalanceThrottler balanceThrottler;
@@ -104,21 +100,17 @@ class DataXceiverServer implements Runnable {
    * For older clients we just use the server-side default block size.
    */
   final long estimateBlockSize;
-  
-  
+
   DataXceiverServer(PeerServer peerServer, Configuration conf,
       DataNode datanode) {
-    
     this.peerServer = peerServer;
     this.datanode = datanode;
-    
-    this.maxXceiverCount = 
-      conf.getInt(DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_KEY,
-                  DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT);
-    
+    this.maxXceiverCount = conf.getInt(DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_KEY,
+          DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT);
+
     this.estimateBlockSize = conf.getLongBytes(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
         DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
-    
+
     //set up parameter for cluster balancing
     this.balanceThrottler = new BlockBalanceThrottler(
         conf.getLong(DFSConfigKeys.DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_KEY,
@@ -133,23 +125,23 @@ class DataXceiverServer implements Runnable {
     while (datanode.shouldRun && !datanode.shutdownForUpgrade) {
       try {
         peer = peerServer.accept();
-
         // Make sure the xceiver count is not exceeded
         int curXceiverCount = datanode.getXceiverCount();
         if (curXceiverCount > maxXceiverCount) {
           throw new IOException("Xceiver count " + curXceiverCount
-              + " exceeds the limit of concurrent xcievers: "
-              + maxXceiverCount);
+              + " exceeds the limit of concurrent xcievers: " + maxXceiverCount);
         }
-
-        new Daemon(datanode.threadGroup,
-            DataXceiver.create(peer, datanode, this))
-            .start();
+        PeerXceiverStopper stopper = new PeerXceiverStopper(peer);
+        XceiverRunnable xceiver =
+            new XceiverRunnable(DataXceiver.create(peer, stopper, datanode,
+              this));
+        stopper.setXceiver(xceiver);
+        stopper.setFuture(datanode.xceiverPool.submit(xceiver));
       } catch (SocketTimeoutException ignored) {
         // wake up to see if should continue to run
       } catch (AsynchronousCloseException ace) {
-        // another thread closed our listener socket - that's expected during shutdown,
-        // but not in other circumstances
+        // another thread closed our listener socket - that's expected during
+        // shutdown, but not in other circumstances
         if (datanode.shouldRun && !datanode.shutdownForUpgrade) {
           LOG.warn(datanode.getDisplayName() + ":DataXceiverServer: ", ace);
         }

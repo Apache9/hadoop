@@ -858,8 +858,8 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   }
 
   @Override // FsDatasetSpi
-  public synchronized ReplicaHandler append(
-      ExtendedBlock b, long newGS, long expectedBlockLen) throws IOException {
+  public synchronized ReplicaHandler append(ExtendedBlock b, long newGS, long expectedBlockLen,
+      XceiverStopper stopper) throws IOException {
     final Map<Block, BInfo> map = getMap(b.getBlockPoolId());
     BInfo binfo = map.get(b.getLocalBlock());
     if (binfo == null || !binfo.isFinalized()) {
@@ -871,8 +871,8 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   }
 
   @Override // FsDatasetSpi
-  public synchronized ReplicaHandler recoverAppend(
-      ExtendedBlock b, long newGS, long expectedBlockLen) throws IOException {
+  public synchronized ReplicaHandler recoverAppend(ExtendedBlock b, long newGS,
+      long expectedBlockLen, XceiverStopper stopper) throws IOException {
     final Map<Block, BInfo> map = getMap(b.getBlockPoolId());
     BInfo binfo = map.get(b.getLocalBlock());
     if (binfo == null) {
@@ -907,9 +907,8 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   }
   
   @Override // FsDatasetSpi
-  public synchronized ReplicaHandler recoverRbw(
-      ExtendedBlock b, long newGS, long minBytesRcvd, long maxBytesRcvd)
-      throws IOException {
+  public synchronized ReplicaHandler recoverRbw(ExtendedBlock b, long newGS, long minBytesRcvd,
+      long maxBytesRcvd, XceiverStopper stopper) throws IOException {
     final Map<Block, BInfo> map = getMap(b.getBlockPoolId());
     BInfo binfo = map.get(b.getLocalBlock());
     if ( binfo == null) {
@@ -927,22 +926,20 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   }
 
   @Override // FsDatasetSpi
-  public synchronized ReplicaHandler createRbw(
-      StorageType storageType, ExtendedBlock b,
-      boolean allowLazyPersist) throws IOException {
-    return createTemporary(storageType, b);
+  public synchronized ReplicaHandler createRbw(StorageType storageType, ExtendedBlock b,
+      boolean allowLazyPersist, XceiverStopper stopper) throws IOException {
+    return createTemporary(storageType, b, stopper);
   }
 
   @Override // FsDatasetSpi
-  public synchronized ReplicaHandler createTemporary(
-      StorageType storageType, ExtendedBlock b) throws IOException {
+  public synchronized ReplicaHandler createTemporary(StorageType storageType, ExtendedBlock b,
+      XceiverStopper stopper) throws IOException {
     if (isValidBlock(b)) {
-          throw new ReplicaAlreadyExistsException("Block " + b + 
-              " is valid, and cannot be written to.");
-      }
+      throw new ReplicaAlreadyExistsException("Block " + b + " is valid, and cannot be written to.");
+    }
     if (isValidRbw(b)) {
-        throw new ReplicaAlreadyExistsException("Block " + b + 
-            " is being written, and cannot be written to.");
+      throw new ReplicaAlreadyExistsException("Block " + b
+          + " is being written, and cannot be written to.");
     }
     final Map<Block, BInfo> map = getMap(b.getBlockPoolId());
     BInfo binfo = new BInfo(b.getBlockPoolId(), b.getLocalBlock(), true);

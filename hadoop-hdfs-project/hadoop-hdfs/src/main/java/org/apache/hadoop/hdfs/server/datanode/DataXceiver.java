@@ -17,13 +17,13 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
+import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ShortCircuitFdResponse.DO_NOT_USE_RECEIPT_VERIFICATION;
+import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ShortCircuitFdResponse.USE_RECEIPT_VERIFICATION;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.ERROR;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.ERROR_ACCESS_TOKEN;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.ERROR_INVALID;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.ERROR_UNSUPPORTED;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.SUCCESS;
-import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ShortCircuitFdResponse.USE_RECEIPT_VERIFICATION;
-import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ShortCircuitFdResponse.DO_NOT_USE_RECEIPT_VERIFICATION;
 import static org.apache.hadoop.hdfs.server.datanode.DataNode.DN_CLIENTTRACE_FORMAT;
 import static org.apache.hadoop.util.Time.monotonicNow;
 
@@ -50,7 +50,6 @@ import org.apache.commons.logging.Log;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
-import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -86,10 +85,10 @@ import org.apache.hadoop.net.unix.DomainSocket;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
+import org.apache.hadoop.util.Time;
 
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
-import org.apache.hadoop.util.Time;
 
 
 /**
@@ -100,6 +99,7 @@ class DataXceiver extends Receiver implements Runnable {
   static final Log ClientTraceLog = DataNode.ClientTraceLog;
   
   private Peer peer;
+  private final PeerXceiverStopper stopper;
   private final String remoteAddress; // address of remote side
   private final String remoteAddressWithoutPort; // only the address, no port
   private final String localAddress;  // local address of this daemon
@@ -120,15 +120,15 @@ class DataXceiver extends Receiver implements Runnable {
    */
   private String previousOpClientName;
   
-  public static DataXceiver create(Peer peer, DataNode dn,
-      DataXceiverServer dataXceiverServer) throws IOException {
-    return new DataXceiver(peer, dn, dataXceiverServer);
+  public static DataXceiver create(Peer peer, PeerXceiverStopper stopper,
+      DataNode dn, DataXceiverServer dataXceiverServer) throws IOException {
+    return new DataXceiver(peer, stopper, dn, dataXceiverServer);
   }
-  
-  private DataXceiver(Peer peer, DataNode datanode,
-      DataXceiverServer dataXceiverServer) throws IOException {
 
+  private DataXceiver(Peer peer, PeerXceiverStopper stopper, DataNode datanode,
+      DataXceiverServer dataXceiverServer) throws IOException {
     this.peer = peer;
+    this.stopper = stopper;
     this.dnConf = datanode.getDnConf();
     this.socketIn = peer.getInputStream();
     this.socketOut = peer.getOutputStream();
@@ -676,10 +676,10 @@ class DataXceiver extends Receiver implements Runnable {
     Status mirrorInStatus = SUCCESS;
     final String storageUuid;
     try {
-      if (isDatanode || 
+      if (isDatanode ||
           stage != BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
         // open a block receiver
-        blockReceiver = new BlockReceiver(block, storageType, in,
+        blockReceiver = new BlockReceiver(block, storageType, stopper, in,
             peer.getRemoteAddressString(),
             peer.getLocalAddressString(),
             stage, latestGenerationStamp, minBytesRcvd, maxBytesRcvd,
@@ -1126,7 +1126,7 @@ class DataXceiver extends Receiver implements Runnable {
         proxySock = datanode.newSocket();
         NetUtils.connect(proxySock, proxyAddr, dnConf.socketTimeout);
         proxySock.setSoTimeout(dnConf.socketTimeout);
-        
+
         OutputStream unbufProxyOut = NetUtils.getOutputStream(proxySock,
             dnConf.socketWriteTimeout);
         InputStream unbufProxyIn = NetUtils.getInputStream(proxySock);
@@ -1136,45 +1136,47 @@ class DataXceiver extends Receiver implements Runnable {
             unbufProxyOut, unbufProxyIn, keyFactory, blockToken, proxySource);
         unbufProxyOut = saslStreams.out;
         unbufProxyIn = saslStreams.in;
-        
+
         proxyOut = new DataOutputStream(new BufferedOutputStream(unbufProxyOut,
             smallBufferSize));
         proxyReply = new DataInputStream(new BufferedInputStream(unbufProxyIn,
             ioFileBufferSize));
-        
+
         /* send request to the proxy */
         IoeDuringCopyBlockOperation = true;
         new Sender(proxyOut).copyBlock(block, blockToken);
         IoeDuringCopyBlockOperation = false;
-        
+
         // receive the response from the proxy
-        
         BlockOpResponseProto copyResponse = BlockOpResponseProto.parseFrom(
             PBHelper.vintPrefixed(proxyReply));
-        
+
         String logInfo = "copy block " + block + " from "
             + proxySock.getRemoteSocketAddress();
         DataTransferProtoUtil.checkBlockOpStatus(copyResponse, logInfo);
 
         // get checksum info about the block we're copying
-        ReadOpChecksumInfoProto checksumInfo = copyResponse.getReadOpChecksumInfo();
+        ReadOpChecksumInfoProto checksumInfo =
+            copyResponse.getReadOpChecksumInfo();
         DataChecksum remoteChecksum = DataTransferProtoUtil.fromProto(
             checksumInfo.getChecksum());
         // open a block receiver and check if the block does not exist
-        blockReceiver = new BlockReceiver(block, storageType,
-            proxyReply, proxySock.getRemoteSocketAddress().toString(),
-            proxySock.getLocalSocketAddress().toString(),
-            null, 0, 0, 0, "", null, datanode, remoteChecksum,
-            CachingStrategy.newDropBehind(), false, false);
-        
+        blockReceiver =
+            new BlockReceiver(block, storageType, new SocketXceiverStopper(
+                proxySock, stopper), proxyReply, proxySock
+                .getRemoteSocketAddress().toString(), proxySock
+                .getLocalSocketAddress().toString(), null, 0, 0, 0, "", null,
+                datanode, remoteChecksum, CachingStrategy.newDropBehind(),
+                false, false);
+
         // receive a block
-        blockReceiver.receiveBlock(null, null, replyOut, null, 
-            dataXceiverServer.balanceThrottler, null, true);
-        
+        blockReceiver.receiveBlock(null, null, replyOut, null,
+          dataXceiverServer.balanceThrottler, null, true);
+
         // notify name node
         datanode.notifyNamenodeReceivedBlock(
             block, delHint, blockReceiver.getStorageUuid());
-        
+
         LOG.info("Moved " + block + " from " + peer.getRemoteAddressString()
             + ", delHint=" + delHint);
       }

@@ -83,7 +83,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.management.ObjectName;
 
@@ -294,7 +299,7 @@ public class DataNode extends ReconfigurableBase
   DataXceiverServer xserver = null;
   Daemon localDataXceiverServer = null;
   ShortCircuitRegistry shortCircuitRegistry = null;
-  ThreadGroup threadGroup = null;
+  final ThreadGroup threadGroup = new ThreadGroup("dataXceiverServer");
   private DNConf dnConf;
   private volatile boolean heartbeatsDisabledForTests = false;
   private DataStorage storage = null;
@@ -358,6 +363,10 @@ public class DataNode extends ReconfigurableBase
       .availableProcessors();
   private static final double CONGESTION_RATIO = 1.5;
 
+  final ThreadPoolExecutor xceiverPool;
+
+  private static final String IDLE_XCEIVER_PREFIX = "Idle-Xceiver-";
+
   /**
    * Creates a dummy DataNode for testing purpose.
    */
@@ -373,6 +382,7 @@ public class DataNode extends ReconfigurableBase
     this.getHdfsBlockLocationsEnabled = false;
     this.blockScanner = new BlockScanner(this, conf);
     this.pipelineSupportECN = false;
+    this.xceiverPool = null;
   }
 
   /**
@@ -387,6 +397,21 @@ public class DataNode extends ReconfigurableBase
     this.lastDiskErrorCheck = 0;
     this.maxNumberOfBlocksToLog = conf.getLong(DFS_MAX_NUM_BLOCKS_TO_LOG_KEY,
         DFS_MAX_NUM_BLOCKS_TO_LOG_DEFAULT);
+
+    this.xceiverPool =
+        new ThreadPoolExecutor(4, Integer.MAX_VALUE, 5, TimeUnit.MINUTES,
+            new SynchronousQueue<Runnable>(), new ThreadFactory() {
+
+              private final AtomicLong count = new AtomicLong(0L);
+
+              @Override
+              public Thread newThread(Runnable r) {
+                Thread t = new Thread(threadGroup, r);
+                t.setDaemon(true);
+                t.setName(IDLE_XCEIVER_PREFIX + count.getAndIncrement());
+                return t;
+              }
+            });
 
     this.usersWithLocalPathAccess = Arrays.asList(
         conf.getTrimmedStrings(DFSConfigKeys.DFS_BLOCK_LOCAL_PATH_ACCESS_USER_KEY));
@@ -856,7 +881,7 @@ public class DataNode extends ReconfigurableBase
       return;
     }
     // Try to get the ugi in the RPC call.
-    UserGroupInformation callerUgi = ipcServer.getRemoteUser();
+    UserGroupInformation callerUgi = RPC.Server.getRemoteUser();
     if (callerUgi == null) {
       // This is not from RPC.
       callerUgi = UserGroupInformation.getCurrentUser();
@@ -923,7 +948,6 @@ public class DataNode extends ReconfigurableBase
     tcpPeerServer.setReceiveBufferSize(HdfsConstants.DEFAULT_DATA_SOCKET_SIZE);
     streamingAddr = tcpPeerServer.getStreamingAddr();
     LOG.info("Opened streaming server at " + streamingAddr);
-    this.threadGroup = new ThreadGroup("dataXceiverServer");
     xserver = new DataXceiverServer(tcpPeerServer, conf, this);
     this.dataXceiverServer = new Daemon(threadGroup, xserver);
     this.threadGroup.setDaemon(true); // auto destroy when empty
@@ -1742,32 +1766,32 @@ public class DataNode extends ReconfigurableBase
     shutdownReconfigurationTask();
 
     // wait for all data receiver threads to exit
-    if (this.threadGroup != null) {
+    if (xceiverPool != null) {
       int sleepMs = 2;
-      while (true) {
+      for (;;) {
         // When shutting down for restart, wait 2.5 seconds before forcing
         // termination of receiver threads.
-        if (!this.shutdownForUpgrade ||
-            (this.shutdownForUpgrade && (Time.monotonicNow() - timeNotified
-                > 1000))) {
-          this.threadGroup.interrupt();
+        if (!this.shutdownForUpgrade || (this.shutdownForUpgrade &&
+                (Time.monotonicNow() - timeNotified > 1000))) {
+          xceiverPool.shutdownNow();
           break;
         }
-        LOG.info("Waiting for threadgroup to exit, active threads is " +
-                 this.threadGroup.activeCount());
-        if (this.threadGroup.activeCount() == 0) {
+        LOG.info("Waiting for xceiver pool to exit, active threads is "
+            + this.xceiverPool.getActiveCount());
+        if (this.xceiverPool.getActiveCount() == 0) {
           break;
         }
         try {
           Thread.sleep(sleepMs);
-        } catch (InterruptedException e) {}
+        } catch (InterruptedException e) {
+        }
         sleepMs = sleepMs * 3 / 2; // exponential backoff
         if (sleepMs > 200) {
           sleepMs = 200;
         }
       }
-      this.threadGroup = null;
     }
+    threadGroup.interrupt();
     if (this.dataXceiverServer != null) {
       // wait for dataXceiverServer to terminate
       try {
@@ -1865,11 +1889,15 @@ public class DataNode extends ReconfigurableBase
     LOG.warn("DataNode is shutting down: " + errMsgr);
     shouldRun = false;
   }
-    
+
   /** Number of concurrent xceivers per node. */
   @Override // DataNodeMXBean
   public int getXceiverCount() {
-    return threadGroup == null ? 0 : threadGroup.activeCount();
+    if (xceiverPool == null) {
+      return 0;
+    }
+    return xceiverPool.getActiveCount()
+        + (localDataXceiverServer == null ? 1 : 2);
   }
 
   @Override // DataNodeMXBean
@@ -1948,10 +1976,10 @@ public class DataNode extends ReconfigurableBase
       return;
     }
     if (lengthTooShort) {
-      // Check if NN recorded length matches on-disk length 
+      // Check if NN recorded length matches on-disk length
       // Shorter on-disk len indicates corruption so report NN the corrupt block
       reportBadBlock(bpos, block, "Can't replicate block " + block
-          + " because on-disk length " + data.getLength(block) 
+          + " because on-disk length " + data.getLength(block)
           + " is shorter than NameNode recorded length " + block.getNumBytes());
       return;
     }
@@ -1963,11 +1991,11 @@ public class DataNode extends ReconfigurableBase
         xfersBuilder.append(xferTargets[i]);
         xfersBuilder.append(" ");
       }
-      LOG.info(bpReg + " Starting thread to transfer " + 
-               block + " to " + xfersBuilder);                       
-
-      new Daemon(new DataTransfer(xferTargets, xferTargetStorageTypes, block,
-          BlockConstructionStage.PIPELINE_SETUP_CREATE, "")).start();
+      LOG.info(bpReg + " Starting thread to transfer " + block + " to "
+          + xfersBuilder);
+      xceiverPool.execute(new XceiverRunnable(new DataTransfer(xferTargets,
+          xferTargetStorageTypes, block,
+          BlockConstructionStage.PIPELINE_SETUP_CREATE, "")));
     }
   }
 
