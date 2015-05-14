@@ -124,6 +124,8 @@ public class TestReplicationPolicy {
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY, true);
     conf.setBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_WRITE_KEY, true);
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_OVERUSED_PERCENTAGE_THRESHOLD, 0);
+    conf.setLong(DFSConfigKeys.DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD, 0);
     DFSTestUtil.formatNameNode(conf);
     namenode = new NameNode(conf);
 
