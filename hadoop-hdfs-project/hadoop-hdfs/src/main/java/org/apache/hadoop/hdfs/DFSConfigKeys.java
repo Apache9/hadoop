@@ -797,4 +797,13 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String HDFS_TTLMANAGER_WORKER_QUEUE_CAPACITY_KEY =
       "hdfs.ttlmanager.worker.queue.capacity";
   public static final int HDFS_TTLMANAGER_WORKER_QUEUE_CAPACITY_DEFAULT = 1024;
+
+  public static final String DFS_DATANODE_OVERUSED_PERCENTAGE_THRESHOLD =
+      "dfs.datanode.overused.percentage.threshold";
+  public static final int DFS_DATANODE_OVERUSED_PERCENTAGE_THRESHOLD_DEFAULT =
+      0;
+  public static final String DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD =
+      "dfs.datanode.overused.freespace.threshold";
+  public static final long DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD_DEFAULT =
+      0; 
 }
