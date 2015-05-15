@@ -326,13 +326,14 @@ public class UserGroupInformation {
    * Information about the logged in user.
    */
   private static UserGroupInformation loginUser = null;
-  private static String keytabPrincipal = null;
+  private static String krbPrincipal = null;
   private static String keytabFile = null;
+  private static String krbPassword = null;
 
   private final Subject subject;
   // All non-static fields must be read-only caches that come from the subject.
   private final User user;
-  private final boolean isKeytab;
+  private final boolean isKrbKey;
   private final boolean isKrbTkt;
   
   private static String OS_LOGIN_MODULE_NAME;
@@ -444,6 +445,8 @@ public class UserGroupInformation {
       "hadoop-user-kerberos";
     private static final String KEYTAB_KERBEROS_CONFIG_NAME = 
       "hadoop-keytab-kerberos";
+    private static final String PASSWORD_KERBEROS_CONFIG_NAME =
+      "hadoop-password-kerberos";
 
     private static final Map<String, String> BASIC_JAAS_OPTIONS =
       new HashMap<String,String>();
@@ -498,12 +501,31 @@ public class UserGroupInformation {
         KEYTAB_KERBEROS_OPTIONS.put("storeKey", "true");
       }
       KEYTAB_KERBEROS_OPTIONS.put("refreshKrb5Config", "true");
-      KEYTAB_KERBEROS_OPTIONS.putAll(BASIC_JAAS_OPTIONS);      
+      KEYTAB_KERBEROS_OPTIONS.putAll(BASIC_JAAS_OPTIONS);
     }
     private static final AppConfigurationEntry KEYTAB_KERBEROS_LOGIN =
       new AppConfigurationEntry(KerberosUtil.getKrb5LoginModuleName(),
                                 LoginModuleControlFlag.REQUIRED,
                                 KEYTAB_KERBEROS_OPTIONS);
+    private static final Map<String,String> PASSWORD_KERBEROS_OPTIONS =
+      new HashMap<String,String>();
+    static {
+      if (IBM_JAVA) {
+        // TODO This may not work
+        PASSWORD_KERBEROS_OPTIONS.put("credsType", "both");
+      } else {
+        PASSWORD_KERBEROS_OPTIONS.put("tryFirstPass", "true");
+        PASSWORD_KERBEROS_OPTIONS.put("doNotPrompt", "false");
+        PASSWORD_KERBEROS_OPTIONS.put("useKeyTab", "false");
+        PASSWORD_KERBEROS_OPTIONS.put("storeKey", "true");
+      }
+      PASSWORD_KERBEROS_OPTIONS.put("refreshKrb5Config", "true");
+      PASSWORD_KERBEROS_OPTIONS.putAll(BASIC_JAAS_OPTIONS);
+    }
+    private static final AppConfigurationEntry PASSWORD_KERBEROS_LOGIN =
+      new AppConfigurationEntry(KerberosUtil.getKrb5LoginModuleName(),
+                                LoginModuleControlFlag.REQUIRED,
+                                PASSWORD_KERBEROS_OPTIONS);
     
     private static final AppConfigurationEntry[] SIMPLE_CONF = 
       new AppConfigurationEntry[]{OS_SPECIFIC_LOGIN, HADOOP_LOGIN};
@@ -514,6 +536,9 @@ public class UserGroupInformation {
 
     private static final AppConfigurationEntry[] KEYTAB_KERBEROS_CONF =
       new AppConfigurationEntry[]{KEYTAB_KERBEROS_LOGIN, HADOOP_LOGIN};
+
+    private static final AppConfigurationEntry[] PASSWORD_KERBEROS_CONF =
+      new AppConfigurationEntry[]{PASSWORD_KERBEROS_LOGIN, HADOOP_LOGIN};
 
     @Override
     public AppConfigurationEntry[] getAppConfigurationEntry(String appName) {
@@ -528,8 +553,10 @@ public class UserGroupInformation {
         } else {
           KEYTAB_KERBEROS_OPTIONS.put("keyTab", keytabFile);
         }
-        KEYTAB_KERBEROS_OPTIONS.put("principal", keytabPrincipal);
+        KEYTAB_KERBEROS_OPTIONS.put("principal", krbPrincipal);
         return KEYTAB_KERBEROS_CONF;
+      } else if (PASSWORD_KERBEROS_CONFIG_NAME.equals(appName)) {
+        return PASSWORD_KERBEROS_CONF;
       }
       return null;
     }
@@ -558,7 +585,7 @@ public class UserGroupInformation {
   }
 
   private static LoginContext
-  newLoginContext(String appName, Subject subject,
+  newLoginContext(String appName, Subject subject, CallbackHandler callbackHandler,
     javax.security.auth.login.Configuration loginConf)
       throws LoginException {
     // Temporarily switch the thread's ContextClassLoader to match this
@@ -568,7 +595,7 @@ public class UserGroupInformation {
     ClassLoader oldCCL = t.getContextClassLoader();
     t.setContextClassLoader(HadoopLoginModule.class.getClassLoader());
     try {
-      return new LoginContext(appName, subject, null, loginConf);
+      return new LoginContext(appName, subject, callbackHandler, loginConf);
     } finally {
       t.setContextClassLoader(oldCCL);
     }
@@ -604,7 +631,7 @@ public class UserGroupInformation {
   UserGroupInformation(Subject subject) {
     this.subject = subject;
     this.user = subject.getPrincipals(User.class).iterator().next();
-    this.isKeytab = !subject.getPrivateCredentials(KEY_TAB_CLASS).isEmpty();
+    this.isKrbKey = !subject.getPrivateCredentials(KEY_TAB_CLASS).isEmpty();
     this.isKrbTkt = !subject.getPrivateCredentials(KerberosTicket.class).isEmpty();
   }
   
@@ -613,7 +640,7 @@ public class UserGroupInformation {
    * @return true if the subject logged via keytab or has a Kerberos TGT
    */
   public boolean hasKerberosCredentials() {
-    return isKeytab || isKrbTkt;
+    return isKrbKey || isKrbTkt;
   }
 
   /**
@@ -691,7 +718,7 @@ public class UserGroupInformation {
       DynamicConfiguration dynConf =
           new DynamicConfiguration(new AppConfigurationEntry[]{ ace });
       LoginContext login = newLoginContext(
-          HadoopConfiguration.USER_KERBEROS_CONFIG_NAME, null, dynConf);
+          HadoopConfiguration.USER_KERBEROS_CONFIG_NAME, null, null, dynConf);
       login.login();
 
       Subject loginSubject = login.getSubject();
@@ -728,7 +755,7 @@ public class UserGroupInformation {
     if (loginUser == null) {
       if (isSecurityEnabled()) {
         try {
-          tryLoginFromKeytab();
+          tryLoginFromKerberosKey();
           return loginUser;
         } catch (IOException ioe) {
           LOG.info("Can't login from keytab, try to login from ticket cache");
@@ -757,7 +784,7 @@ public class UserGroupInformation {
       }
       LoginContext login =
           newLoginContext(authenticationMethod.getLoginAppName(), 
-                          subject, new HadoopConfiguration());
+                          subject, null, new HadoopConfiguration());
       login.login();
       UserGroupInformation realUser = new UserGroupInformation(subject);
       realUser.setLogin(login);
@@ -800,31 +827,50 @@ public class UserGroupInformation {
   }
   
   /**
-   * Try to login from the user specified principal and keytab file
+   * Try to login from the user specified principal and password/keytab file
    * @throws IOException
    */
-  private static void tryLoginFromKeytab()
+  private static void tryLoginFromKerberosKey()
       throws IOException {
     String keytabFile = conf.get(
         CommonConfigurationKeys.HADOOP_CLIENT_KEYTAB_FILE);
     String principal = conf.get(
         CommonConfigurationKeys.HADOOP_CLIENT_KERBEROS_PRINCIPAL);
+    String password = conf.get(
+        CommonConfigurationKeys.HADOOP_CLIENT_KERBEROS_PASSWORD);
+    // override the password settings with system properties which can be updated at runtime
+    principal = System.getProperty(
+        CommonConfigurationKeys.HADOOP_CLIENT_KERBEROS_PRINCIPAL, principal);
+    password = System.getProperty(
+        CommonConfigurationKeys.HADOOP_CLIENT_KERBEROS_PASSWORD, password);
 
     if (keytabFile != null && principal != null &&
         keytabFile.length() != 0 && principal.length() != 0) {
       loginUserFromKeytab(principal, keytabFile);
+    } else if (password != null && principal != null &&
+        password.length() != 0 && principal.length() != 0) {
+      loginUserFromPassword(principal, password);
     } else {
       throw new IOException("Invalid keytab: " + keytabFile +
-          " and principal:" + principal);
+          " (or password) and principal:" + principal);
     }
   }
 
   /**
-   * Is this user logged in from a keytab file?
-   * @return true if the credentials are from a keytab file.
+   * Is this user logged in from a keytab file or password?
+   * @return true if the credentials are from a keytab file or password.
    */
+  @Deprecated
   public boolean isFromKeytab() {
-    return isKeytab;
+    return isFromKey();
+  }
+
+  /**
+   * Is this user logged in from a keytab file or password?
+   * @return true if the credentials are from a keytab file or password.
+   */
+  public boolean isFromKey() {
+    return isKrbKey;
   }
   
   /**
@@ -856,7 +902,7 @@ public class UserGroupInformation {
     if (isSecurityEnabled()) {
       //spawn thread only if we have kerb credentials
       if (user.getAuthenticationMethod() == AuthenticationMethod.KERBEROS &&
-          !isKeytab) {
+          !isKrbKey) {
         Thread t = new Thread(new Runnable() {
           
           @Override
@@ -925,13 +971,13 @@ public class UserGroupInformation {
       return;
 
     keytabFile = path;
-    keytabPrincipal = user;
+    krbPrincipal = user;
     Subject subject = new Subject();
     LoginContext login; 
     long start = 0;
     try {
       login = newLoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME,
-            subject, new HadoopConfiguration());
+            subject, null, new HadoopConfiguration());
       start = Time.now();
       login.login();
       metrics.loginSuccess.add(Time.now() - start);
@@ -945,8 +991,45 @@ public class UserGroupInformation {
       throw new IOException("Login failure for " + user + " from keytab " + 
                             path, le);
     }
-    LOG.info("Login successful for user " + keytabPrincipal
+    LOG.info("Login successful for user " + krbPrincipal
         + " using keytab file " + keytabFile);
+  }
+
+  /**
+   * Log a user with password. They become the currently logged-in user.
+   * @param user the principal name
+   * @param password the principal password
+   * @throws IOException if login failed
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public synchronized
+  static void loginUserFromPassword(String user, String password)
+  throws IOException {
+    if (!isSecurityEnabled())
+      return;
+
+    krbPrincipal = user;
+    krbPassword = password;
+    Subject subject = new Subject();
+    LoginContext login;
+    long start = 0;
+    try {
+      login = newLoginContext(HadoopConfiguration.PASSWORD_KERBEROS_CONFIG_NAME,
+          subject, new EchoCallbackHandler(user, password), new HadoopConfiguration());
+      start = Time.now();
+      login.login();
+      metrics.loginSuccess.add(Time.now() - start);
+      loginUser = new UserGroupInformation(subject);
+      loginUser.setLogin(login);
+      loginUser.setAuthenticationMethod(AuthenticationMethod.KERBEROS);
+    } catch (LoginException le) {
+      if (start > 0) {
+        metrics.loginFailure.add(Time.now() - start);
+      }
+      throw new IOException("Login failure for " + user + " from password", le);
+    }
+    LOG.info("Login successful for user " + user + " using krbPassword");
   }
   
   /**
@@ -957,7 +1040,7 @@ public class UserGroupInformation {
   public synchronized void checkTGTAndReloginFromKeytab() throws IOException {
     if (!isSecurityEnabled()
         || user.getAuthenticationMethod() != AuthenticationMethod.KERBEROS
-        || !isKeytab)
+        || !isKrbKey)
       return;
     KerberosTicket tgt = getTGT();
     if (tgt != null && Time.now() < getRefreshTime(tgt)) {
@@ -969,21 +1052,55 @@ public class UserGroupInformation {
   /**
    * Re-Login a user in from a keytab file. Loads a user identity from a keytab
    * file and logs them in. They become the currently logged-in user. This
-   * method assumes that {@link #loginUserFromKeytab(String, String)} had 
-   * happened already.
+   * method assumes that {@link #loginUserFromKeytab(String, String)} or
+   * {@link #loginUserFromPassword(String, String)} had happened already.
    * The Subject field of this UserGroupInformation object is updated to have
    * the new credentials.
    * @throws IOException on a failure
    */
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
+  @Deprecated
   public synchronized void reloginFromKeytab()
+      throws IOException {
+    reloginFromKerberosKey();
+  }
+  
+  /**
+   * Re-Login a user in from a keytab file. Loads a user identity from a keytab
+   * file and logs them in. They become the currently logged-in user. This
+   * method assumes that {@link #loginUserFromKeytab(String, String)} or
+   * {@link #loginUserFromPassword(String, String)} had happened already.
+   * The Subject field of this UserGroupInformation object is updated to have
+   * the new credentials.
+   * @throws IOException on a failure
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public synchronized void reloginFromKerberosKey()
+  throws IOException {
+    if (keytabFile != null) {
+      reloginFromKerberosKey(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, null);
+    } else if (krbPassword != null) {
+      // refresh password settings, which can be reloaded at runtime
+      krbPrincipal = System.getProperty(
+          CommonConfigurationKeys.HADOOP_CLIENT_KERBEROS_PRINCIPAL, krbPrincipal);
+      krbPassword = System.getProperty(
+          CommonConfigurationKeys.HADOOP_CLIENT_KERBEROS_PASSWORD, krbPassword);
+      reloginFromKerberosKey(HadoopConfiguration.PASSWORD_KERBEROS_CONFIG_NAME,
+          new EchoCallbackHandler(krbPrincipal, krbPassword));
+    } else {
+      throw new IOException("loginUserFromKeyTab or loginUserFromPassword must be done first");
+    }
+  }
+  
+  private void reloginFromKerberosKey(String appName, CallbackHandler callbackHandler)
   throws IOException {
     if (!isSecurityEnabled() ||
-         user.getAuthenticationMethod() != AuthenticationMethod.KERBEROS ||
-         !isKeytab)
+        user.getAuthenticationMethod() != AuthenticationMethod.KERBEROS ||
+        !isKrbKey)
       return;
-    
+
     long now = Time.now();
     if (!hasSufficientTimeElapsed(now)) {
       return;
@@ -994,12 +1111,12 @@ public class UserGroupInformation {
     if (tgt != null && now < getRefreshTime(tgt)) {
       return;
     }
-    
+
     LoginContext login = getLogin();
-    if (login == null || keytabFile == null) {
-      throw new IOException("loginUserFromKeyTab must be done first");
+    if (login == null || (keytabFile == null && krbPassword == null)) {
+      throw new IOException("loginUserFromKeyTab/loginUserFromPassword must be done first");
     }
-    
+
     long start = 0;
     // register most recent relogin attempt
     user.setLastLogin(now);
@@ -1012,10 +1129,8 @@ public class UserGroupInformation {
         login.logout();
         // login and also update the subject field of this instance to
         // have the new credentials (pass it to the LoginContext constructor)
-        login = newLoginContext(
-            HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, getSubject(),
-            new HadoopConfiguration());
-        LOG.info("Initiating re-login for " + keytabPrincipal);
+        login = newLoginContext(appName, getSubject(), callbackHandler, new HadoopConfiguration());
+        LOG.info("Initiating re-login for " + krbPrincipal);
         start = Time.now();
         login.login();
         metrics.loginSuccess.add(Time.now() - start);
@@ -1025,9 +1140,8 @@ public class UserGroupInformation {
       if (start > 0) {
         metrics.loginFailure.add(Time.now() - start);
       }
-      throw new IOException("Login failure for " + keytabPrincipal + 
-          " from keytab " + keytabFile, le);
-    } 
+      throw new IOException("Login failure for " + krbPrincipal + " from keytab/password", le);
+    }
   }
 
   /**
@@ -1065,7 +1179,7 @@ public class UserGroupInformation {
       //have the new credentials (pass it to the LoginContext constructor)
       login = 
         newLoginContext(HadoopConfiguration.USER_KERBEROS_CONFIG_NAME, 
-            getSubject(), new HadoopConfiguration());
+            getSubject(), null, new HadoopConfiguration());
       LOG.info("Initiating re-login for " + getUserName());
       login.login();
       setLogin(login);
@@ -1095,13 +1209,13 @@ public class UserGroupInformation {
     long start = 0;
     try {
       oldKeytabFile = keytabFile;
-      oldKeytabPrincipal = keytabPrincipal;
+      oldKeytabPrincipal = krbPrincipal;
       keytabFile = path;
-      keytabPrincipal = user;
+      krbPrincipal = user;
       Subject subject = new Subject();
       
       LoginContext login = newLoginContext(
-          HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject,
+          HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject, null,
           new HadoopConfiguration());
        
       start = Time.now();
@@ -1120,7 +1234,53 @@ public class UserGroupInformation {
                             path, le);
     } finally {
       if(oldKeytabFile != null) keytabFile = oldKeytabFile;
-      if(oldKeytabPrincipal != null) keytabPrincipal = oldKeytabPrincipal;
+      if(oldKeytabPrincipal != null) krbPrincipal = oldKeytabPrincipal;
+    }
+  }
+
+  /**
+   * Log a user in from password. This new user does not affect the currently
+   * logged-in user.
+   * @param user the principal name
+   * @param password the principal password
+   * @throws IOException if the login failed
+   */
+  public synchronized
+  static UserGroupInformation loginUserFromPasswordAndReturnUGI(String user, String password)
+  throws IOException {
+    if (!isSecurityEnabled())
+      return UserGroupInformation.getCurrentUser();
+    String oldKrbPrincipal = null;
+    String oldKrbPassword = null;
+    
+    long start = 0;
+    try {
+      oldKrbPrincipal = krbPrincipal;
+      oldKrbPassword = krbPassword;
+      krbPrincipal = user;
+      krbPassword = password;
+      Subject subject = new Subject();
+
+      LoginContext login = newLoginContext(
+          HadoopConfiguration.PASSWORD_KERBEROS_CONFIG_NAME, subject,
+          new EchoCallbackHandler(user, password), new HadoopConfiguration());
+
+      start = Time.now();
+      login.login();
+      metrics.loginSuccess.add(Time.now() - start);
+      UserGroupInformation newLoginUser = new UserGroupInformation(subject);
+      newLoginUser.setLogin(login);
+      newLoginUser.setAuthenticationMethod(AuthenticationMethod.KERBEROS);
+
+      return newLoginUser;
+    } catch (LoginException le) {
+      if (start > 0) {
+        metrics.loginFailure.add(Time.now() - start);
+      }
+      throw new IOException("Login failure for " + user + " from krbPassword", le);
+    } finally {
+      if(oldKrbPrincipal != null) krbPrincipal = oldKrbPrincipal;
+      if(oldKrbPassword != null) krbPassword = oldKrbPassword;
     }
   }
 
@@ -1135,13 +1295,24 @@ public class UserGroupInformation {
   }
   
   /**
-   * Did the login happen via keytab
+   * Did the login happen via key (keytab or password)
    * @return true or false
    */
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
+  @Deprecated
   public synchronized static boolean isLoginKeytabBased() throws IOException {
-    return getLoginUser().isKeytab;
+    return isLoginKerberosKeyBased();
+  }
+  
+  /**
+   * Did the login happen via key (keytab or password)
+   * @return true or false
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public synchronized static boolean isLoginKerberosKeyBased() throws IOException {
+    return getLoginUser().isKrbKey;
   }
 
   /**
@@ -1642,8 +1813,9 @@ public class UserGroupInformation {
 
   /**
    * A test method to print out the current user's UGI.
-   * @param args if there are two arguments, read the user from the keytab
-   * and print it out.
+   * @param args if there are two arguments, read the user from the keytab and print it out;
+   * if there are four arguments, read user by password from the last two arguments and
+   * print it out.
    * @throws Exception
    */
   public static void main(String [] args) throws Exception {
@@ -1652,16 +1824,25 @@ public class UserGroupInformation {
     ugi.print();
     System.out.println("UGI: " + ugi);
     System.out.println("Auth method " + ugi.user.getAuthenticationMethod());
-    System.out.println("Keytab " + ugi.isKeytab);
+    System.out.println("Keytab " + ugi.isKrbKey);
     System.out.println("============================================================");
     
-    if (args.length == 2) {
+    if (args.length >= 2) {
       System.out.println("Getting UGI from keytab....");
       loginUserFromKeytab(args[0], args[1]);
-      getCurrentUser().print();
-      System.out.println("Keytab: " + ugi);
+      ugi = getCurrentUser();
+      System.out.println("UGI: " + ugi);
       System.out.println("Auth method " + loginUser.user.getAuthenticationMethod());
-      System.out.println("Keytab " + loginUser.isKeytab);
+      System.out.println("Keytab " + loginUser.isKrbKey);
+    }
+
+    if (args.length == 4) {
+      System.out.println("Getting UGI by password....");
+      loginUserFromPassword(args[2], args[3]);
+      ugi = getCurrentUser();
+      System.out.println("UGI: " + ugi);
+      System.out.println("Auth method " + loginUser.user.getAuthenticationMethod());
+      System.out.println("Password " + loginUser.isKrbKey);
     }
   }
 
