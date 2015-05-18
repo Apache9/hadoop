@@ -18,7 +18,9 @@
 package org.apache.hadoop.hdfs.server.datanode.web.webhdfs;
 
 import io.netty.handler.codec.http.QueryStringDecoder;
+
 import org.apache.commons.io.Charsets;
+import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.HAUtilClient;
@@ -47,33 +49,34 @@ import java.util.Map;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.HDFS_URI_SCHEME;
 import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.WEBHDFS_PREFIX_LENGTH;
 
-class ParameterParser {
+@InterfaceAudience.Private
+public class ParameterParser {
   private final Configuration conf;
   private final String path;
   private final Map<String, List<String>> params;
 
-  ParameterParser(QueryStringDecoder decoder, Configuration conf) {
+  public ParameterParser(QueryStringDecoder decoder, Configuration conf) {
     this.path = decodeComponent(decoder.path().substring
         (WEBHDFS_PREFIX_LENGTH), Charsets.UTF_8);
     this.params = decoder.parameters();
     this.conf = conf;
   }
 
-  String path() { return path; }
+  public String path() { return path; }
 
-  String op() {
+  public String op() {
     return param(HttpOpParam.NAME);
   }
 
-  long offset() {
+  public long offset() {
     return new OffsetParam(param(OffsetParam.NAME)).getOffset();
   }
 
-  long length() {
+  public long length() {
     return new LengthParam(param(LengthParam.NAME)).getLength();
   }
 
-  String namenodeId() {
+  public String namenodeId() {
     return new NamenodeAddressParam(param(NamenodeAddressParam.NAME))
       .getValue();
   }
@@ -86,27 +89,27 @@ class ParameterParser {
     return new UserParam(param(UserParam.NAME)).getValue();
   }
 
-  int bufferSize() {
+  public int bufferSize() {
     return new BufferSizeParam(param(BufferSizeParam.NAME)).getValue(conf);
   }
 
-  long blockSize() {
+  public long blockSize() {
     return new BlockSizeParam(param(BlockSizeParam.NAME)).getValue(conf);
   }
 
-  short replication() {
+  public short replication() {
     return new ReplicationParam(param(ReplicationParam.NAME)).getValue(conf);
   }
 
-  FsPermission permission() {
+  public FsPermission permission() {
     return new PermissionParam(param(PermissionParam.NAME)).getFsPermission();
   }
 
-  boolean overwrite() {
+  public boolean overwrite() {
     return new OverwriteParam(param(OverwriteParam.NAME)).getValue();
   }
 
-  Token<DelegationTokenIdentifier> delegationToken() throws IOException {
+  public Token<DelegationTokenIdentifier> delegationToken() throws IOException {
     String delegation = param(DelegationParam.NAME);
     final Token<DelegationTokenIdentifier> token = new
       Token<DelegationTokenIdentifier>();

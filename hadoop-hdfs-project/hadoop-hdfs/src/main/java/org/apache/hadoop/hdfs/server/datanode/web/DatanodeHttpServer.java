@@ -17,8 +17,10 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web;
 
-import io.netty.bootstrap.ChannelFactory;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -28,17 +30,11 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler;
+import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.DFSUtil;
-import org.apache.hadoop.hdfs.server.datanode.DataNode;
-import org.apache.hadoop.http.HttpConfig;
-import org.apache.hadoop.net.NetUtils;
-import org.apache.hadoop.security.ssl.SSLFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -46,9 +42,25 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.ServerSocketChannel;
 import java.security.GeneralSecurityException;
+import java.util.Collections;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_DEFAULT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtil;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.web.http2.DataNodeHttp2Handler;
+import org.apache.hadoop.http.HttpConfig;
+import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.security.ssl.SSLFactory;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public class DatanodeHttpServer implements Closeable {
   private final EventLoopGroup bossGroup;
@@ -61,8 +73,9 @@ public class DatanodeHttpServer implements Closeable {
   private final Configuration confForCreate;
   private InetSocketAddress httpAddress;
   private InetSocketAddress httpsAddress;
+  private final ExecutorService executor;
 
-  static final Log LOG = LogFactory.getLog(DatanodeHttpServer.class);
+  public static final Log LOG = LogFactory.getLog(DatanodeHttpServer.class);
 
   public DatanodeHttpServer(final Configuration conf, final InetSocketAddress
     jettyAddr, final ServerSocketChannel externalHttpChannel)
@@ -70,8 +83,17 @@ public class DatanodeHttpServer implements Closeable {
     this.conf = conf;
     this.confForCreate = new Configuration(conf);
     confForCreate.set(FsPermission.UMASK_LABEL, "000");
+    int maximumPoolSize =
+        conf.getInt(DFSConfigKeys.DFS_DATANODE_MAX_HTTP_HANDLERS_KEY,
+          DFSConfigKeys.DFS_DATANODE_MAX_HTTP_HANDLERS_DEFAULT);
+    int corePoolSize = Math.min(4, maximumPoolSize);
+    this.executor =
+        new ThreadPoolExecutor(corePoolSize, maximumPoolSize, 1,
+            TimeUnit.MINUTES, new SynchronousQueue<Runnable>(),
+            new ThreadFactoryBuilder().setNameFormat("Http-Handler-%d")
+                .setDaemon(true).build());
 
-    this.bossGroup = new NioEventLoopGroup();
+    this.bossGroup = new NioEventLoopGroup(1);
     this.workerGroup = new NioEventLoopGroup();
     this.externalHttpChannel = externalHttpChannel;
     HttpConfig.Policy policy = DFSUtil.getHttpPolicy(conf);
@@ -81,9 +103,13 @@ public class DatanodeHttpServer implements Closeable {
         .childHandler(new ChannelInitializer<SocketChannel>() {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
+          HttpServerCodec sourceCodec = new HttpServerCodec();
+          HttpServerUpgradeHandler.UpgradeCodec upgradeCodec = new Http2ServerUpgradeCodec(
+                  new DataNodeHttp2Handler(conf, confForCreate, executor));
+          HttpServerUpgradeHandler upgradeHandler = new HttpServerUpgradeHandler(
+                  sourceCodec, Collections.singletonList(upgradeCodec), Integer.MAX_VALUE);
           ChannelPipeline p = ch.pipeline();
-          p.addLast(new HttpRequestDecoder(),
-            new HttpResponseEncoder(),
+          p.addLast(sourceCodec, upgradeHandler,
             new ChunkedWriteHandler(),
             new URLDispatcher(jettyAddr, conf, confForCreate));
         }
