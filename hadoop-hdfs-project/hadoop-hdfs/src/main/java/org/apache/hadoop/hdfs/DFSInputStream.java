@@ -74,6 +74,7 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.IdentityHashStore;
+import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -217,6 +218,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   
   private final byte[] oneByteBuf = new byte[1]; // used for 'int read()'
 
+  private final long dfsclientSlowLogThresholdMs;
+
   void addToDeadNodes(DatanodeInfo dnInfo) {
     deadNodes.put(dnInfo, dnInfo);
   }
@@ -230,6 +233,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     this.cachingStrategy =
         dfsClient.getDefaultReadCachingStrategy();
     openInfo();
+    this.dfsclientSlowLogThresholdMs =
+        dfsClient.getConf().dfsclientSlowIoWarningThresholdMs;
   }
 
   /**
@@ -747,7 +752,14 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     while (true) {
       // retry as many times as seekToNewSource allows.
       try {
-        return reader.doRead(blockReader, off, len, readStatistics);
+        long startTS = Time.monotonicNow();
+        int nread = reader.doRead(blockReader, off, len, readStatistics);
+        long cost = Time.monotonicNow() - startTS;
+        if (cost > dfsclientSlowLogThresholdMs) {
+          DFSClient.LOG.info("Slow readBuffer. Cost: " + cost + " ms from "
+              + currentNode);
+        }
+        return nread;
       } catch ( ChecksumException ce ) {
         DFSClient.LOG.warn("Found Checksum error for "
             + getCurrentBlock() + " from " + currentNode
@@ -1074,6 +1086,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             setUserGroupInformation(dfsClient.ugi).
             setConfiguration(dfsClient.getConfiguration()).
             build();
+        long startTS = Time.monotonicNow();
         int nread = reader.readAll(buf, offset, len);
         updateReadStatistics(readStatistics, nread, reader);
 
@@ -1082,6 +1095,11 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
                                 "excpected " + len + ", got " + nread);
         }
         DFSClientFaultInjector.get().readFromDatanodeDelay();
+        long cost = Time.monotonicNow() - startTS;
+        if (cost > dfsclientSlowLogThresholdMs) {
+          DFSClient.LOG.info("Slow readAll. Cost: " + cost + " ms from "
+              + chosenNode);
+        }
         return;
       } catch (ChecksumException e) {
         String msg = "fetchBlockByteRange(). Got a checksum exception for "
@@ -1430,7 +1448,13 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       int diff = (int)(targetPos - pos);
       if (diff <= blockReader.available()) {
         try {
+          long startTS = Time.monotonicNow();
           pos += blockReader.skip(diff);
+          long cost = Time.monotonicNow() - startTS;
+          if (cost > dfsclientSlowLogThresholdMs) {
+            DFSClient.LOG.info("Slow seek. Cost: " + cost + " ms from "
+                + currentNode);
+          }
           if (pos == targetPos) {
             done = true;
           } else {

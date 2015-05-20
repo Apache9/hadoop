@@ -2202,7 +2202,8 @@ public class DFSOutputStream extends FSOutputSummer
     long duration = Time.monotonicNow() - begin;
     if (duration > dfsclientSlowLogThresholdMs) {
       DFSClient.LOG.warn("Slow waitForAckedSeqno took " + duration
-          + "ms (threshold=" + dfsclientSlowLogThresholdMs + "ms)");
+          + " ms (threshold=" + dfsclientSlowLogThresholdMs + " ms)"
+          + " pipeline:" + Arrays.asList(getPipeline()));
     }
   }
 
