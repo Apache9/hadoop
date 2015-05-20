@@ -662,8 +662,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     boolean badTarget = false;
     DatanodeStorageInfo firstChosen = null;
     while(numOfReplicas > 0 && numOfAvailableNodes > 0) {
-      DatanodeDescriptor chosenNode = 
-          (DatanodeDescriptor)clusterMap.chooseRandom(scope);
+      DatanodeDescriptor chosenNode = chooseDataNode(scope);
       if (excludedNodes.add(chosenNode)) { //was not in the excluded list
         if (LOG.isDebugEnabled()) {
           builder.append("\nNode ").append(NodeBase.getPath(chosenNode)).append(" [");
@@ -722,6 +721,14 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     }
     
     return firstChosen;
+  }
+
+  /**
+   * Choose a datanode from the given <i>scope</i>.
+   * @return the chosen node, if there is any.
+   */
+  protected DatanodeDescriptor chooseDataNode(final String scope) {
+    return (DatanodeDescriptor) clusterMap.chooseRandom(scope);
   }
 
   /**
