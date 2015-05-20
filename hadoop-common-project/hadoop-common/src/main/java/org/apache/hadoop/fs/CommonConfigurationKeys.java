@@ -260,6 +260,10 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String HADOOP_CLIENT_KEYTAB_FILE =
       "hadoop.client.keytab.file";
 
+  /*The hadoop client password*/
+  public static final String HADOOP_CLIENT_KERBEROS_PASSWORD =
+      "hadoop.client.kerberos.password";
+
   /*The hadoop kerberos principal*/
   public static final String HADOOP_CLIENT_KERBEROS_PRINCIPAL =
       "hadoop.client.kerberos.principal";
