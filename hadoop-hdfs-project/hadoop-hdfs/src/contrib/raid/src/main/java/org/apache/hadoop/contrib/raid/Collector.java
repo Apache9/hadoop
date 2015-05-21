@@ -99,6 +99,7 @@ public class Collector {
 
     FileOutputFormat.setOutputPath(job, resultDir);
 
+    job.setSpeculativeExecution(false);
     job.setNumReduceTasks(1);
     job.submit();
     MRUtils.writeJobId(conf, getJobIdFilePath(purpose), getJobId());
@@ -187,31 +188,43 @@ public class Collector {
         if (!BlockCodec.isCodingFile(file)) {
           // This is not a coding file in the /raid directory, which might be a temporary or other
           // meta files. Just skip it.
+          LOG.debug(file.toString() + " is not a coding file, skip moving check");
           return;
         }
         // This is scanning coding files, which is used to collect blocks that need to be moved.
         Path sourceFile = BlockCodec.getCodingFileSource(file);
         if (!fs.exists(sourceFile)) {
           // Zombie coding file. Nothing to do.
+          LOG.debug(file.toString() + " is a zombie file, skip moving check");
           return;
         }
 
         FileStatus sourceStatus = fs.getFileStatus(sourceFile);
         FileStatus fileStatus = fs.getFileStatus(file);
-        int groupNum = (int) ((sourceStatus.getLen() + sourceStatus.getBlockSize() - 1) / sourceStatus
+        int blksNum = (int) ((sourceStatus.getLen() + sourceStatus.getBlockSize() - 1) / sourceStatus
             .getBlockSize());
+        int groupNum = (blksNum + dataBlocksNum - 1) / dataBlocksNum; 
 
         if (!((DistributedFileSystem) fs).isFileClosed(file)) {
           // The encoding is on-going. Do nothing.
+          LOG.debug(file.toString() + " is not closed yet, skip moving check");
           return;
         }
 
         if (groupNum * codingBlocksNum * fileStatus.getBlockSize() != fileStatus.getLen()) {
           StringBuilder sb = new StringBuilder();
-          sb.append("Something goes wrong - the expected coding file size is ")
+          sb.append("Something goes wrong with ").append(file.toString())
+              .append(" - the expected coding file size is ")
               .append(groupNum * codingBlocksNum * fileStatus.getBlockSize())
-              .append(" whereas actually is ").append(fileStatus.getLen());
-          throw new IOException(sb.toString());
+              .append(" whereas actually is ").append(fileStatus.getLen())
+              .append(", dataBlocksNum is ").append(dataBlocksNum)
+              .append(", codingBlocksNum is ").append(codingBlocksNum)
+              .append(", blockSize is ").append(fileStatus.getBlockSize())
+              .append(", file size is ").append(fileStatus.getLen())
+              .append(". Source file size is ").append(sourceStatus.getLen());
+          LOG.warn(sb.toString());
+          // The file might be left by a unfinished coder job.
+          return;
         }
 
         LocatedBlocks sourceBlks = ((DistributedFileSystem) fs).getClient().getLocatedBlocks(
@@ -386,6 +399,9 @@ public class Collector {
     private long raidFileTimeWindow;
     private int totalNum;
     private TaskPurpose purpose;
+    private int dataBlocksNum;
+    private int codingBlocksNum;
+    private boolean skipSpaceCheckForTest;
 
     private Counter filesScannedForCoder;
     private Counter filesScannedForMover;
@@ -405,6 +421,16 @@ public class Collector {
       this.filesScannedForCoder = context.getCounter(CounterName.FilesScannedForCoder);
       this.filesScannedForMover = context.getCounter(CounterName.FilesScannedForMover);
       this.readerInitialized = context.getCounter(CounterName.ReaderInitialized);
+      this.dataBlocksNum = this.conf.getInt(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_DEFAULT);
+      this.codingBlocksNum = this.conf.getInt(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_DEFAULT);
+      this.skipSpaceCheckForTest = this.conf.getBoolean(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_DEAFULT);
+
       readerInitialized.increment(1);
       this.dirs = RaidTaskUtils.traverseDirectoryTree(fs, this.split.getRootDir(),
         new RaidTaskUtils.Filter() {
@@ -419,15 +445,34 @@ public class Collector {
               long currentTimeMs = System.currentTimeMillis();
               long fileModTime = fileStatus.getModificationTime();
               filesScannedForCoder.increment(1);
+              // Skip already encoded files
+              if (BlockCodec.isFileEncoded(fs, file)) {
+                LOG.debug("Skip " + file.toString() + " since it is already encoded.");
+                return false;
+              }
+              long blocks = (fileStatus.getLen() + fileStatus.getBlockSize() - 1)
+                  / fileStatus.getBlockSize();
+              long grps = (blocks + dataBlocksNum - 1) / dataBlocksNum;
+              long origSpace = fileStatus.getReplication() * fileStatus.getLen();
+              long encodedSapce = fileStatus.getLen()
+                  + (grps * codingBlocksNum * fileStatus.getBlockSize());
+              if (origSpace <= encodedSapce && skipSpaceCheckForTest == false) {
+                LOG.debug("Skip " + file.toString()
+                    + " since encoding it would not save any space: original space consumed is "
+                    + origSpace + ", estimated space comsumption after encoding is " + encodedSapce);
+                return false;
+              }
               if (fs instanceof DistributedFileSystem) {
                 DistributedFileSystem dfs = (DistributedFileSystem) fs;
                 if ((fileModTime + raidFileTimeWindow < currentTimeMs) && dfs.isFileClosed(file)) {
+                  LOG.debug("Selected " + file.toString() + "to encode: consumed space is "
+                      + origSpace + ", estimated space comsumption after encoding is  "
+                      + encodedSapce);
                   return true;
                 }
-              } else {
-                if (fileModTime + raidFileTimeWindow < currentTimeMs) {
-                  return true;
-                }
+                LOG.debug("Skip "
+                    + file.toString()
+                    + " as it is still open for write or its last modification time is still in grace period ");
               }
             } else if (purpose == TaskPurpose.BlockMover) {
               if (BlockCodec.isCodingFile(file)) {

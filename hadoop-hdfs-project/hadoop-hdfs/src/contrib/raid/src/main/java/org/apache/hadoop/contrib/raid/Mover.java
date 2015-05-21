@@ -116,6 +116,7 @@ public class Mover {
     job.setInputFormatClass(MoverInfoInputFormat.class);
     FileOutputFormat.setOutputPath(job, outputPath);
 
+    job.setSpeculativeExecution(false);
     job.setNumReduceTasks(0);
     job.submit();
     MRUtils.writeJobId(conf, getJobIdFilePath(), getJobId());

@@ -46,6 +46,7 @@ import com.google.common.util.concurrent.FutureCallback;
 public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
   protected final RaidNode raidNode;
+  protected boolean isTaskKicked;
 
   private static final Log LOG = LogFactory.getLog(RaidTask.class);
 
@@ -261,6 +262,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         Configuration conf) throws IOException {
       super(raidNode);
       this.conf = new Configuration(conf);
+      this.isTaskKicked = false;
       this.purpose = purpose;
       try {
         if (purpose == TaskPurpose.Encode) {
@@ -301,7 +303,8 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       }
 
       if (rootDirs.size() != 0) {
-        String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY);
+        String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_DEFAULT);
         Preconditions.checkNotNull(resultDir);
         resultDirPath = new Path(resultDir + "/" + purpose.toString() + System.currentTimeMillis());
 
@@ -328,6 +331,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_DEFAULT);
       if (liveNodes.length < dataBlocksNum + codingBlocksNum) {
+        LOG.debug("Not kicking encoding since the number of datanodes is not enough to ensure data availability of raid");
         nothingToDo = true;
       }
 
@@ -350,11 +354,13 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       raidNode.getMetrics().incrCollectorTaskScheduled();
       // Run the collector
       if (!nothingToDo) {
+        LOG.debug("Collecting files for " + purpose.toString());
+        isTaskKicked = true;
         collector.run();
       } else {
+        LOG.debug("Idle collecting task for " + purpose.toString());
         raidNode.getMetrics().incrIdleCollectorTaskScheduled();
       }
-
       long endTimeMs = System.currentTimeMillis();
       raidNode.getMetrics().addCollectorDurationInMs(endTimeMs - startTimeMs);
       return new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
@@ -365,7 +371,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       LOG.info("Collect raid info task success, timeConsumedMs=" + result.getTimeConsumedMs()
           + " purpose is " + purpose.toString());
       try {
-        if (collector != null) {
+        if (isTaskKicked) {
             raidNode.getMetrics().incrFilesScannedForCoder(
             collector.getCounter(Collector.CounterName.FilesScannedForCoder).getValue());
             raidNode.getMetrics().incrFilesScannedForMover(
@@ -394,7 +400,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       LOG.error("Collect raid info task failed purpose is " + purpose.toString(), t);
       raidNode.getMetrics().incrCollectorTaskFailed();
       try {
-        if (collector != null) {
+        if (isTaskKicked) {
             raidNode.getMetrics().incrFilesScannedForCoder(
             collector.getCounter(Collector.CounterName.FilesScannedForCoder).getValue());
             raidNode.getMetrics().incrFilesScannedForMover(
@@ -450,6 +456,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         Configuration conf) throws IOException {
       super(raidNode);
       this.conf = conf;
+      this.isTaskKicked = false;
       this.purpose = purpose;
       this.lastCollectRaidInfoTaskId = MRUtils.readJobId(this.conf,
         Collector.getJobIdFilePath(purpose));
@@ -459,10 +466,12 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       String resultDir = null;
       switch (purpose) {
       case Encode:
-        resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY);
+        resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_DEFAULT);
         break;
       case BlockMover:
-        resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_RESULT_DIR_KEY);
+        resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_RESULT_DIR_KEY,
+          HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_RESULT_DIR_DEFAULT);
         break;
       default:
         throw new IOException("Unknow task type");
@@ -504,12 +513,14 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       switch (purpose) {
       case Encode:
         raidNode.getMetrics().incrCoderTaskScheduled();
+        isTaskKicked = true;
         coder.run();
         endTimeMs = System.currentTimeMillis();
         raidNode.getMetrics().addCoderDurationInMs(endTimeMs - startTimeMs);
         break;
       case BlockMover:
         raidNode.getMetrics().incrMoverTaskScheduled();
+        isTaskKicked = true;
         mover.run();
         endTimeMs = System.currentTimeMillis();
         raidNode.getMetrics().addMoverDurationInMs(endTimeMs - startTimeMs);
@@ -527,7 +538,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       LOG.info("Batch raid task finished successfully, timeConsumedMs="
           + result.getTimeConsumedMs());
 
-      if (coder != null) {
+      if (isTaskKicked && coder != null) {
         try {
           raidNode.getMetrics().incrFilesCoded(
             coder.getCounter(Coder.CounterName.EncodeFiles).getValue());
@@ -537,10 +548,11 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
             coder.getCounter(Coder.CounterName.EncodeFail).getValue());
         } catch (IOException ioe) {
           // Just ignore
+          LOG.warn("Fail to get metrics of Coder job ", ioe);
         }
       }
 
-      if (mover != null) {
+      if (isTaskKicked && mover != null) {
         try {
           raidNode.getMetrics().incrBlocksMoved(
             mover.getCounter(Mover.CounterName.MovedBlocks).getValue());
@@ -550,6 +562,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
             mover.getCounter(Mover.CounterName.FailedMoving).getValue());
         } catch (IOException ioe) {
           // Just ignore
+          LOG.warn("Fail to get metrics of Mover job ", ioe);
         }
       }
 
@@ -569,7 +582,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         assert false : "Unknown task type";
       }
       // There may be some partial success encoding
-      if (coder != null) {
+      if (coder != null && isTaskKicked) {
         try {
           raidNode.getMetrics().incrFilesCoded(
             coder.getCounter(Coder.CounterName.EncodeFiles).getValue());
@@ -582,7 +595,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         }
       }
 
-      if (mover != null) {
+      if (mover != null && isTaskKicked) {
         try {
           raidNode.getMetrics().incrBlocksMoved(
             mover.getCounter(Mover.CounterName.MovedBlocks).getValue());
@@ -630,8 +643,10 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public FixerTask(RaidNode raidNode, Configuration conf) throws IOException {
       super(raidNode);
       this.conf = conf;
+      this.isTaskKicked = false;
 
-      String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY);
+      String resultDir = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_RESULT_DIR_DEFAULT);
       Preconditions.checkNotNull(resultDir);
       Path resultDirPath = new Path(resultDir + "/" + System.currentTimeMillis());
 
@@ -643,6 +658,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
       long startTimeMs = System.currentTimeMillis();
       raidNode.getMetrics().incrFixerTaskScheduled();
+      isTaskKicked = true;
       fixer.run();
       long endTimeMs = System.currentTimeMillis();
       raidNode.getMetrics().addFixerDurationInMs(endTimeMs - startTimeMs);
@@ -655,7 +671,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     public void onSuccess(TaskResult result) {
       LOG.info("Fixer task finished successfully, timeConsumedMs=" + result.getTimeConsumedMs());
 
-      if (fixer != null) {
+      if (isTaskKicked) {
         try {
           raidNode.getMetrics().incrBlocksFixed(
             fixer.getCounter(Fixer.CounterName.FixedBlocks).getValue());
@@ -676,7 +692,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
       raidNode.increaseFixerTaskDone();
       raidNode.getMetrics().incrFixerTaskFailed();
-      if (fixer != null) {
+      if (isTaskKicked) {
         try {
           raidNode.getMetrics().incrBlocksFixed(
             fixer.getCounter(Fixer.CounterName.FixedBlocks).getValue());

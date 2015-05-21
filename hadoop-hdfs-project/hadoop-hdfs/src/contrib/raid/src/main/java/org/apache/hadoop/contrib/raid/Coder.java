@@ -82,6 +82,7 @@ public class Coder {
     job.setInputFormatClass(RaidFileInfoInputFormat.class);
     FileOutputFormat.setOutputPath(job, outputPath);
 
+    job.setSpeculativeExecution(false);
     job.setNumReduceTasks(0);
     job.submit();
     MRUtils.writeJobId(conf, getJobIdFilePath(), getJobId());
@@ -142,6 +143,7 @@ public class Coder {
       try {
         FileStatus status = FileSystem.get(conf).getFileStatus(file);
         blockCodec.encode(file);
+        LOG.debug("Encoded file " + file.toString());
         encodeFiles.increment(1);
         encodeBytes.increment(((status.getLen() + status.getBlockSize() - 1) / status
             .getBlockSize()) * status.getBlockSize());
@@ -183,6 +185,7 @@ public class Coder {
         split.addFileInfo(line.trim());
       }
       reader.close();
+      LOG.debug("Get " + result.size() + " splits for coder");
       return result;
     }
 

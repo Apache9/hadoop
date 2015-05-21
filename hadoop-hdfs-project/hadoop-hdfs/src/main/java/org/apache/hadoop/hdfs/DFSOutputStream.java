@@ -2079,7 +2079,8 @@ public class DFSOutputStream extends FSOutputSummer
       }
       long t2 = Time.monotonicNow();
       if (t2 - t1 > dfsClient.getConf().slowLogThresholdMs) {
-        DFSClient.LOG.info("waitForAckedSeqno cost:" + (t2 - t1) + "ms");
+        DFSClient.LOG.info("waitForAckedSeqno cost: " + (t2 - t1) + " ms"
+            + " pipeline:" + Arrays.asList(getPipeline()));
       }
       checkClosed();
     } catch (ClosedChannelException e) {

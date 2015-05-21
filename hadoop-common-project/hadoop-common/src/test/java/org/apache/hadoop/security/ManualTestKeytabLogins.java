@@ -30,7 +30,7 @@ import static org.junit.Assert.assertTrue;
  *  HADOOP_CLASSPATH=build/test/classes bin/hadoop \
  *     org.apache.hadoop.security.ManualTestKeytabLogins \
  *     usera/test@REALM  /path/to/usera-keytab \
- *     userb/test@REALM  /path/to/userb-keytab
+ *     userb/test@REALM  userb-password
  *  </code>
  */
 public class ManualTestKeytabLogins {
@@ -38,7 +38,7 @@ public class ManualTestKeytabLogins {
   public static void main(String []args) throws Exception {
     if (args.length != 4) {
       System.err.println(
-        "usage: ManualTestKeytabLogins <principal 1> <keytab 1> <principal 2> <keytab 2>");
+        "usage: ManualTestKeytabLogins <principal 1> <keytab 1> <principal 2> <password 2>");
       System.exit(1);
     }
 
@@ -49,7 +49,7 @@ public class ManualTestKeytabLogins {
     assertTrue(ugi1.getUserName().equals(args[0]));
     
     UserGroupInformation ugi2 =
-      UserGroupInformation.loginUserFromKeytabAndReturnUGI(
+      UserGroupInformation.loginUserFromPasswordAndReturnUGI(
         args[2], args[3]);
     System.out.println("UGI 2 = " + ugi2);
     assertTrue(ugi2.getUserName().equals(args[2]));
