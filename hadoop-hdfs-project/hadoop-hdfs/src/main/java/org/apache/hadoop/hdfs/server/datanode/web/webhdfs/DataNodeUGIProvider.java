@@ -13,6 +13,7 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web.webhdfs;
 
+import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.server.common.JspHelper;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -27,14 +28,15 @@ import java.io.IOException;
  * the DN does not authenticate the UGI -- the NN will authenticate them in
  * subsequent operations.
  */
-class DataNodeUGIProvider {
+@InterfaceAudience.Private
+public class DataNodeUGIProvider {
   private final ParameterParser params;
 
-  DataNodeUGIProvider(ParameterParser params) {
+  public DataNodeUGIProvider(ParameterParser params) {
     this.params = params;
   }
 
-  UserGroupInformation ugi() throws IOException {
+  public UserGroupInformation ugi() throws IOException {
     if (UserGroupInformation.isSecurityEnabled()) {
       return tokenUGI();
     }

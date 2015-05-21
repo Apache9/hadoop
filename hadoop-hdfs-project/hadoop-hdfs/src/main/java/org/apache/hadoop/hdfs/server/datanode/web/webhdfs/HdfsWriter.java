@@ -22,16 +22,16 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.LastHttpContent;
-import org.apache.commons.logging.Log;
-import org.apache.hadoop.hdfs.DFSClient;
-import org.apache.hadoop.io.IOUtils;
 
 import java.io.IOException;
 import java.io.OutputStream;
 
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONNECTION;
-import static io.netty.handler.codec.http.HttpHeaders.Values.CLOSE;
+import org.apache.commons.logging.Log;
+import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.io.IOUtils;
 
 class HdfsWriter extends SimpleChannelInboundHandler<HttpContent> {
   private final DFSClient client;
@@ -55,7 +55,8 @@ class HdfsWriter extends SimpleChannelInboundHandler<HttpContent> {
     throws IOException {
     chunk.content().readBytes(out, chunk.content().readableBytes());
     if (chunk instanceof LastHttpContent) {
-      response.headers().set(CONNECTION, CLOSE);
+      response.headers()
+          .set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
       ctx.write(response).addListener(ChannelFutureListener.CLOSE);
       releaseDfsResources();
     }
@@ -70,7 +71,7 @@ class HdfsWriter extends SimpleChannelInboundHandler<HttpContent> {
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
     releaseDfsResources();
     DefaultHttpResponse resp = ExceptionHandler.exceptionCaught(cause);
-    resp.headers().set(CONNECTION, CLOSE);
+    resp.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
     ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
   }
 

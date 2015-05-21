@@ -90,7 +90,7 @@
     <enforced.maven.version>[3.0.2,)</enforced.maven.version>
 
     <!-- Plugin versions and config -->
-    <maven-surefire-plugin.argLine>-Xmx4096m -XX:MaxPermSize=768m -XX:+HeapDumpOnOutOfMemoryError</maven-surefire-plugin.argLine>
+    <maven-surefire-plugin.argLine>-Xmx4096m -XX:MaxPermSize=768m -XX:+HeapDumpOnOutOfMemoryError ${env.HADOOP_JVM_BOOT_CLASSPATH}</maven-surefire-plugin.argLine>
     <maven-surefire-plugin.version>2.17</maven-surefire-plugin.version>
     <maven-surefire-report-plugin.version>${maven-surefire-plugin.version}</maven-surefire-report-plugin.version>
     <maven-failsafe-plugin.version>${maven-surefire-plugin.version}</maven-failsafe-plugin.version>
@@ -579,7 +579,19 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.23.Final</version>
+        <version>4.1.0.Beta5</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.twitter</groupId>
+        <artifactId>hpack</artifactId>
+        <version>0.11.0</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.eclipse.jetty.alpn</groupId>
+        <artifactId>alpn-api</artifactId>
+        <version>1.1.1.v20150508</version>
       </dependency>
 
       <dependency>

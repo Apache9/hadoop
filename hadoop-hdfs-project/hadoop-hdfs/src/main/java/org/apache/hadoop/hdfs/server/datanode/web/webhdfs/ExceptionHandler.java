@@ -17,54 +17,61 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web.webhdfs;
 
-import com.google.common.base.Charsets;
-import com.sun.jersey.api.ParamException;
-import com.sun.jersey.api.container.ContainerException;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import org.apache.commons.logging.Log;
-import org.apache.hadoop.hdfs.web.JsonUtil;
-import org.apache.hadoop.ipc.RemoteException;
-import org.apache.hadoop.ipc.StandbyException;
-import org.apache.hadoop.security.authorize.AuthorizationException;
-import org.apache.hadoop.security.token.SecretManager;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
-
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_LENGTH;
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN;
 import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
 import static io.netty.handler.codec.http.HttpResponseStatus.NOT_FOUND;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.APPLICATION_JSON_UTF8;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpResponseStatus;
 
-class ExceptionHandler {
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.math3.util.Pair;
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.hdfs.web.JsonUtil;
+import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.StandbyException;
+import org.apache.hadoop.security.authorize.AuthorizationException;
+import org.apache.hadoop.security.token.SecretManager;
+
+import com.google.common.base.Charsets;
+import com.sun.jersey.api.ParamException;
+import com.sun.jersey.api.container.ContainerException;
+
+@InterfaceAudience.Private
+public class ExceptionHandler {
   static Log LOG = WebHdfsHandler.LOG;
-
-  static DefaultFullHttpResponse exceptionCaught(Throwable cause) {
-    Exception e = cause instanceof Exception ? (Exception) cause : new Exception(cause);
+  
+  public static Pair<HttpResponseStatus, byte[]>
+      getHttpResponseStatusAndContent(Throwable cause) {
+    Exception e =
+        cause instanceof Exception ? (Exception) cause : new Exception(cause);
 
     if (LOG.isTraceEnabled()) {
       LOG.trace("GOT EXCEPITION", e);
     }
 
-    //Convert exception
+    // Convert exception
     if (e instanceof ParamException) {
-      final ParamException paramexception = (ParamException)e;
-      e = new IllegalArgumentException("Invalid value for webhdfs parameter \""
-                                         + paramexception.getParameterName() + "\": "
-                                         + e.getCause().getMessage(), e);
-    } else if (e instanceof ContainerException || e instanceof SecurityException) {
+      final ParamException paramexception = (ParamException) e;
+      e =
+          new IllegalArgumentException("Invalid value for webhdfs parameter \""
+              + paramexception.getParameterName() + "\": "
+              + e.getCause().getMessage(), e);
+    } else if (e instanceof ContainerException
+        || e instanceof SecurityException) {
       e = toCause(e);
     } else if (e instanceof RemoteException) {
-      e = ((RemoteException)e).unwrapRemoteException();
+      e = ((RemoteException) e).unwrapRemoteException();
     }
 
-    //Map response status
+    // Map response status
     final HttpResponseStatus s;
     if (e instanceof SecurityException) {
       s = FORBIDDEN;
@@ -82,13 +89,20 @@ class ExceptionHandler {
       LOG.warn("INTERNAL_SERVER_ERROR", e);
       s = INTERNAL_SERVER_ERROR;
     }
+    return new Pair<HttpResponseStatus, byte[]>(s, JsonUtil.toJsonString(e)
+        .getBytes(Charsets.UTF_8));
+  }
 
-    final byte[] js = JsonUtil.toJsonString(e).getBytes(Charsets.UTF_8);
+  static DefaultFullHttpResponse exceptionCaught(Throwable cause) {
+    Pair<HttpResponseStatus, byte[]> statusAndContent =
+        getHttpResponseStatusAndContent(cause);
     DefaultFullHttpResponse resp =
-      new DefaultFullHttpResponse(HTTP_1_1, s, Unpooled.wrappedBuffer(js));
+        new DefaultFullHttpResponse(HTTP_1_1, statusAndContent.getFirst(),
+            Unpooled.wrappedBuffer(statusAndContent.getSecond()));
 
-    resp.headers().set(CONTENT_TYPE, APPLICATION_JSON_UTF8);
-    resp.headers().set(CONTENT_LENGTH, js.length);
+    resp.headers().set(HttpHeaderNames.CONTENT_TYPE, APPLICATION_JSON_UTF8);
+    resp.headers().set(HttpHeaderNames.CONTENT_LENGTH,
+      statusAndContent.getSecond().length);
     return resp;
   }
 

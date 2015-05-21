@@ -434,7 +434,8 @@ public class WebHdfsFileSystem extends FileSystem
     return authParams.toArray(new Param<?,?>[0]);
   }
 
-  URL toUrl(final HttpOpParam.Op op, final Path fspath,
+  @VisibleForTesting
+  public URL toUrl(final HttpOpParam.Op op, final Path fspath,
       final Param<?,?>... parameters) throws IOException {
     //initialize URI path and query
     final String path = PATH_PREFIX
