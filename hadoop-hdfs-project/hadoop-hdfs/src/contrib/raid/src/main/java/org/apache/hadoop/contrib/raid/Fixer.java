@@ -78,6 +78,7 @@ public class Fixer {
     job.setInputFormatClass(FixerInfoInputFormat.class);
     FileOutputFormat.setOutputPath(job, outputPath);
 
+    job.setSpeculativeExecution(false);
     job.setNumReduceTasks(0);
     job.submit();
     MRUtils.writeJobId(conf, getJobIdFilePath(), getJobId());

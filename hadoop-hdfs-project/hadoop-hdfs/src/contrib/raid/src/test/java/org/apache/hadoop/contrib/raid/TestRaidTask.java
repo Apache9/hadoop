@@ -11,6 +11,7 @@
 package org.apache.hadoop.contrib.raid;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -73,6 +74,7 @@ public class TestRaidTask {
     conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY, codingBlocksNum);
     // Set the block size to a small value so that the test can finish in a short time
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    conf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, (long) 0);
 
     dfsCluster = new MiniDFSCluster.Builder(conf).numDataNodes(dataBlocksNum + codingBlocksNum)
         .build();
@@ -116,13 +118,15 @@ public class TestRaidTask {
   }
 
   private void setupFsEnv() throws IOException {
+    byte[] buf = new byte[dataBlocksNum * (int) blockSize];
+    Arrays.fill(buf, (byte) 0xff);
     for (int i = 0; i < 3; i++) {
       for (int j = 0; j < 3; j++) {
         Path dir = new Path("/" + i + "/" + j);
         Path file = new Path("/" + i + "/" + j + "/f");
         dfs.mkdirs(dir);
         FSDataOutputStream out = dfs.create(file);
-        out.write((dir.toString() + file.toString()).getBytes());
+        out.write(buf);
         out.close();
       }
     }
@@ -189,7 +193,7 @@ public class TestRaidTask {
     
     Assert.assertEquals(rd.getMetrics().filesScannedForCoder.value(), 9);
     Assert.assertEquals(rd.getMetrics().filesCoded.value(), 9);
-    Assert.assertEquals(rd.getMetrics().bytesCoded.value(), 9 * blockSize);
+    Assert.assertEquals(rd.getMetrics().bytesCoded.value(), 9 * dataBlocksNum * blockSize);
   }
 
   // Use encoded files left by the encode test case.
@@ -256,11 +260,14 @@ public class TestRaidTask {
     blocks.getLocatedBlocks().toArray(lblks);
 
     // Mark this file's block as corrupted
-    dfsClient.reportBadBlocks(lblks);
+    LocatedBlock[] corruptBlks = new LocatedBlock[] { lblks[0], lblks[1] };
+    dfsClient.reportBadBlocks(corruptBlks);
     blocks = dfsClient.getLocatedBlocks(file.toString(), 0);
     lblks = new LocatedBlock[blocks.getLocatedBlocks().size()];
     blocks.getLocatedBlocks().toArray(lblks);
-    for (LocatedBlock blk : lblks) {
+    corruptBlks[0] = lblks[0];
+    corruptBlks[1] = lblks[1];
+    for (LocatedBlock blk : corruptBlks) {
       Assert.assertTrue(blk.isCorrupt());
     }
 
@@ -320,7 +327,7 @@ public class TestRaidTask {
     }
 
     Assert.assertTrue(ft.success);
-    Assert.assertEquals(rd.getMetrics().blocksFixed.value(), 1);
+    Assert.assertEquals(rd.getMetrics().blocksFixed.value(), 2);
     Assert.assertEquals(rd.getMetrics().failedFixing.value(), 0);
   }
 
@@ -459,7 +466,7 @@ public class TestRaidTask {
   @Test
   public void testGetCorruptList() throws Exception {
     Map<RaidTaskUtils.FixerItem, Set<Integer>> fixerInfo = Fixer.collectFixerInfo(dfs.getConf());
-    Assert.assertTrue(fixerInfo.entrySet().size() == 0);
+    Assert.assertEquals(fixerInfo.entrySet().size(), 0);
     int numDNs = dfsCluster.getDataNodes().size();
 
     for (int i = 0; i < numDNs - 1; i++) {

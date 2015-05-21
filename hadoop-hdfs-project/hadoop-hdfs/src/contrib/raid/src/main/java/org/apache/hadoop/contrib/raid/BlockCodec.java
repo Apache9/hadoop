@@ -124,12 +124,18 @@ public class BlockCodec {
         for (int i = 0; i < codingBlocksNum; i++) {
           tmpCodingFiles[i] = new Path(codingFile.toString() + TEMP_CODINF_FILE_SUFFIX + r + "_"
               + i);
+          if (fs.exists(tmpCodingFiles[i])) {
+            LOG.warn("Remove already existing temporary coding file "
+                + tmpCodingFiles[i].toString() + ", which should have been delted. r is " + r
+                + " i is " + i);
+            fs.delete(tmpCodingFiles[i], false);
+          }
           codingOuts[i] = fs.create(tmpCodingFiles[i], true, conf.getInt(
             CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY,
             CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT), fs
               .getDefaultReplication(tmpCodingFiles[i]), fileStatus.getBlockSize());
         }
-
+        LOG.info("Created " + codingBlocksNum + " temporary coding files");
         encodeBlocks(file, fileStatus, locations.length, codingOuts, r * dataBlocksNum,
           Math.min(dataBlocksNum, locations.length - r * dataBlocksNum));
 
@@ -157,12 +163,15 @@ public class BlockCodec {
       } catch (IOException ioe) {
         // Fail to encoding. Delete the coding file.
         if (fs.exists(codingFile)) {
+          LOG.info("Remove coding file " + codingFile.toString());
           fs.delete(codingFile, false);
         }
-        break;
+        LOG.warn("Failed to encode file " + file.toString(), ioe);
+        throw ioe;
       } finally {
         for (int i = 0; i < codingBlocksNum; i++) {
           if (fs.exists(tmpCodingFiles[i])) {
+            LOG.info("Remove temporary coding file " + tmpCodingFiles[i].toString());
             fs.delete(tmpCodingFiles[i], false);
           }
         }
@@ -717,7 +726,8 @@ public class BlockCodec {
   }
 
   public static Path getCodingFile(Path file) {
-    return new Path(RAID_ROOT.toString() + file + CODING_FILE_SUFFIX);
+    String s = file.toUri().getPath();
+    return new Path(RAID_ROOT.toString() + s + CODING_FILE_SUFFIX);
   }
 
   public static boolean isCodingFile(String file) {
@@ -740,7 +750,8 @@ public class BlockCodec {
   }
 
   private static Path getDecodeLockFile(Path file) {
-    return new Path(RAID_ROOT.toString() + file + DECODE_LOCK_FILE_SUFFIX);
+    String s = file.toUri().getPath();
+    return new Path(RAID_ROOT.toString() + s + DECODE_LOCK_FILE_SUFFIX);
   }
 
   public static boolean isFileDecoding(FileSystem fs, Path file) throws IOException {

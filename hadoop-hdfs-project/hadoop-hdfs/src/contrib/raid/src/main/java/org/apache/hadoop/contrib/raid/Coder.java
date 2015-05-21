@@ -82,6 +82,7 @@ public class Coder {
     job.setInputFormatClass(RaidFileInfoInputFormat.class);
     FileOutputFormat.setOutputPath(job, outputPath);
 
+    job.setSpeculativeExecution(false);
     job.setNumReduceTasks(0);
     job.submit();
     MRUtils.writeJobId(conf, getJobIdFilePath(), getJobId());

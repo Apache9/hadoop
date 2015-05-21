@@ -145,4 +145,7 @@ public class HdfsRaidConfigKeys {
   /** RPC ACL */
   public static final String HADOOP_SECURITY_SERVICE_AUTHORIZATION_CLIENT_RAIDNODE_PROTOCOL_ACL =
       "security.client.raidnode.protocol.acl";
+
+  public static final String HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_KEY = "hdfs.raid.skip-space-check";
+  public static final boolean HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_DEAFULT = false;
 }

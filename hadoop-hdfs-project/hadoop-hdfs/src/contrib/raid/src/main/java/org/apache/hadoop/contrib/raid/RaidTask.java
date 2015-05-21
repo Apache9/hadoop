@@ -331,6 +331,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_DEFAULT);
       if (liveNodes.length < dataBlocksNum + codingBlocksNum) {
+        LOG.debug("Not kicking encoding since the number of datanodes is not enough to ensure data availability of raid");
         nothingToDo = true;
       }
 
