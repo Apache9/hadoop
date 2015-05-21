@@ -2199,11 +2199,12 @@ public class DFSOutputStream extends FSOutputSummer
       checkClosed();
     } catch (ClosedChannelException e) {
     }
-    long duration = Time.monotonicNow() - begin;
-    if (duration > dfsclientSlowLogThresholdMs) {
-      DFSClient.LOG.warn("Slow waitForAckedSeqno took " + duration
-          + " ms (threshold=" + dfsclientSlowLogThresholdMs + " ms)"
-          + " pipeline:" + Arrays.asList(getPipeline()));
+    long t2 = Time.monotonicNow();
+    if (t2 - t1 > dfsClient.getConf().slowLogThresholdMs) {
+      DatanodeInfo[] nodes = getPipeline();
+      DFSClient.LOG.info("waitForAckedSeqno cost: " + (t2 - t1)
+          + " ms, pipeline: "
+          + ((nodes == null) ? "[]" : Arrays.asList(nodes)));
     }
   }
 
