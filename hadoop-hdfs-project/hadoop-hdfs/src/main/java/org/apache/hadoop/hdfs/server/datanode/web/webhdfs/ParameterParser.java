@@ -17,7 +17,16 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web.webhdfs;
 
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.HDFS_URI_SCHEME;
+import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.WEBHDFS_PREFIX_LENGTH;
 import io.netty.handler.codec.http.QueryStringDecoder;
+
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.Charset;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.commons.io.Charsets;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -37,15 +46,6 @@ import org.apache.hadoop.hdfs.web.resources.ReplicationParam;
 import org.apache.hadoop.hdfs.web.resources.UserParam;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.token.Token;
-
-import java.io.IOException;
-import java.net.URI;
-import java.nio.charset.Charset;
-import java.util.List;
-import java.util.Map;
-
-import static org.apache.hadoop.hdfs.protocol.HdfsConstants.HDFS_URI_SCHEME;
-import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.WEBHDFS_PREFIX_LENGTH;
 
 class ParameterParser {
   private final Configuration conf;

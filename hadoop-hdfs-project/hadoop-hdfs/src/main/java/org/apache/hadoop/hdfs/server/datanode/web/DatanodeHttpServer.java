@@ -30,12 +30,14 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler;
 import org.apache.hadoop.http.HttpConfig;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.ssl.SSLFactory;
@@ -52,6 +54,9 @@ import java.security.GeneralSecurityException;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY;
 
+/**
+ * The http server started by datanode.
+ */
 public class DatanodeHttpServer implements Closeable {
   private final EventLoopGroup bossGroup;
   private final EventLoopGroup workerGroup;
@@ -79,17 +84,17 @@ public class DatanodeHttpServer implements Closeable {
     HttpConfig.Policy policy = DFSUtil.getHttpPolicy(conf);
 
     if (policy.isHttpEnabled()) {
-      this.httpServer = new ServerBootstrap().group(bossGroup, workerGroup)
-        .childHandler(new ChannelInitializer<SocketChannel>() {
-        @Override
-        protected void initChannel(SocketChannel ch) throws Exception {
-          ChannelPipeline p = ch.pipeline();
-          p.addLast(new HttpRequestDecoder(),
-            new HttpResponseEncoder(),
-            new ChunkedWriteHandler(),
-            new URLDispatcher(jettyAddr, conf, confForCreate));
-        }
-      });
+      this.httpServer =
+          new ServerBootstrap().group(bossGroup, workerGroup).childHandler(
+            new ChannelInitializer<SocketChannel>() {
+              @Override
+              protected void initChannel(SocketChannel ch) throws Exception {
+                ChannelPipeline p = ch.pipeline();
+                p.addLast(new HttpRequestDecoder(), new HttpResponseEncoder(),
+                    new ChunkedWriteHandler(), new HttpTransportHandler(
+                        new WebHdfsHandler(conf, confForCreate), jettyAddr));
+              }
+            });
       if (externalHttpChannel == null) {
         httpServer.channel(NioServerSocketChannel.class);
       } else {
@@ -116,20 +121,19 @@ public class DatanodeHttpServer implements Closeable {
       } catch (GeneralSecurityException e) {
         throw new IOException(e);
       }
-      this.httpsServer = new ServerBootstrap().group(bossGroup, workerGroup)
-        .channel(NioServerSocketChannel.class)
-        .childHandler(new ChannelInitializer<SocketChannel>() {
-          @Override
-          protected void initChannel(SocketChannel ch) throws Exception {
-            ChannelPipeline p = ch.pipeline();
-            p.addLast(
-              new SslHandler(sslFactory.createSSLEngine()),
-              new HttpRequestDecoder(),
-              new HttpResponseEncoder(),
-              new ChunkedWriteHandler(),
-              new URLDispatcher(jettyAddr, conf, confForCreate));
-          }
-        });
+      this.httpsServer =
+          new ServerBootstrap().group(bossGroup, workerGroup)
+              .channel(NioServerSocketChannel.class)
+              .childHandler(new ChannelInitializer<SocketChannel>() {
+                @Override
+                protected void initChannel(SocketChannel ch) throws Exception {
+                  ChannelPipeline p = ch.pipeline();
+                  p.addLast(new SslHandler(sslFactory.createSSLEngine()),
+                      new HttpRequestDecoder(), new HttpResponseEncoder(),
+                      new ChunkedWriteHandler(), new HttpTransportHandler(
+                          new WebHdfsHandler(conf, confForCreate), jettyAddr));
+                }
+              });
     } else {
       this.httpsServer = null;
       this.sslFactory = null;
