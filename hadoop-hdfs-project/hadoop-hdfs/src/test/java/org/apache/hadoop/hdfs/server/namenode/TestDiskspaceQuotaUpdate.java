@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.util.EnumSet;
+import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ContentSummary;
@@ -32,7 +33,11 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
+import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.ipc.RemoteException;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -181,5 +186,88 @@ public class TestDiskspaceQuotaUpdate {
     ds = quota.get(Quota.DISKSPACE);
     assertEquals(2, ns); // foo and bar
     assertEquals((BLOCKSIZE * 2 + BLOCKSIZE / 2) * REPLICATION, ds);
+  }
+
+  /**
+   * Test append over storage quota does not mark file as UC or create lease
+   */
+  @Test (timeout=60000)
+  public void testAppendOverStorageQuota() throws Exception {
+    final Path dir = new Path("/TestAppendOverQuota");
+    final Path file = new Path(dir, "file");
+
+    // create partial block file
+    dfs.mkdirs(dir);
+    DFSTestUtil.createFile(dfs, file, BLOCKSIZE/2, REPLICATION, seed);
+
+    // lower quota to cause exception when appending to partial block
+    dfs.setQuota(dir, Long.MAX_VALUE - 1, 1);
+    final INodeDirectory dirNode = fsdir.getINode4Write(dir.toString())
+        .asDirectory();
+    final long spaceUsed = dirNode.getDirectoryWithQuotaFeature()
+        .getSpaceConsumed().get(Quota.DISKSPACE);
+    try {
+      DFSTestUtil.appendFile(dfs, file, BLOCKSIZE);
+      Assert.fail("append didn't fail");
+    } catch (DSQuotaExceededException e) {
+      // ignore
+    }
+
+    // check that the file exists, isn't UC, and has no dangling lease
+    INodeFile inode = fsdir.getINode(file.toString()).asFile();
+    Assert.assertNotNull(inode);
+    Assert.assertFalse("should not be UC", inode.isUnderConstruction());
+    Assert.assertNull("should not have a lease", cluster.getNamesystem()
+        .getLeaseManager().getLeaseByPath(file.toString()));
+    // make sure the quota usage is unchanged
+    final long newSpaceUsed = dirNode.getDirectoryWithQuotaFeature()
+        .getSpaceConsumed().get(Quota.DISKSPACE);
+    assertEquals(spaceUsed, newSpaceUsed);
+    // make sure edits aren't corrupted
+    dfs.recoverLease(file);
+    cluster.restartNameNodes();
+  }
+
+  /**
+   * Test append over a specific type of storage quota does not mark file as
+   * UC or create a lease
+   */
+  @Test (timeout=60000)
+  public void testAppendOverTypeQuota() throws Exception {
+    final Path dir = new Path("/TestAppendOverTypeQuota");
+    final Path file = new Path(dir, "file");
+
+    // create partial block file
+    dfs.mkdirs(dir);
+    // set the storage policy on dir
+    dfs.setStoragePolicy(dir, HdfsConstants.ONESSD_STORAGE_POLICY_NAME);
+    DFSTestUtil.createFile(dfs, file, BLOCKSIZE/2, REPLICATION, seed);
+
+    // set quota to 1L
+     dfs.setQuota(dir, 100, 1L);
+    final INodeDirectory dirNode = fsdir.getINode4Write(dir.toString())
+        .asDirectory();
+    final long spaceUsed = dirNode.getDirectoryWithQuotaFeature()
+        .getSpaceConsumed().get(Quota.DISKSPACE);
+    try {
+      DFSTestUtil.appendFile(dfs, file, BLOCKSIZE);
+      Assert.fail("append didn't fail");
+    } catch (IOException e) {
+      // Ignore
+    }
+
+    // check that the file exists, isn't UC, and has no dangling lease
+    INodeFile inode = fsdir.getINode(file.toString()).asFile();
+    Assert.assertNotNull(inode);
+    Assert.assertFalse("should not be UC", inode.isUnderConstruction());
+    Assert.assertNull("should not have a lease", cluster.getNamesystem()
+        .getLeaseManager().getLeaseByPath(file.toString()));
+    // make sure the quota usage is unchanged
+    final long newSpaceUsed = dirNode.getDirectoryWithQuotaFeature()
+        .getSpaceConsumed().get(Quota.DISKSPACE);
+    assertEquals(spaceUsed, newSpaceUsed);
+    // make sure edits aren't corrupted
+    dfs.recoverLease(file);
+    cluster.restartNameNodes();
   }
 }

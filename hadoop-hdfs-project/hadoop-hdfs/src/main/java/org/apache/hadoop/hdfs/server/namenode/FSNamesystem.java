@@ -241,6 +241,7 @@ import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
 import org.apache.hadoop.hdfs.server.namenode.ha.StandbyCheckpointer;
 import org.apache.hadoop.hdfs.server.namenode.metrics.FSNamesystemMBean;
 import org.apache.hadoop.hdfs.server.namenode.metrics.NameNodeMetrics;
+import org.apache.hadoop.hdfs.server.namenode.snapshot.DirectoryWithSnapshotFeature;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.SnapshotManager;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.Phase;
@@ -2877,7 +2878,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         throw new IOException("append: lastBlock=" + lastBlock +
             " of src=" + src + " is not sufficiently replicated yet.");
       }
-      return prepareFileForWrite(src, myFile, holder, clientMachine, true,
+      return prepareFileForWrite(src, iip, myFile, holder, clientMachine, true,
               iip.getLatestSnapshotId(), logRetryCache);
     } catch (IOException ie) {
       NameNode.stateChangeLog.warn("DIR* NameSystem.append: " +ie.getMessage());
@@ -2890,6 +2891,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    * Recreate in-memory lease record.
    * 
    * @param src path to the file
+   * @param iip the inodes resolved from the path 
    * @param file existing file object
    * @param leaseHolder identifier of the lease holder on this file
    * @param clientMachine identifier of the client machine
@@ -2900,11 +2902,12 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    * @throws UnresolvedLinkException
    * @throws IOException
    */
-  LocatedBlock prepareFileForWrite(String src, INodeFile file,
+  LocatedBlock prepareFileForWrite(String src, INodesInPath iip, INodeFile file,
                                    String leaseHolder, String clientMachine,
                                    boolean writeToEditLog,
                                    int latestSnapshot, boolean logRetryCache)
       throws IOException {
+    final long delta = verifyQuotaForUCBlock(file, iip);
     file.recordModification(latestSnapshot);
     final INodeFile cons = file.toUnderConstruction(leaseHolder, clientMachine);
 
@@ -2912,10 +2915,15 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         .getClientName(), src);
     
     LocatedBlock ret = blockManager.convertLastBlockToUnderConstruction(cons);
-    if (ret != null) {
-      // update the quota: use the preferred block size for UC block
-      final long diff = file.getPreferredBlockSize() - ret.getBlockSize();
-      dir.updateSpaceConsumed(src, 0, diff * file.getBlockReplication());
+    if (ret != null && delta != 0) {
+      Preconditions.checkState(delta >= 0,
+          "appending to a block with size larger than the preferred block size");
+      dir.writeLock();
+      try {
+        dir.updateCountNoQuotaCheck(iip, iip.getINodes().length - 1, 0, delta);
+      } finally {
+        dir.writeUnlock();
+      }
     }
 
     if (writeToEditLog) {
@@ -2923,6 +2931,45 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     }
     return ret;
   }
+
+  /**
+   * Verify quota when using the preferred block size for UC block. This is
+   * usually used by append and truncate
+   * @throws QuotaExceededException when violating the storage quota
+   * @return expected quota usage update. null means no change or no need to
+   *         update quota usage later
+   */
+  private long verifyQuotaForUCBlock(INodeFile file, INodesInPath iip)
+      throws QuotaExceededException {
+    if (!isImageLoaded() || dir.shouldSkipQuotaChecks()) {
+      // Do not check quota if editlog is still being processed
+      return 0;
+    }
+    if (file.getLastBlock() != null) {
+      final long delta = computeQuotaDeltaForUCBlock(file);
+      dir.readLock();
+      try {
+        FSDirectory.verifyQuota(iip.getINodes(), iip.getINodes().length - 1, 0, delta, null);
+        return delta;
+      } finally {
+        dir.readUnlock();
+      }
+    }
+    return 0;
+  }
+
+  /** Compute quota change for converting a complete block to a UC block */
+  private long computeQuotaDeltaForUCBlock(INodeFile file) {
+    final BlockInfo lastBlock = file.getLastBlock();
+    if (lastBlock != null) {
+      final long diff = file.getPreferredBlockSize() - lastBlock.getNumBytes();
+      final short repl = file.getBlockReplication();
+      return diff * repl; 
+    }
+    return 0;
+  }
+
+
 
   /**
    * Recover lease;
@@ -3348,7 +3395,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       BlockInfo penultimateBlock = pendingFile.getPenultimateBlock();
       if (previous == null &&
           lastBlockInFile != null &&
-          lastBlockInFile.getNumBytes() == pendingFile.getPreferredBlockSize() &&
+          lastBlockInFile.getNumBytes() >= pendingFile.getPreferredBlockSize() &&
           lastBlockInFile.isComplete()) {
         // Case 1
         if (NameNode.stateChangeLog.isDebugEnabled()) {
@@ -6900,10 +6947,18 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     INode tmpChild = file;
     INodeDirectory tmpParent = file.getParent();
     while (true) {
-      if (tmpParent == null ||
-          tmpParent.searchChildren(tmpChild.getLocalNameBytes()) < 0) {
+      if (tmpParent == null) { 
         return true;
       }
+
+      INode childINode = tmpParent.getChild(tmpChild.getLocalNameBytes(),
+          Snapshot.CURRENT_STATE_ID);
+      if (childINode == null || !childINode.equals(tmpChild)) {
+        // a newly created INode with the same name as an already deleted one
+        // would be a different INode than the deleted one
+        return true;
+      }
+
       if (tmpParent.isRoot()) {
         break;
       }
