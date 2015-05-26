@@ -70,12 +70,13 @@ public class TestRaidTask {
     // To make DN dead detection quickly
     conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, heartBeatInterval);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, hbRecheckInterval);
+    conf.setLong(DFSConfigKeys.DFS_CLIENT_SLOW_LOG_THRESHOLD_MS_KEY, 10000);
     conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY, dataBlocksNum);
     conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY, codingBlocksNum);
     // Set the block size to a small value so that the test can finish in a short time
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
     conf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, (long) 0);
-
+    
     dfsCluster = new MiniDFSCluster.Builder(conf).numDataNodes(dataBlocksNum + codingBlocksNum)
         .build();
     dfsCluster.waitActive();

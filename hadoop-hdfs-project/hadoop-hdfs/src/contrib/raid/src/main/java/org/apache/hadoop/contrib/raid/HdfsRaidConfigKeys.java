@@ -43,6 +43,10 @@ public class HdfsRaidConfigKeys {
   public static final String HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY = "hdfs.raidnode.fixer.result.dir";
   public static final String HDFS_RAIDNODE_FIXER_RESULT_DIR_DEFAULT = "/raid/fixer";
 
+  // Anfer encoding a file, set the replica number to the value specified by this conf item
+  public static final String HDFS_RAIDNODE_CODER_FILE_REPLICA = "hdfs.raidnode.coder.replica";
+  public static final int HDFS_RAIDNODE_CODER_FILE_REPLICA_DEFAULT = 1;
+
   /** Comma separated directories that need to do raid or scan for block moving */
   public static final String HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY = "hdfs.raidnode.scan.root.dirs";
 

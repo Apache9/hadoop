@@ -62,6 +62,7 @@ public class BlockCodec {
   private final int stripSize;
   private final int wordSize;
   private final int codecBufSize;
+  private final short replicaAfterEncode;
 
   private static final Path RAID_ROOT = new Path("/raid");
   private static final String CODING_FILE_SUFFIX = ".ec";
@@ -83,6 +84,9 @@ public class BlockCodec {
       HdfsRaidConfigKeys.HDFS_RAID_CODEC_WORD_SIZE_DEFAULT);
     this.codecBufSize = conf.getInt(HdfsRaidConfigKeys.HDFS_RAID_CODEC_CODE_BUF_SIZE,
       HdfsRaidConfigKeys.HDFS_RAID_CODEC_CODE_BUF_SIZE_DEFAULT);
+    this.replicaAfterEncode = (short) conf.getInt(
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA,
+      HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA_DEFAULT);
     Preconditions.checkState(((codecBufSize % stripSize) == 0) && (codecBufSize > stripSize));
     this.conf = conf;
     this.fs = FileSystem.get(conf);
@@ -179,7 +183,7 @@ public class BlockCodec {
     }
 
     // Change the data and coding file's replica number
-    fs.setReplication(file, (short) 1);
+    fs.setReplication(file, replicaAfterEncode);
     fs.setReplication(codingFile, (short) 1);
   }
 
