@@ -696,9 +696,10 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     scheduler.handle(updateEvent);
 
     // Asked for less than increment allocation.
-    assertEquals(FairSchedulerConfiguration.DEFAULT_RM_SCHEDULER_INCREMENT_ALLOCATION_MB,
+    assertEquals(
+        FairSchedulerConfiguration.DEFAULT_RM_SCHEDULER_INCREMENT_ALLOCATION_MB,
         scheduler.getQueueManager().getQueue("queue1").
-        getResourceUsage().getMemory());
+            getResourceUsage().getMemory());
 
     NodeUpdateSchedulerEvent updateEvent2 = new NodeUpdateSchedulerEvent(node2);
     scheduler.handle(updateEvent2);
@@ -750,7 +751,7 @@ public class TestFairScheduler extends FairSchedulerTestBase {
 
     // Make sure queue 2 is waiting with a reservation
     assertEquals(0, scheduler.getQueueManager().getQueue("queue2").
-      getResourceUsage().getMemory());
+        getResourceUsage().getMemory());
     assertEquals(1024, scheduler.getSchedulerApp(attId).getCurrentReservation().getMemory());
 
     // Now another node checks in with capacity
@@ -2269,7 +2270,8 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     scheduler.handle(updateEvent);
 
     ApplicationAttemptId attId1 = createSchedulingRequest(1024, "queue2", "user2", 1);
-    ApplicationAttemptId attId2 = createSchedulingRequest(1024, "queue3", "user3", 1);
+    ApplicationAttemptId attId2 = createSchedulingRequest(1024, "queue3",
+        "user3", 1);
     
     scheduler.update();
     scheduler.handle(updateEvent);
@@ -2798,7 +2800,8 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     ApplicationAttemptId attId1 = createSchedulingRequest(1024, "queue1",
         "user1", 0);
     
-    ResourceRequest nodeRequest = createResourceRequest(1024, node1.getHostName(), 1, 1, true);
+    ResourceRequest nodeRequest = createResourceRequest(1024,
+        node1.getHostName(), 1, 1, true);
     ResourceRequest rackRequest = createResourceRequest(1024, node1.getRackName(), 1, 1, false);
     ResourceRequest anyRequest = createResourceRequest(1024, ResourceRequest.ANY,
         1, 1, false);
@@ -3148,7 +3151,8 @@ public class TestFairScheduler extends FairSchedulerTestBase {
   
   private void verifyQueueNumRunnable(String queueName, int numRunnableInQueue,
       int numNonRunnableInQueue) {
-    FSLeafQueue queue = scheduler.getQueueManager().getLeafQueue(queueName, false);
+    FSLeafQueue queue = scheduler.getQueueManager().getLeafQueue(queueName,
+        false);
     assertEquals(numRunnableInQueue, queue.getNumRunnableApps());
     assertEquals(numNonRunnableInQueue, queue.getNumNonRunnableApps());
   }
@@ -3551,7 +3555,8 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     verifyQueueNumRunnable("queue1.sub3", 1, 0);
     clock.tick(10);
     // exceeds no limits
-    ApplicationAttemptId attId3 = createSchedulingRequest(1024, "queue1.sub2", "user1");
+    ApplicationAttemptId attId3 = createSchedulingRequest(1024, "queue1.sub2",
+        "user1");
     verifyAppRunnable(attId3, true);
     verifyQueueNumRunnable("queue1.sub2", 1, 0);
     clock.tick(10);
@@ -3797,6 +3802,50 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     createSchedulingRequest(1024, "default", "jerry");
     assertEquals(2, jerryQueue.getNumRunnableApps());
     assertEquals(2, defaultQueue.getNumRunnableApps());
+  }
+
+  @Test
+  public void testSchedulingOnRemovedNode() throws Exception {
+    // Disable continuous scheduling, will invoke continuous scheduling manually
+    scheduler.init(conf);
+    scheduler.start();
+    Assert.assertTrue("Continuous scheduling should be disabled.",
+        !scheduler.isContinuousSchedulingEnabled());
+
+    ApplicationAttemptId id11 = createAppAttemptId(1, 1);
+    createMockRMApp(id11);
+
+    scheduler.addApplication(id11.getApplicationId(), "root.queue1", "user1",
+        false);
+    scheduler.addApplicationAttempt(id11, false, false);
+
+    List<ResourceRequest> ask1 = new ArrayList<ResourceRequest>();
+    ResourceRequest request1 =
+        createResourceRequest(1024, 8, ResourceRequest.ANY, 1, 1, true);
+
+    ask1.add(request1);
+    scheduler.allocate(id11, ask1, new ArrayList<ContainerId>(), null,
+        null);
+
+    String hostName = "127.0.0.1";
+    RMNode node1 = MockNodes.newNodeInfo(1,
+      Resources.createResource(8 * 1024, 8), 1, hostName);
+    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
+    scheduler.handle(nodeEvent1);
+
+    FSSchedulerNode node = (FSSchedulerNode)scheduler.getSchedulerNode(
+      node1.getNodeID());
+
+    NodeRemovedSchedulerEvent removeNode1 =
+        new NodeRemovedSchedulerEvent(node1);
+    scheduler.handle(removeNode1);
+
+    scheduler.attemptScheduling(node);
+
+    AppAttemptRemovedSchedulerEvent appRemovedEvent1 =
+        new AppAttemptRemovedSchedulerEvent(id11,
+            RMAppAttemptState.FINISHED, false);
+    scheduler.handle(appRemovedEvent1);
   }
 
   @Test
