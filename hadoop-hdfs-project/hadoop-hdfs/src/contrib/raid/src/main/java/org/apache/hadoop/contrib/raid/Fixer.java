@@ -72,6 +72,7 @@ public class Fixer {
   public void run() throws IOException, ClassNotFoundException, InterruptedException {
 
     job = Job.getInstance(conf, "RaidNode-Fixer");
+    MRUtils.cacheCodecLib(conf, job);
     job.setJarByClass(Fixer.class);
     job.setMapperClass(FixerMapper.class);
 

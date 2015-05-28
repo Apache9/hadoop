@@ -68,6 +68,8 @@ public class BlockCodec {
   private static final String CODING_FILE_SUFFIX = ".ec";
   private static final String TEMP_CODINF_FILE_SUFFIX = ".tmp";
   private static final String DECODE_LOCK_FILE_SUFFIX = ".lock";
+  private static final String JERASURE_LIBNAME = "libJerasure.so";
+  private static final String GF_LIBNAME = "libgf_complete.so";
   private static final byte COMPLEMENT_BYTE = (byte) 1;
   private static final OutputStream DUMMY_STREAM = new ByteArrayOutputStream(1);
 
@@ -181,7 +183,21 @@ public class BlockCodec {
         }
       }
     }
-
+    long fileModTime = fileStatus.getModificationTime();
+    long currentTimeMs = System.currentTimeMillis();
+    if ((fileModTime + raidTimeWindowMs > currentTimeMs)
+        || !((DistributedFileSystem) fs).isFileClosed(file)) {
+      // The file might have been re-opened for write, do not change replica and clean
+      // the ec file.
+      try {
+        fs.delete(codingFile, false);
+      } catch (Exception e) {
+        // Log the message and let sweeper to handle it later.
+        LOG.warn("Failed to delete ec file " + codingFile.toString()
+            + ", whose source file is re-opened for write.");
+      }
+      return;
+    }
     // Change the data and coding file's replica number
     fs.setReplication(file, replicaAfterEncode);
     fs.setReplication(codingFile, (short) 1);
@@ -751,6 +767,14 @@ public class BlockCodec {
 
   public static Path getRaidRoot() {
     return RAID_ROOT;
+  }
+
+  public static String getJerasureLibName() {
+    return JERASURE_LIBNAME;
+  }
+
+  public static String getGfLibName() {
+    return GF_LIBNAME;
   }
 
   private static Path getDecodeLockFile(Path file) {

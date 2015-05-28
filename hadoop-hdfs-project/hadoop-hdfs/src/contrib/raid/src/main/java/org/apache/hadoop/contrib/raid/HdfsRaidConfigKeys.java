@@ -26,6 +26,8 @@ public class HdfsRaidConfigKeys {
 
   public static final String HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY = "hdfs.raidnode.coder.map.task.num";
   public static final int HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT = 1;
+  public static final String HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER = "hdfs.raidnode.coder.max-files-per-mapper";
+  public static final long HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER_DEFAULT = Long.MAX_VALUE;
 
   public static final String HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_KEY = "hdfs.raidnode.fixer.map.task.num";
   public static final int HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_DEFAULT = 1;
@@ -152,4 +154,6 @@ public class HdfsRaidConfigKeys {
 
   public static final String HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_KEY = "hdfs.raid.skip-space-check";
   public static final boolean HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_DEAFULT = false;
+
+  public static final String HDFS_RAIDNODE_CODEC_LIBRARY_PATH = "hdfs.raidnode.codec.lib-path";
 }

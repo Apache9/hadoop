@@ -62,7 +62,7 @@ public class ClientRaidnodeProtocolTranslatorPB implements ProtocolMetaInterface
     RPC.stopProxy(rpcProxy);
   }
 
-  private Policy convertFromProto(PolicyInfosProto infos) {
+  private Policy convertFromProto(PolicyInfosProto infos) throws IOException {
     List<PolicyInfoProto> pis;
     if (infos != null) {
       pis = infos.getPolicyinfosList();

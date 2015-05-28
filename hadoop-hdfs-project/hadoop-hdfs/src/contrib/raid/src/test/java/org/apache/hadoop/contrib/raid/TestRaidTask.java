@@ -137,7 +137,7 @@ public class TestRaidTask {
     dfs.mkdirs(new Path(moverResult));
   }
 
-  private Policy setupPolicy() {
+  private Policy setupPolicy() throws IOException {
     Policy policy = new Policy(null);
     for (int i = 0; i < 3; i++) {
       for (int j = 0; j < 3; j++) {

@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
@@ -76,6 +77,7 @@ public class Coder {
       collectorResultFile.toString());
 
     job = Job.getInstance(conf, "RaidNode-Coder");
+    MRUtils.cacheCodecLib(conf, job);
     job.setJarByClass(Coder.class);
     job.setMapperClass(CoderMapper.class);
 
@@ -120,6 +122,9 @@ public class Coder {
     private Counter decodeSuccess;
     private Counter decodeFail;
     private Counter invalidTaskType;
+    private long encodeTimeWindow;
+    private DistributedFileSystem dfs;
+    private long maxFilesPerMapper;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -131,6 +136,13 @@ public class Coder {
       this.decodeSuccess = context.getCounter(CounterName.DecodeSuccess);
       this.decodeFail = context.getCounter(CounterName.DecodeFail);
       this.invalidTaskType = context.getCounter(CounterName.InvalidTaskType);
+      this.encodeTimeWindow = this.conf.getLong(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT);
+      this.dfs = (DistributedFileSystem) FileSystem.get(this.conf);
+      this.maxFilesPerMapper = this.conf.getLong(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER_DEFAULT);
     }
 
     @Override
@@ -141,7 +153,17 @@ public class Coder {
       Path file = new Path(tokens[0].trim());
       // TBD: The second token should be the group num to be encoded
       try {
+        if (encodeFiles.getValue() >= maxFilesPerMapper) {
+          // Use the HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER to prevent coder from running too long
+          return;
+        }
         FileStatus status = FileSystem.get(conf).getFileStatus(file);
+        long fileModTime = status.getModificationTime();
+        long currentTimeMs = System.currentTimeMillis();
+        if ((fileModTime + encodeTimeWindow > currentTimeMs) || !dfs.isFileClosed(file)) {
+          // The file might have been re-opened for write
+          return;
+        }
         blockCodec.encode(file);
         LOG.debug("Encoded file " + file.toString());
         encodeFiles.increment(1);

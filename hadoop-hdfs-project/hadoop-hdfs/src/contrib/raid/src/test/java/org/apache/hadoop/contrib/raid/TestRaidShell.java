@@ -67,4 +67,16 @@ public class TestRaidShell {
     clPolicy.showPolicy();
     Assert.assertTrue(policy.equals(clPolicy));
   }
+  
+  @Test(expected=IOException.class)
+ public void testRootAsInput() throws Exception {
+	  Policy policy = new Policy(conf);
+	  policy.addNewPolicy("/",120);
+  }
+  
+  @Test(expected=IOException.class)
+  public void testRaidAsInput() throws Exception {
+	  Policy policy = new Policy(conf);
+	  policy.addNewPolicy("/raid", 120);
+  }
 }

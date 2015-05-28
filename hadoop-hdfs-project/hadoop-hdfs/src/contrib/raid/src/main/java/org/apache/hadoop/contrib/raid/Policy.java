@@ -174,7 +174,14 @@ public class Policy {
     }
   }
 
-  public void addNewPolicy(String path, long interval) {
+  public void addNewPolicy(String path, long interval) throws IOException {
+    if (path.compareTo("/") == 0) {
+      throw new IOException("Root directory cannot be used as the input path");
+    }
+    if (path.compareTo("/raid") == 0) {
+      throw new IOException(
+          "/raid  is reserved as metadata path and cannot be used as the input path");
+    }
     PolicyEntry pe = new PolicyEntry(new Path(path), interval);
     peList.add(pe);
   }
