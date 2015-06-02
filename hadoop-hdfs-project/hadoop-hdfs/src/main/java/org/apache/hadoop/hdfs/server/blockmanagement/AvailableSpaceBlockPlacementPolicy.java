@@ -28,6 +28,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.net.NetworkTopology;
+import org.apache.hadoop.hdfs.server.namenode.FSClusterStats;
 
 /**
  * Space balanced block placement policy.

@@ -27,8 +27,9 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.TestBlockStoragePolicy;
-import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
+import org.apache.hadoop.hdfs.server.namenode.FSClusterStats;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.test.PathUtils;
 import org.junit.AfterClass;
@@ -100,19 +101,19 @@ public class TestAvailableSpaceBlockPlacementPolicy {
         capacity, dfsUsed, remaining, blockPoolUsed);
     dn.updateHeartbeat(
         BlockManagerTestUtil.getStorageReportsForDatanode(dn),
-        dnCacheCapacity, dnCacheUsed, xceiverCount, volFailures, null);
+        dnCacheCapacity, dnCacheUsed, xceiverCount, volFailures);
   }
 
   private static void setupDataNodeCapacity() {
     for (int i = 0; i < nodesPerRack * numRacks; i++) {
       if ((i % 2) == 0) {
         // remaining 100%
-        updateHeartbeatWithUsage(dataNodes[i], 2 * HdfsServerConstants.MIN_BLOCKS_FOR_WRITE * blockSize,
-          0L, 2 * HdfsServerConstants.MIN_BLOCKS_FOR_WRITE * blockSize, 0L, 0L, 0L, 0, 0);
+        updateHeartbeatWithUsage(dataNodes[i], 2 * HdfsConstants.MIN_BLOCKS_FOR_WRITE * blockSize,
+          0L, 2 * HdfsConstants.MIN_BLOCKS_FOR_WRITE * blockSize, 0L, 0L, 0L, 0, 0);
       } else {
         // remaining 50%
-        updateHeartbeatWithUsage(dataNodes[i], 2 * HdfsServerConstants.MIN_BLOCKS_FOR_WRITE * blockSize,
-          HdfsServerConstants.MIN_BLOCKS_FOR_WRITE * blockSize, HdfsServerConstants.MIN_BLOCKS_FOR_WRITE
+        updateHeartbeatWithUsage(dataNodes[i], 2 * HdfsConstants.MIN_BLOCKS_FOR_WRITE * blockSize,
+          HdfsConstants.MIN_BLOCKS_FOR_WRITE * blockSize, HdfsConstants.MIN_BLOCKS_FOR_WRITE
               * blockSize, 0L, 0L, 0L, 0, 0);
       }
     }
