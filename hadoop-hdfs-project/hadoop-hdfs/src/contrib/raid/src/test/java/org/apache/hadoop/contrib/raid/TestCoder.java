@@ -42,6 +42,7 @@ public class TestCoder {
     Path outputPath = new Path("/testCoder");
     Coder coder = new Coder(collectResultFile, 1, outputPath, conf);
     conf.set("mapreduce.framework.name", "local");
+    conf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 0);
     coder.run();
     Assert.assertEquals(2l, coder.getCounter(CounterName.EncodeFiles).getValue()
         + coder.getCounter(CounterName.EncodeFail).getValue());

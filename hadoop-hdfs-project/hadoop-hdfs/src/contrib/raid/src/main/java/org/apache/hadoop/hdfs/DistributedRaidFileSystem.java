@@ -47,8 +47,10 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
   @Override
   public FSDataOutputStream append(Path f, int bufferSize, Progressable progress)
       throws IOException {
-    // TBD: Should we allow appending to normal files which are not encoded?
-    throw new UnsupportedOperationException("append() is not supported");
+    if (fs.exists(BlockCodec.getCodingFile(f))) {
+      throw new UnsupportedOperationException("append() is not supported for raid file");
+    }
+    return fs.append(f, bufferSize, progress);
   }
 
   @Override
@@ -57,7 +59,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     result = fs.rename(src, dst);
     // Rename coding file only when source file is renamed successfully.
     if (result) {
-      result = fs.rename(BlockCodec.getCodingFile(src), BlockCodec.getCodingFile(dst));
+      if (fs.exists(BlockCodec.getCodingFile(src))) {
+        result = fs.rename(BlockCodec.getCodingFile(src), BlockCodec.getCodingFile(dst));
+      }
       // TBD: if we fail to rename coding file, should we set back the file's
       // replication so that the file's availability is not impacted
     }
@@ -71,7 +75,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
     // Delete coding file only when source file is deleted successfully.
     if (result) {
       // If fail to delete the coding file, let the zombie cleaner to remove it later.
-      result = fs.delete(BlockCodec.getCodingFile(f), recursive);
+      if (fs.exists(BlockCodec.getCodingFile(f))) {
+        result = fs.delete(BlockCodec.getCodingFile(f), recursive);
+      }
     }
     return result;
   }

@@ -165,11 +165,26 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     private final Path dirToSweep;
     private final Configuration conf;
     private int cleanedFiles;
+    private int dataBlocksNum;
+    private int codingBlocksNum;
+    private long zombieSweeperGracePeriod;
+    private short replicaAfterEncode;
 
     public ZombieSweeperTask(RaidNode raidNode, Path dir, Configuration conf) {
       super(raidNode);
       this.dirToSweep = dir;
       this.conf = conf;
+      this.dataBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_DEFAULT);
+      this.codingBlocksNum = conf.getInt(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_DEFAULT);
+      this.zombieSweeperGracePeriod = conf.getLong(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL_DEFAULT);
+      this.replicaAfterEncode = (short) conf.getInt(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA_DEFAULT);
     }
 
     @Override
@@ -187,9 +202,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       LOG.info("ZombieSweeper cleanup orphan coding files successfully and took "
           + (result.getEndTimeMs() - result.getStartTimeMs()) / 1000 + " seconds");
       raidNode.increaseZombieSweeperTaskDone();
-      raidNode.scheduleZombieSweeperTask(conf.getLong(
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL,
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL_DEFAULT));
+      raidNode.scheduleZombieSweeperTask(zombieSweeperGracePeriod);
     }
 
     @Override
@@ -198,9 +211,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       ReflectionUtils.logThreadInfo(LOG, "Thread dump from ZombieSweeperTask:onFailure", 1000);
       raidNode.getMetrics().incrZombieSweeperTaskFailed();
       raidNode.increaseZombieSweeperTaskDone();
-      raidNode.scheduleZombieSweeperTask(conf.getLong(
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL,
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_ZOMBIE_SWEEPER_INTERVAL_DEFAULT));
+      raidNode.scheduleZombieSweeperTask(zombieSweeperGracePeriod);
     }
 
     private void sweepDirectory(Path dir) throws IOException {
@@ -214,6 +225,35 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
             if (BlockCodec.isCodingFile(file)) {
               Path sourceFile = BlockCodec.getCodingFileSource(file);
               if (!fs.exists(sourceFile)) {
+                return true;
+              }
+              FileStatus sourceFileStatus = fs.getFileStatus(sourceFile);
+              FileStatus codeFileStatus = fs.getFileStatus(file);
+              if (System.currentTimeMillis() > codeFileStatus.getModificationTime()
+                  + zombieSweeperGracePeriod
+                  || !((DistributedFileSystem) fs).isFileClosed(file)) {
+                // The coding file has been changed recently or is not closed yet, which implies the
+                // coder might be in progress.
+                return false;
+              }
+              if (sourceFileStatus.getReplication() <= replicaAfterEncode) {
+                // The source file's replica has been reduced. It implies the source file has ever
+                // been encoded successfully.
+                // Do not treat the file as zombie file even if the coding file's
+                // length is not correct. Let fixer handle it.
+                return false;
+              }
+
+              long sourceFileLen = sourceFileStatus.getLen();
+              long codeFileLen = codeFileStatus.getLen();
+              int blksNum = (int) ((sourceFileLen + sourceFileStatus.getBlockSize() - 1) / sourceFileStatus
+                  .getBlockSize());
+              int groupNum = (blksNum + dataBlocksNum - 1) / dataBlocksNum;
+              if (groupNum * codingBlocksNum * sourceFileStatus.getBlockSize() != codeFileStatus
+                  .getLen()) {
+                // The lenth of the coding file is not match with the encoding algorithm, which
+                // implies it is a file left by a failed encoding map task. We gonna delete it and
+                // the next round of encoding will try to encode it again.
                 return true;
               }
             }

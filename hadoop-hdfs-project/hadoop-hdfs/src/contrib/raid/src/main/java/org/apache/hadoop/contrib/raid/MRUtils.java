@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapreduce.Job;
 
 public class MRUtils {
 
@@ -55,5 +56,29 @@ public class MRUtils {
     int readLen = in.read(buffer);
     in.close();
     return new String(buffer, 0, readLen);
+  }
+  
+  private static Path getCodecLibraryPath(Configuration conf) throws IOException {
+    String libPath = conf.get(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODEC_LIBRARY_PATH);
+    if (libPath == null) {
+      return null;
+    }
+    FileSystem localFs;
+    try {
+      localFs = FileSystem.getLocal(conf);
+    } catch (IOException ioe) {
+      throw new RuntimeException("problem getting local fs", ioe);
+    }
+    return new Path(libPath).makeQualified(localFs);
+  }
+
+  public static void cacheCodecLib(Configuration conf, Job job) throws IOException {
+    Path libPath = getCodecLibraryPath(conf);
+    if (libPath != null) {
+      Path jerasurePath = new Path(libPath, BlockCodec.getJerasureLibName());
+      Path gfCompletePath = new Path(libPath, BlockCodec.getGfLibName());
+      job.addFileToClassPath(jerasurePath);
+      job.addFileToClassPath(gfCompletePath);
+    }
   }
 }

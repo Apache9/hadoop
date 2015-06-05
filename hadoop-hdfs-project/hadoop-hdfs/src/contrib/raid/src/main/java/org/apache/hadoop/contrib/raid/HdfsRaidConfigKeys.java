@@ -26,6 +26,8 @@ public class HdfsRaidConfigKeys {
 
   public static final String HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY = "hdfs.raidnode.coder.map.task.num";
   public static final int HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT = 1;
+  public static final String HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER = "hdfs.raidnode.coder.max-files-per-mapper";
+  public static final long HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER_DEFAULT = Long.MAX_VALUE;
 
   public static final String HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_KEY = "hdfs.raidnode.fixer.map.task.num";
   public static final int HDFS_RAIDNODE_FIXER_MAP_TASK_NUM_DEFAULT = 1;
@@ -42,6 +44,10 @@ public class HdfsRaidConfigKeys {
   public static final String HDFS_RAIDNODE_MOVER_RESULT_DIR_DEFAULT = "/raid/mover";
   public static final String HDFS_RAIDNODE_FIXER_RESULT_DIR_KEY = "hdfs.raidnode.fixer.result.dir";
   public static final String HDFS_RAIDNODE_FIXER_RESULT_DIR_DEFAULT = "/raid/fixer";
+
+  // Anfer encoding a file, set the replica number to the value specified by this conf item
+  public static final String HDFS_RAIDNODE_CODER_FILE_REPLICA = "hdfs.raidnode.coder.replica";
+  public static final int HDFS_RAIDNODE_CODER_FILE_REPLICA_DEFAULT = 1;
 
   /** Comma separated directories that need to do raid or scan for block moving */
   public static final String HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY = "hdfs.raidnode.scan.root.dirs";
@@ -148,4 +154,6 @@ public class HdfsRaidConfigKeys {
 
   public static final String HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_KEY = "hdfs.raid.skip-space-check";
   public static final boolean HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_DEAFULT = false;
+
+  public static final String HDFS_RAIDNODE_CODEC_LIBRARY_PATH = "hdfs.raidnode.codec.lib-path";
 }

@@ -110,6 +110,7 @@ public class Mover {
       collectorResultFile.toString());
 
     job = Job.getInstance(conf, "RaidNode-Mover");
+    MRUtils.cacheCodecLib(conf, job);
     job.setJarByClass(Mover.class);
     job.setMapperClass(MoverMapper.class);
 

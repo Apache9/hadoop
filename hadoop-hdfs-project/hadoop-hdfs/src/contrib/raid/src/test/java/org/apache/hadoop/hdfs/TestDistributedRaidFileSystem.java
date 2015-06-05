@@ -11,7 +11,6 @@
 package org.apache.hadoop.hdfs;
 
 import java.util.Arrays;
-import java.lang.UnsupportedOperationException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.contrib.raid.BlockCodec;
@@ -66,15 +65,38 @@ public class TestDistributedRaidFileSystem {
     Assert.assertArrayEquals(data.getBytes(), buffer);
   }
 
-  @Test(expected = UnsupportedOperationException.class)
   public void testAppend() throws Exception {
     String data = "Hello, this is some test data";
+    String data1 = " Hello, this is some appended data";
     Path file = new Path("/test.txt");
 
     FSDataOutputStream out = dfs.create(file);
     out.write(data.getBytes());
     out.close();
     out = dfs.append(file, 4096, null);
+    out.write(data1.getBytes());
+    out.close();
+
+    byte[] buffer = new byte[data.length() + data1.length()];
+    FSDataInputStream in = dfs.open(file);
+    in.read(buffer);
+    in.close();
+    Assert.assertArrayEquals((data + data1).getBytes(), buffer);
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testAppendEncodedFile() throws Exception {
+    String data = "Hello, this is some test data";
+    Path file = new Path("/test.txt");
+    Path encodedFile = BlockCodec.getCodingFile(file);
+
+    FSDataOutputStream out = dfs.create(file);
+    out.write(data.getBytes());
+    out.close();
+    FSDataOutputStream encodedOut = dfs.create(encodedFile);
+    encodedOut.close();
+    out = dfs.append(file, 4096, null);
+    out.write(data.getBytes());
     out.close();
   }
 
