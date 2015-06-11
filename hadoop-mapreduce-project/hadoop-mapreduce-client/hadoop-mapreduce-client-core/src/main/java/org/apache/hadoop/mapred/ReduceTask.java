@@ -49,10 +49,12 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
 import org.apache.hadoop.mapreduce.MRConfig;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskCounter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormatCounter;
 import org.apache.hadoop.mapreduce.task.reduce.Shuffle;
+import org.apache.hadoop.mapreduce.util.HeapUsageUtils;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -439,6 +441,19 @@ public class ReduceTask extends Task {
           job.getOutputValueGroupingComparator(), keyClass, valueClass, 
           job, reporter);
       values.informReduceProgress();
+
+      long lastSampleTime = System.currentTimeMillis();
+      long heapSampleRecordsInterval = conf.getLong(
+          MRJobConfig.HEAP_SAMPLE_RECORDS_INTERVAL,
+          MRJobConfig.DEFAULT_HEAP_SAMPLE_RECORDS_INTERVAL);
+      long heapSampleTimeInterval = conf.getLong(
+          MRJobConfig.HEAP_SAMPLE_TIME_INTERVAL,
+          MRJobConfig.DEFAULT_HEAP_SAMPLE_TIME_INTERVAL);
+      Counters.Counter heapSampleCounter =
+          reporter.getCounter(TaskCounter.HEAP_USAGE_BYTES);
+      HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
+      long recordsIndex = 0;
+
       while (values.more()) {
         reduceInputKeyCounter.increment(1);
         reducer.reduce(values.getKey(), values, collector, reporter);
@@ -448,8 +463,20 @@ public class ReduceTask extends Task {
         }
         values.nextKey();
         values.informReduceProgress();
+
+        ++recordsIndex;
+
+        if (recordsIndex >= heapSampleRecordsInterval) {
+          long now = System.currentTimeMillis();
+          if (now > lastSampleTime + heapSampleTimeInterval) {
+            HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
+            lastSampleTime = now;
+          }
+          recordsIndex = 0;
+        }
       }
 
+      HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
       reducer.close();
       reducer = null;
       

@@ -67,6 +67,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormatCounter;
 import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitIndex;
 import org.apache.hadoop.mapreduce.task.MapContextImpl;
 import org.apache.hadoop.mapreduce.CryptoUtils;
+import org.apache.hadoop.mapreduce.util.HeapUsageUtils;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.Progress;
@@ -446,8 +447,13 @@ public class MapTask extends Task {
     MapRunnable<INKEY,INVALUE,OUTKEY,OUTVALUE> runner =
       ReflectionUtils.newInstance(job.getMapRunnerClass(), job);
 
+    Counters.Counter heapSampleCounter =
+        reporter.getCounter(TaskCounter.HEAP_USAGE_BYTES);
+    HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
+
     try {
       runner.run(in, new OldOutputCollector(collector, conf), reporter);
+      HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
       mapPhase.complete();
       // start the sort phase only if there are reducers
       if (numReduceTasks > 0) {

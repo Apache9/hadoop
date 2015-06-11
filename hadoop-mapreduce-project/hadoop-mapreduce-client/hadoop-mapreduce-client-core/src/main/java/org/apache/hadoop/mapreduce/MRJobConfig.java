@@ -260,6 +260,15 @@ public interface MRJobConfig {
   public static final String REDUCE_MEMORY_MB = "mapreduce.reduce.memory.mb";
   public static final int DEFAULT_REDUCE_MEMORY_MB = 1024;
 
+  public static final String HEAP_SAMPLE_ENABLE = "mapreduce.heap.sample.enable";
+  public static final boolean DEFAULT_HEAP_SAMPLE_ENABLE = false;
+
+  public static final String HEAP_SAMPLE_RECORDS_INTERVAL = "mapreduce.heap.sample.records.interval";
+  public static final long DEFAULT_HEAP_SAMPLE_RECORDS_INTERVAL = 10000;
+
+  public static final String HEAP_SAMPLE_TIME_INTERVAL = "mapreduce.heap.sample.time.interval";
+  public static final long DEFAULT_HEAP_SAMPLE_TIME_INTERVAL = 300000;
+
   public static final String REDUCE_CPU_VCORES = "mapreduce.reduce.cpu.vcores";
   public static final int DEFAULT_REDUCE_CPU_VCORES = 1;
 

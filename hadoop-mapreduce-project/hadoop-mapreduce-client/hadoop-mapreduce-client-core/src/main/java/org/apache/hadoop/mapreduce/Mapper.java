@@ -25,7 +25,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.RawComparator;
 import org.apache.hadoop.io.compress.CompressionCodec;
-import org.apache.hadoop.mapreduce.task.MapContextImpl;
+import org.apache.hadoop.mapreduce.util.HeapUsageUtils;
 
 /** 
  * Maps input key/value pairs to a set of intermediate key/value pairs.  
@@ -139,13 +139,40 @@ public class Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
    * @throws IOException
    */
   public void run(Context context) throws IOException, InterruptedException {
+    Configuration conf = context.getConfiguration();
+    Counter heapSampleCounter = context.getCounter(
+        TaskCounter.HEAP_USAGE_BYTES);
+
+    long lastSampleTime = System.currentTimeMillis();
+    long heapSampleRecordsInterval = conf.getLong(
+        MRJobConfig.HEAP_SAMPLE_RECORDS_INTERVAL,
+        MRJobConfig.DEFAULT_HEAP_SAMPLE_RECORDS_INTERVAL);
+    long heapSampleTimeInterval = conf.getLong(
+        MRJobConfig.HEAP_SAMPLE_TIME_INTERVAL,
+        MRJobConfig.DEFAULT_HEAP_SAMPLE_TIME_INTERVAL);
+
     setup(context);
+    HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
+
+    long recordsIndex = 0;
     try {
       while (context.nextKeyValue()) {
         map(context.getCurrentKey(), context.getCurrentValue(), context);
+        ++recordsIndex;
+
+        if (recordsIndex >= heapSampleRecordsInterval) {
+          long now = System.currentTimeMillis();
+          if (now > lastSampleTime + heapSampleTimeInterval) {
+            HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
+            lastSampleTime = now;
+          }
+          recordsIndex = 0;
+        }
       }
     } finally {
+      HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
       cleanup(context);
+      HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
     }
   }
 }

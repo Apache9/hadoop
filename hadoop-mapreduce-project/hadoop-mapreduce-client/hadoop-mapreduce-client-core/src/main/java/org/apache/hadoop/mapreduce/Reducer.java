@@ -24,6 +24,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.task.annotation.Checkpointable;
+import org.apache.hadoop.mapreduce.util.HeapUsageUtils;
 
 import java.util.Iterator;
 
@@ -165,7 +166,26 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
    * control how the reduce task works.
    */
   public void run(Context context) throws IOException, InterruptedException {
+    Configuration conf = context.getConfiguration();
+    Counter heapSampleCounter = context.getCounter(
+        TaskCounter.HEAP_USAGE_BYTES);
+
+    long lastSampleTime = System.currentTimeMillis();
+    long heapSampleRecordsInterval = conf.getLong(
+        MRJobConfig.HEAP_SAMPLE_RECORDS_INTERVAL,
+        MRJobConfig.DEFAULT_HEAP_SAMPLE_RECORDS_INTERVAL);
+    long heapSampleTimeInterval = conf.getLong(
+        MRJobConfig.HEAP_SAMPLE_TIME_INTERVAL,
+        MRJobConfig.DEFAULT_HEAP_SAMPLE_TIME_INTERVAL);
+
+    // not sample for combiner
+    boolean enableHeapSample =
+        context.getTaskAttemptID().getTaskType() == TaskType.REDUCE;
+
     setup(context);
+    HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter, enableHeapSample);
+
+    long recordsIndex = 0;
     try {
       while (context.nextKey()) {
         reduce(context.getCurrentKey(), context.getValues(), context);
@@ -174,9 +194,23 @@ public class Reducer<KEYIN,VALUEIN,KEYOUT,VALUEOUT> {
         if(iter instanceof ReduceContext.ValueIterator) {
           ((ReduceContext.ValueIterator<VALUEIN>)iter).resetBackupStore();        
         }
+
+        ++recordsIndex;
+
+        if (recordsIndex >= heapSampleRecordsInterval) {
+          long now = System.currentTimeMillis();
+          if (now > lastSampleTime + heapSampleTimeInterval) {
+            HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter,
+                enableHeapSample);
+            lastSampleTime = now;
+          }
+          recordsIndex = 0;
+        }
       }
     } finally {
+      HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter, enableHeapSample);
       cleanup(context);
+      HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter, enableHeapSample);
     }
   }
 }
