@@ -448,7 +448,8 @@ public class MapTask extends Task {
       ReflectionUtils.newInstance(job.getMapRunnerClass(), job);
 
     Counters.Counter heapSampleCounter =
-        reporter.getCounter(TaskCounter.HEAP_USAGE_BYTES);
+        reporter.getCounter(HeapUsageUtils.HeapUsageCounterGroup,
+            HeapUsageUtils.HeapUsageCounterName);
     HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
 
     try {

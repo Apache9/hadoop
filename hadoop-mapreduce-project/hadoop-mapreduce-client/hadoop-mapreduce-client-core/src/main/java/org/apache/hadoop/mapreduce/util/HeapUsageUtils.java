@@ -26,6 +26,8 @@ import org.apache.hadoop.mapreduce.MRJobConfig;
 
 public class HeapUsageUtils {
   private static final Log LOG = LogFactory.getLog(HeapUsageUtils.class.getName());
+  public static String HeapUsageCounterGroup = "HeapUsageGroup";
+  public static String HeapUsageCounterName = "HeapUsageCounter";
 
   static public void sampleHeapUsage(Configuration conf,
       Counter counter) {

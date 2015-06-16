@@ -450,7 +450,8 @@ public class ReduceTask extends Task {
           MRJobConfig.HEAP_SAMPLE_TIME_INTERVAL,
           MRJobConfig.DEFAULT_HEAP_SAMPLE_TIME_INTERVAL);
       Counters.Counter heapSampleCounter =
-          reporter.getCounter(TaskCounter.HEAP_USAGE_BYTES);
+          reporter.getCounter(HeapUsageUtils.HeapUsageCounterGroup,
+              HeapUsageUtils.HeapUsageCounterName);
       HeapUsageUtils.sampleHeapUsage(conf, heapSampleCounter);
       long recordsIndex = 0;
 

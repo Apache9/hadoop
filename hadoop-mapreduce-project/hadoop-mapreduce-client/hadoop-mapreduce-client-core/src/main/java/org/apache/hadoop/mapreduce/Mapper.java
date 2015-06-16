@@ -141,7 +141,8 @@ public class Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
   public void run(Context context) throws IOException, InterruptedException {
     Configuration conf = context.getConfiguration();
     Counter heapSampleCounter = context.getCounter(
-        TaskCounter.HEAP_USAGE_BYTES);
+        HeapUsageUtils.HeapUsageCounterGroup,
+        HeapUsageUtils.HeapUsageCounterName);
 
     long lastSampleTime = System.currentTimeMillis();
     long heapSampleRecordsInterval = conf.getLong(
