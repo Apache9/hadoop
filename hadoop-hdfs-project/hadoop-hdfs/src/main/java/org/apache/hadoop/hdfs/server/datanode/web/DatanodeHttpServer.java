@@ -68,7 +68,6 @@ public class DatanodeHttpServer implements Closeable {
   private final SSLFactory sslFactory;
   private final ServerBootstrap httpsServer;
   private final Configuration conf;
-  private final Configuration confForCreate;
   private InetSocketAddress httpAddress;
   private InetSocketAddress httpsAddress;
 
@@ -100,7 +99,7 @@ public class DatanodeHttpServer implements Closeable {
     this.infoServer.start();
     final InetSocketAddress jettyAddr = infoServer.getConnectorAddress(0);
 
-    this.confForCreate = new Configuration(conf);
+    final Configuration confForCreate = new Configuration(conf);
     confForCreate.set(FsPermission.UMASK_LABEL, "000");
 
     this.bossGroup = new NioEventLoopGroup();

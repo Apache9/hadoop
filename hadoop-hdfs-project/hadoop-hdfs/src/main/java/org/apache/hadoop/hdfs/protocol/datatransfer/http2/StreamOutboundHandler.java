@@ -15,20 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.datanode.web.dtp;
+package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
-import io.netty.handler.codec.http2.Http2ConnectionHandler;
-
 /**
- * The HTTP/2 handler.
+ * A StreamOutboundHandler only used for data transfer.
  */
 @InterfaceAudience.Private
-public class DtpHttp2Handler extends Http2ConnectionHandler {
+public interface StreamOutboundHandler extends StreamHandler {
 
-  public DtpHttp2Handler() {
-    super(true, new DtpHttp2FrameListener());
-    ((DtpHttp2FrameListener) decoder().listener()).encoder(encoder());
-  }
+  void write(StreamHandlerContext ctx, Object msg, boolean endOfStream)
+      throws Exception;
+
+  void writeAndFlush(StreamHandlerContext ctx, Object msg, boolean endOfStream)
+      throws Exception;
 }
