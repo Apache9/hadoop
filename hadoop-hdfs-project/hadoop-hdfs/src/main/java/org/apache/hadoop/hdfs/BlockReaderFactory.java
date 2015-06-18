@@ -189,6 +189,11 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
    */
   private int remainingCacheTries;
 
+  /**
+   * Used to establish an HTTP/2 connection, if needed.
+   */
+  private Http2ConnectionPool http2ConnPool;
+
   public BlockReaderFactory(DfsClientConf conf) {
     this.conf = conf;
     this.remainingCacheTries = conf.getNumCachedConnRetry();
@@ -281,6 +286,12 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
     return this;
   }
 
+  public BlockReaderFactory setHttp2ConnPool(
+      Http2ConnectionPool http2ConnPool) {
+    this.http2ConnPool = http2ConnPool;
+    return this;
+  }
+
   @VisibleForTesting
   public static void setFailureInjectorForTesting(FailureInjector injector) {
     failureInjector = injector;
@@ -365,6 +376,9 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
     Preconditions.checkState(!DFSInputStream.tcpReadsDisabledForTesting,
         "TCP reads were disabled for testing, but we failed to " +
         "do a non-TCP read.");
+    if (conf.isHttp2ReadEnabled()) {
+      // TODO: create http2 block reader
+    }
     return getRemoteBlockReaderFromTcp();
   }
 

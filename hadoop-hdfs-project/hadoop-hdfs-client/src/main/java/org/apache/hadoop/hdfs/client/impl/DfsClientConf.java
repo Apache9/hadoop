@@ -130,6 +130,8 @@ public class DfsClientConf {
   private final List<Class<? extends ReplicaAccessorBuilder>>
       replicaAccessorBuilderClasses;
 
+  private final boolean http2ReadEnabled;
+
   public DfsClientConf(Configuration conf) {
     // The hdfsTimeout is currently the same as the ipc timeout
     hdfsTimeout = Client.getTimeout(conf);
@@ -238,6 +240,10 @@ public class DfsClientConf {
         HdfsClientConfigKeys.HedgedRead.THREADPOOL_SIZE_DEFAULT);
 
     replicaAccessorBuilderClasses = loadReplicaAccessorBuilderClasses(conf);
+
+    http2ReadEnabled =
+        conf.getBoolean(HdfsClientConfigKeys.Read.Http2.KEY,
+          HdfsClientConfigKeys.Read.Http2.DEFAULT);
   }
 
   @SuppressWarnings("unchecked")
@@ -533,6 +539,12 @@ public class DfsClientConf {
     return shortCircuitConf;
   }
 
+  /**
+   * @return whether read block over http2 is enabled.
+   */
+  public boolean isHttp2ReadEnabled() {
+    return http2ReadEnabled;
+  }
   /**
    * Configuration for short-circuit reads.
    */

@@ -248,6 +248,13 @@ public interface HdfsClientConfigKeys {
       String  STREAMS_CACHE_EXPIRY_MS_KEY = PREFIX + "streams.cache.expiry.ms";
       long    STREAMS_CACHE_EXPIRY_MS_DEFAULT = 5*MINUTE;
     }
+    
+    interface Http2 {
+      String PREFIX = Read.PREFIX + "http2.";
+      
+      String KEY = PREFIX.substring(0, PREFIX.length() - 1);
+      boolean DEFAULT = false;
+    }
   }
 
   /** dfs.client.short.circuit configuration properties */

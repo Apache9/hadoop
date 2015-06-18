@@ -215,6 +215,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   private volatile long serverDefaultsLastUpdate;
   final String clientName;
   final SocketFactory socketFactory;
+  final Http2ConnectionPool http2ConnPool;
   final ReplaceDatanodeOnFailure dtpReplaceDatanodeOnFailure;
   final FileSystem.Statistics stats;
   private final String authority;
@@ -301,6 +302,11 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     this.conf = conf;
     this.stats = stats;
     this.socketFactory = NetUtils.getSocketFactory(conf, ClientProtocol.class);
+    if (this.dfsClientConf.isHttp2ReadEnabled()) {
+      http2ConnPool = new Http2ConnectionPool();
+    } else {
+      http2ConnPool = null;
+    }
     this.dtpReplaceDatanodeOnFailure = ReplaceDatanodeOnFailure.get(conf);
     this.smallBufferSize = DFSUtil.getSmallBufferSize(conf);
 
