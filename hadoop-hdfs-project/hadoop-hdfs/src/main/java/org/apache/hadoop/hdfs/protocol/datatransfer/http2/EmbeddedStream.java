@@ -24,6 +24,9 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.HttpUtil;
+import io.netty.handler.stream.ChunkedInput;
+
+import java.net.SocketAddress;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
@@ -53,7 +56,6 @@ public class EmbeddedStream {
   void writeToParentChannel(Object msg, boolean endOfStream, boolean flush) {
     if (msg instanceof FullHttpResponse) {
       FullHttpResponse resp = (FullHttpResponse) msg;
-      resp.headers().add(resp.headers());
       Http2Headers headers;
       try {
         headers = HttpUtil.toHttp2Headers(resp);
@@ -101,6 +103,17 @@ public class EmbeddedStream {
       } else {
         channel.write(frame);
       }
+    } else if (msg instanceof ChunkedInput) {
+      @SuppressWarnings("unchecked")
+      Http2ChunkedInput chunkedInput =
+          new Http2ChunkedInput(streamId, (ChunkedInput<ByteBuf>) msg,
+              endOfStream);
+      if (flush) {
+        channel.writeAndFlush(chunkedInput).addListener(
+          new ResetOnFailureListener(streamId));
+      } else {
+        channel.write(chunkedInput);
+      }
     } else {
       if (flush) {
         channel.writeAndFlush(msg).addListener(
@@ -115,4 +128,7 @@ public class EmbeddedStream {
     return channel;
   }
 
+  public SocketAddress remoteAddress() {
+    return channel.remoteAddress();
+  }
 }

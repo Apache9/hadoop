@@ -1153,4 +1153,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   @Deprecated
   public static final long    DFS_CLIENT_KEY_PROVIDER_CACHE_EXPIRY_DEFAULT =
       HdfsClientConfigKeys.DFS_CLIENT_KEY_PROVIDER_CACHE_EXPIRY_DEFAULT;
+
+  // whether to log http2 frame for debugging
+  public static final String  DFS_HTTP2_VERBOSE_KEY = "dfs.http2.verbose";
+  public static final boolean DFS_HTTP2_VERBOSE_DEFAULT = false;
 }

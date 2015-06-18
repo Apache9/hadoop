@@ -591,7 +591,6 @@
         <groupId>org.eclipse.jetty.http2</groupId>
         <artifactId>http2-client</artifactId>
         <version>9.3.0.M2</version>
-        <scope>test</scope>
       </dependency>
 
       <dependency>

@@ -20,7 +20,18 @@ package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http2.DefaultHttp2Connection;
+import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
+import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
+import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
+import io.netty.handler.codec.http2.Http2FrameListener;
+import io.netty.handler.codec.http2.Http2FrameLogger;
+import io.netty.handler.codec.http2.Http2FrameReader;
+import io.netty.handler.codec.http2.Http2FrameWriter;
+import io.netty.handler.codec.http2.Http2InboundFrameLogger;
+import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
+import io.netty.handler.logging.LogLevel;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -32,14 +43,16 @@ import org.apache.hadoop.classification.InterfaceAudience;
 @InterfaceAudience.Private
 public class DataTransferHttp2ConnectionHandler extends Http2ConnectionHandler {
 
+  private static final Http2FrameLogger FRAME_LOGGER = new Http2FrameLogger(
+      LogLevel.INFO, DataTransferHttp2ConnectionHandler.class);
+
   static final Log LOG = LogFactory
       .getLog(DataTransferHttp2ConnectionHandler.class);
 
-  public DataTransferHttp2ConnectionHandler(Channel channel,
-      StreamHandlerInitializer initializer) {
-    super(true, new DataTransferHttp2EventListener(channel, initializer));
-    ((DataTransferHttp2EventListener) decoder().listener())
-        .connection(connection());
+  private DataTransferHttp2ConnectionHandler(Http2Connection connection,
+      Http2FrameReader frameReader, Http2FrameWriter frameWriter,
+      Http2FrameListener listener) {
+    super(connection, frameReader, frameWriter, listener);
   }
 
   @Override
@@ -62,5 +75,28 @@ public class DataTransferHttp2ConnectionHandler extends Http2ConnectionHandler {
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
     onException(ctx, cause);
+  }
+
+  public static DataTransferHttp2ConnectionHandler create(Channel channel,
+      StreamHandlerInitializer initializer, boolean verbose) {
+    Http2Connection conn = new DefaultHttp2Connection(true);
+    DataTransferHttp2EventListener listener =
+        new DataTransferHttp2EventListener(channel, conn, initializer);
+    conn.addListener(listener);
+    Http2FrameReader frameReader;
+    Http2FrameWriter frameWriter;
+    if (verbose) {
+      frameReader =
+          new Http2InboundFrameLogger(new DefaultHttp2FrameReader(),
+              FRAME_LOGGER);
+      frameWriter =
+          new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(),
+              FRAME_LOGGER);
+    } else {
+      frameReader = new DefaultHttp2FrameReader();
+      frameWriter = new DefaultHttp2FrameWriter();
+    }
+    return new DataTransferHttp2ConnectionHandler(conn, frameReader,
+        frameWriter, listener);
   }
 }

@@ -42,20 +42,16 @@ public class DataTransferHttp2EventListener extends Http2EventAdapter {
 
   private final StreamHandlerInitializer initializer;
 
-  private Http2Connection conn;
+  private final Http2Connection conn;
 
-  private PropertyKey embeddedStreamPropKey;
+  private final PropertyKey embeddedStreamPropKey;
 
-  public DataTransferHttp2EventListener(Channel channel,
+  public DataTransferHttp2EventListener(Channel channel, Http2Connection conn,
       StreamHandlerInitializer initializer) {
     this.channel = channel;
-    this.initializer = initializer;
-  }
-
-  public void connection(Http2Connection conn) {
     this.conn = conn;
+    this.initializer = initializer;
     this.embeddedStreamPropKey = conn.newKey();
-    conn.addListener(this);
   }
 
   @Override

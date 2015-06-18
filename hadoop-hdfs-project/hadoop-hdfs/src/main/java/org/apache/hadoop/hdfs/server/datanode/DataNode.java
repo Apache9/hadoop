@@ -3165,6 +3165,14 @@ public class DataNode extends ReconfigurableBase
     return shouldRun;
   }
 
+  public boolean isBlockTokenEnabled() {
+    return isBlockTokenEnabled;
+  }
+
+  public BlockPoolTokenSecretManager getBlockPoolTokenSecretManager() {
+    return blockPoolTokenSecretManager;
+  }
+
   @VisibleForTesting
   DataStorage getStorage() {
     return storage;

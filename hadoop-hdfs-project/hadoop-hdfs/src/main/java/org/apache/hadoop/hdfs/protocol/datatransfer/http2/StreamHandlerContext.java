@@ -33,7 +33,7 @@ public class StreamHandlerContext {
 
   StreamHandlerContext next;
 
-  private final StreamHandler handler;
+  final StreamHandler handler;
 
   private final boolean inbound;
 
@@ -52,7 +52,7 @@ public class StreamHandlerContext {
   }
 
   private StreamHandlerContext nextInbound() {
-    for (StreamHandlerContext ctx = next; ctx != null;) {
+    for (StreamHandlerContext ctx = next; ctx != null; ctx = ctx.next) {
       if (ctx.inbound) {
         return ctx;
       }
@@ -61,7 +61,7 @@ public class StreamHandlerContext {
   }
 
   private StreamHandlerContext nextOutbound() {
-    for (StreamHandlerContext ctx = prev; ctx != null;) {
+    for (StreamHandlerContext ctx = prev; ctx != null; ctx = ctx.prev) {
       if (ctx.outbound) {
         return ctx;
       }

@@ -31,6 +31,7 @@ import java.io.OutputStream;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
 import org.apache.hadoop.io.IOUtils;
 
 class HdfsWriter extends SimpleChannelInboundHandler<HttpContent> {

@@ -35,7 +35,6 @@ import io.netty.handler.codec.http.HttpVersion;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -49,7 +48,6 @@ import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.MetaData;
-import org.eclipse.jetty.http.MetaData.Response;
 import org.eclipse.jetty.http2.ErrorCode;
 import org.eclipse.jetty.http2.api.Session;
 import org.eclipse.jetty.http2.api.Stream;
@@ -99,15 +97,14 @@ public class TestHttp2ServerMultiThread {
               @Override
               protected void initChannel(Channel ch) throws Exception {
                 ch.pipeline().addLast(
-                  new DataTransferHttp2ConnectionHandler(ch,
-                      new StreamHandlerInitializer() {
+                  DataTransferHttp2ConnectionHandler.create(ch,
+                    new StreamHandlerInitializer() {
 
-                        @Override
-                        public void initialize(EmbeddedStream stream) {
-                          stream.pipeline().addHandlerFirst(
-                            new DispatcherHandler());
-                        }
-                      }));
+                      @Override
+                      public void initialize(EmbeddedStream stream) {
+                        stream.pipeline().addLast(new DispatcherHandler());
+                      }
+                    }, true));
               }
 
             });
@@ -143,8 +140,8 @@ public class TestHttp2ServerMultiThread {
         boolean endOfStream) throws Exception {
       if (msg instanceof HttpRequest) {
         StreamPipeline pipeline = ctx.stream().pipeline();
-        pipeline.removeHandler(this);
-        pipeline.addHandlerFirst(new EchoHandler());
+        pipeline.remove(this);
+        pipeline.addLast(new EchoHandler());
         ctx.writeAndFlush(new DefaultHttpResponse(HttpVersion.HTTP_1_1,
             HttpResponseStatus.OK), endOfStream);
       } else {
@@ -172,93 +169,6 @@ public class TestHttp2ServerMultiThread {
       handlerClosedCount.incrementAndGet();
     }
 
-  }
-
-  private static final class StreamListener extends Stream.Listener.Adapter {
-
-    private boolean finish = false;
-
-    private byte[] buf = new byte[0];
-
-    private int status = -1;
-
-    private boolean reset;
-
-    @Override
-    public void onData(Stream stream, DataFrame frame, Callback callback) {
-      synchronized (this) {
-        if (reset) {
-          callback.failed(new IllegalStateException("Stream already closed"));
-        }
-        if (status == -1) {
-          callback.failed(new IllegalStateException(
-              "Haven't received header yet"));
-        }
-        int bufLen = buf.length;
-        int newBufLen = bufLen + frame.getData().remaining();
-        buf = Arrays.copyOf(buf, newBufLen);
-        frame.getData().get(buf, bufLen, frame.getData().remaining());
-        if (frame.isEndStream()) {
-          finish = true;
-        }
-        notifyAll();
-        callback.succeeded();
-      }
-    }
-
-    @Override
-    public void onHeaders(Stream stream, HeadersFrame frame) {
-      synchronized (this) {
-        if (reset) {
-          throw new IllegalStateException("Stream already closed");
-        }
-        if (status != -1) {
-          throw new IllegalStateException("Header already received");
-        }
-        MetaData meta = frame.getMetaData();
-        if (!meta.isResponse()) {
-          throw new IllegalStateException("Received non-response header");
-        }
-        status = ((Response) meta).getStatus();
-        if (frame.isEndStream()) {
-          finish = true;
-          notifyAll();
-        }
-      }
-    }
-
-    @Override
-    public void onReset(Stream stream, ResetFrame frame) {
-      synchronized (this) {
-        reset = true;
-        finish = true;
-        notifyAll();
-      }
-    }
-
-    public int getStatus() throws InterruptedException, IOException {
-      synchronized (this) {
-        while (!finish) {
-          wait();
-        }
-        if (reset) {
-          throw new IOException("Stream reset");
-        }
-        return status;
-      }
-    }
-
-    public byte[] getData() throws InterruptedException, IOException {
-      synchronized (this) {
-        while (!finish) {
-          wait();
-        }
-        if (reset) {
-          throw new IOException("Stream reset");
-        }
-        return buf;
-      }
-    }
   }
 
   private void testEcho() throws InterruptedException, ExecutionException,

@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.datanode.web.webhdfs;
+package org.apache.hadoop.hdfs.server.datanode.web;
 
 import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
 import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
@@ -33,6 +33,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.apache.commons.logging.Log;
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.web.JsonUtil;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
@@ -40,13 +42,15 @@ import org.apache.hadoop.security.authorize.AuthorizationException;
 import org.apache.hadoop.security.token.SecretManager;
 
 import com.google.common.base.Charsets;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.sun.jersey.api.ParamException;
 import com.sun.jersey.api.container.ContainerException;
 
-class ExceptionHandler {
-  static Log LOG = WebHdfsHandler.LOG;
+@InterfaceAudience.Private
+public class ExceptionHandler {
+  static Log LOG = DatanodeHttpServer.LOG;
 
-  static DefaultFullHttpResponse exceptionCaught(Throwable cause) {
+  public static DefaultFullHttpResponse exceptionCaught(Throwable cause) {
     Exception e = cause instanceof Exception ? (Exception) cause : new Exception(cause);
 
     if (LOG.isTraceEnabled()) {
@@ -67,18 +71,17 @@ class ExceptionHandler {
 
     //Map response status
     final HttpResponseStatus s;
-    if (e instanceof SecurityException) {
+    if (e instanceof SecurityException || e instanceof AuthorizationException) {
       s = FORBIDDEN;
-    } else if (e instanceof AuthorizationException) {
-      s = FORBIDDEN;
-    } else if (e instanceof FileNotFoundException) {
+    } else if (e instanceof FileNotFoundException
+        || e instanceof ReplicaNotFoundException) {
       s = NOT_FOUND;
+    } else if (e instanceof UnsupportedOperationException
+        || e instanceof IllegalArgumentException
+        || e instanceof InvalidProtocolBufferException) {
+      s = BAD_REQUEST;
     } else if (e instanceof IOException) {
       s = FORBIDDEN;
-    } else if (e instanceof UnsupportedOperationException) {
-      s = BAD_REQUEST;
-    } else if (e instanceof IllegalArgumentException) {
-      s = BAD_REQUEST;
     } else {
       LOG.warn("INTERNAL_SERVER_ERROR", e);
       s = INTERNAL_SERVER_ERROR;

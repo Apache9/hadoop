@@ -30,8 +30,10 @@ import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.datatransfer.http2.DataTransferHttp2ConnectionHandler;
-import org.apache.hadoop.hdfs.server.datanode.web.dtp.DataNodeStreamHandlerInitializer;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpStreamHandlerInitializer;
 
 /**
  * A port unification handler to support HTTP/1.1 and HTTP/2 on the same port.
@@ -51,12 +53,15 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
   private final Configuration conf;
 
   private final Configuration confForCreate;
+  
+  private final DataNode datanode;
 
   public PortUnificationServerHandler(InetSocketAddress proxyHost,
-      Configuration conf, Configuration confForCreate) {
+      Configuration conf, Configuration confForCreate, DataNode datanode) {
     this.proxyHost = proxyHost;
     this.conf = conf;
     this.confForCreate = confForCreate;
+    this.datanode = datanode;
   }
 
   private void configureHttp1(ChannelHandlerContext ctx) {
@@ -66,8 +71,10 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
 
   private void configureHttp2(ChannelHandlerContext ctx) {
     ctx.pipeline().addLast(
-        new DataTransferHttp2ConnectionHandler(
-          ctx.channel(), new DataNodeStreamHandlerInitializer()));
+      DataTransferHttp2ConnectionHandler.create(ctx.channel(),
+        new DtpStreamHandlerInitializer(datanode), conf.getBoolean(
+          DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY,
+          DFSConfigKeys.DFS_HTTP2_VERBOSE_DEFAULT)), new ChunkedWriteHandler());
   }
 
   @Override

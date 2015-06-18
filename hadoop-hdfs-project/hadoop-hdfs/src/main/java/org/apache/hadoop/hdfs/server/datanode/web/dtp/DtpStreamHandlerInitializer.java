@@ -17,37 +17,39 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
+import static org.apache.hadoop.hdfs.server.datanode.web.dtp.HandlerNames.DISPATCHER_HANDLER_NAME;
 
-import java.nio.charset.StandardCharsets;
-
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.protocol.datatransfer.http2.EmbeddedStream;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.StreamHandlerContext;
 import org.apache.hadoop.hdfs.protocol.datatransfer.http2.StreamHandlerInitializer;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.StreamInboundHandlerAdaptor;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
 
 /**
  *
  */
-public class DataNodeStreamHandlerInitializer implements
-    StreamHandlerInitializer {
+@InterfaceAudience.Private
+public class DtpStreamHandlerInitializer implements StreamHandlerInitializer {
+
+  static final Log LOG = LogFactory.getLog(DtpStreamHandlerInitializer.class);
+
+  public static final int VERSION = 1;
+
+  public static final String URL_PREFIX = "/dtp/v" + VERSION;
+
+  public static final String OP_READ_BLOCK = "/read_block";
+
+  private final DataNode datanode;
+
+  public DtpStreamHandlerInitializer(DataNode datanode) {
+    this.datanode = datanode;
+  }
 
   @Override
   public void initialize(EmbeddedStream stream) {
-    stream.pipeline().addHandlerFirst(new StreamInboundHandlerAdaptor() {
-
-      @Override
-      public void streamRead(StreamHandlerContext ctx, Object msg,
-          boolean endOfStream) {
-        ctx.writeAndFlush(
-          new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
-              HttpResponseStatus.OK, ctx.alloc().buffer()
-                  .writeBytes("HTTP/2 DTP".getBytes(StandardCharsets.UTF_8))),
-          true);
-      }
-    });
+    stream.pipeline().addLast(DISPATCHER_HANDLER_NAME,
+      new DtpUrlDispatcher(datanode));
   }
 
 }

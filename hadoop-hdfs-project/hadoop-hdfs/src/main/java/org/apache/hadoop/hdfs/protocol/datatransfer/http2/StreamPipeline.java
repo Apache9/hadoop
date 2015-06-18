@@ -17,12 +17,16 @@
  */
 package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
-import java.util.IdentityHashMap;
-
 import io.netty.channel.ChannelPipeline;
+
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
+
+import com.google.common.base.Preconditions;
 
 /**
  * A list of {@link StreamHandler}s.
@@ -35,8 +39,10 @@ public class StreamPipeline {
 
   private final EmbeddedStream stream;
 
-  private final IdentityHashMap<StreamHandler, StreamHandlerContext> handler2Ctx =
+  private final IdentityHashMap<StreamHandler, String> handler2Name =
       new IdentityHashMap<>();
+
+  private final Map<String, StreamHandlerContext> name2Ctx = new HashMap<>();
 
   private final StreamHandlerContext head;
 
@@ -84,29 +90,79 @@ public class StreamPipeline {
     head.next = tail;
   }
 
-  private void addHandlerFirst0(StreamHandler handler) {
-    StreamHandlerContext holder =
-        new StreamHandlerContext(head, head.next, handler, stream);
-    head.next.prev = holder;
-    head.next = holder;
-    handler2Ctx.put(handler, holder);
+  private long handlerNumber = 0;
+
+  private String generateName(StreamHandler handler) {
+    return (handler.getClass().getSimpleName() + (handlerNumber++));
   }
 
-  public void addHandlerFirst(StreamHandler... handlers) {
-    for (int i = handlers.length - 1; i >= 0; i--) {
-      addHandlerFirst0(handlers[i]);
+  private void checkDuplicate(String name, StreamHandler handler) {
+    Preconditions.checkArgument(!handler2Name.containsKey(handler), "Handler "
+        + handler + " already added");
+    Preconditions.checkArgument(!name2Ctx.containsKey(name), "Handler name "
+        + name + " already exists");
+  }
+
+  private void addLast0(String name, StreamHandler handler) {
+    checkDuplicate(name, handler);
+    StreamHandlerContext ctx =
+        new StreamHandlerContext(tail.prev, tail, handler, stream);
+    tail.prev.next = ctx;
+    tail.prev = ctx;
+    handler2Name.put(handler, name);
+    name2Ctx.put(name, ctx);
+  }
+
+  public StreamPipeline addLast(StreamHandler... handlers) {
+    for (StreamHandler handler : handlers) {
+      addLast0(generateName(handler), handler);
+    }
+    return this;
+  }
+
+  public StreamPipeline addLast(String name, StreamHandler handler) {
+    addLast0(name, handler);
+    return this;
+  }
+
+  private void addAfter0(StreamHandlerContext baseCtx, String name,
+      StreamHandler handler) {
+    checkDuplicate(name, handler);
+    StreamHandlerContext ctx =
+        new StreamHandlerContext(baseCtx, baseCtx.next, handler, stream);
+    baseCtx.next.prev = ctx;
+    baseCtx.next = ctx;
+    handler2Name.put(handler, name);
+    name2Ctx.put(name, ctx);
+  }
+
+  public StreamPipeline addAfter(String baseName, String name,
+      StreamHandler handler) {
+    StreamHandlerContext baseCtx = name2Ctx.get(baseName);
+    Preconditions.checkArgument(baseCtx != null, "Handler " + baseName
+        + " not found");
+    addAfter0(baseCtx, name, handler);
+    return this;
+  }
+
+  private void remove0(StreamHandlerContext ctx) {
+    ctx.next.prev = ctx.prev;
+    ctx.prev.next = ctx.next;
+    handler2Name.remove(ctx.handler);
+    ctx.handler.streamClosed(ctx);
+  }
+
+  public void remove(StreamHandler handler) {
+    String name = handler2Name.get(handler);
+    if (name != null) {
+      remove(name);
     }
   }
 
-  private void removeHandler0(StreamHandlerContext ctx) {
-    ctx.next.prev = ctx.prev;
-    ctx.prev.next = ctx.next;
-  }
-
-  public void removeHandler(StreamHandler handler) {
-    StreamHandlerContext ctx = handler2Ctx.get(handler);
+  public void remove(String name) {
+    StreamHandlerContext ctx = name2Ctx.remove(name);
     if (ctx != null) {
-      removeHandler0(ctx);
+      remove0(ctx);
     }
   }
 

@@ -33,7 +33,8 @@ class NativeCrc32 {
    * Return true if the JNI-based native CRC extensions are available.
    */
   public static boolean isAvailable() {
-    return NativeCodeLoader.isNativeCodeLoaded();
+    return false;
+    //return NativeCodeLoader.isNativeCodeLoaded();
   }
 
   /**

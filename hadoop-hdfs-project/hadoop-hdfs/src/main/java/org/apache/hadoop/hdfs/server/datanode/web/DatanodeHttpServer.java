@@ -113,7 +113,7 @@ public class DatanodeHttpServer implements Closeable {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
           ch.pipeline().addLast(new PortUnificationServerHandler(jettyAddr,
-              conf, confForCreate));
+              conf, confForCreate, datanode));
         }
       });
       if (externalHttpChannel == null) {
