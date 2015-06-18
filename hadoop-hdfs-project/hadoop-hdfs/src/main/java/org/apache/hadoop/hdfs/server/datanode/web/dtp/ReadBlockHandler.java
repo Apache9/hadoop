@@ -18,7 +18,6 @@
 package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.SUCCESS;
-
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
@@ -28,6 +27,7 @@ import java.io.DataInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -35,6 +35,7 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Op;
+import org.apache.hadoop.hdfs.protocol.datatransfer.http2.EmbeddedStream;
 import org.apache.hadoop.hdfs.protocol.datatransfer.http2.SimpleStreamInboundHandler;
 import org.apache.hadoop.hdfs.protocol.datatransfer.http2.StreamHandlerContext;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ReadOpChecksumInfoProto;
@@ -67,8 +68,11 @@ class ReadBlockHandler extends
 
   private final DataNode datanode;
 
-  public ReadBlockHandler(DataNode datanode) {
+  private final ExecutorService executor;
+
+  public ReadBlockHandler(DataNode datanode, ExecutorService executor) {
     this.datanode = datanode;
+    this.executor = executor;
   }
 
   private static Replica getReplica(ExtendedBlock block,
@@ -105,16 +109,14 @@ class ReadBlockHandler extends
     }
   }
 
-  // TODO: use thread pool
-  @Override
-  protected void streamRead0(StreamHandlerContext ctx,
-      OpReadBlockRequestProto request, boolean endOfStream) throws Exception {
+  private void handleReadBlock(OpReadBlockRequestProto request,
+      EmbeddedStream stream) throws IOException {
     ExtendedBlock block =
         PBHelper.convert(request.getHeader().getBaseHeader().getBlock());
     Token<BlockTokenIdentifier> token =
         PBHelper.convert(request.getHeader().getBaseHeader().getToken());
     DtpUtil.checkAccess(datanode, block, token, Op.READ_BLOCK,
-      BlockTokenIdentifier.AccessMode.READ, ctx.stream().remoteAddress());
+      BlockTokenIdentifier.AccessMode.READ, stream.remoteAddress());
 
     FsDatasetSpi<? extends FsVolumeSpi> data = datanode.getFSDataset();
     Replica replica;
@@ -222,9 +224,9 @@ class ReadBlockHandler extends
       }
       blockInput = data.getBlockInputStream(block, startOffset);
       long length = endOffset - startOffset;
-      ctx.write(new DefaultHttpResponse(HttpVersion.HTTP_1_1,
+      stream.write(new DefaultHttpResponse(HttpVersion.HTTP_1_1,
           HttpResponseStatus.OK), false);
-      ctx.write(
+      stream.write(
         OpReadBlockResponseProto
             .newBuilder()
             .setStatus(SUCCESS)
@@ -232,7 +234,7 @@ class ReadBlockHandler extends
               ReadOpChecksumInfoProto.newBuilder()
                   .setChecksum(DataTransferProtoUtil.toProto(checksum))
                   .setChunkOffset(startOffset)).build(), false);
-      ctx.writeAndFlush(
+      stream.writeAndFlush(
         new ChunkedBlockInput(volumeRef, blockInput, checksumInput,
             lastChunkChecksum == null ? null : lastChunkChecksum.getChecksum(),
             checksum, Math.max(
@@ -246,6 +248,28 @@ class ReadBlockHandler extends
         IOUtils.cleanup(LOG, blockInput, checksumInput, volumeRef);
       }
     }
+  }
+
+  @Override
+  protected void streamRead0(StreamHandlerContext ctx,
+      final OpReadBlockRequestProto request, boolean endOfStream)
+      throws Exception {
+    if (!endOfStream) {
+      throw new IllegalArgumentException("More data than needed");
+    }
+    final EmbeddedStream stream = ctx.stream();
+    executor.execute(new Runnable() {
+
+      @Override
+      public void run() {
+        try {
+          handleReadBlock(request, stream);
+        } catch (Throwable t) {
+          stream.pipeline().fireExceptionCaught(t);
+        }
+      }
+    });
+
   }
 
   @Override

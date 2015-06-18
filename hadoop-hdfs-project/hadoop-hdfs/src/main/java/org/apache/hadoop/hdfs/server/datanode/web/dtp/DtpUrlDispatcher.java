@@ -20,6 +20,9 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 import static org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpStreamHandlerInitializer.OP_READ_BLOCK;
 import static org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpStreamHandlerInitializer.URL_PREFIX;
 import static org.apache.hadoop.hdfs.server.datanode.web.dtp.HandlerNames.*;
+
+import java.util.concurrent.ExecutorService;
+
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 
@@ -41,8 +44,11 @@ class DtpUrlDispatcher extends SimpleStreamInboundHandler<HttpRequest> {
 
   private final DataNode datanode;
 
-  public DtpUrlDispatcher(DataNode datanode) {
+  private final ExecutorService executor;
+
+  public DtpUrlDispatcher(DataNode datanode, ExecutorService executor) {
     this.datanode = datanode;
+    this.executor = executor;
   }
 
   @Override
@@ -64,7 +70,8 @@ class DtpUrlDispatcher extends SimpleStreamInboundHandler<HttpRequest> {
             new ProtobufVarint32Encoder())
           .addLast(REQUEST_PROTO_DECODER_HANDLER_NAME,
             new ProtobufVarint32Decoder(OpReadBlockRequestProto.PARSER))
-          .addLast(READ_BLOCK_HANDLER_NAME, new ReadBlockHandler(datanode));
+          .addLast(READ_BLOCK_HANDLER_NAME,
+            new ReadBlockHandler(datanode, executor));
     } else {
       throw new IllegalArgumentException("No mapping found for uri "
           + req.uri());

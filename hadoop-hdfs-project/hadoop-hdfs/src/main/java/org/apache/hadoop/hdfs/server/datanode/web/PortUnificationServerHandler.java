@@ -27,6 +27,7 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -55,13 +56,17 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
   private final Configuration confForCreate;
   
   private final DataNode datanode;
+  
+  private final ExecutorService executor;
 
   public PortUnificationServerHandler(InetSocketAddress proxyHost,
-      Configuration conf, Configuration confForCreate, DataNode datanode) {
+      Configuration conf, Configuration confForCreate, DataNode datanode,
+      ExecutorService executor) {
     this.proxyHost = proxyHost;
     this.conf = conf;
     this.confForCreate = confForCreate;
     this.datanode = datanode;
+    this.executor = executor;
   }
 
   private void configureHttp1(ChannelHandlerContext ctx) {
@@ -71,10 +76,11 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
 
   private void configureHttp2(ChannelHandlerContext ctx) {
     ctx.pipeline().addLast(
-      DataTransferHttp2ConnectionHandler.create(ctx.channel(),
-        new DtpStreamHandlerInitializer(datanode), conf.getBoolean(
-          DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY,
-          DFSConfigKeys.DFS_HTTP2_VERBOSE_DEFAULT)), new ChunkedWriteHandler());
+        DataTransferHttp2ConnectionHandler.create(ctx.channel(),
+            new DtpStreamHandlerInitializer(datanode, executor),
+                conf.getBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY,
+                    DFSConfigKeys.DFS_HTTP2_VERBOSE_DEFAULT)),
+                    new ChunkedWriteHandler());
   }
 
   @Override

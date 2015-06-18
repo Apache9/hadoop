@@ -53,6 +53,14 @@ public class EmbeddedStream {
     return pipeline;
   }
 
+  public void write(Object msg, boolean endOfStream) {
+    pipeline.write(msg, endOfStream);
+  }
+
+  public void writeAndFlush(Object msg, boolean endOfStream) {
+    pipeline.writeAndFlush(msg, endOfStream);
+  }
+
   void writeToParentChannel(Object msg, boolean endOfStream, boolean flush) {
     if (msg instanceof FullHttpResponse) {
       FullHttpResponse resp = (FullHttpResponse) msg;

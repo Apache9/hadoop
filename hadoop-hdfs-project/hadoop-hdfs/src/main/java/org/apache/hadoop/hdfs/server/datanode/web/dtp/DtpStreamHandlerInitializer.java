@@ -19,6 +19,8 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
 import static org.apache.hadoop.hdfs.server.datanode.web.dtp.HandlerNames.DISPATCHER_HANDLER_NAME;
 
+import java.util.concurrent.ExecutorService;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -42,14 +44,17 @@ public class DtpStreamHandlerInitializer implements StreamHandlerInitializer {
 
   private final DataNode datanode;
 
-  public DtpStreamHandlerInitializer(DataNode datanode) {
+  private final ExecutorService executor;
+
+  public DtpStreamHandlerInitializer(DataNode datanode, ExecutorService executor) {
     this.datanode = datanode;
+    this.executor = executor;
   }
 
   @Override
   public void initialize(EmbeddedStream stream) {
     stream.pipeline().addLast(DISPATCHER_HANDLER_NAME,
-      new DtpUrlDispatcher(datanode));
+        new DtpUrlDispatcher(datanode, executor));
   }
 
 }
