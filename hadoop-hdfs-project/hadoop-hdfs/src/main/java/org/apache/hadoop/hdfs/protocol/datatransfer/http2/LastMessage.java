@@ -19,50 +19,20 @@ package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
-import io.netty.buffer.ByteBuf;
-
 /**
- * Represent an HTTP/2 data frame.
+ *
  */
 @InterfaceAudience.Private
-public class Http2DataFrame {
+public class LastMessage {
 
-  private final int streamId;
+  private final Object msg;
 
-  private final ByteBuf data;
-
-  private final int padding;
-
-  private final boolean endOfStream;
-
-  public Http2DataFrame(int streamId, ByteBuf data, int padding,
-      boolean endOfStream) {
-    this.streamId = streamId;
-    this.data = data;
-    this.padding = padding;
-    this.endOfStream = endOfStream;
+  public LastMessage(Object msg) {
+    this.msg = msg;
   }
 
-  public int getStreamId() {
-    return streamId;
-  }
-
-  public ByteBuf getData() {
-    return data;
-  }
-
-  public int getPadding() {
-    return padding;
-  }
-
-  public boolean isEndOfStream() {
-    return endOfStream;
-  }
-
-  @Override
-  public String toString() {
-    return "Http2DataFrame [streamId=" + streamId + ", data=" + data
-        + ", padding=" + padding + ", endOfStream=" + endOfStream + "]";
+  public Object get() {
+    return msg;
   }
 
 }

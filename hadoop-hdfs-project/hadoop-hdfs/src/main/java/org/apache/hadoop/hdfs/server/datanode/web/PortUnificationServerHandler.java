@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.datanode.web;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http2.Http2CodecUtil;
@@ -32,9 +33,10 @@ import java.util.concurrent.ExecutorService;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.DataTransferHttp2ConnectionHandler;
+import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ServerHttp2EventListener;
+import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ServerHttp2StreamChannel;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
-import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpStreamHandlerInitializer;
+import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 
 /**
  * A port unification handler to support HTTP/1.1 and HTTP/2 on the same port.
@@ -76,11 +78,16 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
 
   private void configureHttp2(ChannelHandlerContext ctx) {
     ctx.pipeline().addLast(
-        DataTransferHttp2ConnectionHandler.create(ctx.channel(),
-            new DtpStreamHandlerInitializer(datanode, executor),
-                conf.getBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY,
-                    DFSConfigKeys.DFS_HTTP2_VERBOSE_DEFAULT)),
-                    new ChunkedWriteHandler());
+      ServerHttp2EventListener.create(ctx.channel(),
+        new ChannelInitializer<ServerHttp2StreamChannel>() {
+
+          @Override
+          protected void initChannel(ServerHttp2StreamChannel ch)
+              throws Exception {
+            ch.pipeline().addLast(new DtpUrlDispatcher(datanode, executor));
+          }
+        }, conf.getBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY,
+          DFSConfigKeys.DFS_HTTP2_VERBOSE_DEFAULT)));
   }
 
   @Override

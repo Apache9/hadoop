@@ -15,15 +15,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.server.datanode.web.dtp;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.MessageToMessageEncoder;
+
+import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
+import com.google.protobuf.CodedOutputStream;
+import com.google.protobuf.Message;
+
 /**
- * Set up stream handler pipeline.
+ *
  */
 @InterfaceAudience.Private
-public interface StreamHandlerInitializer {
+public class ProtobufVarint32Encoder extends MessageToMessageEncoder<Message> {
 
-  void initialize(EmbeddedStream stream);
+  @Override
+  protected void
+      encode(ChannelHandlerContext ctx, Message msg, List<Object> out)
+          throws Exception {
+    int serializedSize = msg.getSerializedSize();
+    int size =
+        CodedOutputStream.computeRawVarint32Size(serializedSize)
+            + serializedSize;
+    ByteBuf buf = ctx.alloc().buffer(size);
+    msg.writeDelimitedTo(new ByteBufOutputStream(buf));
+    out.add(buf);
+  }
 }

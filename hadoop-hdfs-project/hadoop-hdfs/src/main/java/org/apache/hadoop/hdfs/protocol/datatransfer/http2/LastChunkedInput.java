@@ -19,33 +19,53 @@ package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.handler.codec.http2.Http2Error;
-import io.netty.handler.codec.http2.Http2Exception;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.stream.ChunkedInput;
 
 /**
- * Reset HTTP/2 stream if operation failed.
+ * 
  */
 @InterfaceAudience.Private
-public class ResetOnFailureListener implements ChannelFutureListener {
+public class LastChunkedInput implements ChunkedInput<Object> {
 
-  private final int streamId;
+  private final ChunkedInput<ByteBuf> in;
 
-  public ResetOnFailureListener(int streamId) {
-    this.streamId = streamId;
+  public LastChunkedInput(ChunkedInput<ByteBuf> in) {
+    this.in = in;
   }
 
   @Override
-  public void operationComplete(ChannelFuture future) throws Exception {
-    if (!future.isSuccess()) {
-      future
-          .channel()
-          .pipeline()
-          .fireExceptionCaught(
-            Http2Exception.streamError(streamId, Http2Error.INTERNAL_ERROR,
-              future.cause(), ""));
+  public boolean isEndOfInput() throws Exception {
+    return in.isEndOfInput();
+  }
+
+  @Override
+  public void close() throws Exception {
+    in.close();
+  }
+
+  @Override
+  public Object readChunk(ChannelHandlerContext ctx) throws Exception {
+    if (isEndOfInput()) {
+      return null;
     }
+    ByteBuf chunk = in.readChunk(ctx);
+    if (isEndOfInput()) {
+      return new LastMessage(chunk);
+    } else {
+      return chunk;
+    }
+  }
+
+  @Override
+  public long length() {
+    return in.length();
+  }
+
+  @Override
+  public long progress() {
+    return in.progress();
   }
 
 }

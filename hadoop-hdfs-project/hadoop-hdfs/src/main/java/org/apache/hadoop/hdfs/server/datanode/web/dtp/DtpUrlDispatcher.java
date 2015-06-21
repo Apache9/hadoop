@@ -17,30 +17,37 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
-import static org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpStreamHandlerInitializer.OP_READ_BLOCK;
-import static org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpStreamHandlerInitializer.URL_PREFIX;
-import static org.apache.hadoop.hdfs.server.datanode.web.dtp.HandlerNames.*;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.protobuf.ProtobufDecoder;
+import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
+import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.ByteString;
 
 import java.util.concurrent.ExecutorService;
 
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpRequest;
-
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ProtobufVarint32Decoder;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ProtobufVarint32Encoder;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.SimpleStreamInboundHandler;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.StreamHandlerContext;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.StreamPipeline;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
-import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
 
 /**
  *
  */
 @InterfaceAudience.Private
-class DtpUrlDispatcher extends SimpleStreamInboundHandler<HttpRequest> {
+public class DtpUrlDispatcher extends SimpleChannelInboundHandler<Http2Headers> {
+
+  static final Log LOG = LogFactory.getLog(DtpUrlDispatcher.class);
+
+  public static final int VERSION = 1;
+
+  public static final String URL_PREFIX = "/dtp/v" + VERSION;
+
+  public static final String OP_READ_BLOCK = "/read_block";
 
   private final DataNode datanode;
 
@@ -52,35 +59,33 @@ class DtpUrlDispatcher extends SimpleStreamInboundHandler<HttpRequest> {
   }
 
   @Override
-  protected void streamRead0(StreamHandlerContext ctx, HttpRequest req,
-      boolean endOfStream) throws Exception {
-    if (req.method() != HttpMethod.POST) {
-      throw new IllegalArgumentException("Only accept " + HttpMethod.POST
-          + " requests");
+  protected void channelRead0(ChannelHandlerContext ctx, Http2Headers headers)
+      throws Exception {
+    ByteString method = headers.method();
+    if (method == null || !method.toString().equals(HttpMethod.POST.name())) {
+      throw new IllegalArgumentException("Request method " + method
+          + " is not supported");
     }
-    if (!req.uri().startsWith(URL_PREFIX)) {
-      throw new IllegalArgumentException("No mapping found for uri "
-          + req.uri());
+    ByteString path = headers.path();
+    if (path == null || !path.toString().startsWith(URL_PREFIX)) {
+      throw new IllegalArgumentException("No mapping found for uri " + path);
     }
-    if (req.uri().endsWith(OP_READ_BLOCK)) {
-      StreamPipeline pipeline = ctx.stream().pipeline();
-      pipeline.remove(this);
-      pipeline
-          .addLast(RESPONSE_PROTO_ENCODER_HANDLER_NAME,
-            new ProtobufVarint32Encoder())
-          .addLast(REQUEST_PROTO_DECODER_HANDLER_NAME,
-            new ProtobufVarint32Decoder(OpReadBlockRequestProto.PARSER))
-          .addLast(READ_BLOCK_HANDLER_NAME,
-            new ReadBlockHandler(datanode, executor));
+    String uri = path.toString();
+    if (uri.endsWith(OP_READ_BLOCK)) {
+      ChannelPipeline pipeline = ctx.pipeline();
+      pipeline.remove(this).addLast(new ChunkedWriteHandler(),
+        new ProtobufVarint32Encoder(), new ProtobufVarint32FrameDecoder(),
+        new ProtobufDecoder(OpReadBlockRequestProto.getDefaultInstance()),
+        new ReadBlockHandler(datanode, executor));
     } else {
-      throw new IllegalArgumentException("No mapping found for uri "
-          + req.uri());
+      throw new IllegalArgumentException("No mapping found for uri " + uri);
     }
   }
 
   @Override
-  public void exceptionCaught(StreamHandlerContext ctx, Throwable cause) {
-    ctx.writeAndFlush(ExceptionHandler.exceptionCaught(cause), true);
+  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+      throws Exception {
+    Http2ExceptionHandler.exceptionCaught(ctx, cause);
   }
 
 }

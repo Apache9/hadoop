@@ -35,7 +35,7 @@ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 @InterfaceAudience.Private
 class DtpUtil {
 
-  private static final Log LOG = DtpStreamHandlerInitializer.LOG;
+  private static final Log LOG = DtpUrlDispatcher.LOG;
 
   static void checkAccess(DataNode datanode, ExtendedBlock block,
       Token<BlockTokenIdentifier> token, Op op,

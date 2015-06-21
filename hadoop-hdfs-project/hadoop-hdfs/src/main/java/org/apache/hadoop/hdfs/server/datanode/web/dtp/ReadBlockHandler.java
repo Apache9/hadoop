@@ -18,9 +18,11 @@
 package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.SUCCESS;
-import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http2.DefaultHttp2Headers;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -35,9 +37,7 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Op;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.EmbeddedStream;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.SimpleStreamInboundHandler;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.StreamHandlerContext;
+import org.apache.hadoop.hdfs.protocol.datatransfer.http2.LastChunkedInput;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ReadOpChecksumInfoProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
@@ -53,7 +53,6 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.LengthInputStream;
-import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
@@ -63,8 +62,8 @@ import org.apache.hadoop.util.DataChecksum;
  */
 @InterfaceAudience.Private
 class ReadBlockHandler extends
-    SimpleStreamInboundHandler<OpReadBlockRequestProto> {
-  private static final Log LOG = DtpStreamHandlerInitializer.LOG;
+    SimpleChannelInboundHandler<OpReadBlockRequestProto> {
+  private static final Log LOG = DtpUrlDispatcher.LOG;
 
   private final DataNode datanode;
 
@@ -109,14 +108,14 @@ class ReadBlockHandler extends
     }
   }
 
-  private void handleReadBlock(OpReadBlockRequestProto request,
-      EmbeddedStream stream) throws IOException {
+  private void handleReadBlock(ChannelHandlerContext ctx,
+      OpReadBlockRequestProto request) throws IOException {
     ExtendedBlock block =
         PBHelper.convert(request.getHeader().getBaseHeader().getBlock());
     Token<BlockTokenIdentifier> token =
         PBHelper.convert(request.getHeader().getBaseHeader().getToken());
     DtpUtil.checkAccess(datanode, block, token, Op.READ_BLOCK,
-      BlockTokenIdentifier.AccessMode.READ, stream.remoteAddress());
+      BlockTokenIdentifier.AccessMode.READ, ctx.channel().remoteAddress());
 
     FsDatasetSpi<? extends FsVolumeSpi> data = datanode.getFSDataset();
     Replica replica;
@@ -224,24 +223,24 @@ class ReadBlockHandler extends
       }
       blockInput = data.getBlockInputStream(block, startOffset);
       long length = endOffset - startOffset;
-      stream.write(new DefaultHttpResponse(HttpVersion.HTTP_1_1,
-          HttpResponseStatus.OK), false);
-      stream.write(
-        OpReadBlockResponseProto
-            .newBuilder()
-            .setStatus(SUCCESS)
-            .setReadOpChecksumInfo(
-              ReadOpChecksumInfoProto.newBuilder()
-                  .setChecksum(DataTransferProtoUtil.toProto(checksum))
-                  .setChunkOffset(startOffset)).build(), false);
-      stream.writeAndFlush(
-        new ChunkedBlockInput(volumeRef, blockInput, checksumInput,
-            lastChunkChecksum == null ? null : lastChunkChecksum.getChecksum(),
-            checksum, Math.max(
+      ctx.write(new DefaultHttp2Headers().status(HttpResponseStatus.OK
+          .codeAsText()));
+      ctx.write(OpReadBlockResponseProto
+          .newBuilder()
+          .setStatus(SUCCESS)
+          .setReadOpChecksumInfo(
+            ReadOpChecksumInfoProto.newBuilder()
+                .setChecksum(DataTransferProtoUtil.toProto(checksum))
+                .setChunkOffset(startOffset)).build());
+      ctx.writeAndFlush(
+        new LastChunkedInput(new ChunkedBlockInput(volumeRef, blockInput,
+            checksumInput, lastChunkChecksum == null ? null : lastChunkChecksum
+                .getChecksum(), checksum, Math.max(
               1,
               ChunkedBlockInput.numberOfBlockChunks(
                 DFSUtil.getIoFileBufferSize(datanode.getConf()),
-                checksum.getBytesPerChecksum())), length), true);
+                checksum.getBytesPerChecksum())), length))).addListener(
+        ChannelFutureListener.CLOSE_ON_FAILURE);
       success = true;
     } finally {
       if (!success) {
@@ -251,30 +250,25 @@ class ReadBlockHandler extends
   }
 
   @Override
-  protected void streamRead0(StreamHandlerContext ctx,
-      final OpReadBlockRequestProto request, boolean endOfStream)
+  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
-    if (!endOfStream) {
-      throw new IllegalArgumentException("More data than needed");
-    }
-    final EmbeddedStream stream = ctx.stream();
+    Http2ExceptionHandler.exceptionCaught(ctx, cause);
+  }
+
+  @Override
+  protected void channelRead0(final ChannelHandlerContext ctx,
+      final OpReadBlockRequestProto msg) throws Exception {
     executor.execute(new Runnable() {
 
       @Override
       public void run() {
         try {
-          handleReadBlock(request, stream);
+          handleReadBlock(ctx, msg);
         } catch (Throwable t) {
-          stream.pipeline().fireExceptionCaught(t);
+          ctx.channel().pipeline().fireExceptionCaught(t);
         }
       }
     });
-
-  }
-
-  @Override
-  public void exceptionCaught(StreamHandlerContext ctx, Throwable cause) {
-    ctx.writeAndFlush(ExceptionHandler.exceptionCaught(cause), true);
   }
 
 }

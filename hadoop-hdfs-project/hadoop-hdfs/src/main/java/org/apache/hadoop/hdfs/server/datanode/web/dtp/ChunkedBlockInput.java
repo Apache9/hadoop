@@ -41,7 +41,7 @@ import com.google.protobuf.CodedOutputStream;
 @InterfaceAudience.Private
 class ChunkedBlockInput implements ChunkedInput<ByteBuf> {
 
-  private static final Log LOG = DtpStreamHandlerInitializer.LOG;
+  private static final Log LOG = DtpUrlDispatcher.LOG;
 
   private final FsVolumeReference volumeRef;
 

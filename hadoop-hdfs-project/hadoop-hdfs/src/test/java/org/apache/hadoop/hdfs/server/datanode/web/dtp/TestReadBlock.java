@@ -33,6 +33,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
@@ -86,6 +87,7 @@ public class TestReadBlock {
 
   @BeforeClass
   public static void setUp() throws Exception {
+    CONF.setBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY, true);
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
 
@@ -125,8 +127,8 @@ public class TestReadBlock {
     out.close();
     HttpFields fields = new HttpFields();
     fields.put(HttpHeader.C_METHOD, HttpMethod.POST.asString());
-    fields.put(HttpHeader.C_PATH, DtpStreamHandlerInitializer.URL_PREFIX
-        + DtpStreamHandlerInitializer.OP_READ_BLOCK);
+    fields.put(HttpHeader.C_PATH, DtpUrlDispatcher.URL_PREFIX
+        + DtpUrlDispatcher.OP_READ_BLOCK);
     FuturePromise<Stream> streamPromise = new FuturePromise<>();
     StreamListener listener = new StreamListener();
     SESSION.newStream(new HeadersFrame(1, new MetaData(HttpVersion.HTTP_2,
@@ -182,8 +184,8 @@ public class TestReadBlock {
     out.close();
     HttpFields fields = new HttpFields();
     fields.put(HttpHeader.C_METHOD, HttpMethod.POST.asString());
-    fields.put(HttpHeader.C_PATH, DtpStreamHandlerInitializer.URL_PREFIX
-        + DtpStreamHandlerInitializer.OP_READ_BLOCK);
+    fields.put(HttpHeader.C_PATH, DtpUrlDispatcher.URL_PREFIX
+        + DtpUrlDispatcher.OP_READ_BLOCK);
     FuturePromise<Stream> streamPromise = new FuturePromise<>();
     StreamListener listener = new StreamListener();
     SESSION.newStream(new HeadersFrame(1, new MetaData(HttpVersion.HTTP_2,

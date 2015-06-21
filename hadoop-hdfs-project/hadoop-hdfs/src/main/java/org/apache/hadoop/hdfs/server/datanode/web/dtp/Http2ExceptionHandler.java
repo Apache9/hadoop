@@ -15,19 +15,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.server.datanode.web.dtp;
+
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.http2.HttpUtil;
 
 import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.hdfs.protocol.datatransfer.http2.LastMessage;
+import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
 
 /**
- * A StreamOutboundHandler only used for data transfer.
+ *
  */
 @InterfaceAudience.Private
-public interface StreamOutboundHandler extends StreamHandler {
+public class Http2ExceptionHandler {
 
-  void write(StreamHandlerContext ctx, Object msg, boolean endOfStream)
-      throws Exception;
-
-  void writeAndFlush(StreamHandlerContext ctx, Object msg, boolean endOfStream)
-      throws Exception;
+  public static void
+      exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+          throws Exception {
+    DefaultFullHttpResponse resp = ExceptionHandler.exceptionCaught(cause);
+    Http2Headers headers = HttpUtil.toHttp2Headers(resp);
+    if (resp.content().isReadable()) {
+      ctx.write(headers);
+      ctx.writeAndFlush(new LastMessage(resp.content()));
+    } else {
+      ctx.writeAndFlush(new LastMessage(headers));
+    }
+  }
 }

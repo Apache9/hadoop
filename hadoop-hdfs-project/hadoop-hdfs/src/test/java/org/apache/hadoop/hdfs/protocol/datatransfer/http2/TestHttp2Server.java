@@ -17,37 +17,27 @@
  */
 package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
-import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.util.ResourceLeakDetector;
-import io.netty.util.ResourceLeakDetector.Level;
+import io.netty.util.ReferenceCountUtil;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
-import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.http2.ErrorCode;
 import org.eclipse.jetty.http2.api.Stream;
@@ -61,36 +51,21 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+public class TestHttp2Server extends AbstractTestHttp2Server {
 
-public class TestHttp2ServerMultiThread extends AbstractTestHttp2Server {
+  private final AtomicInteger handlerClosedCount = new AtomicInteger(0);
 
-  private final class DispatchHandler extends
-      SimpleChannelInboundHandler<Http2Headers> {
-
-    @Override
-    protected void channelRead0(ChannelHandlerContext ctx, Http2Headers msg)
-        throws Exception {
-      ctx.writeAndFlush(new DefaultHttp2Headers().status(HttpResponseStatus.OK
-          .codeAsText()));
-      ctx.pipeline().replace(this, "echo", new EchoHandler());
-    }
-  }
-
-  private final class EchoHandler extends SimpleChannelInboundHandler<ByteBuf> {
+  private final class HelloWorldHandler extends ChannelInboundHandlerAdapter {
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg)
+    public void channelRead(ChannelHandlerContext ctx, Object msg)
         throws Exception {
-      ServerHttp2StreamChannel channel =
-          (ServerHttp2StreamChannel) ctx.channel();
-      ByteBuf out = msg.readBytes(msg.readableBytes());
-      if (channel.remoteSideClosed()) {
-        ctx.writeAndFlush(new LastMessage(out));
+      if (msg instanceof Http2Headers) {
+        ctx.writeAndFlush(new DefaultHttp2Headers()
+            .status(HttpResponseStatus.OK.codeAsText()));
       } else {
-        ctx.writeAndFlush(out);
+        ctx.writeAndFlush(new LastMessage(ReferenceCountUtil.retain(msg)));
       }
-
     }
 
     @Override
@@ -99,16 +74,6 @@ public class TestHttp2ServerMultiThread extends AbstractTestHttp2Server {
     }
 
   }
-
-  private final AtomicInteger handlerClosedCount = new AtomicInteger(0);
-
-  private int concurrency = 10;
-
-  private ExecutorService executor = Executors.newFixedThreadPool(concurrency,
-    new ThreadFactoryBuilder().setNameFormat("Echo-Client-%d").setDaemon(true)
-        .build());
-
-  private int requestCount = 10000;
 
   @Override
   protected Channel initServer() {
@@ -125,9 +90,9 @@ public class TestHttp2ServerMultiThread extends AbstractTestHttp2Server {
                   @Override
                   protected void initChannel(ServerHttp2StreamChannel ch)
                       throws Exception {
-                    ch.pipeline().addLast(new DispatchHandler());
+                    ch.pipeline().addLast(new HelloWorldHandler());
                   }
-                }, false));
+                }, true));
           }
 
         }).bind(0).syncUninterruptibly().channel();
@@ -135,17 +100,16 @@ public class TestHttp2ServerMultiThread extends AbstractTestHttp2Server {
 
   @Before
   public void setUp() throws Exception {
-    ResourceLeakDetector.setLevel(Level.ADVANCED);
     start();
   }
 
   @After
   public void tearDown() throws Exception {
-    executor.shutdownNow();
     stop();
   }
 
-  private void testEcho() throws InterruptedException, ExecutionException,
+  @Test
+  public void test() throws InterruptedException, ExecutionException,
       IOException {
     HttpFields fields = new HttpFields();
     fields.put(HttpHeader.C_METHOD, HttpMethod.GET.asString());
@@ -156,46 +120,21 @@ public class TestHttp2ServerMultiThread extends AbstractTestHttp2Server {
         org.eclipse.jetty.http.HttpVersion.HTTP_2, fields), new PriorityFrame(
         1, 0, 1, false), false), streamPromise, listener);
     Stream stream = streamPromise.get();
-    if (ThreadLocalRandom.current().nextInt(5) < 1) { // 20%
-      stream.reset(new ResetFrame(stream.getId(), ErrorCode.NO_ERROR.code),
-        new Callback.Adapter());
-    } else {
-      int numFrames = ThreadLocalRandom.current().nextInt(1, 3);
-      ByteArrayOutputStream msg = new ByteArrayOutputStream();
-      for (int i = 0; i < numFrames; i++) {
-        byte[] frame = new byte[ThreadLocalRandom.current().nextInt(10, 100)];
-        ThreadLocalRandom.current().nextBytes(frame);
-        stream.data(new DataFrame(stream.getId(), ByteBuffer.wrap(frame),
-            i == numFrames - 1), new Callback.Adapter());
-        msg.write(frame);
-      }
-      assertEquals(HttpStatus.OK_200, listener.getStatus());
-      assertArrayEquals(msg.toByteArray(), listener.getData());
-    }
-  }
+    stream.data(
+      new DataFrame(stream.getId(), ByteBuffer.wrap("Hello World"
+          .getBytes(StandardCharsets.UTF_8)), true), new Callback.Adapter());
+    assertEquals("Hello World", new String(listener.getData(),
+        StandardCharsets.UTF_8));
 
-  @Test
-  public void test() throws InterruptedException {
-    final AtomicBoolean succ = new AtomicBoolean(true);
-    for (int i = 0; i < requestCount; i++) {
-      executor.execute(new Runnable() {
-
-        @Override
-        public void run() {
-          try {
-            testEcho();
-          } catch (Throwable t) {
-            t.printStackTrace();
-            succ.set(false);
-          }
-        }
-      });
-    }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(5, TimeUnit.MINUTES));
-    assertTrue(succ.get());
+    streamPromise = new FuturePromise<>();
+    listener = new StreamListener();
+    session.newStream(new HeadersFrame(1, new MetaData(
+        org.eclipse.jetty.http.HttpVersion.HTTP_2, fields), new PriorityFrame(
+        1, 0, 1, false), false), streamPromise, listener);
+    stream = streamPromise.get();
+    stream.reset(new ResetFrame(stream.getId(), ErrorCode.NO_ERROR.code),
+      new Callback.Adapter());
     Thread.sleep(1000);
-    assertEquals(requestCount, handlerClosedCount.get());
+    assertEquals(2, handlerClosedCount.get());
   }
-
 }
