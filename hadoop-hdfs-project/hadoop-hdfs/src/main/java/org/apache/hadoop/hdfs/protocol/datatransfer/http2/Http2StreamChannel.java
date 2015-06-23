@@ -50,7 +50,7 @@ import com.google.common.collect.ImmutableSet;
  *
  */
 @InterfaceAudience.Private
-public class ServerHttp2StreamChannel extends AbstractChannel {
+public class Http2StreamChannel extends AbstractChannel {
 
   private static final ChannelMetadata METADATA = new ChannelMetadata(false);
 
@@ -80,7 +80,7 @@ public class ServerHttp2StreamChannel extends AbstractChannel {
 
   private AtomicReference<State> state;
 
-  public ServerHttp2StreamChannel(Channel parent, Http2Stream stream) {
+  public Http2StreamChannel(Channel parent, Http2Stream stream) {
     super(parent);
     this.http2ConnHandlerCtx =
         parent.pipeline().context(Http2ConnectionHandler.class);
@@ -94,8 +94,11 @@ public class ServerHttp2StreamChannel extends AbstractChannel {
         connHandler.connection().remote().flowController();
     this.encoder = connHandler.encoder();
     this.config = new DefaultChannelConfig(this);
-    this.state =
-        new AtomicReference<ServerHttp2StreamChannel.State>(State.OPEN);
+    this.state = new AtomicReference<Http2StreamChannel.State>(State.OPEN);
+  }
+
+  public Http2Stream stream() {
+    return stream;
   }
 
   @Override

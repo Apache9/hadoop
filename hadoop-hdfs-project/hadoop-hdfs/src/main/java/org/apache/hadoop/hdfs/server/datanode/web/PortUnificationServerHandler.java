@@ -33,8 +33,8 @@ import java.util.concurrent.ExecutorService;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ServerHttp2EventListener;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ServerHttp2StreamChannel;
+import org.apache.hadoop.hdfs.protocol.datatransfer.http2.Http2StreamChannel;
+import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ServerHttp2ConnectionHandler;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 
@@ -78,11 +78,11 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
 
   private void configureHttp2(ChannelHandlerContext ctx) {
     ctx.pipeline().addLast(
-      ServerHttp2EventListener.create(ctx.channel(),
-        new ChannelInitializer<ServerHttp2StreamChannel>() {
+      ServerHttp2ConnectionHandler.create(ctx.channel(),
+        new ChannelInitializer<Http2StreamChannel>() {
 
           @Override
-          protected void initChannel(ServerHttp2StreamChannel ch)
+          protected void initChannel(Http2StreamChannel ch)
               throws Exception {
             ch.pipeline().addLast(new DtpUrlDispatcher(datanode, executor));
           }
