@@ -15,57 +15,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.stream.ChunkedInput;
+import io.netty.channel.Channel;
+import io.netty.handler.codec.http2.Http2Connection;
+import io.netty.handler.codec.http2.Http2Connection.PropertyKey;
 
 /**
- * 
+ *
  */
 @InterfaceAudience.Private
-public class LastChunkedInput implements ChunkedInput<Object> {
+public class ClientHttp2EventListener extends AbstractHttp2EventListener {
 
-  private final ChunkedInput<ByteBuf> in;
+  public ClientHttp2EventListener(Channel parentChannel, Http2Connection conn) {
+    super(parentChannel, conn);
+  }
 
-  public LastChunkedInput(ChunkedInput<ByteBuf> in) {
-    this.in = in;
+  PropertyKey getSubChannelPropKey() {
+    return subChannelPropKey;
   }
 
   @Override
-  public boolean isEndOfInput() throws Exception {
-    return in.isEndOfInput();
-  }
-
-  @Override
-  public void close() throws Exception {
-    in.close();
-  }
-
-  @Override
-  public Object readChunk(ChannelHandlerContext ctx) throws Exception {
-    if (isEndOfInput()) {
-      return null;
-    }
-    ByteBuf chunk = in.readChunk(ctx);
-    if (isEndOfInput()) {
-      return new LastMessage(chunk);
-    } else {
-      return chunk;
-    }
-  }
-
-  @Override
-  public long length() {
-    return in.length();
-  }
-
-  @Override
-  public long progress() {
-    return in.progress();
+  protected void initChannelOnStreamActive(Http2StreamChannel subChannel) {
+    // disable read until pipeline initialized
+    subChannel.config().setAutoRead(false);
   }
 
 }

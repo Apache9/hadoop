@@ -47,11 +47,6 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ClientHttp2ConnectionHandler;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.Http2StreamBootstrap;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.Http2StreamChannel;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.LastMessage;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ResponseHandler;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BaseHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
@@ -61,6 +56,11 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRes
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
+import org.apache.hadoop.hdfs.web.http2.ClientHttp2ConnectionHandler;
+import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
+import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
+import org.apache.hadoop.hdfs.web.http2.LastHttp2Message;
+import org.apache.hadoop.hdfs.web.http2.ResponseHandler;
 import org.apache.hadoop.util.DataChecksum;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -171,7 +171,8 @@ public class TestReadBlock {
     proto.writeDelimitedTo(new ByteBufOutputStream(buf));
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     proto.writeDelimitedTo(bos);
-    stream.writeAndFlush(new LastMessage(buf));
+    stream.write(buf);
+    stream.writeAndFlush(LastHttp2Message.get());
     assertEquals(HttpResponseStatus.OK.codeAsText(), respHandler.getHeaders()
         .status());
     ByteArrayInputStream input =
@@ -242,7 +243,8 @@ public class TestReadBlock {
     proto.writeDelimitedTo(new ByteBufOutputStream(buf));
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     proto.writeDelimitedTo(bos);
-    stream.writeAndFlush(new LastMessage(buf));
+    stream.write(buf);
+    stream.writeAndFlush(LastHttp2Message.get());
     assertEquals(HttpResponseStatus.NOT_FOUND.codeAsText(), respHandler
         .getHeaders().status());
     JsonNode jsonNode =

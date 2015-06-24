@@ -15,119 +15,64 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
-import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.stream.ChunkedInput;
-import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.ReferenceCountUtil;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
-import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.MetaData;
+import org.eclipse.jetty.http2.ErrorCode;
 import org.eclipse.jetty.http2.api.Stream;
+import org.eclipse.jetty.http2.frames.DataFrame;
 import org.eclipse.jetty.http2.frames.HeadersFrame;
 import org.eclipse.jetty.http2.frames.PriorityFrame;
+import org.eclipse.jetty.http2.frames.ResetFrame;
+import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.FuturePromise;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-public class TestLastChunkedInput extends AbstractTestHttp2Server {
+public class TestHttp2Server extends AbstractTestHttp2Server {
 
-  protected List<byte[]> expectedChunkList;
+  private final AtomicInteger handlerClosedCount = new AtomicInteger(0);
 
-  protected byte[] combinedChunkes;
+  private final class HelloWorldHandler extends ChannelInboundHandlerAdapter {
 
-  private final class ChunkedHandler extends
-      SimpleChannelInboundHandler<Http2Headers> {
-
-    private final List<byte[]> chunkList;
-
-    public ChunkedHandler(List<byte[]> chunkList) {
-      this.chunkList = chunkList;
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg)
+        throws Exception {
+      if (msg instanceof Http2Headers) {
+        ctx.writeAndFlush(new DefaultHttp2Headers()
+            .status(HttpResponseStatus.OK.codeAsText()));
+      } else {
+        ctx.writeAndFlush(ReferenceCountUtil.retain(msg));
+      }
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, Http2Headers msg)
-        throws Exception {
-      ctx.write(new DefaultHttp2Headers().status(HttpResponseStatus.OK
-          .codeAsText()));
-      ctx.writeAndFlush(new LastChunkedInput(new ChunkedInput<ByteBuf>() {
-
-        private Iterator<byte[]> iter = chunkList.iterator();
-
-        @Override
-        public ByteBuf readChunk(ChannelHandlerContext ctx) throws Exception {
-          if (isEndOfInput()) {
-            return null;
-          }
-          return ctx.alloc().buffer().writeBytes(iter.next());
-        }
-
-        @Override
-        public long progress() {
-          return -1;
-        }
-
-        @Override
-        public long length() {
-          return -1;
-        }
-
-        @Override
-        public boolean isEndOfInput() throws Exception {
-          return !iter.hasNext();
-        }
-
-        @Override
-        public void close() throws Exception {
-          while (iter.hasNext()) {
-            iter.next();
-          }
-        }
-      })).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+      handlerClosedCount.incrementAndGet();
     }
-  }
 
-  @Before
-  public void setUp() throws Exception {
-    ByteArrayOutputStream bos = new ByteArrayOutputStream();
-    expectedChunkList = new ArrayList<>();
-    for (int i = 0; i < 5; i++) {
-      byte[] chunk = new byte[ThreadLocalRandom.current().nextInt(10, 50)];
-      ThreadLocalRandom.current().nextBytes(chunk);
-      expectedChunkList.add(chunk);
-      bos.write(chunk);
-    }
-    combinedChunkes = bos.toByteArray();
-    start();
-  }
-
-  @After
-  public void tearDown() throws Exception {
-    stop();
   }
 
   @Override
@@ -145,13 +90,22 @@ public class TestLastChunkedInput extends AbstractTestHttp2Server {
                   @Override
                   protected void initChannel(Http2StreamChannel ch)
                       throws Exception {
-                    ch.pipeline().addLast(new ChunkedWriteHandler(),
-                      new ChunkedHandler(expectedChunkList));
+                    ch.pipeline().addLast(new HelloWorldHandler());
                   }
                 }, true));
           }
 
         }).bind(0).syncUninterruptibly().channel();
+  }
+
+  @Before
+  public void setUp() throws Exception {
+    start();
+  }
+
+  @After
+  public void tearDown() throws Exception {
+    stop();
   }
 
   @Test
@@ -164,8 +118,23 @@ public class TestLastChunkedInput extends AbstractTestHttp2Server {
     StreamListener listener = new StreamListener();
     session.newStream(new HeadersFrame(1, new MetaData(
         org.eclipse.jetty.http.HttpVersion.HTTP_2, fields), new PriorityFrame(
-        1, 0, 1, false), true), streamPromise, listener);
-    assertEquals(HttpStatus.OK_200, listener.getStatus());
-    assertArrayEquals(combinedChunkes, listener.getData());
+        1, 0, 1, false), false), streamPromise, listener);
+    Stream stream = streamPromise.get();
+    stream.data(
+      new DataFrame(stream.getId(), ByteBuffer.wrap("Hello World"
+          .getBytes(StandardCharsets.UTF_8)), true), new Callback.Adapter());
+    assertEquals("Hello World", new String(listener.getData(),
+        StandardCharsets.UTF_8));
+
+    streamPromise = new FuturePromise<>();
+    listener = new StreamListener();
+    session.newStream(new HeadersFrame(1, new MetaData(
+        org.eclipse.jetty.http.HttpVersion.HTTP_2, fields), new PriorityFrame(
+        1, 0, 1, false), false), streamPromise, listener);
+    stream = streamPromise.get();
+    stream.reset(new ResetFrame(stream.getId(), ErrorCode.NO_ERROR.code),
+      new Callback.Adapter());
+    Thread.sleep(1000);
+    assertEquals(2, handlerClosedCount.get());
   }
 }

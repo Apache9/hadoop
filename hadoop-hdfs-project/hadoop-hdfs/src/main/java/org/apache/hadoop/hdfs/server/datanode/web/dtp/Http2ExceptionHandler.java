@@ -23,8 +23,8 @@ import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.HttpUtil;
 
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.LastMessage;
 import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
+import org.apache.hadoop.hdfs.web.http2.LastHttp2Message;
 
 /**
  *
@@ -37,11 +37,10 @@ public class Http2ExceptionHandler {
           throws Exception {
     DefaultFullHttpResponse resp = ExceptionHandler.exceptionCaught(cause);
     Http2Headers headers = HttpUtil.toHttp2Headers(resp);
+    ctx.write(headers);
     if (resp.content().isReadable()) {
-      ctx.write(headers);
-      ctx.writeAndFlush(new LastMessage(resp.content()));
-    } else {
-      ctx.writeAndFlush(new LastMessage(headers));
+      ctx.write(resp.content());
     }
+    ctx.writeAndFlush(LastHttp2Message.get());
   }
 }

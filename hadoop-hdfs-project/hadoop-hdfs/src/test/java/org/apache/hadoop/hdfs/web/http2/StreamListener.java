@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
 import java.io.IOException;
 import java.util.Arrays;

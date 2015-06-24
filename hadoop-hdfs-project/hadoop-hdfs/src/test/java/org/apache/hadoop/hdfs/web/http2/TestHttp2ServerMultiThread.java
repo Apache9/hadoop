@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -73,7 +73,8 @@ public class TestHttp2ServerMultiThread extends AbstractTestHttp2Server {
         throws Exception {
       ctx.writeAndFlush(new DefaultHttp2Headers().status(HttpResponseStatus.OK
           .codeAsText()));
-      ctx.pipeline().replace(this, "echo", new EchoHandler());
+      ctx.pipeline().remove(this)
+          .addLast(new EchoHandler(), new EndStreamHandler());
     }
   }
 
@@ -82,20 +83,24 @@ public class TestHttp2ServerMultiThread extends AbstractTestHttp2Server {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg)
         throws Exception {
-      Http2StreamChannel channel =
-          (Http2StreamChannel) ctx.channel();
-      ByteBuf out = msg.readBytes(msg.readableBytes());
-      if (channel.remoteSideClosed()) {
-        ctx.writeAndFlush(new LastMessage(out));
-      } else {
-        ctx.writeAndFlush(out);
-      }
-
+      ctx.writeAndFlush(msg.readBytes(msg.readableBytes()));
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
       handlerClosedCount.incrementAndGet();
+    }
+
+  }
+
+  private final class EndStreamHandler extends
+      SimpleChannelInboundHandler<LastHttp2Message> {
+
+    @Override
+    protected void
+        channelRead0(ChannelHandlerContext ctx, LastHttp2Message msg)
+            throws Exception {
+      ctx.writeAndFlush(msg);
     }
 
   }

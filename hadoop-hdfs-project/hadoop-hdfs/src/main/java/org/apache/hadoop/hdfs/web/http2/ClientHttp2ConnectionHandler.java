@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -65,31 +65,26 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
   @Override
   public void write(ChannelHandlerContext ctx, Object msg,
       ChannelPromise promise) throws Exception {
-    boolean endStream;
-    if (msg instanceof LastMessage) {
-      msg = ((LastMessage) msg).get();
-      endStream = true;
-    } else {
-      endStream = false;
-    }
     if (msg instanceof Http2HeadersAndPromise) {
       final Http2HeadersAndPromise headersAndPromise =
           (Http2HeadersAndPromise) msg;
       final int streamId = nextStreamId();
       Http2ConnectionEncoder encoder = encoder();
       encoder.writeHeaders(ctx, streamId, headersAndPromise.headers, 0,
-        endStream, promise).addListener(new ChannelFutureListener() {
+        headersAndPromise.endStream, promise).addListener(
+        new ChannelFutureListener() {
 
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-          if (future.isSuccess()) {
-            headersAndPromise.promise.setSuccess(connection().stream(streamId)
-                .<Http2StreamChannel> getProperty(subChannelPropKey));
-          } else {
-            headersAndPromise.promise.setFailure(future.cause());
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              headersAndPromise.promise.setSuccess(connection()
+                  .stream(streamId).<Http2StreamChannel> getProperty(
+                    subChannelPropKey));
+            } else {
+              headersAndPromise.promise.setFailure(future.cause());
+            }
           }
-        }
-      });
+        });
     } else {
       throw new UnsupportedMessageTypeException(msg, Http2Headers.class);
     }

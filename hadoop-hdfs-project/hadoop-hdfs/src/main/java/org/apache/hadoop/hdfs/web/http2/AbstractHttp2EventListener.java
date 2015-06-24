@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
 import static io.netty.handler.codec.http2.Http2CodecUtil.CONNECTION_STREAM_ID;
 import io.netty.buffer.ByteBuf;
@@ -83,10 +83,9 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
   private boolean writeInbound(int streamId, Object msg, boolean endOfStream,
       int pendingBytes) throws Http2Exception {
     Http2StreamChannel subChannel = getSubChannel(streamId);
+    subChannel.writeInbound(msg);
     if (endOfStream) {
-      subChannel.writeInbound(new LastMessage(msg));
-    } else {
-      subChannel.writeInbound(msg);
+      subChannel.writeInbound(LastHttp2Message.get());
     }
     if (subChannel.config().isAutoRead()) {
       subChannel.read();

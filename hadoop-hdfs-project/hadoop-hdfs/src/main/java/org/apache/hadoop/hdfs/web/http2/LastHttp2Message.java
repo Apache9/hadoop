@@ -15,24 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
-
-import org.apache.hadoop.classification.InterfaceAudience;
+package org.apache.hadoop.hdfs.web.http2;
 
 /**
  *
  */
-@InterfaceAudience.Private
-public class LastMessage {
+public class LastHttp2Message {
 
-  private final Object msg;
-
-  public LastMessage(Object msg) {
-    this.msg = msg;
+  private static final LastHttp2Message INSTANCE = new LastHttp2Message();
+  
+  public static LastHttp2Message get() {
+    return INSTANCE;
   }
-
-  public Object get() {
-    return msg;
-  }
-
 }

@@ -37,7 +37,6 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Op;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.LastChunkedInput;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ReadOpChecksumInfoProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
@@ -53,6 +52,7 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.LengthInputStream;
+import org.apache.hadoop.hdfs.web.http2.LastHttp2Message;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
@@ -232,15 +232,16 @@ class ReadBlockHandler extends
             ReadOpChecksumInfoProto.newBuilder()
                 .setChecksum(DataTransferProtoUtil.toProto(checksum))
                 .setChunkOffset(startOffset)).build());
-      ctx.writeAndFlush(
-        new LastChunkedInput(new ChunkedBlockInput(volumeRef, blockInput,
-            checksumInput, lastChunkChecksum == null ? null : lastChunkChecksum
-                .getChecksum(), checksum, Math.max(
+      ctx.write(
+        new ChunkedBlockInput(volumeRef, blockInput, checksumInput,
+            lastChunkChecksum == null ? null : lastChunkChecksum.getChecksum(),
+            checksum, Math.max(
               1,
               ChunkedBlockInput.numberOfBlockChunks(
                 DFSUtil.getIoFileBufferSize(datanode.getConf()),
-                checksum.getBytesPerChecksum())), length))).addListener(
+                checksum.getBytesPerChecksum())), length)).addListener(
         ChannelFutureListener.CLOSE_ON_FAILURE);
+      ctx.writeAndFlush(LastHttp2Message.get());
       success = true;
     } finally {
       if (!success) {

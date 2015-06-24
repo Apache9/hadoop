@@ -33,10 +33,10 @@ import java.util.concurrent.ExecutorService;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.Http2StreamChannel;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ServerHttp2ConnectionHandler;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
+import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
+import org.apache.hadoop.hdfs.web.http2.ServerHttp2ConnectionHandler;
 
 /**
  * A port unification handler to support HTTP/1.1 and HTTP/2 on the same port.

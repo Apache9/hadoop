@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -70,7 +70,7 @@ public class Http2StreamBootstrap {
         channel.eventLoop().<Http2StreamChannel> newPromise();
 
     Http2HeadersAndPromise headersAndPromise =
-        new Http2HeadersAndPromise(headers, channel.eventLoop()
+        new Http2HeadersAndPromise(headers, endStream, channel.eventLoop()
             .<Http2StreamChannel> newPromise()
             .addListener(new FutureListener<Http2StreamChannel>() {
 
@@ -100,8 +100,7 @@ public class Http2StreamBootstrap {
               }
 
             }));
-    channel.writeAndFlush(endStream ? new LastMessage(headersAndPromise)
-        : headersAndPromise);
+    channel.writeAndFlush(headersAndPromise);
     return registeredPromise;
   }
 }

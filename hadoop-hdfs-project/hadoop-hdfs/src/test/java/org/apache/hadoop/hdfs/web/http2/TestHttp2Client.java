@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
 import static org.junit.Assert.assertEquals;
 import io.netty.bootstrap.Bootstrap;
@@ -139,8 +139,9 @@ public class TestHttp2Client {
                         + ((InetSocketAddress) channel.remoteAddress())
                             .getPort(), StandardCharsets.UTF_8)))
             .endStream(false).connect().sync().get();
-    stream.writeAndFlush(new LastMessage(stream.alloc().buffer()
-        .writeBytes("Hello World".getBytes(StandardCharsets.UTF_8))));
+    stream.write(stream.alloc().buffer()
+        .writeBytes("Hello World".getBytes(StandardCharsets.UTF_8)));
+    stream.writeAndFlush(LastHttp2Message.get());
     assertEquals(respHandler.getHeaders().status(),
       HttpResponseStatus.OK.codeAsText());
     assertEquals("Hello World", new String(respHandler.getData(),

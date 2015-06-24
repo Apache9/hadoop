@@ -15,32 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
-import org.apache.hadoop.classification.InterfaceAudience;
-
-import io.netty.channel.Channel;
-import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2Connection.PropertyKey;
+import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.util.concurrent.Promise;
 
 /**
  *
  */
-@InterfaceAudience.Private
-public class ClientHttp2EventListener extends AbstractHttp2EventListener {
+class Http2HeadersAndPromise {
 
-  public ClientHttp2EventListener(Channel parentChannel, Http2Connection conn) {
-    super(parentChannel, conn);
-  }
+  final Http2Headers headers;
 
-  PropertyKey getSubChannelPropKey() {
-    return subChannelPropKey;
-  }
+  final boolean endStream;
 
-  @Override
-  protected void initChannelOnStreamActive(Http2StreamChannel subChannel) {
-    // disable read until pipeline initialized
-    subChannel.config().setAutoRead(false);
+  final Promise<Http2StreamChannel> promise;
+
+  Http2HeadersAndPromise(Http2Headers headers, boolean endStream,
+      Promise<Http2StreamChannel> promise) {
+    this.headers = headers;
+    this.endStream = endStream;
+    this.promise = promise;
   }
 
 }

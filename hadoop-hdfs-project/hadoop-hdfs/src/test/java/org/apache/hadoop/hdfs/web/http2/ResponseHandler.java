@@ -1,4 +1,4 @@
-package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
+package org.apache.hadoop.hdfs.web.http2;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -20,19 +20,16 @@ public class ResponseHandler extends ChannelInboundHandlerAdapter {
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object msg)
       throws Exception {
-    boolean endOfStream =
-        ((Http2StreamChannel) ctx.channel()).remoteSideClosed();
     synchronized (this) {
-      if (msg instanceof Http2Headers) {
+      if (msg == LastHttp2Message.get()) {
+        finished = true;
+        data = bos.toByteArray();
+        notifyAll();
+      } else if (msg instanceof Http2Headers) {
         headers = (Http2Headers) msg;
       } else if (msg instanceof ByteBuf) {
         ByteBuf buf = (ByteBuf) msg;
         buf.readBytes(bos, buf.readableBytes());
-      }
-      if (endOfStream) {
-        finished = true;
-        data = bos.toByteArray();
-        notifyAll();
       }
     }
   }
