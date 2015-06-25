@@ -78,7 +78,7 @@ public class TestHttp2BlockReader {
 
     String fileName = "/test2";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
-    int len = 1024;
+    int len = 4096 * 100;
     byte[] b = new byte[len];
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
@@ -89,7 +89,7 @@ public class TestHttp2BlockReader {
     SessionAndStreamId sessionAndStreamId =
         http2ConnPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER.getDataNodes().get(0)
             .getInfoPort()));
-    int offset = 1;
+    int offset = 0;
     int length = len - offset;
     BlockReader blockReader =
         new Http2BlockReader(sessionAndStreamId, block.toString(), block, offset, true,

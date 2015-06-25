@@ -24,7 +24,9 @@ import java.nio.ByteBuffer;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
+import org.apache.hadoop.hdfs.web.http2.StreamListener;
 import org.apache.hadoop.util.DataChecksum;
+import org.mortbay.log.Log;
 
 public class ChunkInputStream extends InputStream {
 
@@ -38,7 +40,7 @@ public class ChunkInputStream extends InputStream {
 
   private long dataPos = 0;
 
-  public ChunkInputStream(ContinuousStreamListener listener) {
+  public ChunkInputStream(StreamListener listener) {
     this.frameInputStream = new FrameInputStream(listener);
   }
 
@@ -69,9 +71,12 @@ public class ChunkInputStream extends InputStream {
             + checksum.length);
       }
       int dataLength = frameHeaderProto.getDataLength();
+      Log.info("=== " + dataLength);
       byte[] data = new byte[dataLength];
       IOUtils.readFully(this.frameInputStream, data);
+      Log.info("***");
       this.verifyChecksum(checksum, data, dataPos);
+      this.dataChecksum.reset();
       this.dataPos += dataLength;
       this.buffer = ByteBuffer.wrap(data);
       return buffer.get() & 0xff;

@@ -32,7 +32,6 @@ import org.apache.hadoop.hdfs.Http2ConnectionPool.SessionAndStreamId;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ChunkInputStream;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ContinuousStreamListener;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BaseHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
@@ -42,6 +41,7 @@ import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.shortcircuit.ClientMmap;
+import org.apache.hadoop.hdfs.web.http2.StreamListener;
 import org.apache.hadoop.util.DataChecksum;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
@@ -88,8 +88,9 @@ public class Http2BlockReader implements BlockReader {
 
   private ChunkInputStream chunkInputStream = null;
 
-  private ContinuousStreamListener listener = null;
+  //private ContinuousStreamListener listener = null;
 
+  private StreamListener listener = null;
   public Http2BlockReader(SessionAndStreamId sessionAndSessionId, String fileName,
       ExtendedBlock block, long startOffsetInBlock, boolean verifyChecksum, String clientName,
       long length, CachingStrategy strategy) {
@@ -151,12 +152,12 @@ public class Http2BlockReader implements BlockReader {
     if (!this.newStream) {
       HttpFields fields = new HttpFields();
       fields.put(HttpHeader.C_METHOD, HttpMethod.POST.asString());
-      fields.put(HttpHeader.C_PATH, DtpUrlDispatcher.URL_PREFIX
-          + DtpUrlDispatcher.OP_READ_BLOCK);
+      fields.put(HttpHeader.C_PATH, DtpUrlDispatcher.URL_PREFIX + DtpUrlDispatcher.OP_READ_BLOCK);
       FuturePromise<Stream> streamPromise = null;
       int streamId = streamIdGenerator.getAndAdd(2);
       streamPromise = new FuturePromise<>();
-      this.listener = new ContinuousStreamListener();
+      this.listener = new StreamListener();
+      //this.listener = new ContinuousStreamListener();
       session.newStream(new HeadersFrame(streamId, new MetaData(
           org.eclipse.jetty.http.HttpVersion.HTTP_2, fields), new PriorityFrame(streamId, 0, 1,
           false), false), streamPromise, this.listener);
@@ -179,7 +180,9 @@ public class Http2BlockReader implements BlockReader {
       stream.data(new DataFrame(stream.getId(), ByteBuffer.wrap(bos.toByteArray()), true),
         new Callback.Adapter());
       try {
+        LOG.info("before get status");
         if (listener.getStatus() == HttpStatus.OK_200) {
+          LOG.info("after get status");
           this.chunkInputStream = new ChunkInputStream(listener);
           OpReadBlockResponseProto respProto =
               OpReadBlockResponseProto.parseDelimitedFrom(this.chunkInputStream

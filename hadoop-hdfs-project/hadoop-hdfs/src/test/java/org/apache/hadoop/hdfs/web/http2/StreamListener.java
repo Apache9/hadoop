@@ -27,6 +27,7 @@ import org.eclipse.jetty.http2.frames.DataFrame;
 import org.eclipse.jetty.http2.frames.HeadersFrame;
 import org.eclipse.jetty.http2.frames.ResetFrame;
 import org.eclipse.jetty.util.Callback;
+import org.mortbay.log.Log;
 
 public class StreamListener extends Stream.Listener.Adapter {
 
@@ -40,6 +41,7 @@ public class StreamListener extends Stream.Listener.Adapter {
 
   @Override
   public void onData(Stream stream, DataFrame frame, Callback callback) {
+    Log.info("onData");
     synchronized (this) {
       if (reset) {
         callback.failed(new IllegalStateException("Stream already closed"));
@@ -54,6 +56,7 @@ public class StreamListener extends Stream.Listener.Adapter {
       frame.getData().get(buf, bufLen, frame.getData().remaining());
       if (frame.isEndStream()) {
         finish = true;
+        Log.info("set finish");
       }
       notifyAll();
       callback.succeeded();
@@ -76,6 +79,7 @@ public class StreamListener extends Stream.Listener.Adapter {
       status = ((Response) meta).getStatus();
       if (frame.isEndStream()) {
         finish = true;
+        Log.info("set finish");
         notifyAll();
       }
     }
@@ -86,6 +90,7 @@ public class StreamListener extends Stream.Listener.Adapter {
     synchronized (this) {
       reset = true;
       finish = true;
+      Log.info("set finish");
       notifyAll();
     }
   }
