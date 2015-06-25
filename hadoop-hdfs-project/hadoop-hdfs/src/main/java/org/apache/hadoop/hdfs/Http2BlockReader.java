@@ -32,6 +32,7 @@ import org.apache.hadoop.hdfs.Http2ConnectionPool.SessionAndStreamId;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ChunkInputStream;
+import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ContinuousStreamListener;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BaseHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
@@ -41,7 +42,6 @@ import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.shortcircuit.ClientMmap;
-import org.apache.hadoop.hdfs.web.http2.StreamListener;
 import org.apache.hadoop.util.DataChecksum;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
@@ -88,9 +88,7 @@ public class Http2BlockReader implements BlockReader {
 
   private ChunkInputStream chunkInputStream = null;
 
-  //private ContinuousStreamListener listener = null;
-
-  private StreamListener listener = null;
+  private ContinuousStreamListener listener = null;
 
   public Http2BlockReader(SessionAndStreamId sessionAndSessionId, String fileName,
       ExtendedBlock block, long startOffsetInBlock, boolean verifyChecksum, String clientName,
@@ -157,7 +155,7 @@ public class Http2BlockReader implements BlockReader {
       FuturePromise<Stream> streamPromise = null;
       int streamId = streamIdGenerator.getAndAdd(2);
       streamPromise = new FuturePromise<>();
-      this.listener = new StreamListener();
+      this.listener = new ContinuousStreamListener();
       //this.listener = new ContinuousStreamListener();
       session.newStream(new HeadersFrame(streamId, new MetaData(
           org.eclipse.jetty.http.HttpVersion.HTTP_2, fields), new PriorityFrame(streamId, 0, 1,
@@ -197,7 +195,7 @@ public class Http2BlockReader implements BlockReader {
             }
             this.chunkInputStream.setDataChecksum(dataChecksum);
             this.chunkInputStream.setFileName(this.fileName);
-            LOG.info(this.startOffsetInBlock + "   ### " + chunkOffset);
+            this.chunkInputStream.setChunkOffset(chunkOffset);
             this.chunkInputStream.setSkipBytes(this.startOffsetInBlock - chunkOffset);
             this.newStream = true;
           } else {

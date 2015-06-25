@@ -20,12 +20,10 @@ package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
-import org.apache.hadoop.hdfs.web.http2.StreamListener;
 import org.apache.hadoop.util.DataChecksum;
 
 public class ChunkInputStream extends InputStream {
@@ -38,16 +36,20 @@ public class ChunkInputStream extends InputStream {
 
   private ByteBuffer buffer = ByteBuffer.wrap(new byte[0]);
 
-  private long dataPos = 0;
+  private long dataPos;
 
   private long skipBytes;
 
-  public ChunkInputStream(StreamListener listener) {
+  public ChunkInputStream(ContinuousStreamListener listener) {
     this.frameInputStream = new FrameInputStream(listener);
   }
 
   public void setDataChecksum(DataChecksum dataChecksum) {
     this.dataChecksum = dataChecksum;
+  }
+
+  public void setChunkOffset(long chunkOffset) {
+    this.dataPos = chunkOffset;
   }
 
   public void setFileName(String fileName) {
@@ -79,17 +81,14 @@ public class ChunkInputStream extends InputStream {
           OpReadBlockFrameHeaderProto.parseDelimitedFrom(frameInputStream);
       int numChunks = frameHeaderProto.getNumChunks();
       byte[] checksum = frameHeaderProto.getChecksums().toByteArray();
-      System.err.println("===checksum: " + Arrays.toString(checksum));
       if (checksum.length != dataChecksum.getChecksumSize() * numChunks) {
         throw new IOException("checksum size not matched,expected size in header is "
             + dataChecksum.getChecksumSize() + ", but actual size in header frame is "
             + checksum.length);
       }
       int dataLength = frameHeaderProto.getDataLength();
-      System.err.println("=== " + dataLength);
       byte[] data = new byte[dataLength];
       IOUtils.readFully(this.frameInputStream, data);
-      System.err.println("***");
       this.dataChecksum.reset();
       this.verifyChecksum(checksum, data, dataPos);
       this.dataPos += dataLength;

@@ -21,28 +21,21 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-import org.apache.hadoop.hdfs.web.http2.StreamListener;
-import org.mortbay.log.Log;
-
 public class FrameInputStream extends InputStream {
 
-  private StreamListener listener;
+  private ContinuousStreamListener listener;
 
   private ByteBuffer buffer = ByteBuffer.wrap(new byte[0]);
 
-  public FrameInputStream(StreamListener listener) {
+  public FrameInputStream(ContinuousStreamListener listener) {
     this.listener = listener;
   }
 
-  public static int count = 0;
   @Override
   public int read() throws IOException {
     if (buffer.remaining() <= 0) {
       try {
-        Log.info("before get data, count=" + count);
         byte[] b = listener.getData();
-        count+= b.length;
-        Log.info("after get data " + b.length);
         buffer = ByteBuffer.wrap(b);
         if (buffer.remaining() == 0) {
           return -1;

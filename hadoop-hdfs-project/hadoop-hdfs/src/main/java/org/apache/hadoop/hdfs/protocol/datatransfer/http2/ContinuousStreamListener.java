@@ -27,7 +27,6 @@ import org.eclipse.jetty.http2.frames.DataFrame;
 import org.eclipse.jetty.http2.frames.HeadersFrame;
 import org.eclipse.jetty.http2.frames.ResetFrame;
 import org.eclipse.jetty.util.Callback;
-import org.mortbay.log.Log;
 
 public class ContinuousStreamListener extends Stream.Listener.Adapter {
 
@@ -78,7 +77,6 @@ public class ContinuousStreamListener extends Stream.Listener.Adapter {
     synchronized (gotData) {
       if (frame.isEndStream()) {
         finish = true;
-        Log.info("====== set finish");
         gotData.notifyAll();
       }
     }
@@ -100,7 +98,6 @@ public class ContinuousStreamListener extends Stream.Listener.Adapter {
       data = true;
       if (frame.isEndStream()) {
         finish = true;
-        Log.info("====== set finish");
       }
       gotData.notifyAll();
       callback.succeeded();
