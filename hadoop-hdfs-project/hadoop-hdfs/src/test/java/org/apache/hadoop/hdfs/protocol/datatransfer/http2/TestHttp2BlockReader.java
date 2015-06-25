@@ -17,10 +17,15 @@
  */
 package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
+import static org.junit.Assert.assertTrue;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -38,6 +43,8 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public class TestHttp2BlockReader {
 
@@ -68,9 +75,10 @@ public class TestHttp2BlockReader {
 
   @Test
   public void test() throws IllegalArgumentException, IOException {
-    String fileName = "/test";
+
+    String fileName = "/test2";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
-    int len = 6 * 1024 * 1024 - 10;
+    int len = 1024;
     byte[] b = new byte[len];
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
@@ -81,16 +89,75 @@ public class TestHttp2BlockReader {
     SessionAndStreamId sessionAndStreamId =
         http2ConnPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER.getDataNodes().get(0)
             .getInfoPort()));
+    int offset = 1;
+    int length = len - offset;
     BlockReader blockReader =
-        new Http2BlockReader(sessionAndStreamId, block.toString(), block, 1, true, "clientName",
-            len - 1, null);
-    byte[] result = new byte[len];
-    blockReader.read(result, 0, len);
-    byte[] expected = new byte[b.length - 1];
-    for (int i = 0; i < expected.length; ++i) {
-      expected[i] = b[i + 1];
+        new Http2BlockReader(sessionAndStreamId, block.toString(), block, offset, true,
+            "clientName", length, null);
+    byte[] result = new byte[length];
+    blockReader.readFully(result, 0, length);
+    byte[] expected = new byte[length];
+    for (int i = 0; i < length; ++i) {
+      expected[i] = b[i + offset];
     }
     Arrays.equals(result, expected);
+    http2ConnPool.close();
+  }
+
+  @Test
+  public void testPerformance() throws IllegalArgumentException, IOException, InterruptedException {
+    String fileName = "/test";
+    FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
+    final int len = 6 * 1024 * 1024 - 10;
+    final byte[] b = new byte[len];
+    ThreadLocalRandom.current().nextBytes(b);
+    out.write(b);
+    out.close();
+
+    final ExtendedBlock block =
+        CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0).get(0).getBlock();
+
+    final Http2ConnectionPool http2ConnectionPool = new Http2ConnectionPool();
+
+    int concurrency = 50;
+
+    ExecutorService executor =
+        Executors.newFixedThreadPool(concurrency,
+          new ThreadFactoryBuilder().setNameFormat("Http2-BlockReader-%d").setDaemon(true).build());
+    for (int i = 0; i < concurrency; ++i) {
+      final int index = i;
+      executor.execute(new Runnable() {
+
+        @Override
+        public void run() {
+          try {
+            SessionAndStreamId sessionAndStreamId =
+                http2ConnectionPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER
+                    .getDataNodes().get(0).getInfoPort()));
+            int offset = ThreadLocalRandom.current().nextInt(0, len);
+            int length = len - offset;
+            BlockReader blockReader =
+                new Http2BlockReader(sessionAndStreamId, block.toString(), block, offset, true,
+                    "clientName" + index, length, null);
+            byte[] expected = new byte[length];
+            for (int j = 0; j < length; ++j) {
+              expected[j] = b[j + offset];
+            }
+            byte[] result = new byte[length];
+            blockReader.readFully(result, 0, length);
+            Arrays.equals(expected, result);
+            System.out.println("succ");
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
+
+      });
+    }
+    executor.shutdown();
+    assertTrue(executor.awaitTermination(5, TimeUnit.MINUTES));
+    http2ConnectionPool.close();
+
   }
 
 }

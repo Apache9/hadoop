@@ -57,7 +57,7 @@ public class ChunkInputStream extends InputStream {
   @Override
   public int read() throws IOException {
     if (buffer.remaining() > 0) {
-      return (int) buffer.get();
+      return buffer.get() & 0xff;
     } else {
       OpReadBlockFrameHeaderProto frameHeaderProto =
           OpReadBlockFrameHeaderProto.parseDelimitedFrom(frameInputStream);
