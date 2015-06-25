@@ -75,6 +75,14 @@ public class ChunkInputStream extends InputStream {
 
   @Override
   public int read(byte b[], int off, int len) throws IOException {
+    if (b == null) {
+      throw new NullPointerException();
+    } else if (off < 0 || len < 0 || len > b.length - off) {
+      throw new IndexOutOfBoundsException();
+    } else if (len == 0) {
+      return 0;
+    }
+
     while (this.skipBytes > 0) {
       if (buffer.remaining() > 0) {
         int skip = Math.min(buffer.remaining(), this.skipBytes);
