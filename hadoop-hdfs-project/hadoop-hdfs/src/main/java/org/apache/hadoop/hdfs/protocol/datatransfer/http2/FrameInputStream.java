@@ -49,4 +49,36 @@ public class FrameInputStream extends InputStream {
       return buffer.get() & 0xff;
     }
   }
+
+  @Override
+  public int read(byte b[], int off, int len) throws IOException {
+    if (b == null) {
+      throw new NullPointerException();
+    } else if (off < 0 || len < 0 || len > b.length - off) {
+      throw new IndexOutOfBoundsException();
+    } else if (len == 0) {
+      return 0;
+    }
+    if (buffer.remaining() > 0) {
+      int nRead = Math.min(buffer.remaining(), len);
+      this.buffer.get(b, off, nRead);
+      return nRead;
+    } else {
+      byte[] data;
+      try {
+        data = listener.getData();
+      } catch (InterruptedException e) {
+        throw new IOException(e);
+      }
+      if (data.length == 0) {
+        return -1;
+      } else {
+        this.buffer = ByteBuffer.wrap(data);
+        int nRead = Math.min(this.buffer.remaining(), len);
+        this.buffer.get(b, off, nRead);
+        return nRead;
+      }
+    }
+
+  }
 }

@@ -38,7 +38,7 @@ public class ChunkInputStream extends InputStream {
 
   private long dataPos;
 
-  private long skipBytes;
+  private int skipBytes;
 
   public ChunkInputStream(ContinuousStreamListener listener) {
     this.frameInputStream = new FrameInputStream(listener);
@@ -57,7 +57,7 @@ public class ChunkInputStream extends InputStream {
   }
 
   public void setSkipBytes(long skipBytes) {
-    this.skipBytes = skipBytes;
+    this.skipBytes = (int) skipBytes;
   }
 
   public FrameInputStream getFrameInputStream() {
@@ -71,6 +71,32 @@ public class ChunkInputStream extends InputStream {
       skipBytes--;
     }
     return getByte();
+  }
+
+  @Override
+  public int read(byte b[], int off, int len) throws IOException {
+    while (this.skipBytes > 0) {
+      if (buffer.remaining() > 0) {
+        int skip = Math.min(buffer.remaining(), this.skipBytes);
+        buffer.position(buffer.position() + skip);
+        this.skipBytes -= skip;
+      } else {
+        byte[] data = new byte[this.skipBytes];
+        int ret = this.frameInputStream.read(data, 0, skipBytes);
+        if (ret == -1) {
+          return -1;
+        } else {
+          this.skipBytes -= ret;
+        }
+      }
+    }
+    if (buffer.remaining() > 0) {
+      int nRead = Math.min(buffer.remaining(), len);
+      this.buffer.get(b, off, nRead);
+      return nRead;
+    } else {
+      return this.frameInputStream.read(b, off, len);
+    }
   }
 
   private int getByte() throws IOException {

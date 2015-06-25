@@ -78,7 +78,7 @@ public class TestHttp2BlockReader {
   public void test() throws IllegalArgumentException, IOException {
     String fileName = "/test2";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
-    int len = 6 * 1024 - 10;
+    int len = 6 * 1024 * 1024 - 10;
     byte[] b = new byte[len];
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
