@@ -41,14 +41,12 @@ public class StreamListener extends Stream.Listener.Adapter {
 
   @Override
   public void onData(Stream stream, DataFrame frame, Callback callback) {
-    Log.info("onData");
     synchronized (this) {
       if (reset) {
         callback.failed(new IllegalStateException("Stream already closed"));
       }
       if (status == -1) {
-        callback
-            .failed(new IllegalStateException("Haven't received header yet"));
+        callback.failed(new IllegalStateException("Haven't received header yet"));
       }
       int bufLen = buf.length;
       int newBufLen = bufLen + frame.getData().remaining();

@@ -91,6 +91,7 @@ public class Http2BlockReader implements BlockReader {
   //private ContinuousStreamListener listener = null;
 
   private StreamListener listener = null;
+
   public Http2BlockReader(SessionAndStreamId sessionAndSessionId, String fileName,
       ExtendedBlock block, long startOffsetInBlock, boolean verifyChecksum, String clientName,
       long length, CachingStrategy strategy) {
@@ -180,9 +181,7 @@ public class Http2BlockReader implements BlockReader {
       stream.data(new DataFrame(stream.getId(), ByteBuffer.wrap(bos.toByteArray()), true),
         new Callback.Adapter());
       try {
-        LOG.info("before get status");
         if (listener.getStatus() == HttpStatus.OK_200) {
-          LOG.info("after get status");
           this.chunkInputStream = new ChunkInputStream(listener);
           OpReadBlockResponseProto respProto =
               OpReadBlockResponseProto.parseDelimitedFrom(this.chunkInputStream
@@ -198,9 +197,8 @@ public class Http2BlockReader implements BlockReader {
             }
             this.chunkInputStream.setDataChecksum(dataChecksum);
             this.chunkInputStream.setFileName(this.fileName);
-            if (chunkOffset < this.startOffsetInBlock) {
-              chunkInputStream.skip(this.startOffsetInBlock - chunkOffset);
-            }
+            LOG.info(this.startOffsetInBlock + "   ### " + chunkOffset);
+            this.chunkInputStream.setSkipBytes(this.startOffsetInBlock - chunkOffset);
             this.newStream = true;
           } else {
             String message = "resp status is " + respProto.getStatus();

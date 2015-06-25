@@ -44,6 +44,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mortbay.log.Log;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -79,7 +80,7 @@ public class TestHttp2BlockReader {
   public void test() throws IllegalArgumentException, IOException {
     String fileName = "/test2";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
-    int len = 4096 * 100;
+    int len = 6 * 1024 - 10;
     byte[] b = new byte[len];
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
@@ -90,7 +91,7 @@ public class TestHttp2BlockReader {
     SessionAndStreamId sessionAndStreamId =
         http2ConnPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER.getDataNodes().get(0)
             .getInfoPort()));
-    int offset = 0;
+    int offset = 1;
     int length = len - offset;
     BlockReader blockReader =
         new Http2BlockReader(sessionAndStreamId, block.toString(), block, offset, true,
@@ -109,7 +110,7 @@ public class TestHttp2BlockReader {
   public void testPerformance() throws IllegalArgumentException, IOException, InterruptedException {
     String fileName = "/test";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
-    final int len = 6 * 1024 * 1024 - 10;
+    final int len = 6 * 1024 - 10;
     final byte[] b = new byte[len];
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
@@ -120,7 +121,7 @@ public class TestHttp2BlockReader {
 
     final Http2ConnectionPool http2ConnectionPool = new Http2ConnectionPool();
 
-    int concurrency = 50;
+    int concurrency = 1;
 
     ExecutorService executor =
         Executors.newFixedThreadPool(concurrency,
@@ -131,11 +132,12 @@ public class TestHttp2BlockReader {
 
         @Override
         public void run() {
+          int offset = 0;
           try {
             SessionAndStreamId sessionAndStreamId =
                 http2ConnectionPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER
                     .getDataNodes().get(0).getInfoPort()));
-            int offset = ThreadLocalRandom.current().nextInt(0, len);
+            offset = 511;//ThreadLocalRandom.current().nextInt(0, len);
             int length = len - offset;
             BlockReader blockReader =
                 new Http2BlockReader(sessionAndStreamId, block.toString(), block, offset, true,
@@ -147,8 +149,8 @@ public class TestHttp2BlockReader {
             byte[] result = new byte[length];
             blockReader.readFully(result, 0, length);
             Arrays.equals(expected, result);
-            System.out.println("succ");
           } catch (IOException e) {
+            Log.info("offset:" + offset);
             e.printStackTrace();
           }
         }

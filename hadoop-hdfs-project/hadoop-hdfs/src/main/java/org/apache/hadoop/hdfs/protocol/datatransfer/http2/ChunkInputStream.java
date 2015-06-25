@@ -40,6 +40,8 @@ public class ChunkInputStream extends InputStream {
 
   private long dataPos = 0;
 
+  private long skipBytes;
+
   public ChunkInputStream(StreamListener listener) {
     this.frameInputStream = new FrameInputStream(listener);
   }
@@ -52,12 +54,24 @@ public class ChunkInputStream extends InputStream {
     this.fileName = fileName;
   }
 
+  public void setSkipBytes(long skipBytes) {
+    this.skipBytes = skipBytes;
+  }
+
   public FrameInputStream getFrameInputStream() {
     return this.frameInputStream;
   }
 
   @Override
   public int read() throws IOException {
+    while (skipBytes > 0) {
+      getByte();
+      skipBytes--;
+    }
+    return getByte();
+  }
+
+  private int getByte() throws IOException {
     if (buffer.remaining() > 0) {
       return buffer.get() & 0xff;
     } else {
@@ -75,8 +89,8 @@ public class ChunkInputStream extends InputStream {
       byte[] data = new byte[dataLength];
       IOUtils.readFully(this.frameInputStream, data);
       Log.info("***");
-      this.verifyChecksum(checksum, data, dataPos);
       this.dataChecksum.reset();
+      this.verifyChecksum(checksum, data, dataPos);
       this.dataPos += dataLength;
       this.buffer = ByteBuffer.wrap(data);
       return buffer.get() & 0xff;
@@ -87,16 +101,5 @@ public class ChunkInputStream extends InputStream {
     ByteBuffer checksumBuffer = ByteBuffer.wrap(checksum);
     ByteBuffer dataBuffer = ByteBuffer.wrap(data);
     this.dataChecksum.verifyChunkedSums(dataBuffer, checksumBuffer, fileName, basePos);
-  }
-
-  @Override
-  public long skip(long n) throws IOException {
-
-    if (n <= 0) {
-      return 0;
-    }
-    byte[] b = new byte[(int) n];
-    IOUtils.readFully(this, b);
-    return n;
   }
 }
