@@ -22,6 +22,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
@@ -112,7 +113,8 @@ public class TestHttp2BlockReader {
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
     final int len = 6 * 1024 - 10;
     final byte[] b = new byte[len];
-    ThreadLocalRandom.current().nextBytes(b);
+    new Random(0).nextBytes(b);
+  //  ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
     out.close();
 
@@ -137,7 +139,7 @@ public class TestHttp2BlockReader {
             SessionAndStreamId sessionAndStreamId =
                 http2ConnectionPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER
                     .getDataNodes().get(0).getInfoPort()));
-            offset = 511;//ThreadLocalRandom.current().nextInt(0, len);
+            offset = 512;//ThreadLocalRandom.current().nextInt(0, len);
             int length = len - offset;
             BlockReader blockReader =
                 new Http2BlockReader(sessionAndStreamId, block.toString(), block, offset, true,

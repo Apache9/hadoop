@@ -219,7 +219,8 @@ class ReadBlockHandler extends
         lastChunkChecksum = null;
       }
       if (checksumInput != null && startOffset > 0) {
-        IOUtils.skipFully(checksumInput, startOffset / chunkSize);
+        IOUtils.skipFully(checksumInput,
+          startOffset / chunkSize * checksum.getChecksumSize());
       }
       blockInput = data.getBlockInputStream(block, startOffset);
       long length = endOffset - startOffset;
