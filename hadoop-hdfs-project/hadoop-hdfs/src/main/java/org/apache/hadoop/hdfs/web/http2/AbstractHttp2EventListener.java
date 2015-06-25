@@ -138,7 +138,13 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
         }
       });
     } else {
-      getSubChannel(streamId).tryWrite();
+      Http2Stream stream = conn.stream(streamId);
+      if (stream != null) {
+        Http2StreamChannel subChannel = stream.getProperty(subChannelPropKey);
+        if (subChannel != null) {
+          subChannel.tryWrite();
+        }
+      }
     }
   }
 }

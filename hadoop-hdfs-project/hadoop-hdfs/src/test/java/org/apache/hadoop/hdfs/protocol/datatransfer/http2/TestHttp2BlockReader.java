@@ -33,6 +33,7 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.BlockReader;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.Http2BlockReader;
 import org.apache.hadoop.hdfs.Http2ConnectionPool;
 import org.apache.hadoop.hdfs.Http2ConnectionPool.SessionAndStreamId;
@@ -54,6 +55,7 @@ public class TestHttp2BlockReader {
 
   @BeforeClass
   public static void setUp() throws Exception {
+    CONF.setBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY, true);
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
   }
@@ -75,7 +77,6 @@ public class TestHttp2BlockReader {
 
   @Test
   public void test() throws IllegalArgumentException, IOException {
-
     String fileName = "/test2";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
     int len = 4096 * 100;
