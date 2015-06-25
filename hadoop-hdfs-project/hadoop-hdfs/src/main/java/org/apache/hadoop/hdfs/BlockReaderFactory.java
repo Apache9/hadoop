@@ -36,6 +36,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.Http2ConnectionPool.SessionAndStreamId;
 import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
 import org.apache.hadoop.hdfs.client.impl.DfsClientConf.ShortCircuitConf;
 import org.apache.hadoop.hdfs.net.DomainPeer;
@@ -377,7 +378,12 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
         "TCP reads were disabled for testing, but we failed to " +
         "do a non-TCP read.");
     if (conf.isHttp2ReadEnabled()) {
-      // TODO: create http2 block reader
+      if (this.http2ConnPool == null) {
+        this.http2ConnPool = new Http2ConnectionPool();
+      }
+      SessionAndStreamId sessionAndStreamId = this.http2ConnPool.connect(this.inetSocketAddress);
+      return new Http2BlockReader(sessionAndStreamId, this.fileName, this.block, this.startOffset,
+          this.verifyChecksum, this.clientName, this.length, this.cachingStrategy);
     }
     return getRemoteBlockReaderFromTcp();
   }

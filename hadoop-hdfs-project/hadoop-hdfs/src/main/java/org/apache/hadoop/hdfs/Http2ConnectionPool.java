@@ -20,10 +20,17 @@ package org.apache.hadoop.hdfs;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.eclipse.jetty.http2.api.Session;
 import org.eclipse.jetty.http2.client.HTTP2Client;
+import org.eclipse.jetty.util.FuturePromise;
 
 /**
  * A wrapper of {@link HTTP2Client} which will reuse session to the same server.
@@ -31,12 +38,36 @@ import org.eclipse.jetty.http2.client.HTTP2Client;
 @InterfaceAudience.Private
 public class Http2ConnectionPool implements Closeable {
 
+  public static final Log LOG = LogFactory.getLog(Http2ConnectionPool.class);
+
   private final HTTP2Client client;
+
+  private final Map<InetSocketAddress, SessionAndStreamId> addressToSession;
+
+  public static class SessionAndStreamId {
+
+    public SessionAndStreamId(Session session) {
+      this.session = session;
+      this.streamIdGenerator = new AtomicInteger(1);
+    }
+
+    private Session session;
+    private AtomicInteger streamIdGenerator;
+
+    public Session getSession() {
+      return session;
+    }
+
+    public AtomicInteger getStreamIdGenerator() {
+      return streamIdGenerator;
+    }
+  }
 
   public Http2ConnectionPool() throws IOException {
     HTTP2Client c = new HTTP2Client();
     try {
       c.start();
+      this.addressToSession = new HashMap<InetSocketAddress, SessionAndStreamId>();
     } catch (Exception e) {
       try {
         c.stop();
@@ -48,9 +79,22 @@ public class Http2ConnectionPool implements Closeable {
     this.client = c;
   }
 
-  public Session connect(InetSocketAddress address) throws IOException {
-    // TODO:
-    return null;
+  public SessionAndStreamId connect(InetSocketAddress address) throws IOException {
+    synchronized (this.addressToSession) {
+      SessionAndStreamId sessionAndStreamId = this.addressToSession.get(address);
+      if (sessionAndStreamId == null) {
+        FuturePromise<Session> sessionPromise = new FuturePromise<>();
+        this.client.connect(address, new Session.Listener.Adapter(), sessionPromise);
+        try {
+          sessionAndStreamId = new SessionAndStreamId(sessionPromise.get());
+          this.addressToSession.put(address, sessionAndStreamId);
+        } catch (InterruptedException | ExecutionException e) {
+          LOG.warn("connect to " + address + " failed ", e);
+          throw new IOException(e);
+        }
+      }
+      return sessionAndStreamId;
+    }
   }
 
   @Override
