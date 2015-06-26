@@ -40,9 +40,11 @@ public class Http2ConnectionPool implements Closeable {
 
   public static final Log LOG = LogFactory.getLog(Http2ConnectionPool.class);
 
-  private final HTTP2Client client;
+  private HTTP2Client client;
 
-  private final Map<InetSocketAddress, SessionAndStreamId> addressToSession;
+  private Map<InetSocketAddress, SessionAndStreamId> addressToSession;
+
+  private boolean initialized = false;
 
   public static class SessionAndStreamId {
 
@@ -63,23 +65,28 @@ public class Http2ConnectionPool implements Closeable {
     }
   }
 
-  public Http2ConnectionPool() throws IOException {
-    HTTP2Client c = new HTTP2Client();
-    try {
-      c.start();
-      this.addressToSession = new HashMap<InetSocketAddress, SessionAndStreamId>();
-    } catch (Exception e) {
-      try {
-        c.stop();
-      } catch (Exception e1) {
-        throw new IOException(e1);
-      }
-      throw new IOException(e);
-    }
-    this.client = c;
+  public Http2ConnectionPool() {
   }
 
   public SessionAndStreamId connect(InetSocketAddress address) throws IOException {
+    synchronized (this) {
+      if (!this.initialized) {
+        HTTP2Client c = new HTTP2Client();
+        try {
+          c.start();
+          this.addressToSession = new HashMap<InetSocketAddress, SessionAndStreamId>();
+        } catch (Exception e) {
+          try {
+            c.stop();
+          } catch (Exception e1) {
+            throw new IOException(e1);
+          }
+          throw new IOException(e);
+        }
+        this.client = c;
+        this.initialized = true;
+      }
+    }
     synchronized (this.addressToSession) {
       SessionAndStreamId sessionAndStreamId = this.addressToSession.get(address);
       if (sessionAndStreamId == null) {

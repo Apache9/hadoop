@@ -133,7 +133,9 @@ public class Http2BlockReader implements BlockReader {
 
   @Override
   public void close() throws IOException {
-    this.chunkInputStream.close();
+    if (this.chunkInputStream != null) {
+      this.chunkInputStream.close();
+    }
   }
 
   @Override

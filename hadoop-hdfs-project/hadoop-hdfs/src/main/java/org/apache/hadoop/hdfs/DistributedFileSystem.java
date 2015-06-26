@@ -147,7 +147,6 @@ public class DistributedFileSystem extends FileSystem {
     homeDirPrefix = conf.get(
         DFSConfigKeys.DFS_USER_HOME_DIR_PREFIX_KEY,
         DFSConfigKeys.DFS_USER_HOME_DIR_PREFIX_DEFAULT);
-    
     this.dfs = new DFSClient(uri, conf, statistics);
     this.uri = URI.create(uri.getScheme()+"://"+uri.getAuthority());
     this.workingDir = getHomeDirectory();

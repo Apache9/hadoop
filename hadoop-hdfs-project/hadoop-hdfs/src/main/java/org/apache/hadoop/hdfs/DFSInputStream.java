@@ -678,6 +678,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         setClientCacheContext(dfsClient.getClientContext()).
         setUserGroupInformation(dfsClient.ugi).
         setConfiguration(dfsClient.getConfiguration()).
+        setHttp2ConnectionPool(dfsClient.getHttp2ConnectionPool()).
         build();
   }
 

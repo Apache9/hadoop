@@ -215,7 +215,6 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   private volatile long serverDefaultsLastUpdate;
   final String clientName;
   final SocketFactory socketFactory;
-  final Http2ConnectionPool http2ConnPool;
   final ReplaceDatanodeOnFailure dtpReplaceDatanodeOnFailure;
   final FileSystem.Statistics stats;
   private final String authority;
@@ -232,6 +231,11 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   private static ThreadPoolExecutor HEDGED_READ_THREAD_POOL;
   private final Sampler<?> traceSampler;
   private final int smallBufferSize;
+  private Http2ConnectionPool http2ConnectionPool = null;
+
+  public Http2ConnectionPool getHttp2ConnectionPool() {
+    return http2ConnectionPool;
+  }
 
   public DfsClientConf getConf() {
     return dfsClientConf;
@@ -299,14 +303,12 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
         wrapHadoopConf(DFSConfigKeys.DFS_CLIENT_HTRACE_PREFIX, conf)).build();
     // Copy only the required DFSClient configuration
     this.dfsClientConf = new DfsClientConf(conf);
+    if (this.dfsClientConf.isHttp2ReadEnabled()) {
+      this.http2ConnectionPool = new Http2ConnectionPool();
+    }
     this.conf = conf;
     this.stats = stats;
     this.socketFactory = NetUtils.getSocketFactory(conf, ClientProtocol.class);
-    if (this.dfsClientConf.isHttp2ReadEnabled()) {
-      http2ConnPool = new Http2ConnectionPool();
-    } else {
-      http2ConnPool = null;
-    }
     this.dtpReplaceDatanodeOnFailure = ReplaceDatanodeOnFailure.get(conf);
     this.smallBufferSize = DFSUtil.getSmallBufferSize(conf);
 

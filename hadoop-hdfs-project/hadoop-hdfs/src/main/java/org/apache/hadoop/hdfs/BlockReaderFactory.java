@@ -190,11 +190,8 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
    */
   private int remainingCacheTries;
 
-  /**
-   * Used to establish an HTTP/2 connection, if needed.
-   */
-  private Http2ConnectionPool http2ConnPool;
-
+  private Http2ConnectionPool http2ConnectionPool = null;
+  
   public BlockReaderFactory(DfsClientConf conf) {
     this.conf = conf;
     this.remainingCacheTries = conf.getNumCachedConnRetry();
@@ -215,6 +212,11 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
     return this;
   }
 
+  public BlockReaderFactory setHttp2ConnectionPool(Http2ConnectionPool http2ConnectionPool) {
+    this.http2ConnectionPool = http2ConnectionPool;
+    return this;
+  }
+  
   public BlockReaderFactory setStartOffset(long startOffset) {
     this.startOffset = startOffset;
     return this;
@@ -378,10 +380,9 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
         "TCP reads were disabled for testing, but we failed to " +
         "do a non-TCP read.");
     if (conf.isHttp2ReadEnabled()) {
-      if (this.http2ConnPool == null) {
-        this.http2ConnPool = new Http2ConnectionPool();
-      }
-      SessionAndStreamId sessionAndStreamId = this.http2ConnPool.connect(this.inetSocketAddress);
+      SessionAndStreamId sessionAndStreamId =
+          this.http2ConnectionPool.connect(new InetSocketAddress(this.datanode.getIpAddr(),
+              this.datanode.getInfoPort()));
       return new Http2BlockReader(sessionAndStreamId, this.fileName, this.block, this.startOffset,
           this.verifyChecksum, this.clientName, this.length, this.cachingStrategy);
     }

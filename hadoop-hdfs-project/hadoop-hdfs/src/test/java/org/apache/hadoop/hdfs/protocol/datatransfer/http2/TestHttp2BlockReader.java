@@ -105,7 +105,7 @@ public class TestHttp2BlockReader {
   }
 
   @Test
-  public void testPerformance() throws IllegalArgumentException, IOException, InterruptedException {
+  public void testConcurrency() throws IllegalArgumentException, IOException, InterruptedException {
     String fileName = "/test";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
     final int len = 1024 * 20 - 10;
@@ -154,9 +154,7 @@ public class TestHttp2BlockReader {
             assertTrue(false);
 
           }
-
         }
-
       });
     }
     executor.shutdown();
