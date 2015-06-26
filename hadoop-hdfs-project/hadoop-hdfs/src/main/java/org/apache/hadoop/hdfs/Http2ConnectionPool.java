@@ -28,8 +28,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
+import org.eclipse.jetty.http2.BufferingFlowControlStrategy;
+import org.eclipse.jetty.http2.FlowControlStrategy;
 import org.eclipse.jetty.http2.api.Session;
 import org.eclipse.jetty.http2.client.HTTP2Client;
+import org.eclipse.jetty.http2.client.HTTP2ClientConnectionFactory;
 import org.eclipse.jetty.util.FuturePromise;
 
 /**
@@ -45,6 +48,8 @@ public class Http2ConnectionPool implements Closeable {
   private Map<InetSocketAddress, SessionAndStreamId> addressToSession;
 
   private boolean initialized = false;
+
+  private static final int initialWindowSize = 4 * 1024 * 1024;
 
   public static class SessionAndStreamId {
 
@@ -72,6 +77,12 @@ public class Http2ConnectionPool implements Closeable {
     synchronized (this) {
       if (!this.initialized) {
         HTTP2Client c = new HTTP2Client();
+        c.setClientConnectionFactory(new HTTP2ClientConnectionFactory() {
+          @Override
+          protected FlowControlStrategy newFlowControlStrategy() {
+            return new BufferingFlowControlStrategy(initialWindowSize, 0.3f);
+          }
+        });
         try {
           c.start();
           this.addressToSession = new HashMap<InetSocketAddress, SessionAndStreamId>();

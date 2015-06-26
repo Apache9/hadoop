@@ -158,7 +158,6 @@ public class Http2BlockReader implements BlockReader {
       int streamId = streamIdGenerator.getAndAdd(2);
       streamPromise = new FuturePromise<>();
       this.listener = new ContinuousStreamListener();
-      //this.listener = new ContinuousStreamListener();
       session.newStream(new HeadersFrame(streamId, new MetaData(
           org.eclipse.jetty.http.HttpVersion.HTTP_2, fields), new PriorityFrame(streamId, 0, 1,
           false), false), streamPromise, this.listener);

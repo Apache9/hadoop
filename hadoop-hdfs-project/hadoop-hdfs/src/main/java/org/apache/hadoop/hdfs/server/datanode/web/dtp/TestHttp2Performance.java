@@ -53,6 +53,7 @@ public class TestHttp2Performance {
 
   @BeforeClass
   public static void setUp() throws Exception {
+    //CONF2.setBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY, true);
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
 
@@ -62,7 +63,6 @@ public class TestHttp2Performance {
 
     CLUSTER2 = new MiniDFSCluster.Builder(CONF2).numDataNodes(1).build();
     CLUSTER2.waitActive();
-    //System.exit(1);
   }
 
   @AfterClass
@@ -119,7 +119,7 @@ public class TestHttp2Performance {
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
     out.close();
-    int concurrency = 2;
+    int concurrency = 5;
     long start = System.currentTimeMillis();
     ExecutorService executor =
         Executors.newFixedThreadPool(concurrency,
