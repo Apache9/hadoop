@@ -33,7 +33,6 @@ import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
-import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2InboundFrameLogger;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.logging.LogLevel;
@@ -86,7 +85,8 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
           }
         });
     } else {
-      throw new UnsupportedMessageTypeException(msg, Http2Headers.class);
+      throw new UnsupportedMessageTypeException(msg,
+          Http2HeadersAndPromise.class);
     }
   }
 
