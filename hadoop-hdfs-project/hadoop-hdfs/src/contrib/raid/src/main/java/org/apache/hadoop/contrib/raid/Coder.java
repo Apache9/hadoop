@@ -77,7 +77,6 @@ public class Coder {
       collectorResultFile.toString());
 
     job = Job.getInstance(conf, "RaidNode-Coder");
-    MRUtils.cacheCodecLib(conf, job);
     job.setJarByClass(Coder.class);
     job.setMapperClass(CoderMapper.class);
 

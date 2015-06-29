@@ -32,6 +32,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
+import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
@@ -44,6 +46,8 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -72,7 +76,6 @@ public class Fixer {
   public void run() throws IOException, ClassNotFoundException, InterruptedException {
 
     job = Job.getInstance(conf, "RaidNode-Fixer");
-    MRUtils.cacheCodecLib(conf, job);
     job.setJarByClass(Fixer.class);
     job.setMapperClass(FixerMapper.class);
 
@@ -146,6 +149,7 @@ public class Fixer {
 
     for (Path file : corruptFiles) {
       try {
+        LOG.debug("Checking corrupt file " + file.toString());
         if (!BlockCodec.isCodingFile(file)) {
           // This is the source file corruption
           FileStatus fileStatus = fs.getFileStatus(file);
@@ -153,8 +157,11 @@ public class Fixer {
           for (BlockLocation blk : blkLocs) {
             if (blk.isCorrupt()) {
               int blkIndex = (int) (blk.getOffset() / fileStatus.getBlockSize());
-              int group = blkIndex / dataBlocksNum;
-              RaidTaskUtils.FixerItem item = new RaidTaskUtils.FixerItem(file, group);
+              // Currently, the raid lock is per file. So we will conduct fixer file by file. Just
+              // use 0 for all groups.
+              // TBD: Fix files group by group.
+              // int group = blkIndex / dataBlocksNum;
+              RaidTaskUtils.FixerItem item = new RaidTaskUtils.FixerItem(file, 0);
               if (info.containsKey(item)) {
                 info.get(item).add(blkIndex);
               } else {
@@ -162,6 +169,8 @@ public class Fixer {
                 corruptBlks.add(blkIndex);
                 info.put(item, corruptBlks);
               }
+              LOG.info("Added block " + blkIndex + " of " + file.toString()
+                  + " since the source file is corrupted.");
             }
           }
         } else {
@@ -175,11 +184,14 @@ public class Fixer {
               int sourceFileBlks = (int) ((sourceStatus.getLen() + sourceStatus.getBlockSize() - 1) / sourceStatus
                   .getBlockSize());
               int blkIndex = (int) (blk.getOffset() / fileStatus.getBlockSize());
-              int group = blkIndex / codingBlocksNum;
+              // Currently, the raid lock is per file. So we will conduct fixer file by file. Just
+              // use 0 for all groups.
+              // TBD: Fix files group by group.
+              // int group = blkIndex / dataBlocksNum;
               // In the implementation of decode, it will calculate the coding file's index from the
               // last block of source file. We do the same thing here.
               blkIndex += sourceFileBlks;
-              RaidTaskUtils.FixerItem item = new RaidTaskUtils.FixerItem(file, group);
+              RaidTaskUtils.FixerItem item = new RaidTaskUtils.FixerItem(sourceFile, 0);
               if (info.containsKey(item)) {
                 info.get(item).add(blkIndex);
               } else {
@@ -187,12 +199,14 @@ public class Fixer {
                 corruptBlks.add(blkIndex);
                 info.put(item, corruptBlks);
               }
+              LOG.info("Added block " + blkIndex + " of " + sourceFile.toString()
+                  + " since the code file is corrupted.");
             }
           }
         }
       } catch (IOException ioe) {
         // Ignore
-        LOG.warn("Some thing wrong when collecting fixer task info", ioe);
+        LOG.warn("Something wrong when collecting fixer task info", ioe);
       }
     }
     return info;
@@ -209,12 +223,19 @@ public class Fixer {
     private Counter fixedBlocks;
     private Counter fixFail;
 
+    private NamenodeProtocol namenode;
+    private BlockTokenSecretManager blockTokenSecretManager;
+
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
       this.conf = context.getConfiguration();
+      UserGroupInformation.setConfiguration(conf);
+      SecurityUtil.login(conf, HdfsRaidConfigKeys.HDFS_RAIDNODE_KEYTAB_FILE_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_KERBEROS_PRINCIPAL_KEY);
       this.blockCodec = new BlockCodec(this.conf);
       this.fixedBlocks = context.getCounter(CounterName.FixedBlocks);
       this.fixFail = context.getCounter(CounterName.FixFail);
+      this.blockTokenSecretManager = MRUtils.getBlockTokenSecretManager(conf);
     }
 
     @Override
@@ -224,6 +245,8 @@ public class Fixer {
       String[] tokens = info.split("\\s+");
       Path file = new Path(tokens[0].trim());
       int[] blocks = new int[tokens.length - 1];
+
+      LOG.info("Fixing file " + file.toString());
 
       for (int i = 0; i < blocks.length; i++) {
         try {
@@ -235,34 +258,31 @@ public class Fixer {
         }
       }
 
-      if (blocks.length > blockCodec.getCodingBlocksNum()) {
-        fixFail.increment(blocks.length);
-        // Fail earlier if we cannot fix it.
-        StringBuilder sb = new StringBuilder();
-        sb.append("Detect corruption in blocks ");
-        for (int blk : blocks) {
-          sb.append("\t").append(blk);
-        }
-        sb.append(" in file ").append(file.toString()).append(".")
-            .append(" The corrupted blks is larger than ").append(blockCodec.getCodingBlocksNum())
-            .append(", which can not be reconstructed.");
-        LOG.warn(sb.toString());
-        return;
-      }
+      // The following check is not applied now since we are decoding file by file.
+      // Just try to fix things as many as possible.
+      /**
+       * if (blocks.length > blockCodec.getCodingBlocksNum()) { fixFail.increment(blocks.length); //
+       * Fail earlier if we cannot fix it. StringBuilder sb = new StringBuilder();
+       * sb.append("Detect corruption in blocks "); for (int blk : blocks) {
+       * sb.append("\t").append(blk); } sb.append(" in file ").append(file.toString()).append(".")
+       * .append(" The corrupted blks is larger than ").append(blockCodec.getCodingBlocksNum())
+       * .append(", which can not be reconstructed."); LOG.warn(sb.toString()); return; }
+       */
 
+      StringBuilder sb = new StringBuilder();
+      for (int blk : blocks) {
+        sb.append(" " + blk);
+      }
       try {
-        blockCodec.decode(file, blocks);
+        Arrays.sort(blocks);
+        blockCodec.decode(file, blocks, blockTokenSecretManager);
         fixedBlocks.increment(blocks.length);
+        LOG.info("Fixer decoded block " + sb.toString() + " of " + file.toString());
       } catch (Exception e) {
         // Something wrong
-        StringBuilder sb = new StringBuilder();
-        sb.append("Fail to decode blocks of file ").append(file.toString()).append(" :");
-        for (int blk : blocks) {
-          sb.append("\t" + blk);
-        }
-        LOG.warn(sb.toString(), e);
+        LOG.warn("Fixer failed to decode block " + sb.toString() + " of " + file.toString(), e);
         fixFail.increment(blocks.length);
-        throw new IOException("Fail to decode");
+        throw new IOException("Fail to decode ", e);
       }
     }
   }

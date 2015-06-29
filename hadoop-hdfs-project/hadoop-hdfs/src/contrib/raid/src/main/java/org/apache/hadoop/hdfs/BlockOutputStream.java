@@ -172,12 +172,13 @@ public class BlockOutputStream extends FSOutputSummer {
         target = secondTargetSet.get(rand.nextInt(secondTargetSet.size()));
       }
       if (target == null) {
-        throw new IOException("Cannot find a target to create BlockOutputStream");
+        throw new IOException("Cannot find a target to create BlockOutputStream " + " for " + block);
       }
       triedNodes.add(target);
       try {
-        long oldGS = block.getBlock().getGenerationStamp();
-        createBlockOutputStream(target, ++oldGS);
+        long gs = block.getBlock().getGenerationStamp();
+        createBlockOutputStream(target, gs);
+        LOG.info("Create output stream to " + target + " for " + block);
         break;
       } catch (IOException e) {
         LOG.warn("Create block output stream failed", e);
@@ -238,6 +239,7 @@ public class BlockOutputStream extends FSOutputSummer {
 
   @Override
   public synchronized void close() throws IOException {
+    LOG.info("Close BlockOutputStream of block " + block);
     flush();
     super.close();
     IOUtils.closeSocket(socket);
@@ -329,6 +331,7 @@ public class BlockOutputStream extends FSOutputSummer {
   void createBlockOutputStream(DatanodeInfo node, long newGS) throws IOException {
     Status status = null;
     int refetchEncryptionKey = 1;
+    BlockConstructionStage stage = BlockConstructionStage.PIPELINE_SETUP_CREATE;
     while (true) {
       boolean result = false;
       try {
@@ -351,9 +354,8 @@ public class BlockOutputStream extends FSOutputSummer {
 
         // Send the request
         new Sender(blockStream).writeBlock(block.getBlock(), accessToken,
-          dfsClient.getClientName(), new DatanodeInfo[] {}, null,
-          BlockConstructionStage.PIPELINE_SETUP_CREATE, 1, block.getBlockSize(), blockOffset,
-          newGS, checksum, cachingStrategy);
+          dfsClient.getClientName(), new DatanodeInfo[] {}, null, stage, 1, blockOffset,
+          block.getBlockSize(), newGS, checksum, cachingStrategy);
 
         // Receive ack for connect
         BlockOpResponseProto resp = BlockOpResponseProto.parseFrom(PBHelper
@@ -374,6 +376,12 @@ public class BlockOutputStream extends FSOutputSummer {
           refetchEncryptionKey--;
           dfsClient.clearDataEncryptionKey();
           continue;
+        }
+        if (stage == BlockConstructionStage.PIPELINE_SETUP_CREATE) {
+          LOG.warn("Setup pipeline failed ", e);
+          // LOG.info("Trying to recover streaming.");
+          // stage = BlockConstructionStage.PIPELINE_SETUP_STREAMING_RECOVERY;
+          // continue;
         }
         result = false;
         throw e;

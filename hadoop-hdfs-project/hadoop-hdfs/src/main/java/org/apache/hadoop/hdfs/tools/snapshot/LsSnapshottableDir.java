@@ -47,12 +47,12 @@ public class LsSnapshottableDir extends Configured implements Tool {
     }
     
     FileSystem fs = FileSystem.get(getConf());
-    if (! (fs instanceof DistributedFileSystem)) {
+    if (!(fs.isDistributedFileSystem())) {
       System.err.println(
           "LsSnapshottableDir can only be used in DistributedFileSystem");
       return 1;
     }
-    DistributedFileSystem dfs = (DistributedFileSystem) fs;
+    DistributedFileSystem dfs = (DistributedFileSystem) fs.getDistributedFileSystem();
     
     try {
       SnapshottableDirectoryStatus[] stats = dfs.getSnapshottableDirListing();

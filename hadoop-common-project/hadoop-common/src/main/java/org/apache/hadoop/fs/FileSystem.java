@@ -2377,6 +2377,19 @@ public abstract class FileSystem extends Configured implements Closeable {
     }
   }
 
+  public boolean supportRaid() {
+    return false;
+  }
+
+  public boolean isDistributedFileSystem() {
+    return false;
+  }
+
+  public FileSystem getDistributedFileSystem() {
+    throw new UnsupportedOperationException(
+        "It should not be called against a non-distributed file system");
+  }
+
   public static Class<? extends FileSystem> getFileSystemClass(String scheme,
       Configuration conf) throws IOException {
     if (!FILE_SYSTEMS_LOADED) {
@@ -2402,6 +2415,18 @@ public abstract class FileSystem extends Configured implements Closeable {
       throw new IOException("No FileSystem for scheme: " + uri.getScheme());
     }
     FileSystem fs = (FileSystem)ReflectionUtils.newInstance(clazz, conf);
+    if (fs.supportRaid()) {
+      if (conf.getBoolean(CommonConfigurationKeys.HADOOP_RAID_ENABLED_KEY,
+        CommonConfigurationKeys.HADOOP_RAID_ENABLED_DEFAULT)) {
+        clazz =
+            (Class<? extends FileSystem>) conf.getClass(
+              CommonConfigurationKeys.HADOOP_RAID_FILESYSTEM_CLASS_KEY, null);
+        if (clazz == null) {
+          throw new IOException("Raid is enabled whereas no raid file system is specified");
+        }
+        fs = (FileSystem) ReflectionUtils.newInstance(clazz, conf);
+      }
+    }
     fs.initialize(uri, conf);
     return fs;
   }

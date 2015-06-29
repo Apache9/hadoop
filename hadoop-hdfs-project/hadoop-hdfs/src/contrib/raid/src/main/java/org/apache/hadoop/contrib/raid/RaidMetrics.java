@@ -21,9 +21,9 @@ import org.apache.hadoop.metrics2.lib.MutableStat;
 /**
  * Raid metrics
  */
-@Metrics(about = "HDFS Raid Metrics", context = "dfs")
+@Metrics(about = "HDFS Raid Metrics", context = "raid")
 public class RaidMetrics {
-  final MetricsRegistry registry = new MetricsRegistry("HdfsRaid");
+  final MetricsRegistry registry = new MetricsRegistry("RaidNode");
 
   @Metric("Number of Collector task scheduled since startup")
   MutableCounterLong collectorTaskScheduled;

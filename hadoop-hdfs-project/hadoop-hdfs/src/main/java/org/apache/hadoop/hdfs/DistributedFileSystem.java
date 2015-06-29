@@ -279,8 +279,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public Boolean next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           return myDfs.recoverLease(p);
         }
         throw new UnsupportedOperationException("Cannot recoverLease through" +
@@ -369,8 +369,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public HdfsDataOutputStream next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           return myDfs.create(p, permission, overwrite, bufferSize, replication,
               blockSize, progress, favoredNodes);
         }
@@ -1464,8 +1464,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public Void next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           myDfs.allowSnapshot(p);
         } else {
           throw new UnsupportedOperationException("Cannot perform snapshot"
@@ -1491,8 +1491,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public Void next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           myDfs.disallowSnapshot(p);
         } else {
           throw new UnsupportedOperationException("Cannot perform snapshot"
@@ -1518,8 +1518,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public Path next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           return myDfs.createSnapshot(p);
         } else {
           throw new UnsupportedOperationException("Cannot perform snapshot"
@@ -1545,8 +1545,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public Void next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           myDfs.renameSnapshot(p, snapshotOldName, snapshotNewName);
         } else {
           throw new UnsupportedOperationException("Cannot perform snapshot"
@@ -1582,8 +1582,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public Void next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           myDfs.deleteSnapshot(p, snapshotName);
         } else {
           throw new UnsupportedOperationException("Cannot perform snapshot"
@@ -1615,8 +1615,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public SnapshotDiffReport next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           myDfs.getSnapshotDiffReport(p, fromSnapshot, toSnapshot);
         } else {
           throw new UnsupportedOperationException("Cannot perform snapshot"
@@ -1648,8 +1648,8 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public Boolean next(final FileSystem fs, final Path p)
           throws IOException {
-        if (fs instanceof DistributedFileSystem) {
-          DistributedFileSystem myDfs = (DistributedFileSystem)fs;
+        if (fs.isDistributedFileSystem()) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs.getDistributedFileSystem();
           return myDfs.isFileClosed(p);
         } else {
           throw new UnsupportedOperationException("Cannot call isFileClosed"
@@ -1938,5 +1938,20 @@ public class DistributedFileSystem extends FileSystem {
         return fs.getAclStatus(p);
       }
     }.resolve(this, absF);
+  }
+
+  @Override
+  public boolean supportRaid() {
+    return true;
+  }
+
+  @Override
+  public boolean isDistributedFileSystem() {
+    return true;
+  }
+
+  @Override
+  public FileSystem getDistributedFileSystem() {
+    return this;
   }
 }

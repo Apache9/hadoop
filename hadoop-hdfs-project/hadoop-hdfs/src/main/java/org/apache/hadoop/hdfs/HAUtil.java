@@ -292,12 +292,12 @@ public class HAUtil {
    */
   public static InetSocketAddress getAddressOfActive(FileSystem fs)
       throws IOException {
-    if (!(fs instanceof DistributedFileSystem)) {
+    if (!(fs.isDistributedFileSystem())) {
       throw new IllegalArgumentException("FileSystem " + fs + " is not a DFS.");
     }
     // force client address resolution.
     fs.exists(new Path("/"));
-    DistributedFileSystem dfs = (DistributedFileSystem) fs;
+    DistributedFileSystem dfs = (DistributedFileSystem) fs.getDistributedFileSystem();
     DFSClient dfsClient = dfs.getClient();
     return RPC.getServerAddress(dfsClient.getNamenode());
   }

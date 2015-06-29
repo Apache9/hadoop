@@ -378,7 +378,7 @@ public class TestBlockCodec {
 
     // Decode and check
     int[] corruptedBlocks = { 1, 10 + 1 };
-    codec.decode(file, corruptedBlocks);
+    codec.decode(file, corruptedBlocks, null);
 
     byte[] decodedFileContent = DFSTestUtil.readFileBuffer(dfs, file);
     Assert.assertEquals(fileLen, decodedFileContent.length);

@@ -141,7 +141,8 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     @Override
     public TaskResult call() throws Exception {
       long startTimeMs = System.currentTimeMillis();
-      raidNode.getCodec().decode(file, corruptedBlocks);
+      raidNode.getCodec().decode(file, corruptedBlocks,
+        MRUtils.getBlockTokenSecretManager(raidNode.getConf()));
       long endTimeMs = System.currentTimeMillis();
       return new TaskResult(TaskStatus.Success, startTimeMs, endTimeMs);
     }

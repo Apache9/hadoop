@@ -86,7 +86,7 @@ public class HdfsRaidConfigKeys {
    * potential block lost issue. What's the best balance between perf and data availability?
    * (Ideally it should be the same as the duration of a corrupted block being fixed by NN.)
    */
-  public static final String HDFS_RAIDNODE_FIXER_INTERVAL = "hdfs.raidnode.fixer.internal";
+  public static final String HDFS_RAIDNODE_FIXER_INTERVAL = "hdfs.raidnode.fixer.interval";
   public static final long HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT = 3600 * 1000l; // subject to change
 
   public static final String HDFS_RAIDNODE_MOVER_INTERVAL = "hdfs.raidnode.mover.interval";
@@ -155,5 +155,9 @@ public class HdfsRaidConfigKeys {
   public static final String HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_KEY = "hdfs.raid.skip-space-check";
   public static final boolean HDFS_RAIDNODE_SKIP_ENCODE_SPACE_CHECK_DEAFULT = false;
 
-  public static final String HDFS_RAIDNODE_CODEC_LIBRARY_PATH = "hdfs.raidnode.codec.lib-path";
+  public static final String HDFS_RAIDNODE_LIBRARY_PATH = "hdfs.raidnode.lib-path";
+  public static final String HDFS_RAIDNODE_JARS_TO_CACHE = "hdfs.raidnode.jars-to-cache";
+
+  public static final String HDFS_RAID_INPLACE_DECODE_THRESHOLD = "hdfs.raid.inplace-decode.threshold";
+  public static final int HDFS_RAID_INPLACE_DECODE_THRESHOLD_DEFAULT = 4;
 }

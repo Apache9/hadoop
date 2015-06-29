@@ -269,4 +269,7 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final boolean RPC_METRICS_QUANTILE_ENABLE_DEFAULT = false;
   public static final String  RPC_METRICS_PERCENTILES_INTERVALS_KEY =
       "rpc.metrics.percentiles.intervals";
+  public static final String HADOOP_RAID_FILESYSTEM_CLASS_KEY = "hdfs.raid.filesystem.class";
+  public static final String HADOOP_RAID_ENABLED_KEY = "hdfs.raid.enabled";
+  public static final boolean HADOOP_RAID_ENABLED_DEFAULT = false;
 }

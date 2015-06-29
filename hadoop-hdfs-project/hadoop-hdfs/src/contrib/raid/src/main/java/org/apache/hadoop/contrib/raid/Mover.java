@@ -26,6 +26,7 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -51,6 +52,8 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BlockOpResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
+import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
+import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
@@ -66,6 +69,8 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.net.NetworkTopology;
+import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -110,7 +115,6 @@ public class Mover {
       collectorResultFile.toString());
 
     job = Job.getInstance(conf, "RaidNode-Mover");
-    MRUtils.cacheCodecLib(conf, job);
     job.setJarByClass(Mover.class);
     job.setMapperClass(MoverMapper.class);
 
@@ -145,6 +149,7 @@ public class Mover {
     DataOutputStream out = null;
     DataInputStream in = null;
     try {
+      LOG.debug("Trying to move block " + loc + " to DN " + target);
       sock.connect(NetUtils.createSocketAddr(target.getXferAddr()), connectTimeout);
       sock.setSoTimeout(movTimeout);
       sock.setKeepAlive(true);
@@ -161,9 +166,12 @@ public class Mover {
 
       BlockOpResponseProto response = BlockOpResponseProto.parseFrom(vintPrefixed(in));
       if (response.getStatus() != Status.SUCCESS) {
+        LOG.info("Fail to move block, status is " + response.getStatus());
         if (response.getStatus() == Status.ERROR_ACCESS_TOKEN) throw new IOException(
             "block move failed due to access token error");
         throw new IOException("block move is failed: " + response.getMessage());
+      } else {
+        LOG.debug("Successfully move one block");
       }
     } finally {
       IOUtils.closeStream(out);
@@ -171,6 +179,8 @@ public class Mover {
       IOUtils.closeSocket(sock);
     }
   }
+
+
 
   /**
    * Map task to do mover work.
@@ -190,19 +200,26 @@ public class Mover {
     private Counter failedBuildingMovingMap;
     private Counter failedMoving;
 
+    private NamenodeProtocol namenode;
+    private BlockTokenSecretManager blockTokenSecretManager;
+
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
       this.conf = context.getConfiguration();
+      UserGroupInformation.setConfiguration(conf);
+      SecurityUtil.login(conf, HdfsRaidConfigKeys.HDFS_RAIDNODE_KEYTAB_FILE_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_KERBEROS_PRINCIPAL_KEY);
       fs = FileSystem.get(conf);
-
       topology = new NetworkTopology();
       if (!(fs instanceof DistributedFileSystem)) {
         throw new IOException("The file system is not a distributed file system");
       }
       liveNodes = ((DistributedFileSystem) fs).getClient().datanodeReport(DatanodeReportType.LIVE);
       for (DatanodeInfo di : liveNodes) {
+        LOG.debug("Added live node " + di);
         topology.add(di);
       }
+
       dataBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_DEFAULT);
       codingBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
@@ -215,10 +232,19 @@ public class Mover {
       requiredSize = blockSize * reservedBlockNumPerStorage;
       shuffleBlksAmongRacks = conf.getBoolean(HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_SHUFFLE_RACKS,
         HdfsRaidConfigKeys.HDFS_RAIDNODE_MOVER_SHUFFLE_RACKS_DEFAULT);
-      
+      StringBuilder sb = new StringBuilder();
+      sb.append("dataBlocksNum ").append(dataBlocksNum).append(" codingBlocksNum ")
+          .append(codingBlocksNum).append(" reserverdBlockNumPerStorage ")
+          .append(reservedBlockNumPerStorage).append(" blockSize ").append(blockSize)
+          .append(" requiredSize ").append(requiredSize).append(" shuffleBlksAmongRacks ")
+          .append(shuffleBlksAmongRacks);
+      LOG.info(sb.toString());
+
       this.movedBlocks = context.getCounter(CounterName.MovedBlocks);
       this.failedBuildingMovingMap = context.getCounter(CounterName.FailedBuildingMovingMap);
       this.failedMoving = context.getCounter(CounterName.FailedMoving);
+
+      this.blockTokenSecretManager = MRUtils.getBlockTokenSecretManager(conf);
     }
 
     @Override
@@ -229,6 +255,7 @@ public class Mover {
       Path file = new Path(tokens[0].trim());
       int groupIdx = Integer.parseInt(tokens[1].trim());
 
+      LOG.debug("Moving group " + groupIdx + " of file " + file.toString());
       BlockMover bm = new BlockMover(groupIdx, file);
       try {
         bm.doMove();
@@ -295,6 +322,10 @@ public class Mover {
           }
         }
 
+        LOG.debug("Target chosen in the first round : ");
+        for (DatanodeInfo di : targetSet) {
+          LOG.debug(di.toString());
+        }
         if (targetSet.size() > 0) {
           return targetSet.get(rand.nextInt(targetSet.size()));
         }
@@ -309,6 +340,11 @@ public class Mover {
           if (!excludedDis.contains(di) && (di.getRemaining() > requiredSize)) {
             targetSet.add(di);
           }
+        }
+
+        LOG.debug("Target chosen in the second round : ");
+        for (DatanodeInfo di : targetSet) {
+          LOG.debug(di.toString());
         }
 
         if (targetSet.size() > 0) {
@@ -355,6 +391,31 @@ public class Mover {
           }
         }
 
+        LOG.debug("Group " + groupIdx + " info : ");
+        LOG.debug("Src blks:");
+        for (LocatedBlock loc : sourceBlks.getLocatedBlocks()) {
+          LOG.debug(loc.toString());
+        }
+        for (LocatedBlock loc : codingBlks.getLocatedBlocks()) {
+          LOG.debug(loc.toString());
+        }
+        LOG.debug("excludedDis:");
+        for (DatanodeInfo di : excludedDis) {
+          LOG.debug(di.toString());
+        }
+        LOG.debug("moveMapDN:");
+        for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapDN.entrySet()) {
+          LOG.debug(moveItem.getKey() + " : "
+              + ((moveItem.getValue() == null) ? "null" : moveItem.getValue()));
+        }
+        LOG.debug("moveMapRack:");
+        if (moveMapRack != null) {
+          for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapRack.entrySet()) {
+            LOG.debug(moveItem.getKey() + " : "
+                + ((moveItem.getValue() == null) ? "null" : moveItem.getValue()));
+          }
+        }
+
         for (LocatedBlock loc : moveMapDN.keySet()) {
           DatanodeInfo di = chooseTarget(loc, false);
           if (di == null) {
@@ -375,6 +436,18 @@ public class Mover {
             }
             moveMapRack.put(loc, di);
             excludedDis.add(di);
+          }
+        }
+        LOG.debug("moveMapDN after choosing target:");
+        for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapDN.entrySet()) {
+          LOG.debug(moveItem.getKey() + " : "
+              + ((moveItem.getValue() == null) ? "null" : moveItem.getValue()));
+        }
+        LOG.debug("moveMapRack after choosing target:");
+        if (moveMapRack != null) {
+          for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapRack.entrySet()) {
+            LOG.debug(moveItem.getKey() + " : "
+                + ((moveItem.getValue() == null) ? "null" : moveItem.getValue()));
           }
         }
       }
@@ -399,18 +472,27 @@ public class Mover {
 
         try {
           for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapDN.entrySet()) {
-            Mover.moveOneBlock(connectTimeout, moveTimeout, moveItem.getKey(), moveItem.getValue());
+            LocatedBlock lb = moveItem.getKey();
+            lb.setBlockToken(MRUtils.getAccessToken(lb.getBlock(), EnumSet.of(
+              BlockTokenSecretManager.AccessMode.REPLACE, BlockTokenSecretManager.AccessMode.COPY),
+              MoverMapper.this.blockTokenSecretManager));
+            Mover.moveOneBlock(connectTimeout, moveTimeout, lb, moveItem.getValue());
             movedBlocks.increment(1);
           }
 
           if (moveMapRack != null) {
             for (Map.Entry<LocatedBlock, DatanodeInfo> moveItem : moveMapRack.entrySet()) {
-              Mover.moveOneBlock(connectTimeout, moveTimeout, moveItem.getKey(), moveItem.getValue());
+              LocatedBlock lb = moveItem.getKey();
+              lb.setBlockToken(MRUtils.getAccessToken(lb.getBlock(), EnumSet.of(
+                BlockTokenSecretManager.AccessMode.REPLACE, BlockTokenSecretManager.AccessMode.COPY),
+                MoverMapper.this.blockTokenSecretManager));
+              Mover.moveOneBlock(connectTimeout, moveTimeout, lb, moveItem.getValue());
               movedBlocks.increment(1);
             }
           }
         } catch (IOException ioe) {
           failedMoving.increment(1);
+          LOG.warn("Failed to moving blocks", ioe);
         }
       }
     }

@@ -12,9 +12,13 @@ package org.apache.hadoop.hdfs;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.Arrays;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.contrib.raid.BlockCodec;
+import org.apache.hadoop.contrib.raid.HdfsRaidConfigKeys;
+import org.apache.hadoop.contrib.raid.MRUtils;
+import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FSInputStream;
@@ -35,7 +39,17 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
   @Override
   public void initialize(URI name, Configuration conf) throws IOException {
     super.initialize(name, conf);
-    blockCodec = new BlockCodec(conf);
+    blockCodec = new BlockCodec(conf, fs);
+  }
+
+  @Override
+  public boolean isDistributedFileSystem() {
+    return true;
+  }
+
+  @Override
+  public FileSystem getDistributedFileSystem() {
+    return fs;
   }
 
   @Override
@@ -161,6 +175,12 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
       checkPos();
       IOException ioe = null;
       try {
+        try {
+          inplaceDecodeCorruptFile();
+        } catch (IOException e) {
+          // Ignore, just logged the error
+          DFSClient.LOG.warn("Fail to do in-place fixing ", e);
+        }
         int readLen = underlyingStream.read();
         currentPos += readLen;
         return readLen;
@@ -169,7 +189,12 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
       }
 
       if (isFileEncoded()) {
-        int readLen = downgradeRead(getPos(), 1)[0];
+        int readLen = 0;
+        try {
+          readLen = downgradeRead(getPos(), 1)[0];
+        } catch (NullPointerException npe) {
+          throw ioe;
+        }
         skipInternal(readLen);
         return readLen;
       } else {
@@ -187,15 +212,23 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
       checkPos();
       IOException ioe = null;
       try {
+        try {
+          inplaceDecodeCorruptFile();
+        } catch (IOException e) {
+          // Ignore, just logged the error
+          DFSClient.LOG.warn("Fail to do in-place fixing ", e);
+        }
         int readLen = underlyingStream.read(bytes, offset, length);
         currentPos += readLen;
         return readLen;
       } catch (IOException e) {
         ioe = e;
       }
-
       if (isFileEncoded()) {
         byte[] result = downgradeRead(getPos(), length);
+        if (result == null) {
+          throw ioe;
+        }
         System.arraycopy(result, 0, bytes, offset, result.length);
         skipInternal(result.length);
         return result.length;
@@ -209,6 +242,12 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
       checkPos();
       IOException ioe = null;
       try {
+        try {
+          inplaceDecodeCorruptFile();
+        } catch (IOException e) {
+          // Ignore, just logged the error
+          DFSClient.LOG.warn("Fail to do in-place fixing ", e);
+        }
         int readLen = underlyingStream.read(position, buffer, offset, length);
         return readLen;
       } catch (IOException e) {
@@ -217,6 +256,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
 
       if (isFileEncoded()) {
         byte[] result = downgradeRead(position, length);
+        if (result == null) {
+          throw ioe;
+        }
         System.arraycopy(result, 0, buffer, offset, result.length);
         return result.length;
       } else {
@@ -251,6 +293,12 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
 
         IOException ioe = null;
         try {
+          try {
+            inplaceDecodeCorruptFile();
+          } catch (IOException e) {
+            // Ignore, just logged the error
+            DFSClient.LOG.warn("Fail to do in-place fixing ", e);
+          }
           underlyingStream.read(pos, buffer, offset + totalReadLen, len);
           totalReadLen += len;
           continue;
@@ -260,6 +308,9 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
 
         if (isFileEncoded()) {
           byte[] result = downgradeRead(pos, len);
+          if (result == null) {
+            throw ioe;
+          }
           System.arraycopy(result, 0, buffer, offset + totalReadLen, len);
           totalReadLen += result.length;
         } else {
@@ -301,7 +352,74 @@ public class DistributedRaidFileSystem extends FilterFileSystem {
       // read at most until the end of the current block
       long blockSize = fileStatus.getBlockSize();
       length = Math.min(length, (int) (blockSize - (offset % blockSize)));
+      DFSClient.LOG.debug("Decoding file... ");
       return fs.blockCodec.decode(file, offset, length);
+    }
+
+    void inplaceDecodeCorruptFile() throws IOException {
+      Path sourceFile;
+      Path codingFile;
+      if (BlockCodec.isCodingFile(file)) {
+        sourceFile = BlockCodec.getCodingFileSource(file);
+        codingFile = file;
+      } else {
+        sourceFile = file;
+        codingFile = BlockCodec.getCodingFile(file);
+      }
+      if (!rawFs.exists(sourceFile) || !rawFs.exists(codingFile)) {
+        // It is not a coded file. Or it is a zombie file. Or it is a real corrupted file.
+        DFSClient.LOG.debug("Not need to decode the file.");
+        return;
+      }
+      FileStatus sourceFileStatus = rawFs.getFileStatus(sourceFile);
+      FileStatus codingFileStatus = rawFs.getFileStatus(codingFile);
+      BlockLocation[] srcLocs = rawFs.getFileBlockLocations(sourceFile, 0,
+        sourceFileStatus.getLen());
+      BlockLocation[] codeLocs = rawFs.getFileBlockLocations(codingFile, 0,
+        codingFileStatus.getLen());
+      int sourceBlocks = (int) ((sourceFileStatus.getLen() + sourceFileStatus.getBlockSize() - 1) / sourceFileStatus
+          .getBlockSize());
+      int corruptedBlks = 0;
+      for (BlockLocation blk : srcLocs) {
+        if (blk.isCorrupt()) {
+          corruptedBlks++;
+        }
+      }
+      if (corruptedBlks > fs.getConf().getInt(
+        HdfsRaidConfigKeys.HDFS_RAID_INPLACE_DECODE_THRESHOLD,
+        HdfsRaidConfigKeys.HDFS_RAID_INPLACE_DECODE_THRESHOLD_DEFAULT)) {
+        // Too many corrupted blocks, it is not worth in-place decoding.
+        DFSClient.LOG.info("Found " + corruptedBlks + " blocks corrupted in " + file.toString()
+            + ", skip in-place fixing.");
+        return;
+      }
+      for (BlockLocation blk : codeLocs) {
+        if (blk.isCorrupt()) {
+          corruptedBlks++;
+        }
+      }
+      if (corruptedBlks == 0) {
+        DFSClient.LOG.debug("No corrupted blocks found in file " + file.toString());
+        return;
+      }
+      DFSClient.LOG.info("Found " + corruptedBlks + " blocks corrupted in " + file.toString()
+          + ", trying to fix the file before read");
+      int[] blkIndexes = new int[corruptedBlks];
+      int index = 0;
+      for (BlockLocation blk : srcLocs) {
+        if (blk.isCorrupt()) {
+          blkIndexes[index++] = (int) (blk.getOffset() / sourceFileStatus.getBlockSize());
+        }
+      }
+      for (BlockLocation blk : codeLocs) {
+        if (blk.isCorrupt()) {
+          blkIndexes[index++] = sourceBlocks
+              + (int) (blk.getOffset() / codingFileStatus.getBlockSize());
+        }
+      }
+      Arrays.sort(blkIndexes);
+      fs.blockCodec
+          .decode(sourceFile, blkIndexes, MRUtils.getBlockTokenSecretManager(fs.getConf()));
     }
   }
 }

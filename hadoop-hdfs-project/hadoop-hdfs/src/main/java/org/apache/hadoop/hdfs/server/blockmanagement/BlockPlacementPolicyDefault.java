@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -76,6 +77,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private int reservedBlockNumPerStorage;
   private int overUsedPercentageThreshold;
   private long overUsedFreespaceThreshold;
+  private boolean randomlyDelete;
+  private Random rand;
 
   /**
    * A miss of that many heartbeats is tolerated for replica deletion policy.
@@ -115,6 +118,10 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     this.overUsedFreespaceThreshold =
         conf.getLong(DFSConfigKeys.DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD,
             DFSConfigKeys.DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD_DEFAULT);
+    this.randomlyDelete =
+        conf.getBoolean(DFSConfigKeys.DFS_NAMENODE_REPLICA_DELETE_RANDOMLY,
+            DFSConfigKeys.DFS_NAMENODE_REPLICA_DELETE_RANDOMLY_DEFAULT);
+    this.rand = new Random();
   }
 
   @Override
@@ -784,27 +791,44 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       Block block, short replicationFactor,
       Collection<DatanodeDescriptor> first,
       Collection<DatanodeDescriptor> second) {
-    long oldestHeartbeat =
-      now() - heartbeatInterval * tolerateHeartbeatMultiplier;
-    DatanodeDescriptor oldestHeartbeatNode = null;
-    long minSpace = Long.MAX_VALUE;
-    DatanodeDescriptor minSpaceNode = null;
+    if (!randomlyDelete) {
+      long oldestHeartbeat =
+          now() - heartbeatInterval * tolerateHeartbeatMultiplier;
+      DatanodeDescriptor oldestHeartbeatNode = null;
+      long minSpace = Long.MAX_VALUE;
+      DatanodeDescriptor minSpaceNode = null;
 
-    // Pick the node with the oldest heartbeat or with the least free space,
-    // if all hearbeats are within the tolerable heartbeat interval
-    for(DatanodeDescriptor node : pickupReplicaSet(first, second)) {
-      long free = node.getRemaining();
-      long lastHeartbeat = node.getLastUpdate();
-      if(lastHeartbeat < oldestHeartbeat) {
-        oldestHeartbeat = lastHeartbeat;
-        oldestHeartbeatNode = node;
+      // Pick the node with the oldest heartbeat or with the least free space,
+      // if all hearbeats are within the tolerable heartbeat interval
+      for(DatanodeDescriptor node : pickupReplicaSet(first, second)) {
+        long free = node.getRemaining();
+        long lastHeartbeat = node.getLastUpdate();
+        if(lastHeartbeat < oldestHeartbeat) {
+          oldestHeartbeat = lastHeartbeat;
+          oldestHeartbeatNode = node;
+        }
+        if (minSpace > free) {
+          minSpace = free;
+          minSpaceNode = node;
+        }
       }
-      if (minSpace > free) {
-        minSpace = free;
-        minSpaceNode = node;
+      return oldestHeartbeatNode != null ? oldestHeartbeatNode : minSpaceNode;
+    } else {
+      int totalReplica = first.size() + second.size();
+      int toDelete = rand.nextInt(totalReplica);
+      Collection<DatanodeDescriptor> target = first;
+      if (toDelete >= first.size()) {
+        toDelete -= first.size();
+        target = second;
       }
+      for (DatanodeDescriptor node : target) {
+        if (toDelete == 0) {
+          return node;
+        }
+        --toDelete;
+      }
+      return null;
     }
-    return oldestHeartbeatNode != null ? oldestHeartbeatNode : minSpaceNode;
   }
 
   /**

@@ -17,10 +17,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.io.output.NullOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -39,6 +41,7 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -65,15 +68,14 @@ public class BlockCodec {
   private final short replicaAfterEncode;
 
   private static final Path RAID_ROOT = new Path("/raid");
+  private static final Path RAID_LIB = new Path("/raid/lib");
   private static final String CODING_FILE_SUFFIX = ".ec";
   private static final String TEMP_CODINF_FILE_SUFFIX = ".tmp";
   private static final String DECODE_LOCK_FILE_SUFFIX = ".lock";
-  private static final String JERASURE_LIBNAME = "libJerasure.so";
-  private static final String GF_LIBNAME = "libgf_complete.so";
   private static final byte COMPLEMENT_BYTE = (byte) 1;
   private static final OutputStream DUMMY_STREAM = new ByteArrayOutputStream(1);
 
-  public BlockCodec(Configuration conf) throws IOException {
+  public BlockCodec(Configuration conf, FileSystem fs) throws IOException {
     this.raidTimeWindowMs = conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
       HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT);
     this.dataBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_KEY,
@@ -91,7 +93,7 @@ public class BlockCodec {
       HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA_DEFAULT);
     Preconditions.checkState(((codecBufSize % stripSize) == 0) && (codecBufSize > stripSize));
     this.conf = conf;
-    this.fs = FileSystem.get(conf);
+    this.fs = fs;
     checkRaidRoot();
 
     this.codec = new ErasureCodec.Builder(Algorithm.Reed_Solomon).dataBlockNum(dataBlocksNum)
@@ -101,6 +103,10 @@ public class BlockCodec {
     } else {
       throw new IOException("Non-distributed filesystem is not supported");
     }
+  }
+
+  public BlockCodec(Configuration conf) throws IOException {
+    this(conf, FileSystem.get(conf));
   }
 
   /**
@@ -206,20 +212,50 @@ public class BlockCodec {
   /**
    * Decodes corrupted blocks of specified file.
    */
-  public void decode(Path file, int[] corruptedBlocks) throws IOException {
+  public void decode(Path file, int[] corruptedBlocks, BlockTokenSecretManager tokenManager)
+      throws IOException {
     FSDataOutputStream lockOut = beginDecoding(fs, file);
     Map<Integer, OutputStream>[] erasuredDataInfos = null;
     Map<Integer, OutputStream>[] erasuredCodingInfos = null;
     Map<Integer, List<LocatedBlock>> dataGrpLocs = null;
     Map<Integer, List<LocatedBlock>> codingGrpLocs = null;
     try {
+      boolean needFix = false;
       FileStatus fileStatus = fs.getFileStatus(file);
       long fileLen = fileStatus.getLen();
       long blockSize = fileStatus.getBlockSize();
       BlockLocation[] locations = fs.getFileBlockLocations(fileStatus, 0, fileLen);
       Preconditions.checkState(locations.length > 0);
       Path codingFile = getCodingFile(file);
+      FileStatus codingFileStatus = fs.getFileStatus(codingFile);
+      long codingFileLen = codingFileStatus.getLen();
+      long codingBlockSize = codingFileStatus.getBlockSize();
+      BlockLocation[] codingFileLocations = fs.getFileBlockLocations(codingFileStatus, 0,
+        codingFileLen);
 
+      for (BlockLocation blk : locations) {
+        if (blk.isCorrupt()) {
+          needFix = true;
+          break;
+        }
+      }
+      if (needFix == false) {
+        for (BlockLocation blk : codingFileLocations) {
+          if (blk.isCorrupt()) {
+            needFix = true;
+            break;
+          }
+        }
+      }
+      if (needFix == false) {
+        LOG.info("File " + file.toString() + " is not corrupted any more, skip to fix it.");
+        return;
+      }
+      StringBuilder sb = new StringBuilder();
+      for (int cblk : corruptedBlocks) {
+        sb.append(" ").append(cblk);
+      }
+      LOG.debug("File " + file.toString() + " corrupted blks " + sb.toString());
       // Partition the corrupted blocks into groups
       int groupNum = (locations.length - 1) / dataBlocksNum + 1;
       erasuredDataInfos = new Map[groupNum];
@@ -228,15 +264,36 @@ public class BlockCodec {
       codingGrpLocs = new HashMap<Integer, List<LocatedBlock>>();
       partitionErasureBlocks(corruptedBlocks, locations.length, erasuredDataInfos,
         erasuredCodingInfos);
-      constructGroupLocation(file, corruptedBlocks, dataGrpLocs);
-      constructGroupLocation(codingFile, corruptedBlocks, codingGrpLocs);
-      constructBlockOutputStreams(file, erasuredDataInfos, dataGrpLocs, codingGrpLocs);
-      constructBlockOutputStreams(codingFile, erasuredCodingInfos, dataGrpLocs, codingGrpLocs);
+
 
       // Decode blocks within each group
       for (int i = 0; i < groupNum; ++i) {
-        decodeBlocks(file, fileStatus, locations.length, i, blockSize, erasuredDataInfos[i],
-          erasuredCodingInfos[i]);
+        int corruptDataBlks = erasuredDataInfos[i].size();
+        int corruptEcBlks = erasuredCodingInfos[i].size();
+        if (corruptDataBlks + corruptEcBlks > codingBlocksNum) {
+          StringBuilder msg = new StringBuilder();
+          msg.append("Too many blocks corrupted in group ").append(i).append(" in file ")
+              .append(file.toString()).append(". Just skip it.");
+          LOG.warn(msg.toString());
+        } else if (corruptDataBlks + corruptEcBlks != 0) {
+          try {
+            constructGroupLocation(file, locations.length, i, corruptedBlocks, dataGrpLocs);
+            constructGroupLocation(codingFile, locations.length, i, corruptedBlocks, codingGrpLocs);
+            constructBlockOutputStreams(file, i, erasuredDataInfos, dataGrpLocs, codingGrpLocs,
+              tokenManager);
+            constructBlockOutputStreams(codingFile, i, erasuredCodingInfos, dataGrpLocs,
+              codingGrpLocs, tokenManager);
+            decodeBlocks(file, fileStatus, locations.length, i, blockSize, erasuredDataInfos[i],
+              erasuredCodingInfos[i]);
+          } catch (IOException ioe) {
+            LOG.error("Fail to decode group " + groupNum + " of " + file.toString(), ioe);
+            throw ioe;
+          }
+          LOG.info("Decoded group " + groupNum + " of " + file.toString());
+        } else {
+          // No corrupted blocks in this group. Nothing to do.
+          LOG.info("Skipped group " + groupNum + " since no blocks are corrupted in this group.");
+        }
       }
     } finally {
       if (erasuredDataInfos != null) {
@@ -267,13 +324,74 @@ public class BlockCodec {
       FileStatus fileStatus = fs.getFileStatus(file);
       BlockLocation[] locations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
       long blockSize = fileStatus.getBlockSize();
+      if ((offset + length) / blockSize != offset / blockSize) {
+        length = length - (int) ((offset + length) % blockSize);
+      }
       long adjustedOffset = adjustOffset(offset % blockSize, stripSize);
       long adjustedLength = adjustLength(length, stripSize);
       int blockIdx = (int) (offset / blockSize);
       int groupNo = blockIdx / dataBlocksNum;
-
+      Path sourceFile;
+      Path codingFile;
+      if (BlockCodec.isCodingFile(file)) {
+        sourceFile = BlockCodec.getCodingFileSource(file);
+        codingFile = file;
+      } else {
+        sourceFile = file;
+        codingFile = BlockCodec.getCodingFile(file);
+      }
+      if (!fs.exists(sourceFile) || !fs.exists(codingFile)) {
+        // It is not a coded file. Or it is a zombie file. Or it is a real corrupted file.
+       LOG.debug("Not need to decode the file.");
+        return null;
+      }
+      FileStatus sourceFileStatus = fs.getFileStatus(sourceFile);
+      FileStatus codingFileStatus = fs.getFileStatus(codingFile);
+      long srcOff = groupNo * dataBlocksNum * blockSize;
+      long srcLen = dataBlocksNum * blockSize;
+      if (srcOff + srcLen > sourceFileStatus.getLen()) {
+        srcLen = sourceFileStatus.getLen() - srcOff;
+      }
+      BlockLocation[] srcLocs = fs.getFileBlockLocations(sourceFile, srcOff, srcLen);
+      long codeOff = groupNo * codingBlocksNum * blockSize;
+      long codeLen = codingBlocksNum * blockSize;
+      if (codeOff + codeLen > codingFileStatus.getLen()) {
+        codeLen = codingFileStatus.getLen() - codeOff;
+      }
+      BlockLocation[] codeLocs = fs.getFileBlockLocations(codingFile, codeOff, codeLen);
+      int corruptedBlks = 0;
+      for (BlockLocation blk : srcLocs) {
+        if (blk.isCorrupt()) {
+          corruptedBlks++;
+        }
+      }
+      for (BlockLocation blk : codeLocs) {
+        if (blk.isCorrupt()) {
+          corruptedBlks++;
+        }
+      }
+      if (corruptedBlks == 0) {
+        LOG.info("No corrupted blocks found in file " + file.toString());
+        // We continue the decoding since it might be a checksum error.
+      } else {
+        LOG.info("Found " + corruptedBlks + " blocks corrupted in " + file.toString()
+            + ", trying to decode it ...");
+      }
+ 
       erasuredDataInfo = new HashMap<Integer, OutputStream>();
       erasuredCodingInfo = new HashMap<Integer, OutputStream>();
+      for (BlockLocation blk : srcLocs) {
+        if (blk.isCorrupt()) {
+         int blkIndex = (int) (blk.getOffset() / sourceFileStatus.getBlockSize());
+         erasuredDataInfo.put(blkIndex, NullOutputStream.NULL_OUTPUT_STREAM);
+        }
+      }
+      for (BlockLocation blk : codeLocs) {
+        if (blk.isCorrupt()) {
+          int blkIndex = (int) (blk.getOffset() / codingFileStatus.getBlockSize());
+          erasuredCodingInfo.put(blkIndex, NullOutputStream.NULL_OUTPUT_STREAM);
+        }
+      }
       erasuredDataInfo.put(blockIdx, new ByteArrayOutputStream((int) adjustedLength));
 
       decodeData(file, fileStatus, locations.length, groupNo, blockSize, adjustedOffset,
@@ -447,6 +565,7 @@ public class BlockCodec {
             dataIns[i].read(pos, data[i], 0, data[i].length);
           }
         } catch (IOException e) {
+
           if (isBlockCorrupted(e)) {
             dfsClient.reportBadBlocks(new LocatedBlock[] { getBlock(file, blockSize, blockIdx) });
           }
@@ -532,6 +651,7 @@ public class BlockCodec {
   void checkRaidRoot() throws IOException {
     if (!fs.exists(RAID_ROOT)) {
       fs.mkdirs(RAID_ROOT);
+      fs.mkdirs(RAID_LIB);
     }
   }
 
@@ -625,25 +745,59 @@ public class BlockCodec {
         codingBlocksGroup[index].put(corruptedBlocks[i] - totalDataBlocksNum, DUMMY_STREAM);
       }
     }
+    for (int grp = 0; grp < dataBlocksGroup.length; grp++) {
+      if (dataBlocksGroup[grp].keySet().size() == 0) {
+        LOG.debug("grp " + grp + " is empty.");
+      }
+      for (Integer idx : dataBlocksGroup[grp].keySet()) {
+        LOG.debug("grp " + grp + " blk " + idx + " stream "
+            + ((dataBlocksGroup[grp].get(idx) == DUMMY_STREAM) ? "dummy stream" : "not dummy"));
+      }
+    }
+    for (int grp = 0; grp < codingBlocksGroup.length; grp++) {
+      if (codingBlocksGroup[grp].keySet().size() == 0) {
+        LOG.debug("grp " + grp + " is empty.");
+      }
+      for (Integer idx : codingBlocksGroup[grp].keySet()) {
+        LOG.debug("grp " + grp + " blk " + idx + " stream "
+            + ((codingBlocksGroup[grp].get(idx) == DUMMY_STREAM) ? "dummy stream" : "not dummy"));
+      }
+    }
   }
 
-  void constructGroupLocation(Path file, int[] corruptedBlocks,
+  void constructGroupLocation(Path file, int totalBlks, int groupNo, int[] corruptedBlocks,
       Map<Integer, List<LocatedBlock>> blkLocs) throws IOException {
     FileStatus fileStatus = fs.getFileStatus(file);
-    int blksPerGrp = isCodingFile(file) ? codingBlocksNum : dataBlocksNum;
+    boolean isCodingFile = isCodingFile(file);
+    int blksPerGrp = isCodingFile ? codingBlocksNum : dataBlocksNum;
     long bytesPerGrp = blksPerGrp * fileStatus.getBlockSize();
     for (int i = 0; i < corruptedBlocks.length; i++) {
-      int grpIdx = corruptedBlocks[i] / blksPerGrp;
+      if (isCodingFile && corruptedBlocks[i] < totalBlks) {
+        continue;
+      }
+      if (!isCodingFile && corruptedBlocks[i] >= totalBlks) {
+        continue;
+      }
+      int index = isCodingFile ? (corruptedBlocks[i] - totalBlks) : corruptedBlocks[i];
+      int grpIdx = index / blksPerGrp;
+      if (grpIdx != groupNo) {
+        continue;
+      }
       if (!blkLocs.containsKey(grpIdx)) {
-        LocatedBlocks blks = dfsClient.getLocatedBlocks(file.toString(), grpIdx * bytesPerGrp,
+        LOG.debug("Getting locations for " + grpIdx +" file is " + file.toString());
+        LocatedBlocks blks = dfsClient.getLocatedBlocks(file.toUri().getPath(), grpIdx
+            * bytesPerGrp,
           bytesPerGrp);
+        LOG.debug("Put " + blks.toString() + " into group " + grpIdx + " of " + file.toString());
         blkLocs.put(grpIdx, blks.getLocatedBlocks());
       }
     }
   }
 
-  void constructBlockOutputStreams(Path file, Map<Integer, OutputStream>[] blocksGroups,
-      Map<Integer, List<LocatedBlock>> dataLocs, Map<Integer, List<LocatedBlock>> codingLocs)
+  void constructBlockOutputStreams(Path file, int groupNo,
+      Map<Integer, OutputStream>[] blocksGroups,
+      Map<Integer, List<LocatedBlock>> dataLocs, Map<Integer, List<LocatedBlock>> codingLocs,
+      BlockTokenSecretManager tokenManager)
       throws IOException {
     boolean codingFile = isCodingFile(file);
     int blksPerGrp = codingFile ? codingBlocksNum : dataBlocksNum;
@@ -651,6 +805,9 @@ public class BlockCodec {
       for (Map.Entry<Integer, OutputStream> entry : group.entrySet()) {
         int blockIdx = entry.getKey();
         int grpIdx = blockIdx / blksPerGrp;
+        if (grpIdx != groupNo) {
+          continue;
+        }
         int offInGrp = blockIdx % blksPerGrp;
         LocatedBlock block = null;
         if (codingFile) {
@@ -659,37 +816,53 @@ public class BlockCodec {
           block = dataLocs.get(grpIdx).get(offInGrp);
         }
         ArrayList<DatanodeInfo> grpDis = new ArrayList<DatanodeInfo>();
-        for (LocatedBlock dloc : dataLocs.get(grpIdx)) {
-          for (DatanodeInfo di : dloc.getLocations()) {
-            // Raid file's replication should be 1, which implies following check would always pass
-            if (!grpDis.contains(di)) {
-              grpDis.add(di);
+        if (dataLocs.containsKey(grpIdx)) {
+          for (LocatedBlock dloc : dataLocs.get(grpIdx)) {
+            for (DatanodeInfo di : dloc.getLocations()) {
+              // Raid file's replication should be 1, which implies following check would always pass
+              if (!grpDis.contains(di)) {
+                grpDis.add(di);
+              }
             }
           }
         }
-        for (LocatedBlock cloc : codingLocs.get(grpIdx)) {
-          for (DatanodeInfo di : cloc.getLocations()) {
-            // Raid file's replication should be 1, which implies following check would always pass
-            if (!grpDis.contains(di)) {
-              grpDis.add(di);
+        if (codingLocs.containsKey(grpIdx)) {
+          for (LocatedBlock cloc : codingLocs.get(grpIdx)) {
+            for (DatanodeInfo di : cloc.getLocations()) {
+              // Raid file's replication should be 1, which implies following check would always pass
+              if (!grpDis.contains(di)) {
+                grpDis.add(di);
+              }
             }
           }
         }
         DatanodeInfo[] dis = new DatanodeInfo[0];
         BlockOutputStream stream = null;
+        block.setBlockToken(MRUtils.getAccessToken(block.getBlock(),
+          EnumSet.of(BlockTokenSecretManager.AccessMode.WRITE), tokenManager));
         try {
           stream = BlockOutputStream.createStream(dfsClient, block, grpDis.toArray(dis));
+          LOG.info("Created stream for block " + block.toString() + " index " + blockIdx + " of "
+              + file.toString());
         } catch (IOException ioe1) {
           // Try again with smaller excludedNodes
-          LOG.warn("Fail to create BlockOutputStream, will try again with smaller set of excluded nodes");
+          LOG.warn(
+            "Fail to create BlockOutputStream, will try again with smaller set of excluded nodes",
+            ioe1);
           try {
             stream = BlockOutputStream.createStream(dfsClient, block, block.getLocations());
           } catch (IOException ioe2) {
-            // TBD: Should we try with empty excluded nodes?
             LOG.warn(
-              "Still fail to create BlockOutputStream even with smaller set of excluded nodes",
+              "Fail to create BlockOutputStream, will try again with empty set of excluded nodes",
               ioe2);
-            throw ioe2;
+            try {
+              stream = BlockOutputStream.createStream(dfsClient, block, new DatanodeInfo[0]);
+            } catch (IOException ioe3) {
+              LOG.warn(
+                "Still fail to create BlockOutputStream even with empty set of excluded nodes",
+                ioe3);
+              throw ioe3;
+            }
           }
         }
         entry.setValue(stream);
@@ -769,12 +942,8 @@ public class BlockCodec {
     return RAID_ROOT;
   }
 
-  public static String getJerasureLibName() {
-    return JERASURE_LIBNAME;
-  }
-
-  public static String getGfLibName() {
-    return GF_LIBNAME;
+  public static Path getRaidLib() {
+    return RAID_LIB;
   }
 
   private static Path getDecodeLockFile(Path file) {

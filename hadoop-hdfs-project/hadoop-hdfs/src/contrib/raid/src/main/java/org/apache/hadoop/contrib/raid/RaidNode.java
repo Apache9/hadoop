@@ -23,6 +23,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.contrib.raid.ClientRaidnodeProtocolProtos.ClientRaidnodeProtocolService;
@@ -37,6 +39,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -76,9 +79,11 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   private static final int MAX_POOL_SIZE = 100;
   private static final int THREAD_KEEP_ALIVE_SECS = 60;
 
+  private static final Log LOG = LogFactory.getLog(RaidTask.class);
+
   public RaidNode(Configuration conf) throws IOException {
     this.conf = conf;
-
+    this.conf.setBoolean(CommonConfigurationKeys.HADOOP_RAID_ENABLED_KEY, false);
     BlockingQueue<Runnable> taskQueue = new ArrayBlockingQueue<Runnable>(TASK_QUEUE_CAPACITY);
     ExecutorService executorService = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE,
         THREAD_KEEP_ALIVE_SECS, TimeUnit.SECONDS, taskQueue,
@@ -116,6 +121,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
   }
 
   private void initMetrics() {
+    DefaultMetricsSystem.initialize("raidnode");
     this.metrics = RaidMetrics.create();
   }
 
@@ -158,6 +164,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
         }
       }
     }, delay);
+    LOG.debug("Encode job is scheduled in " + delay + "ms");
   }
 
   public void shutDownEncodeTask() {
@@ -176,6 +183,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
         submitTask(task);
       }
     }, delay);
+    LOG.debug("Sweeper job is scheduled in " + delay + "ms");
   }
 
   public void shutDownZombieSweeperTask() {
@@ -197,6 +205,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
         }
       }
     }, delay);
+    LOG.debug("Fixer job is scheduled in " + delay + "ms");
   }
 
   public void shutDownFixerTask() {
@@ -219,6 +228,7 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
         }
       }
     }, delay);
+    LOG.debug("Mover job is scheduled in " + delay + "ms");
   }
 
   public void shutDownMoverTask() {
@@ -268,6 +278,9 @@ public class RaidNode extends Configured implements ClientRaidnodeProtocol {
 
     // Set metrics of raid task before kick-off any tasks
     RaidTaskUtils.setMetrics(metrics);
+   
+    MRUtils.cacheCodecLib(conf);
+    MRUtils.cacheJarLib(conf);
 
     // Start the encoding task
     scheduleEncodeTask(conf.getLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_ENCODE_INTERVAL,

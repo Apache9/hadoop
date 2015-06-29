@@ -259,6 +259,7 @@ public class Collector {
 
         for (Map.Entry<Integer, Set<LocatedBlock>> entry : groupToLoc.entrySet()) {
           if (needMove(entry)) {
+            LOG.debug("Added file " + sourceFile.toString() + " as mover candidate.");
             context.write(new Text(sourceFile.toString()), new Text(entry.getKey().toString()));
           }
         }
@@ -278,24 +279,31 @@ public class Collector {
         // If this group contains corrupt blocks or the replication is not 1 yet, skip this group.
         // It may be handled next time.
         if (lb.isCorrupt() || (lb.getLocations().length != 1)) {
+          LOG.debug("Block " + lb.toString() + " is skipped.");
           return false;
         }
       }
       for (LocatedBlock lb : grpLocs.getValue()) {
+        LOG.debug("Need move check of block " + lb.toString());
         for (LocatedBlock tmpLb : grpLocs.getValue()) {
           if (tmpLb == lb) {
             continue;
           }
           if ((lb.getLocations()[0]).equals(tmpLb.getLocations()[0])) {
+            LOG.debug("Block " + lb.toString() + "and block " + 
+                tmpLb.toString() + " are on same node.");
             return true;
           }
           if (shuffleBlksAmongRacks) {
             if (topology.isOnSameRack(lb.getLocations()[0], tmpLb.getLocations()[0])) {
+              LOG.debug("Block " + lb.toString() + "and block " + 
+                  tmpLb.toString() + " are on same rack.");
               return true;
             }
           }
         }
       }
+      LOG.debug("Do not need to move group " + grpLocs.getKey());
       return false;
     }
   }
@@ -475,13 +483,16 @@ public class Collector {
                     + " as it is still open for write or its last modification time is still in grace period ");
               }
             } else if (purpose == TaskPurpose.BlockMover) {
+              LOG.debug("Checking file " + file.toString() + " for BlockMover.");
               if (BlockCodec.isCodingFile(file)) {
                 if (fs instanceof DistributedFileSystem) {
                   DistributedFileSystem dfs = (DistributedFileSystem) fs;
                   filesScannedForMover.increment(1);
                   if (dfs.isFileClosed(file)) {
+                    LOG.debug("File " + file.toString() + " is picked for BlockMover check.");
                     return true;
                   }
+                  LOG.debug("File " + file.toString() + " is skipped since it is not closed.");
                 }
               }
             }
