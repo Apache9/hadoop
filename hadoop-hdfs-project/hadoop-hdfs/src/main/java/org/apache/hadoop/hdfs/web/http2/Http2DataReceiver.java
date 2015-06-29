@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.web.http2;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http2.Http2Headers;
@@ -44,7 +45,7 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
   private final Deque<ByteBuf> queue = new ArrayDeque<ByteBuf>();
 
-  private SocketAddress remoteAddr;
+  private Channel channel;
 
   private Throwable error;
 
@@ -119,7 +120,30 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
             return bbRemaining;
           }
         }
+
+        @Override
+        public void close() throws IOException {
+          if (doClose()) {
+            channel.close();
+          }
+        }
+
       };
+
+  private boolean doClose() {
+    synchronized (queue) {
+      if (error != null) {
+        return false;
+      }
+      ByteBuf lastBuf = queue.peekLast();
+      if (lastBuf == END_OF_STREAM) {
+        return false;
+      }
+      error = EOF;
+      notifyAll();
+      return true;
+    }
+  }
 
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object msg)
@@ -142,27 +166,21 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
     synchronized (queue) {
-      error = cause;
-      queue.notifyAll();
+      if (error == null) {
+        error = cause;
+        queue.notifyAll();
+      }
     }
   }
 
   @Override
   public void channelActive(ChannelHandlerContext ctx) throws Exception {
-    remoteAddr = ctx.channel().remoteAddress();
+    channel = ctx.channel();
   }
 
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-    synchronized (queue) {
-      ByteBuf lastBuf = queue.peekLast();
-      if (lastBuf == END_OF_STREAM) {
-        return;
-      }
-      // haven't received end of stream yet, so there must be a stream reset.
-      error = EOF;
-      notifyAll();
-    }
+    doClose();
   }
 
   private void enqueue(ByteBuf buf) {
@@ -207,7 +225,8 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
     if (cause == ReadTimeoutException.INSTANCE) {
       return new IOException("Read timeout");
     } else if (cause == EOF) {
-      return new IOException("Connection reset by peer: " + remoteAddr);
+      return new IOException("Connection reset by peer: "
+          + channel.remoteAddress());
     } else {
       return new IOException(cause);
     }

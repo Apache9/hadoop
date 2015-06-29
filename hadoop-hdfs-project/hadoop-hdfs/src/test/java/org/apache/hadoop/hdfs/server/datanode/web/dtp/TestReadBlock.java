@@ -30,10 +30,10 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.util.ByteString;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutionException;
@@ -57,10 +57,10 @@ import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
 import org.apache.hadoop.hdfs.web.http2.ClientHttp2ConnectionHandler;
+import org.apache.hadoop.hdfs.web.http2.Http2DataReceiver;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.apache.hadoop.hdfs.web.http2.LastHttp2Message;
-import org.apache.hadoop.hdfs.web.http2.ResponseHandler;
 import org.apache.hadoop.util.DataChecksum;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -69,6 +69,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Ints;
 
 /**
@@ -133,7 +134,6 @@ public class TestReadBlock {
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path("/test"));
     out.write(1);
     out.close();
-    final ResponseHandler respHandler = new ResponseHandler();
     Http2StreamChannel stream =
         new Http2StreamBootstrap()
             .channel(CHANNEL)
@@ -142,7 +142,7 @@ public class TestReadBlock {
               @Override
               protected void initChannel(Http2StreamChannel ch)
                   throws Exception {
-                ch.pipeline().addLast(respHandler);
+                ch.pipeline().addLast(new Http2DataReceiver());
               }
 
             })
@@ -173,10 +173,10 @@ public class TestReadBlock {
     proto.writeDelimitedTo(bos);
     stream.write(buf);
     stream.writeAndFlush(LastHttp2Message.get());
-    assertEquals(HttpResponseStatus.OK.codeAsText(), respHandler.getHeaders()
+    Http2DataReceiver receiver = stream.pipeline().get(Http2DataReceiver.class);
+    assertEquals(HttpResponseStatus.OK.codeAsText(), receiver.waitForResponse()
         .status());
-    ByteArrayInputStream input =
-        new ByteArrayInputStream(respHandler.getData());
+    InputStream input = receiver.content();
     OpReadBlockResponseProto respProto =
         OpReadBlockResponseProto.parseDelimitedFrom(input);
     assertEquals(Status.SUCCESS, respProto.getStatus());
@@ -186,7 +186,6 @@ public class TestReadBlock {
     assertEquals(1, frameHeaderProto.getNumChunks());
     assertEquals(4, frameHeaderProto.getChecksums().size());
     assertEquals(1, frameHeaderProto.getDataLength());
-    assertEquals(1, input.available());
     assertEquals(1, input.read());
     assertEquals(-1, input.read());
     DataChecksum checksum =
@@ -204,7 +203,6 @@ public class TestReadBlock {
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path("/test"));
     out.write(2);
     out.close();
-    final ResponseHandler respHandler = new ResponseHandler();
     Http2StreamChannel stream =
         new Http2StreamBootstrap()
             .channel(CHANNEL)
@@ -213,7 +211,7 @@ public class TestReadBlock {
               @Override
               protected void initChannel(Http2StreamChannel ch)
                   throws Exception {
-                ch.pipeline().addLast(respHandler);
+                ch.pipeline().addLast(new Http2DataReceiver());
               }
 
             })
@@ -245,11 +243,12 @@ public class TestReadBlock {
     proto.writeDelimitedTo(bos);
     stream.write(buf);
     stream.writeAndFlush(LastHttp2Message.get());
-    assertEquals(HttpResponseStatus.NOT_FOUND.codeAsText(), respHandler
-        .getHeaders().status());
+    Http2DataReceiver receiver = stream.pipeline().get(Http2DataReceiver.class);
+    assertEquals(HttpResponseStatus.NOT_FOUND.codeAsText(), receiver
+        .waitForResponse().status());
     JsonNode jsonNode =
-        new ObjectMapper().readTree(new String(respHandler.getData(),
-            StandardCharsets.UTF_8));
+        new ObjectMapper().readTree(new String(ByteStreams.toByteArray(receiver
+            .content()), StandardCharsets.UTF_8));
     assertEquals(ReplicaNotFoundException.class.getSimpleName(),
       jsonNode.get("RemoteException").get("exception").asText());
   }

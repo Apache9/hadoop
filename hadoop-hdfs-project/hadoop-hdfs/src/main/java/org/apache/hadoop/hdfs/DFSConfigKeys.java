@@ -1159,4 +1159,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   // whether to log http2 frame for debugging
   public static final String  DFS_HTTP2_VERBOSE_KEY = "dfs.http2.verbose";
   public static final boolean DFS_HTTP2_VERBOSE_DEFAULT = false;
+  
+  public static final String  DFS_HTTP2_INITIAL_WINDOW_SIZE = "dfs.http2.initial.windows.size";
+  public static final int     DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT = Integer.MAX_VALUE;
 }

@@ -49,7 +49,7 @@ public class Http2ConnectionPool implements Closeable {
 
   private boolean initialized = false;
 
-  private static final int initialWindowSize = 4 * 1024 * 1024;
+  private static final int initialWindowSize = 1024 * 1024 * 1024;
 
   public static class SessionAndStreamId {
 
@@ -80,7 +80,7 @@ public class Http2ConnectionPool implements Closeable {
         c.setClientConnectionFactory(new HTTP2ClientConnectionFactory() {
           @Override
           protected FlowControlStrategy newFlowControlStrategy() {
-            return new BufferingFlowControlStrategy(initialWindowSize, 0.3f);
+            return new BufferingFlowControlStrategy(initialWindowSize, 0.5f);
           }
         });
         try {

@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
@@ -53,7 +54,7 @@ public class TestHttp2Performance {
 
   @BeforeClass
   public static void setUp() throws Exception {
-    //CONF2.setBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY, true);
+    CONF2.setBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY, true);
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
 
@@ -111,7 +112,6 @@ public class TestHttp2Performance {
 
   @Test
   public void testHttp2() throws IllegalArgumentException, IOException, InterruptedException {
-
     final String fileName = "/test2";
     FSDataOutputStream out = FileSystem.get(CONF2).create(new Path(fileName));
     final int len = 6 * 1024 * 1024 - 10;
@@ -119,7 +119,7 @@ public class TestHttp2Performance {
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
     out.close();
-    int concurrency = 5;
+    int concurrency = 50;
     long start = System.currentTimeMillis();
     ExecutorService executor =
         Executors.newFixedThreadPool(concurrency,

@@ -30,6 +30,7 @@ import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Connection.PropertyKey;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
@@ -91,7 +92,7 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
   }
 
   public static ClientHttp2ConnectionHandler create(Channel channel,
-      boolean verbose) {
+      boolean verbose) throws Http2Exception {
     Http2Connection conn = new DefaultHttp2Connection(false);
     ClientHttp2EventListener listener =
         new ClientHttp2EventListener(channel, conn);
@@ -109,7 +110,11 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
       frameReader = new DefaultHttp2FrameReader();
       frameWriter = new DefaultHttp2FrameWriter();
     }
-    return new ClientHttp2ConnectionHandler(conn, frameReader, frameWriter,
-        listener);
+    ClientHttp2ConnectionHandler handler =
+        new ClientHttp2ConnectionHandler(conn, frameReader, frameWriter,
+            listener);
+    handler.connection().local().flowController()
+        .initialWindowSize(Integer.MAX_VALUE);
+    return handler;
   }
 }
