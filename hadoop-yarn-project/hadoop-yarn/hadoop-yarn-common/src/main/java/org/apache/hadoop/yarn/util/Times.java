@@ -29,6 +29,7 @@ import org.apache.hadoop.classification.InterfaceAudience.Private;
 public class Times {
   private static final Log LOG = LogFactory.getLog(Times.class);
 
+  // This format should match the one used in yarn.dt.plugins.js
   static final ThreadLocal<SimpleDateFormat> dateFormat =
       new ThreadLocal<SimpleDateFormat>() {
         @Override protected SimpleDateFormat initialValue() {
