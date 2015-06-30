@@ -31,8 +31,13 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.shell.Command;
 import org.apache.hadoop.fs.shell.CommandFactory;
 import org.apache.hadoop.fs.shell.FsCommand;
+import org.apache.hadoop.tracing.TraceUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.SamplerBuilder;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 
 /** Provide command line access to a FileSystem. */
 @InterfaceAudience.Private
@@ -43,6 +48,7 @@ public class FsShell extends Configured implements Tool {
   private FileSystem fs;
   private Trash trash;
   protected CommandFactory commandFactory;
+  private Sampler traceSampler;
 
   private final String usagePrefix =
     "Usage: hadoop fs [generic options]";
@@ -240,7 +246,7 @@ public class FsShell extends Configured implements Tool {
   public int run(String argv[]) throws Exception {
     // initialize FsShell
     init();
-
+    traceSampler = new SamplerBuilder(TraceUtils.wrapHadoopConf(getConf())).build();
     int exitCode = -1;
     if (argv.length < 1) {
       printUsage(System.err);
@@ -252,7 +258,12 @@ public class FsShell extends Configured implements Tool {
         if (instance == null) {
           throw new UnknownCommandException();
         }
-        exitCode = instance.run(Arrays.copyOfRange(argv, 1, argv.length));
+        TraceScope scope = Trace.startSpan(instance.getCommandName(), traceSampler);
+        try {
+          exitCode = instance.run(Arrays.copyOfRange(argv, 1, argv.length));
+        } finally {
+          scope.close();
+        }
       } catch (IllegalArgumentException e) {
         displayError(cmd, e.getLocalizedMessage());
         if (instance != null) {

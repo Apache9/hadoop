@@ -8,6 +8,7 @@ Release hadoop-2.4.0-mdh2
 
   IMPROVEMENTS
     HADOOP-11498. Bump the version of HTrace to 3.1.0-incubating (Masatake Iwasaki via Colin P. McCabe)
+    HADOOP-12124. Add HTrace support for FsShell (cmccabe)
 
   OPTIMIZATIONS
 
