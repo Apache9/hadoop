@@ -119,7 +119,7 @@ public class TestHttp2BlockReader {
 
     final Http2ConnectionPool http2ConnectionPool = new Http2ConnectionPool(CONF);
 
-    int concurrency = 10;
+    int concurrency = 100;
 
     ExecutorService executor =
         Executors.newFixedThreadPool(concurrency,

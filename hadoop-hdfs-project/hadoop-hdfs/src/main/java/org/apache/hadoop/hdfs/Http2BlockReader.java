@@ -152,9 +152,9 @@ public class Http2BlockReader implements BlockReader {
         LOG.warn(message);
         throw new IOException(message);
       } else {
-        ChunkInputStream chunkInputStream = new ChunkInputStream(receiver.content());
+        chunkInputStream = new ChunkInputStream(receiver.content());
         OpReadBlockResponseProto respProto =
-            OpReadBlockResponseProto.parseDelimitedFrom(chunkInputStream);
+            OpReadBlockResponseProto.parseDelimitedFrom(receiver.content());
         if (respProto.getStatus() == Status.SUCCESS) {
           long chunkOffset = respProto.getReadOpChecksumInfo().getChunkOffset();
           DataChecksum dataChecksum =
