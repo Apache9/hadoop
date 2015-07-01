@@ -35,10 +35,10 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.BlockReader;
 import org.apache.hadoop.hdfs.Http2BlockReader;
 import org.apache.hadoop.hdfs.Http2ConnectionPool;
-import org.apache.hadoop.hdfs.Http2ConnectionPool.SessionAndStreamId;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
+import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -85,15 +85,15 @@ public class TestHttp2BlockReader {
     out.close();
     ExtendedBlock block =
         CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0).get(0).getBlock();
-    Http2ConnectionPool http2ConnPool = new Http2ConnectionPool();
-    SessionAndStreamId sessionAndStreamId =
+    Http2ConnectionPool http2ConnPool = new Http2ConnectionPool(CONF);
+    Http2StreamChannel streamChannel =
         http2ConnPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER.getDataNodes().get(0)
             .getInfoPort()));
     int offset = 1;
     int length = len - offset;
     BlockReader blockReader =
-        new Http2BlockReader(sessionAndStreamId, block.toString(), block, offset, true,
-            "clientName", length, null);
+        new Http2BlockReader(streamChannel, block.toString(), block, offset, true, "clientName",
+            length, null);
     byte[] result = new byte[length];
     blockReader.readFully(result, 0, length);
     byte[] expected = new byte[length];
@@ -117,9 +117,9 @@ public class TestHttp2BlockReader {
     final ExtendedBlock block =
         CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0).get(0).getBlock();
 
-    final Http2ConnectionPool http2ConnectionPool = new Http2ConnectionPool();
+    final Http2ConnectionPool http2ConnectionPool = new Http2ConnectionPool(CONF);
 
-    int concurrency = 100;
+    int concurrency = 10;
 
     ExecutorService executor =
         Executors.newFixedThreadPool(concurrency,
@@ -131,16 +131,16 @@ public class TestHttp2BlockReader {
         @Override
         public void run() {
           int offset = 0;
-          SessionAndStreamId sessionAndStreamId;
+          Http2StreamChannel streamChannel;
           try {
-            sessionAndStreamId =
+            streamChannel =
                 http2ConnectionPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER
                     .getDataNodes().get(0).getInfoPort()));
 
             offset = ThreadLocalRandom.current().nextInt(0, len);
             int length = len - offset;
             BlockReader blockReader =
-                new Http2BlockReader(sessionAndStreamId, block.toString(), block, offset, true,
+                new Http2BlockReader(streamChannel, block.toString(), block, offset, true,
                     "clientName" + index, length, null);
             byte[] expected = new byte[length];
             for (int j = 0; j < length; ++j) {

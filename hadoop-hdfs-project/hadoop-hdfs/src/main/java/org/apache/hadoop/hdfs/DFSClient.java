@@ -304,7 +304,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     // Copy only the required DFSClient configuration
     this.dfsClientConf = new DfsClientConf(conf);
     if (this.dfsClientConf.isHttp2ReadEnabled()) {
-      this.http2ConnectionPool = new Http2ConnectionPool();
+      this.http2ConnectionPool = new Http2ConnectionPool(conf);
     }
     this.conf = conf;
     this.stats = stats;

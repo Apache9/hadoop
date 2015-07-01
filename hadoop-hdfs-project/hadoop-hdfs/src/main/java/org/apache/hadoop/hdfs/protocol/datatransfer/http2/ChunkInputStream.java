@@ -32,16 +32,16 @@ public class ChunkInputStream extends InputStream {
 
   private String fileName;
 
-  private FrameInputStream frameInputStream;
-
   private ByteBuffer buffer = ByteBuffer.wrap(new byte[0]);
 
   private long dataPos;
 
   private int skipBytes;
 
-  public ChunkInputStream(ContinuousStreamListener listener) {
-    this.frameInputStream = new FrameInputStream(listener);
+  private InputStream frameInputStream;
+
+  public ChunkInputStream(InputStream inputStream) {
+    this.frameInputStream = inputStream;
   }
 
   public void setDataChecksum(DataChecksum dataChecksum) {
@@ -58,10 +58,6 @@ public class ChunkInputStream extends InputStream {
 
   public void setSkipBytes(long skipBytes) {
     this.skipBytes = (int) skipBytes;
-  }
-
-  public FrameInputStream getFrameInputStream() {
-    return this.frameInputStream;
   }
 
   @Override

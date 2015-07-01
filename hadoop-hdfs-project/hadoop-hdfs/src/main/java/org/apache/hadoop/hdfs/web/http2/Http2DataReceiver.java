@@ -37,8 +37,7 @@ import java.util.Deque;
  */
 public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
-  private static final ByteBuf END_OF_STREAM = Unpooled
-      .wrappedBuffer(new byte[1]);
+  private static final ByteBuf END_OF_STREAM = Unpooled.wrappedBuffer(new byte[1]);
 
   private static final EOFException EOF = new EOFException();
 
@@ -50,84 +49,83 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
   private Http2Headers headers;
 
-  private final ByteBufferReadableInputStream contentInput =
-      new ByteBufferReadableInputStream() {
+  private final ByteBufferReadableInputStream contentInput = new ByteBufferReadableInputStream() {
 
-        @Override
-        public int read() throws IOException {
-          ByteBuf buf = peekUntilAvailable();
-          if (buf == END_OF_STREAM) {
-            return -1;
-          }
-          int b = buf.readByte() & 0xFF;
-          if (!buf.isReadable()) {
-            removeHead();
-          }
-          return b;
-        }
+    @Override
+    public int read() throws IOException {
+      ByteBuf buf = peekUntilAvailable();
+      if (buf == END_OF_STREAM) {
+        return -1;
+      }
+      int b = buf.readByte() & 0xFF;
+      if (!buf.isReadable()) {
+        removeHead();
+      }
+      return b;
+    }
 
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-          ByteBuf buf = peekUntilAvailable();
-          if (buf == END_OF_STREAM) {
-            return -1;
-          }
-          int bufReadableBytes = buf.readableBytes();
-          if (len >= bufReadableBytes) {
-            buf.readBytes(b, off, bufReadableBytes);
-            removeHead();
-            return bufReadableBytes;
-          } else {
-            buf.readBytes(b, off, len);
-            return len;
-          }
-        }
+    @Override
+    public int read(byte[] b, int off, int len) throws IOException {
+      ByteBuf buf = peekUntilAvailable();
+      if (buf == END_OF_STREAM) {
+        return -1;
+      }
+      int bufReadableBytes = buf.readableBytes();
+      if (len >= bufReadableBytes) {
+        buf.readBytes(b, off, bufReadableBytes);
+        removeHead();
+        return bufReadableBytes;
+      } else {
+        buf.readBytes(b, off, len);
+        return len;
+      }
+    }
 
-        @Override
-        public long skip(long n) throws IOException {
-          ByteBuf buf = peekUntilAvailable();
-          if (buf == END_OF_STREAM) {
-            return 0;
-          }
-          int bufReadableBytes = buf.readableBytes();
-          if (n >= bufReadableBytes) {
-            removeHead();
-            return bufReadableBytes;
-          } else {
-            buf.skipBytes((int) n);
-            return n;
-          }
-        }
+    @Override
+    public long skip(long n) throws IOException {
+      ByteBuf buf = peekUntilAvailable();
+      if (buf == END_OF_STREAM) {
+        return 0;
+      }
+      int bufReadableBytes = buf.readableBytes();
+      if (n >= bufReadableBytes) {
+        removeHead();
+        return bufReadableBytes;
+      } else {
+        buf.skipBytes((int) n);
+        return n;
+      }
+    }
 
-        @Override
-        public int read(ByteBuffer bb) throws IOException {
-          ByteBuf buf = peekUntilAvailable();
-          if (buf == END_OF_STREAM) {
-            return -1;
-          }
-          int bbRemaining = bb.remaining();
-          int bufReadableBytes = buf.readableBytes();
-          if (bbRemaining >= bufReadableBytes) {
-            int toRestoredLimit = bb.limit();
-            bb.limit(bb.position() + bufReadableBytes);
-            buf.readBytes(bb);
-            bb.limit(toRestoredLimit);
-            removeHead();
-            return bufReadableBytes;
-          } else {
-            buf.readBytes(bb);
-            return bbRemaining;
-          }
-        }
+    @Override
+    public int read(ByteBuffer bb) throws IOException {
+      ByteBuf buf = peekUntilAvailable();
+      if (buf == END_OF_STREAM) {
+        return -1;
+      }
+      int bbRemaining = bb.remaining();
+      int bufReadableBytes = buf.readableBytes();
+      if (bbRemaining >= bufReadableBytes) {
+        int toRestoredLimit = bb.limit();
+        bb.limit(bb.position() + bufReadableBytes);
+        buf.readBytes(bb);
+        bb.limit(toRestoredLimit);
+        removeHead();
+        return bufReadableBytes;
+      } else {
+        buf.readBytes(bb);
+        return bbRemaining;
+      }
+    }
 
-        @Override
-        public void close() throws IOException {
-          if (doClose()) {
-            channel.close();
-          }
-        }
+    @Override
+    public void close() throws IOException {
+      if (doClose()) {
+        channel.close();
+      }
+    }
 
-      };
+  };
 
   private boolean doClose() {
     synchronized (queue) {
@@ -145,8 +143,7 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
   }
 
   @Override
-  public void channelRead(ChannelHandlerContext ctx, Object msg)
-      throws Exception {
+  public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
     if (msg == LastHttp2Message.get()) {
       enqueue(END_OF_STREAM);
     } else if (msg instanceof Http2Headers) {
@@ -162,8 +159,7 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
   }
 
   @Override
-  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
-      throws Exception {
+  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
     synchronized (queue) {
       if (error == null) {
         error = cause;
@@ -224,8 +220,7 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
     if (cause == ReadTimeoutException.INSTANCE) {
       return new IOException("Read timeout");
     } else if (cause == EOF) {
-      return new IOException("Connection reset by peer: "
-          + channel.remoteAddress());
+      return new IOException("Connection reset by peer: " + channel.remoteAddress());
     } else {
       return new IOException(cause);
     }
