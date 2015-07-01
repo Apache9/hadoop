@@ -17,17 +17,19 @@
  */
 package org.apache.hadoop.hdfs.web.http2;
 
-import org.apache.hadoop.classification.InterfaceAudience;
-
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
+import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
+import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
+import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Connection;
+import io.netty.handler.codec.http2.Http2ConnectionDecoder;
+import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Exception;
-import io.netty.handler.codec.http2.Http2FrameListener;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
@@ -35,30 +37,39 @@ import io.netty.handler.codec.http2.Http2InboundFrameLogger;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.logging.LogLevel;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+
 /**
  *
  */
 @InterfaceAudience.Private
 public class ServerHttp2ConnectionHandler extends Http2ConnectionHandler {
 
+  private static final Log LOG = LogFactory
+      .getLog(ServerHttp2ConnectionHandler.class);
+
   private static final Http2FrameLogger FRAME_LOGGER = new Http2FrameLogger(
       LogLevel.INFO, ServerHttp2ConnectionHandler.class);
 
-  private ServerHttp2ConnectionHandler(Http2Connection connection,
-      Http2FrameReader frameReader, Http2FrameWriter frameWriter,
-      Http2FrameListener listener) {
-    super(connection, frameReader, frameWriter, listener);
+  private ServerHttp2ConnectionHandler(Http2ConnectionDecoder decoder,
+      Http2ConnectionEncoder encoder) {
+    super(decoder, encoder);
   }
 
   public static ServerHttp2ConnectionHandler create(Channel channel,
-      ChannelInitializer<Http2StreamChannel> initializer, boolean verbose) {
+      ChannelInitializer<Http2StreamChannel> initializer, Configuration conf)
+      throws Http2Exception {
     Http2Connection conn = new DefaultHttp2Connection(true);
     ServerHttp2EventListener listener =
         new ServerHttp2EventListener(channel, conn, initializer);
     conn.addListener(listener);
     Http2FrameReader frameReader;
     Http2FrameWriter frameWriter;
-    if (verbose) {
+    if (LOG.isDebugEnabled()) {
       frameReader =
           new Http2InboundFrameLogger(new DefaultHttp2FrameReader(),
               FRAME_LOGGER);
@@ -69,7 +80,19 @@ public class ServerHttp2ConnectionHandler extends Http2ConnectionHandler {
       frameReader = new DefaultHttp2FrameReader();
       frameWriter = new DefaultHttp2FrameWriter();
     }
-    return new ServerHttp2ConnectionHandler(conn, frameReader, frameWriter,
-        listener);
+    DefaultHttp2LocalFlowController localFlowController =
+        new DefaultHttp2LocalFlowController(conn, frameWriter, conf.getFloat(
+          DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO,
+          DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO_DEFAULT));
+    localFlowController.initialWindowSize(conf.getInt(
+      DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE,
+      DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT));
+    conn.local().flowController(localFlowController);
+
+    DefaultHttp2ConnectionEncoder encoder =
+        new DefaultHttp2ConnectionEncoder(conn, frameWriter);
+    DefaultHttp2ConnectionDecoder decoder =
+        new DefaultHttp2ConnectionDecoder(conn, encoder, frameReader, listener);
+    return new ServerHttp2ConnectionHandler(decoder, encoder);
   }
 }

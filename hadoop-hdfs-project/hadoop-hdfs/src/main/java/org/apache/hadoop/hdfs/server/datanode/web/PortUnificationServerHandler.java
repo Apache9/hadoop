@@ -24,6 +24,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http2.Http2CodecUtil;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
 import java.net.InetSocketAddress;
@@ -32,7 +33,6 @@ import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
@@ -76,7 +76,7 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
         new URLDispatcher(proxyHost, conf, confForCreate));
   }
 
-  private void configureHttp2(ChannelHandlerContext ctx) {
+  private void configureHttp2(ChannelHandlerContext ctx) throws Http2Exception {
     ctx.pipeline().addLast(
       ServerHttp2ConnectionHandler.create(ctx.channel(),
         new ChannelInitializer<Http2StreamChannel>() {
@@ -86,8 +86,7 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
               throws Exception {
             ch.pipeline().addLast(new DtpUrlDispatcher(datanode, executor));
           }
-        }, conf.getBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY,
-          DFSConfigKeys.DFS_HTTP2_VERBOSE_DEFAULT)));
+        }, conf));
   }
 
   @Override

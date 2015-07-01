@@ -102,7 +102,7 @@ public class TestReadBlock {
               @Override
               protected void initChannel(Channel ch) throws Exception {
                 ch.pipeline().addLast(
-                  ClientHttp2ConnectionHandler.create(ch, true));
+                  ClientHttp2ConnectionHandler.create(ch, CONF));
               }
 
             }).connect(new InetSocketAddress("127.0.0.1", port)).sync()

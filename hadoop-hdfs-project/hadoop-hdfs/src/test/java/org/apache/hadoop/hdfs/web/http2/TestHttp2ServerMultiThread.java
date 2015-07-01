@@ -44,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.conf.Configuration;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
@@ -132,7 +133,7 @@ public class TestHttp2ServerMultiThread extends AbstractTestHttp2Server {
                       throws Exception {
                     ch.pipeline().addLast(new DispatchHandler());
                   }
-                }, false));
+                }, new Configuration()));
           }
 
         }).bind(0).syncUninterruptibly().channel();

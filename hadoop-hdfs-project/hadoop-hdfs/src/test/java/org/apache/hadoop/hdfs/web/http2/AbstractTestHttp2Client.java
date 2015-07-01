@@ -37,6 +37,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.conf.Configuration;
 import org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.Request;
@@ -86,7 +87,7 @@ public class AbstractTestHttp2Client {
               @Override
               protected void initChannel(Channel ch) throws Exception {
                 ch.pipeline().addLast(
-                  ClientHttp2ConnectionHandler.create(ch, false));
+                  ClientHttp2ConnectionHandler.create(ch, new Configuration()));
               }
 
             })

@@ -17,11 +17,10 @@
  */
 package org.apache.hadoop.hdfs.web.http2;
 
-import org.apache.hadoop.classification.InterfaceAudience;
-
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2Connection.PropertyKey;
+
+import org.apache.hadoop.classification.InterfaceAudience;
 
 /**
  *
@@ -31,10 +30,6 @@ public class ClientHttp2EventListener extends AbstractHttp2EventListener {
 
   public ClientHttp2EventListener(Channel parentChannel, Http2Connection conn) {
     super(parentChannel, conn);
-  }
-
-  PropertyKey getSubChannelPropKey() {
-    return subChannelPropKey;
   }
 
   @Override

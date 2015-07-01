@@ -28,7 +28,6 @@ import io.netty.handler.timeout.ReadTimeoutException;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -196,12 +195,12 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
     Throwable cause;
     synchronized (queue) {
       for (;;) {
+        if (!queue.isEmpty()) {
+          return queue.peek();
+        }
         if (error != null) {
           cause = error;
           break;
-        }
-        if (!queue.isEmpty()) {
-          return queue.peek();
         }
         try {
           queue.wait();
