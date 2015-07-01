@@ -113,12 +113,17 @@ public class DatanodeHttpServer implements Closeable {
     int maximumPoolSize =
         conf.getInt(DFSConfigKeys.DFS_DATANODE_MAX_HTTP_HANDLERS_KEY,
           DFSConfigKeys.DFS_DATANODE_MAX_HTTP_HANDLERS_DEFAULT);
-    int corePoolSize = Math.min(4, maximumPoolSize);
-    this.executor =
-        new ThreadPoolExecutor(corePoolSize, maximumPoolSize, 1,
+    // We use an unbounded queue so it is useless to specify different
+    // corePoolSize and maximumPoolSize. Instead, we set corePoolSize to
+    // maximumPoolSize and allow core thread timeout.
+    ThreadPoolExecutor handlerExecutor =
+        new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 1,
             TimeUnit.MINUTES, new LinkedTransferQueue<Runnable>(),
             new ThreadFactoryBuilder().setNameFormat("Http-Handler-%d")
                 .setDaemon(true).build());
+    handlerExecutor.allowCoreThreadTimeOut(true);
+    this.executor = handlerExecutor;
+        
 
     this.bossGroup = new NioEventLoopGroup();
     this.workerGroup = new NioEventLoopGroup();
