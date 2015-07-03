@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -26,7 +27,7 @@ import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
 import org.apache.hadoop.util.DataChecksum;
 
-public class ChunkInputStream extends InputStream {
+public class ChunkInputStream extends FilterInputStream {
 
   private DataChecksum dataChecksum;
 
@@ -38,10 +39,8 @@ public class ChunkInputStream extends InputStream {
 
   private int skipBytes;
 
-  private InputStream frameInputStream;
-
   public ChunkInputStream(InputStream inputStream) {
-    this.frameInputStream = inputStream;
+    super(inputStream);
   }
 
   public void setDataChecksum(DataChecksum dataChecksum) {
@@ -86,7 +85,7 @@ public class ChunkInputStream extends InputStream {
         this.skipBytes -= skip;
       } else {
         byte[] data = new byte[this.skipBytes];
-        int ret = this.frameInputStream.read(data, 0, skipBytes);
+        int ret = in.read(data, 0, skipBytes);
         if (ret == -1) {
           return -1;
         } else {
@@ -99,8 +98,39 @@ public class ChunkInputStream extends InputStream {
       this.buffer.get(b, off, nRead);
       return nRead;
     } else {
-      return this.frameInputStream.read(b, off, len);
+      return in.read(b, off, len);
     }
+  }
+
+  // MAX_SKIP_BUFFER_SIZE is used to determine the maximum buffer size to
+  // use when skipping.
+  private static final int MAX_SKIP_BUFFER_SIZE = 2048;
+
+  @Override
+  public long skip(long n) throws IOException {
+    long remaining = n;
+    int nr;
+
+    if (n <= 0) {
+      return 0;
+    }
+
+    int size = (int) Math.min(MAX_SKIP_BUFFER_SIZE, remaining);
+    byte[] skipBuffer = new byte[size];
+    while (remaining > 0) {
+      nr = read(skipBuffer, 0, (int) Math.min(size, remaining));
+      if (nr < 0) {
+        break;
+      }
+      remaining -= nr;
+    }
+
+    return n - remaining;
+  }
+
+  @Override
+  public boolean markSupported() {
+    return false;
   }
 
   private int getByte() throws IOException {
@@ -108,17 +138,18 @@ public class ChunkInputStream extends InputStream {
       return buffer.get() & 0xff;
     } else {
       OpReadBlockFrameHeaderProto frameHeaderProto =
-          OpReadBlockFrameHeaderProto.parseDelimitedFrom(frameInputStream);
+          OpReadBlockFrameHeaderProto.parseDelimitedFrom(in);
       int numChunks = frameHeaderProto.getNumChunks();
       byte[] checksum = frameHeaderProto.getChecksums().toByteArray();
       if (checksum.length != dataChecksum.getChecksumSize() * numChunks) {
-        throw new IOException("checksum size not matched,expected size in header is "
-            + dataChecksum.getChecksumSize() + ", but actual size in header frame is "
-            + checksum.length);
+        throw new IOException(
+            "checksum size not matched,expected size in header is "
+                + dataChecksum.getChecksumSize()
+                + ", but actual size in header frame is " + checksum.length);
       }
       int dataLength = frameHeaderProto.getDataLength();
       byte[] data = new byte[dataLength];
-      IOUtils.readFully(this.frameInputStream, data);
+      IOUtils.readFully(in, data);
       this.dataChecksum.reset();
       this.verifyChecksum(checksum, data, dataPos);
       this.dataPos += dataLength;
@@ -127,9 +158,11 @@ public class ChunkInputStream extends InputStream {
     }
   }
 
-  private void verifyChecksum(byte[] checksum, byte[] data, long basePos) throws ChecksumException {
+  private void verifyChecksum(byte[] checksum, byte[] data, long basePos)
+      throws ChecksumException {
     ByteBuffer checksumBuffer = ByteBuffer.wrap(checksum);
     ByteBuffer dataBuffer = ByteBuffer.wrap(data);
-    this.dataChecksum.verifyChunkedSums(dataBuffer, checksumBuffer, fileName, basePos);
+    this.dataChecksum.verifyChunkedSums(dataBuffer, checksumBuffer, fileName,
+      basePos);
   }
 }

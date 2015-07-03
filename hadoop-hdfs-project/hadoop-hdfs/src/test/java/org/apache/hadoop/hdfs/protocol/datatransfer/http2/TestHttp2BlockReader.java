@@ -27,6 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -54,7 +55,7 @@ public class TestHttp2BlockReader {
 
   @BeforeClass
   public static void setUp() throws Exception {
-    //CONF.setBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY, true);
+    // CONF.setBoolean(DFSConfigKeys.DFS_HTTP2_VERBOSE_KEY, true);
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
   }
@@ -84,16 +85,17 @@ public class TestHttp2BlockReader {
     out.write(b);
     out.close();
     ExtendedBlock block =
-        CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0).get(0).getBlock();
+        CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0)
+            .get(0).getBlock();
     Http2ConnectionPool http2ConnPool = new Http2ConnectionPool(CONF);
     Http2StreamChannel streamChannel =
-        http2ConnPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER.getDataNodes().get(0)
-            .getInfoPort()));
+        http2ConnPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER
+            .getDataNodes().get(0).getInfoPort()));
     int offset = 1;
     int length = len - offset;
     BlockReader blockReader =
-        new Http2BlockReader(streamChannel, block.toString(), block, offset, true, "clientName",
-            length, null);
+        new Http2BlockReader(streamChannel, block.toString(), block, offset,
+            true, "clientName", length, null);
     byte[] result = new byte[length];
     blockReader.readFully(result, 0, length);
     byte[] expected = new byte[length];
@@ -105,7 +107,8 @@ public class TestHttp2BlockReader {
   }
 
   @Test
-  public void testConcurrency() throws IllegalArgumentException, IOException, InterruptedException {
+  public void testConcurrency() throws IllegalArgumentException, IOException,
+      InterruptedException {
     String fileName = "/test";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
     final int len = 1024 * 20 - 10;
@@ -115,44 +118,58 @@ public class TestHttp2BlockReader {
     out.close();
 
     final ExtendedBlock block =
-        CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0).get(0).getBlock();
+        CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0)
+            .get(0).getBlock();
 
-    final Http2ConnectionPool http2ConnectionPool = new Http2ConnectionPool(CONF);
+    final Http2ConnectionPool http2ConnectionPool =
+        new Http2ConnectionPool(CONF);
 
     int concurrency = 100;
 
     ExecutorService executor =
-        Executors.newFixedThreadPool(concurrency,
-          new ThreadFactoryBuilder().setNameFormat("Http2-BlockReader-%d").setDaemon(true).build());
+        Executors.newFixedThreadPool(concurrency, new ThreadFactoryBuilder()
+            .setNameFormat("Http2-BlockReader-%d").setDaemon(true).build());
     for (int i = 0; i < concurrency; ++i) {
       final int index = i;
       executor.execute(new Runnable() {
 
         @Override
         public void run() {
-          int offset = 0;
-          Http2StreamChannel streamChannel;
-          try {
-            streamChannel =
-                http2ConnectionPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER
-                    .getDataNodes().get(0).getInfoPort()));
+          for (int i = 0; i < 100; i++) {
+            int offset = 0;
+            Http2StreamChannel streamChannel;
+            BlockReader blockReader = null;
+            try {
+              streamChannel =
+                  http2ConnectionPool
+                      .connect(new InetSocketAddress("127.0.0.1", CLUSTER
+                          .getDataNodes().get(0).getInfoPort()));
 
-            offset = ThreadLocalRandom.current().nextInt(0, len);
-            int length = len - offset;
-            BlockReader blockReader =
-                new Http2BlockReader(streamChannel, block.toString(), block, offset, true,
-                    "clientName" + index, length, null);
-            byte[] expected = new byte[length];
-            for (int j = 0; j < length; ++j) {
-              expected[j] = b[j + offset];
+              offset = ThreadLocalRandom.current().nextInt(0, len);
+              int length = len - offset;
+              blockReader =
+                  new Http2BlockReader(streamChannel, block.toString(), block,
+                      offset, true, "clientName" + index, length, null);
+              byte[] expected = new byte[length];
+              for (int j = 0; j < length; ++j) {
+                expected[j] = b[j + offset];
+              }
+              byte[] result = new byte[length];
+              blockReader.readFully(result, 0, length);
+              Arrays.equals(expected, result);
+            } catch (IOException e) {
+              e.printStackTrace();
+              assertTrue(false);
+            } finally {
+              if (blockReader != null) {
+                try {
+                  blockReader.close();
+                } catch (IOException e) {
+                  // TODO Auto-generated catch block
+                  e.printStackTrace();
+                }
+              }
             }
-            byte[] result = new byte[length];
-            blockReader.readFully(result, 0, length);
-            Arrays.equals(expected, result);
-          } catch (IOException e) {
-            e.printStackTrace();
-            assertTrue(false);
-
           }
         }
       });

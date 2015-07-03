@@ -145,6 +145,7 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
                     return;
                   }
                   buf.release();
+                  queue.remove();
                 }
               }
             }
@@ -207,6 +208,8 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
         queue.add(buf);
         queue.notifyAll();
       }
+    } else {
+      buf.release();
     }
   }
 
