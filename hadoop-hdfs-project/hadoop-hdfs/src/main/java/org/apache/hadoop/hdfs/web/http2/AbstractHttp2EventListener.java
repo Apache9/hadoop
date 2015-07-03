@@ -65,7 +65,7 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
   @Override
   public void onStreamClosed(Http2Stream stream) {
     Http2StreamChannel subChannel = stream.removeProperty(subChannelPropKey);
-    if (subChannel != null) {
+    if (subChannel != null && subChannel.isRegistered()) {
       subChannel.close();
     }
   }
