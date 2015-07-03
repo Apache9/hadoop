@@ -81,6 +81,7 @@ import org.apache.hadoop.util.IdentityHashStore;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
+import org.mortbay.log.Log;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -251,6 +252,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
   void addToDeadNodes(DatanodeInfo dnInfo) {
     deadNodes.put(dnInfo, dnInfo);
+    new IOException().printStackTrace();
   }
   
   DFSInputStream(DFSClient dfsClient, String src, boolean verifyChecksum,
@@ -920,7 +922,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             DFSClient.LOG.warn("DFS Read", e);
           }
           blockEnd = -1;
-          if (currentNode != null) { addToDeadNodes(currentNode); }
+          if (currentNode != null) { 
+            DFSClient.LOG.error("", e);
+            addToDeadNodes(currentNode); }
           if (--retries == 0) {
             throw e;
           }

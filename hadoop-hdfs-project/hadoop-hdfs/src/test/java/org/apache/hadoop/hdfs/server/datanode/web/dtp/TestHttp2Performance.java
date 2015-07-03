@@ -86,7 +86,7 @@ public class TestHttp2Performance {
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
     out.close();
-    int concurrency = 50;
+    int concurrency = 100;
     long start = System.currentTimeMillis();
     ExecutorService executor =
         Executors.newFixedThreadPool(concurrency,
@@ -119,7 +119,7 @@ public class TestHttp2Performance {
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
     out.close();
-    int concurrency = 50;
+    int concurrency = 100;
     long start = System.currentTimeMillis();
     ExecutorService executor =
         Executors.newFixedThreadPool(concurrency,
