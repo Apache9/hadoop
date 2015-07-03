@@ -22,8 +22,11 @@ import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.stream.ChunkedInput;
 
+import java.io.EOFException;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.channels.FileChannel;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -47,6 +50,8 @@ class ChunkedBlockInput implements ChunkedInput<ByteBuf> {
 
   private final InputStream blockInput;
 
+  private final FileChannel blockInputChannel;
+
   private final InputStream checksumInput;
 
   private final byte[] lastChunkChecksum;
@@ -54,6 +59,8 @@ class ChunkedBlockInput implements ChunkedInput<ByteBuf> {
   private final DataChecksum checksum;
 
   private final long length;
+
+  private final int chunkSize;
 
   private final byte[] blockReadBuffer;
 
@@ -68,8 +75,16 @@ class ChunkedBlockInput implements ChunkedInput<ByteBuf> {
     this.lastChunkChecksum = lastChunkChecksum;
     this.checksum = checksum;
     this.length = length;
-    this.blockReadBuffer =
-        new byte[checksum.getBytesPerChecksum() * chunksPerFrame];
+    this.chunkSize = checksum.getBytesPerChecksum() * chunksPerFrame;
+    if (blockInput instanceof FileInputStream) {
+      this.blockInputChannel = ((FileInputStream) blockInput).getChannel();
+      this.blockReadBuffer =
+          new byte[checksum.getChecksumSize() * chunksPerFrame];
+    } else {
+      this.blockInputChannel = null;
+      this.blockReadBuffer = new byte[chunkSize];
+    }
+
   }
 
   @Override
@@ -92,8 +107,7 @@ class ChunkedBlockInput implements ChunkedInput<ByteBuf> {
 
   @Override
   public ByteBuf readChunk(ChannelHandlerContext ctx) throws IOException {
-    int blockBytesToRead =
-        (int) Math.min(blockReadBuffer.length, length - progress);
+    int blockBytesToRead = (int) Math.min(chunkSize, length - progress);
     progress += blockBytesToRead;
     int numBlockChunks =
         numberOfBlockChunks(blockBytesToRead, checksum.getBytesPerChecksum());
@@ -124,10 +138,18 @@ class ChunkedBlockInput implements ChunkedInput<ByteBuf> {
           CodedOutputStream.computeRawVarint32Size(header.getSerializedSize())
               + header.getSerializedSize() + blockBytesToRead);
     header.writeDelimitedTo(new ByteBufOutputStream(data));
-    // TODO: use transfer to
-    IOUtils.readFully(blockInput, blockReadBuffer, 0, blockBytesToRead);
-
-    data.writeBytes(blockReadBuffer, 0, blockBytesToRead);
+    if (blockInputChannel != null) {
+      while (blockBytesToRead > 0) {
+        int read = data.writeBytes(blockInputChannel, blockBytesToRead);
+        if (read < 0) {
+          throw new EOFException();
+        }
+        blockBytesToRead -= read;
+      }
+    } else {
+      IOUtils.readFully(blockInput, blockReadBuffer, 0, blockBytesToRead);
+      data.writeBytes(blockReadBuffer, 0, blockBytesToRead);
+    }
     return data;
   }
 
