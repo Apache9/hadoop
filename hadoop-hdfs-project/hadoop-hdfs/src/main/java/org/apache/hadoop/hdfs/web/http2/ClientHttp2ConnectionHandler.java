@@ -24,11 +24,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.UnsupportedMessageTypeException;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
-import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
-import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
-import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
-import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
-import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Connection.PropertyKey;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -36,16 +31,11 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameLogger;
-import io.netty.handler.codec.http2.Http2FrameReader;
-import io.netty.handler.codec.http2.Http2FrameWriter;
-import io.netty.handler.codec.http2.Http2InboundFrameLogger;
-import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.logging.LogLevel;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 
 /**
  *
@@ -104,38 +94,22 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
     }
   }
 
+  private static final Http2Util.Http2ConnectionHandlerFactory<ClientHttp2ConnectionHandler> FACTORY =
+      new Http2Util.Http2ConnectionHandlerFactory<ClientHttp2ConnectionHandler>() {
+
+        @Override
+        public ClientHttp2ConnectionHandler create(
+            Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder) {
+          return new ClientHttp2ConnectionHandler(decoder, encoder);
+        }
+      };
+
   public static ClientHttp2ConnectionHandler create(Channel channel,
       Configuration conf) throws Http2Exception {
     Http2Connection conn = new DefaultHttp2Connection(false);
     ClientHttp2EventListener listener =
         new ClientHttp2EventListener(channel, conn);
-    conn.addListener(listener);
-    Http2FrameReader frameReader;
-    Http2FrameWriter frameWriter;
-    if (LOG.isDebugEnabled()) {
-      frameReader =
-          new Http2InboundFrameLogger(new DefaultHttp2FrameReader(),
-              FRAME_LOGGER);
-      frameWriter =
-          new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(),
-              FRAME_LOGGER);
-    } else {
-      frameReader = new DefaultHttp2FrameReader();
-      frameWriter = new DefaultHttp2FrameWriter();
-    }
-    DefaultHttp2LocalFlowController localFlowController =
-        new DefaultHttp2LocalFlowController(conn, frameWriter, conf.getFloat(
-          DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO,
-          DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO_DEFAULT));
-    localFlowController.initialWindowSize(conf.getInt(
-      DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE,
-      DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT));
-    conn.local().flowController(localFlowController);
-
-    DefaultHttp2ConnectionEncoder encoder =
-        new DefaultHttp2ConnectionEncoder(conn, frameWriter);
-    DefaultHttp2ConnectionDecoder decoder =
-        new DefaultHttp2ConnectionDecoder(conn, encoder, frameReader, listener);
-    return new ClientHttp2ConnectionHandler(decoder, encoder);
+    return Http2Util.create(conf, conn, listener, FACTORY,
+      LOG.isDebugEnabled() ? FRAME_LOGGER : null);
   }
 }
