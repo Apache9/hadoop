@@ -245,4 +245,4 @@ http://www.zlib.net/
 Building distributions:
 
  * Build distribution with native code    : mvn package [-Pdist][-Pdocs][-Psrc][-Dtar]
-
+ * Build distribution with raid           : mvn clean package -Pnative -Pdist -Praid -Dtar -Dhdfs.raid.codec.lib=PATH_TO_RS_LIBRARY
