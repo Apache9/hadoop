@@ -20,6 +20,8 @@ package org.apache.hadoop.hdfs.web.http2;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http2.Http2Headers;
@@ -37,7 +39,8 @@ import java.util.Deque;
  */
 public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
-  private static final ByteBuf END_OF_STREAM = Unpooled.wrappedBuffer(new byte[1]);
+  private static final ByteBuf END_OF_STREAM = Unpooled
+      .wrappedBuffer(new byte[1]);
 
   private static final EOFException EOF = new EOFException();
 
@@ -49,101 +52,110 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
   private Http2Headers headers;
 
-  private final ByteBufferReadableInputStream contentInput = new ByteBufferReadableInputStream() {
+  private final ByteBufferReadableInputStream contentInput =
+      new ByteBufferReadableInputStream() {
 
-    @Override
-    public int read() throws IOException {
-      ByteBuf buf = peekUntilAvailable();
-      if (buf == END_OF_STREAM) {
-        return -1;
-      }
-      int b = buf.readByte() & 0xFF;
-      if (!buf.isReadable()) {
-        removeHead();
-      }
-      return b;
-    }
+        @Override
+        public int read() throws IOException {
+          ByteBuf buf = peekUntilAvailable();
+          if (buf == END_OF_STREAM) {
+            return -1;
+          }
+          int b = buf.readByte() & 0xFF;
+          if (!buf.isReadable()) {
+            removeHead();
+          }
+          return b;
+        }
 
-    @Override
-    public int read(byte[] b, int off, int len) throws IOException {
-      ByteBuf buf = peekUntilAvailable();
-      if (buf == END_OF_STREAM) {
-        return -1;
-      }
-      int bufReadableBytes = buf.readableBytes();
-      if (len >= bufReadableBytes) {
-        buf.readBytes(b, off, bufReadableBytes);
-        removeHead();
-        return bufReadableBytes;
-      } else {
-        buf.readBytes(b, off, len);
-        return len;
-      }
-    }
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+          ByteBuf buf = peekUntilAvailable();
+          if (buf == END_OF_STREAM) {
+            return -1;
+          }
+          int bufReadableBytes = buf.readableBytes();
+          if (len >= bufReadableBytes) {
+            buf.readBytes(b, off, bufReadableBytes);
+            removeHead();
+            return bufReadableBytes;
+          } else {
+            buf.readBytes(b, off, len);
+            return len;
+          }
+        }
 
-    @Override
-    public long skip(long n) throws IOException {
-      ByteBuf buf = peekUntilAvailable();
-      if (buf == END_OF_STREAM) {
-        return 0;
-      }
-      int bufReadableBytes = buf.readableBytes();
-      if (n >= bufReadableBytes) {
-        removeHead();
-        return bufReadableBytes;
-      } else {
-        buf.skipBytes((int) n);
-        return n;
-      }
-    }
+        @Override
+        public long skip(long n) throws IOException {
+          ByteBuf buf = peekUntilAvailable();
+          if (buf == END_OF_STREAM) {
+            return 0;
+          }
+          int bufReadableBytes = buf.readableBytes();
+          if (n >= bufReadableBytes) {
+            removeHead();
+            return bufReadableBytes;
+          } else {
+            buf.skipBytes((int) n);
+            return n;
+          }
+        }
 
-    @Override
-    public int read(ByteBuffer bb) throws IOException {
-      ByteBuf buf = peekUntilAvailable();
-      if (buf == END_OF_STREAM) {
-        return -1;
-      }
-      int bbRemaining = bb.remaining();
-      int bufReadableBytes = buf.readableBytes();
-      if (bbRemaining >= bufReadableBytes) {
-        int toRestoredLimit = bb.limit();
-        bb.limit(bb.position() + bufReadableBytes);
-        buf.readBytes(bb);
-        bb.limit(toRestoredLimit);
-        removeHead();
-        return bufReadableBytes;
-      } else {
-        buf.readBytes(bb);
-        return bbRemaining;
-      }
-    }
+        @Override
+        public int read(ByteBuffer bb) throws IOException {
+          ByteBuf buf = peekUntilAvailable();
+          if (buf == END_OF_STREAM) {
+            return -1;
+          }
+          int bbRemaining = bb.remaining();
+          int bufReadableBytes = buf.readableBytes();
+          if (bbRemaining >= bufReadableBytes) {
+            int toRestoredLimit = bb.limit();
+            bb.limit(bb.position() + bufReadableBytes);
+            buf.readBytes(bb);
+            bb.limit(toRestoredLimit);
+            removeHead();
+            return bufReadableBytes;
+          } else {
+            buf.readBytes(bb);
+            return bbRemaining;
+          }
+        }
 
-    @Override
-    public void close() throws IOException {
-      if (doClose()) {
-        channel.close();
-      }
-    }
+        private boolean closed = false;
 
-  };
+        @Override
+        public void close() throws IOException {
+          if (closed) {
+            return;
+          }
+          synchronized (queue) {
+            if (error == null) {
+              error = new IOException("Stream already closed");
+            }
+          }
+          channel.close().addListener(new ChannelFutureListener() {
 
-  private boolean doClose() {
-    synchronized (queue) {
-      if (error != null) {
-        return false;
-      }
-      ByteBuf lastBuf = queue.peekLast();
-      if (lastBuf == END_OF_STREAM) {
-        return false;
-      }
-      error = EOF;
-      notifyAll();
-      return true;
-    }
-  }
+            @Override
+            public void operationComplete(ChannelFuture future)
+                throws Exception {
+              synchronized (queue) {
+                for (ByteBuf buf; (buf = queue.peek()) != null;) {
+                  if (buf == END_OF_STREAM) {
+                    return;
+                  }
+                  buf.release();
+                }
+              }
+            }
+          });
+        }
+
+      };
 
   @Override
-  public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+  public void channelRead(ChannelHandlerContext ctx, Object msg)
+      throws Exception {
     if (msg == LastHttp2Message.get()) {
       enqueue(END_OF_STREAM);
     } else if (msg instanceof Http2Headers) {
@@ -159,7 +171,8 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
   }
 
   @Override
-  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+      throws Exception {
     synchronized (queue) {
       if (error == null) {
         error = cause;
@@ -175,7 +188,17 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-    doClose();
+    synchronized (queue) {
+      if (error != null) {
+        return;
+      }
+      ByteBuf lastBuf = queue.peekLast();
+      if (lastBuf == END_OF_STREAM) {
+        return;
+      }
+      error = EOF;
+      notifyAll();
+    }
   }
 
   private void enqueue(ByteBuf buf) {
@@ -220,7 +243,8 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
     if (cause == ReadTimeoutException.INSTANCE) {
       return new IOException("Read timeout");
     } else if (cause == EOF) {
-      return new IOException("Connection reset by peer: " + channel.remoteAddress());
+      return new IOException("Connection reset by peer: "
+          + channel.remoteAddress());
     } else {
       return new IOException(cause);
     }
@@ -247,6 +271,9 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
     throw toIOE(cause);
   }
 
+  /**
+   * The returned stream is not thread safe.
+   */
   public ByteBufferReadableInputStream content() {
     return contentInput;
   }
