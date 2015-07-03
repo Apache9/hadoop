@@ -25,6 +25,7 @@ import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
+import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
@@ -67,18 +68,17 @@ public class ServerHttp2ConnectionHandler extends Http2ConnectionHandler {
     ServerHttp2EventListener listener =
         new ServerHttp2EventListener(channel, conn, initializer);
     conn.addListener(listener);
+    DefaultHttp2FrameReader rawFrameReader = new DefaultHttp2FrameReader();
+    DefaultHttp2FrameWriter rawFrameWriter = new DefaultHttp2FrameWriter();
+    rawFrameWriter.maxFrameSize(Http2CodecUtil.MAX_FRAME_SIZE_UPPER_BOUND);
     Http2FrameReader frameReader;
     Http2FrameWriter frameWriter;
     if (LOG.isDebugEnabled()) {
-      frameReader =
-          new Http2InboundFrameLogger(new DefaultHttp2FrameReader(),
-              FRAME_LOGGER);
-      frameWriter =
-          new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(),
-              FRAME_LOGGER);
+      frameReader = new Http2InboundFrameLogger(rawFrameReader, FRAME_LOGGER);
+      frameWriter = new Http2OutboundFrameLogger(rawFrameWriter, FRAME_LOGGER);
     } else {
-      frameReader = new DefaultHttp2FrameReader();
-      frameWriter = new DefaultHttp2FrameWriter();
+      frameReader = rawFrameReader;
+      frameWriter = rawFrameWriter;
     }
     DefaultHttp2LocalFlowController localFlowController =
         new DefaultHttp2LocalFlowController(conn, frameWriter, conf.getFloat(
