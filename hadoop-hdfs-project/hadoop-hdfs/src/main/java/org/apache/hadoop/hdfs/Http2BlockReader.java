@@ -18,9 +18,11 @@
 package org.apache.hadoop.hdfs;
 
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http2.Http2Headers;
 
-import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.EnumSet;
 
@@ -28,20 +30,23 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.ReadOption;
+import org.apache.hadoop.hdfs.net.Peer;
+import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
-import org.apache.hadoop.hdfs.protocol.datatransfer.http2.ChunkInputStream;
-import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BaseHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
-import org.apache.hadoop.hdfs.protocolPB.PBHelper;
+import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.shortcircuit.ClientMmap;
+import org.apache.hadoop.hdfs.web.http2.ByteBufferReadableInputStream;
 import org.apache.hadoop.hdfs.web.http2.Http2DataReceiver;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
-import org.apache.hadoop.hdfs.web.http2.LastHttp2Message;
+import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
 /**
@@ -52,75 +57,127 @@ public class Http2BlockReader implements BlockReader {
 
   public static final Log LOG = LogFactory.getLog(Http2BlockReader.class);
 
-  private String fileName;
+  private static final ByteBuffer EMPTY_BB = ByteBuffer.allocate(0);
 
-  private ExtendedBlock block;
+  private final String file;
 
-  private long startOffsetInBlock;
+  private final ByteBufferReadableInputStream in;
 
-  private boolean verifyChecksum;
+  private final int firstFrameSkipBytes;
 
-  private String clientName;
+  private final DataChecksum checksum;
 
-  private long length;
+  private final boolean verifyChecksum;
 
-  private CachingStrategy strategy;
+  private final boolean isLocal;
 
-  private boolean initialReadBlock = false;
+  private final long endOffsetInBlock;
 
-  private ChunkInputStream chunkInputStream = null;
-
-  private Http2StreamChannel http2StreamChannel;
-
-  public Http2BlockReader(Http2StreamChannel http2StreamChannel, String fileName,
-      ExtendedBlock block, long startOffsetInBlock, boolean verifyChecksum, String clientName,
-      long length, CachingStrategy strategy) {
-    this.http2StreamChannel = http2StreamChannel;
-    this.fileName = fileName;
-    this.block = block;
-    this.startOffsetInBlock = startOffsetInBlock;
+  public Http2BlockReader(String file, ByteBufferReadableInputStream in,
+      long offsetInBlock, int firstFrameSkipBytes, long endOffsetInBlock,
+      DataChecksum checksum, boolean verifyChecksum, boolean isLocal) {
+    this.file = file;
+    this.in = in;
+    this.offsetInBlock = offsetInBlock;
+    this.firstFrameSkipBytes = firstFrameSkipBytes;
+    this.endOffsetInBlock = endOffsetInBlock;
+    this.checksum = checksum;
     this.verifyChecksum = verifyChecksum;
-    this.clientName = clientName;
-    this.length = length;
-    this.strategy = strategy;
+    this.isLocal = isLocal;
+  }
+
+  private long offsetInBlock;
+
+  private ByteBuffer data = EMPTY_BB;
+
+  private boolean firstFrame = true;
+
+  private void receiveNextFrame() throws IOException {
+    OpReadBlockFrameHeaderProto header =
+        OpReadBlockFrameHeaderProto.parseDelimitedFrom(in);
+    if (data.capacity() < header.getDataLength()) {
+      data = ByteBuffer.allocate(header.getDataLength());
+    } else {
+      data.clear();
+      data.limit(header.getDataLength());
+    }
+    while (data.hasRemaining()) {
+      if (in.read(data) == -1) {
+        throw new EOFException();
+      }
+    }
+    data.flip();
+    if (verifyChecksum) {
+      checksum.verifyChunkedSums(data, header.getChecksums()
+          .asReadOnlyByteBuffer(), file, offsetInBlock);
+    }
+    offsetInBlock += header.getDataLength();
+    if (firstFrame) {
+      data.position(firstFrameSkipBytes);
+      firstFrame = false;
+    }
   }
 
   @Override
   public int read(ByteBuffer buf) throws IOException {
-    sendReadBlockRequest();
-    int nRead = buf.remaining();
-    int retRead = this.read(buf.array(), buf.position(), nRead);
-    if (retRead >= 0) {
-      buf.position(buf.position() + retRead);
+    if (!data.hasRemaining()) {
+      if (offsetInBlock >= endOffsetInBlock) {
+        return -1;
+      }
+      receiveNextFrame();
     }
-    return retRead;
+    int bufRemaining = buf.remaining();
+    int dataRemaining = data.remaining();
+    if (bufRemaining < dataRemaining) {
+      int oldLimit = data.limit();
+      data.limit(data.position() + bufRemaining);
+      buf.put(data);
+      data.limit(oldLimit);
+      return bufRemaining;
+    } else {
+      return dataRemaining;
+    }
   }
 
   @Override
   public int read(byte[] buf, int off, int len) throws IOException {
-    sendReadBlockRequest();
-    return this.chunkInputStream.read(buf, off, len);
+    if (!data.hasRemaining()) {
+      if (offsetInBlock >= endOffsetInBlock) {
+        return -1;
+      }
+      receiveNextFrame();
+    }
+    int toRead = Math.min(len, data.remaining());
+    data.get(buf, off, toRead);
+    return toRead;
   }
 
   @Override
   public long skip(long n) throws IOException {
-    return this.chunkInputStream.skip(n);
+    if (!data.hasRemaining()) {
+      if (offsetInBlock >= endOffsetInBlock) {
+        return 0L;
+      }
+      receiveNextFrame();
+    }
+    int toSkip = (int) Math.min(n, data.remaining());
+    data.position(data.position() + toSkip);
+    return toSkip;
   }
 
   @Override
   public int available() throws IOException {
-    return this.chunkInputStream.available();
+    return (int) Math.max(0, endOffsetInBlock - offsetInBlock);
   }
 
   @Override
   public void close() throws IOException {
-    if (this.chunkInputStream != null) {
-      this.chunkInputStream.close();
-    }
+    in.close();
   }
 
   @Override
-  public void readFully(byte[] buf, int readOffset, int amtToRead) throws IOException {
+  public void readFully(byte[] buf, int readOffset, int amtToRead)
+      throws IOException {
     BlockReaderUtil.readFully(this, buf, readOffset, amtToRead);
 
   }
@@ -130,57 +187,9 @@ public class Http2BlockReader implements BlockReader {
     return BlockReaderUtil.readAll(this, buf, offset, len);
   }
 
-  private void sendReadBlockRequest() throws IOException {
-
-    if (!initialReadBlock) {
-      OpReadBlockRequestProto proto =
-          OpReadBlockRequestProto
-              .newBuilder()
-              .setHeader(
-                ClientOperationHeaderProto.newBuilder()
-                    .setBaseHeader(BaseHeaderProto.newBuilder().setBlock(PBHelper.convert(block)))
-                    .setClientName(this.clientName)).setOffset(this.startOffsetInBlock)
-              .setLen(this.length).setSendChecksums(this.verifyChecksum).build();
-      ByteArrayOutputStream bos = new ByteArrayOutputStream();
-      proto.writeDelimitedTo(bos);
-      http2StreamChannel.write(http2StreamChannel.alloc().buffer().writeBytes(bos.toByteArray()));
-      http2StreamChannel.writeAndFlush(LastHttp2Message.get());
-      Http2DataReceiver receiver = http2StreamChannel.pipeline().get(Http2DataReceiver.class);
-      String status = receiver.waitForResponse().status().toString();
-      if (!status.equals(HttpResponseStatus.OK.codeAsText().toString())) {
-        String message = "write data failed, http status code is " + status;
-        LOG.warn(message);
-        throw new IOException(message);
-      } else {
-        chunkInputStream = new ChunkInputStream(receiver.content());
-        OpReadBlockResponseProto respProto =
-            OpReadBlockResponseProto.parseDelimitedFrom(receiver.content());
-        if (respProto.getStatus() == Status.SUCCESS) {
-          long chunkOffset = respProto.getReadOpChecksumInfo().getChunkOffset();
-          DataChecksum dataChecksum =
-              DataTransferProtoUtil.fromProto(respProto.getReadOpChecksumInfo().getChecksum());
-          if (chunkOffset < 0 || chunkOffset > this.startOffsetInBlock
-              || chunkOffset <= (this.startOffsetInBlock - dataChecksum.getBytesPerChecksum())) {
-            throw new IOException("BlockReader: error in first chunk offset (" + chunkOffset
-                + ") startOffset is " + startOffsetInBlock + " for file " + this.fileName);
-          }
-          this.chunkInputStream.setDataChecksum(dataChecksum);
-          this.chunkInputStream.setFileName(this.fileName);
-          this.chunkInputStream.setChunkOffset(chunkOffset);
-          this.chunkInputStream.setSkipBytes(this.startOffsetInBlock - chunkOffset);
-          this.initialReadBlock = true;
-        } else {
-          String message = "resp status is " + respProto.getStatus();
-          LOG.warn(message);
-          throw new IOException(message);
-        }
-      }
-    }
-  }
-
   @Override
   public boolean isLocal() {
-    return false;
+    return isLocal;
   }
 
   @Override
@@ -193,4 +202,64 @@ public class Http2BlockReader implements BlockReader {
     return null;
   }
 
+  public static Http2BlockReader
+      newBlockReader(Http2ConnectionPool connPool, String file,
+          ExtendedBlock block, Token<BlockTokenIdentifier> blockToken,
+          long startOffsetInBlock, long len, boolean verifyChecksum,
+          String clientName, DatanodeID datanodeID,
+          CachingStrategy cachingStrategy) throws IOException {
+    Http2StreamChannel streamChannel =
+        connPool.connect(new InetSocketAddress(datanodeID.getIpAddr(),
+            datanodeID.getInfoPort()));
+    Http2DataReceiver receiver =
+        streamChannel.pipeline().get(Http2DataReceiver.class);
+    boolean succ = false;
+    try {
+      OpReadBlockRequestProto req =
+          OpReadBlockRequestProto
+              .newBuilder()
+              .setHeader(
+                ClientOperationHeaderProto
+                    .newBuilder()
+                    .setBaseHeader(
+                      DataTransferProtoUtil.buildBaseHeader(block, blockToken))
+                    .setClientName(clientName)).setOffset(startOffsetInBlock)
+              .setLen(len).setSendChecksums(verifyChecksum).build();
+      streamChannel.writeAndFlush(req);
+      Http2Headers headers = receiver.waitForResponse();
+      if (!HttpResponseStatus.OK.codeAsText().equals(headers.status())) {
+        // TODO: receive json error message
+        throw new IOException("Unexpected http status code: "
+            + headers.status());
+      }
+      succ = true;
+    } finally {
+      if (!succ) {
+        streamChannel.close();
+      }
+    }
+    succ = false;
+    ByteBufferReadableInputStream in = receiver.content();
+    try {
+      OpReadBlockResponseProto resp =
+          OpReadBlockResponseProto.parseDelimitedFrom(in);
+      if (resp.getStatus() != Status.SUCCESS) {
+        throw new IOException("Unexpected status: " + resp.getStatus());
+      }
+      long chunkOffset = resp.getReadOpChecksumInfo().getChunkOffset();
+      int firstFrameSkipBytes = (int) (startOffsetInBlock - chunkOffset);
+      DataChecksum checksum =
+          DataTransferProtoUtil.fromProto(resp.getReadOpChecksumInfo()
+              .getChecksum());
+      succ = true;
+      return new Http2BlockReader(file, in, chunkOffset, firstFrameSkipBytes,
+          startOffsetInBlock + len, checksum, verifyChecksum,
+          DFSClient.isLocalAddress(NetUtils.createSocketAddr(datanodeID
+              .getXferAddr())));
+    } finally {
+      if (!succ) {
+        in.close();
+      }
+    }
+  }
 }

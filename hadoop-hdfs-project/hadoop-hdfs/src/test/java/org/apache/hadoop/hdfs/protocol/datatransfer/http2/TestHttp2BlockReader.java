@@ -17,28 +17,27 @@
  */
 package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
-import org.apache.hadoop.hdfs.BlockReader;
 import org.apache.hadoop.hdfs.Http2BlockReader;
 import org.apache.hadoop.hdfs.Http2ConnectionPool;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
-import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -52,14 +51,20 @@ public class TestHttp2BlockReader {
 
   private static MiniDFSCluster CLUSTER;
 
+  private static Http2ConnectionPool CONN_POOL;
+
   @BeforeClass
   public static void setUp() throws Exception {
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
+    CONN_POOL = new Http2ConnectionPool(CONF);
   }
 
   @AfterClass
   public static void tearDownAfterClass() throws Exception {
+    if (CONN_POOL != null) {
+      CONN_POOL.close();
+    }
     if (CLUSTER != null) {
       CLUSTER.shutdown();
     }
@@ -82,32 +87,28 @@ public class TestHttp2BlockReader {
     ThreadLocalRandom.current().nextBytes(b);
     out.write(b);
     out.close();
-    ExtendedBlock block =
+    LocatedBlock block =
         CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0)
-            .get(0).getBlock();
-    Http2ConnectionPool http2ConnPool = new Http2ConnectionPool(CONF);
-    Http2StreamChannel streamChannel =
-        http2ConnPool.connect(new InetSocketAddress("127.0.0.1", CLUSTER
-            .getDataNodes().get(0).getInfoPort()));
+            .get(0);
     int offset = 1;
     int length = len - offset;
-    BlockReader blockReader =
-        new Http2BlockReader(streamChannel, block.toString(), block, offset,
-            true, "clientName", length, null);
     byte[] result = new byte[length];
-    blockReader.readFully(result, 0, length);
-    byte[] expected = new byte[length];
-    for (int i = 0; i < length; ++i) {
-      expected[i] = b[i + offset];
+    Http2BlockReader blockReader =
+        Http2BlockReader.newBlockReader(CONN_POOL, fileName, block.getBlock(),
+          block.getBlockToken(), offset, length, true, "clientName",
+          block.getLocations()[0], null);
+    try {
+      blockReader.readFully(result, 0, length);
+    } finally {
+      blockReader.close();
     }
-    Arrays.equals(result, expected);
-    http2ConnPool.close();
+    assertArrayEquals(Arrays.copyOfRange(b, offset, len), result);
   }
 
   @Test
   public void testConcurrency() throws IllegalArgumentException, IOException,
       InterruptedException {
-    String fileName = "/test";
+    final String fileName = "/test";
     FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
     final int len = 1024 * 20 - 10;
     final byte[] b = new byte[len];
@@ -115,15 +116,11 @@ public class TestHttp2BlockReader {
     out.write(b);
     out.close();
 
-    final ExtendedBlock block =
+    final LocatedBlock block =
         CLUSTER.getFileSystem().getClient().getLocatedBlocks(fileName, 0)
-            .get(0).getBlock();
-
-    final Http2ConnectionPool http2ConnectionPool =
-        new Http2ConnectionPool(CONF);
-
+            .get(0);
     int concurrency = 100;
-
+    final AtomicBoolean succ = new AtomicBoolean(true);
     ExecutorService executor =
         Executors.newFixedThreadPool(concurrency, new ThreadFactoryBuilder()
             .setNameFormat("Http2-BlockReader-%d").setDaemon(true).build());
@@ -135,35 +132,26 @@ public class TestHttp2BlockReader {
         public void run() {
           for (int i = 0; i < 100; i++) {
             int offset = 0;
-            Http2StreamChannel streamChannel;
-            BlockReader blockReader = null;
+            Http2BlockReader blockReader = null;
             try {
-              streamChannel =
-                  http2ConnectionPool
-                      .connect(new InetSocketAddress("127.0.0.1", CLUSTER
-                          .getDataNodes().get(0).getInfoPort()));
-
               offset = ThreadLocalRandom.current().nextInt(0, len);
               int length = len - offset;
               blockReader =
-                  new Http2BlockReader(streamChannel, block.toString(), block,
-                      offset, true, "clientName" + index, length, null);
-              byte[] expected = new byte[length];
-              for (int j = 0; j < length; ++j) {
-                expected[j] = b[j + offset];
-              }
+                  Http2BlockReader.newBlockReader(CONN_POOL, fileName,
+                    block.getBlock(), block.getBlockToken(), offset, length,
+                    true, "clientName" + index, block.getLocations()[0], null);
               byte[] result = new byte[length];
               blockReader.readFully(result, 0, length);
-              Arrays.equals(expected, result);
-            } catch (IOException e) {
-              e.printStackTrace();
-              assertTrue(false);
+              assertArrayEquals(Arrays.copyOfRange(b, offset, len), result);
+            } catch (Throwable t) {
+              t.printStackTrace();
+              succ.set(false);
+              break;
             } finally {
               if (blockReader != null) {
                 try {
                   blockReader.close();
                 } catch (IOException e) {
-                  // TODO Auto-generated catch block
                   e.printStackTrace();
                 }
               }
@@ -174,8 +162,6 @@ public class TestHttp2BlockReader {
     }
     executor.shutdown();
     assertTrue(executor.awaitTermination(5, TimeUnit.MINUTES));
-    http2ConnectionPool.close();
-
   }
 
 }

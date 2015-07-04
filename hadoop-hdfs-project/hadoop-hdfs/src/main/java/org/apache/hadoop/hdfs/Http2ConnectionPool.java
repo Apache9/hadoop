@@ -40,6 +40,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
+import org.apache.hadoop.hdfs.server.datanode.web.dtp.ProtobufVarint32Encoder;
 import org.apache.hadoop.hdfs.web.http2.ClientHttp2ConnectionHandler;
 import org.apache.hadoop.hdfs.web.http2.Http2DataReceiver;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
@@ -65,7 +66,8 @@ public class Http2ConnectionPool implements Closeable {
     this.conf = conf;
   }
 
-  public Http2StreamChannel connect(InetSocketAddress address) throws IOException {
+  public Http2StreamChannel connect(InetSocketAddress address)
+      throws IOException {
 
     try {
       Channel channel = null;
@@ -73,12 +75,14 @@ public class Http2ConnectionPool implements Closeable {
         channel = this.addressToChannel.get(address);
         if (channel == null) {
           channel =
-              new Bootstrap().group(workerGroup).channel(NioSocketChannel.class)
+              new Bootstrap().group(workerGroup)
+                  .channel(NioSocketChannel.class)
                   .handler(new ChannelInitializer<Channel>() {
 
                     @Override
                     protected void initChannel(Channel ch) throws Exception {
-                      ch.pipeline().addLast(ClientHttp2ConnectionHandler.create(ch, conf));
+                      ch.pipeline().addLast(
+                        ClientHttp2ConnectionHandler.create(ch, conf));
                     }
 
                   }).connect(address).sync().channel();
@@ -92,20 +96,23 @@ public class Http2ConnectionPool implements Closeable {
 
             @Override
             protected void initChannel(Http2StreamChannel ch) throws Exception {
-              ch.pipeline().addLast(new Http2DataReceiver());
+              ch.pipeline().addLast(new Http2DataReceiver(),
+                new ProtobufVarint32Encoder());
             }
 
           })
           .headers(
             new DefaultHttp2Headers()
-                .method(new ByteString(HttpMethod.POST.name(), StandardCharsets.UTF_8))
+                .method(
+                  new ByteString(HttpMethod.POST.name(), StandardCharsets.UTF_8))
                 .path(
-                  new ByteString(DtpUrlDispatcher.URL_PREFIX + DtpUrlDispatcher.OP_READ_BLOCK,
-                      StandardCharsets.UTF_8))
+                  new ByteString(DtpUrlDispatcher.URL_PREFIX
+                      + DtpUrlDispatcher.OP_READ_BLOCK, StandardCharsets.UTF_8))
                 .scheme(new ByteString("http", StandardCharsets.UTF_8))
                 .authority(
-                  new ByteString(address.getHostString() + ":" + address.getPort(),
-                      StandardCharsets.UTF_8))).endStream(false).connect().sync().get();
+                  new ByteString(address.getHostString() + ":"
+                      + address.getPort(), StandardCharsets.UTF_8)))
+          .endStream(false).connect().sync().get();
     } catch (InterruptedException | ExecutionException e) {
       throw new IOException(e);
     }
@@ -113,7 +120,8 @@ public class Http2ConnectionPool implements Closeable {
 
   @Override
   public void close() throws IOException {
-    for (Map.Entry<InetSocketAddress, Channel> entry : this.addressToChannel.entrySet()) {
+    for (Map.Entry<InetSocketAddress, Channel> entry : this.addressToChannel
+        .entrySet()) {
       Channel channel = entry.getValue();
       if (channel != null) {
         channel.close();
