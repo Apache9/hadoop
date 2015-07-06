@@ -167,7 +167,8 @@ public class Http2BlockReader implements BlockReader {
 
   @Override
   public int available() throws IOException {
-    return (int) Math.max(0, endOffsetInBlock - offsetInBlock);
+    int blockAvailable = (int) Math.max(0, endOffsetInBlock - offsetInBlock);
+    return Math.min(blockAvailable, DFSClient.TCP_WINDOW_SIZE);
   }
 
   @Override
