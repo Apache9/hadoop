@@ -18,6 +18,8 @@
 package org.apache.hadoop.hdfs;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
@@ -29,23 +31,25 @@ import io.netty.util.ByteString;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
-import org.apache.hadoop.hdfs.server.datanode.web.dtp.ProtobufVarint32Encoder;
 import org.apache.hadoop.hdfs.web.http2.ClientHttp2ConnectionHandler;
 import org.apache.hadoop.hdfs.web.http2.Http2DataReceiver;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.eclipse.jetty.http2.client.HTTP2Client;
+
+import com.google.protobuf.CodedOutputStream;
 
 /**
  * A wrapper of {@link HTTP2Client} which will reuse session to the same server.
@@ -66,9 +70,8 @@ public class Http2ConnectionPool implements Closeable {
     this.conf = conf;
   }
 
-  public Http2StreamChannel connect(InetSocketAddress address)
-      throws IOException {
-
+  public Http2DataReceiver connect(InetSocketAddress address,
+      OpReadBlockRequestProto request) throws IOException {
     try {
       Channel channel = null;
       synchronized (this.addressToChannel) {
@@ -90,14 +93,20 @@ public class Http2ConnectionPool implements Closeable {
         }
 
       }
-      return new Http2StreamBootstrap()
+      int serializedSize = request.getSerializedSize();
+      ByteBuf data =
+          channel.alloc().buffer(
+            CodedOutputStream.computeRawVarint32Size(serializedSize)
+                + serializedSize);
+      request.writeDelimitedTo(new ByteBufOutputStream(data));
+      final Http2DataReceiver receiver = new Http2DataReceiver();
+      new Http2StreamBootstrap()
           .channel(channel)
           .handler(new ChannelInitializer<Http2StreamChannel>() {
 
             @Override
             protected void initChannel(Http2StreamChannel ch) throws Exception {
-              ch.pipeline().addLast(new Http2DataReceiver(),
-                new ProtobufVarint32Encoder());
+              ch.pipeline().addLast(receiver);
             }
 
           })
@@ -111,10 +120,11 @@ public class Http2ConnectionPool implements Closeable {
                 .scheme(new ByteString("http", StandardCharsets.UTF_8))
                 .authority(
                   new ByteString(address.getHostString() + ":"
-                      + address.getPort(), StandardCharsets.UTF_8)))
-          .endStream(false).connect().sync().get();
-    } catch (InterruptedException | ExecutionException e) {
-      throw new IOException(e);
+                      + address.getPort(), StandardCharsets.UTF_8))).data(data)
+          .endStream(true).connect().sync();
+      return receiver;
+    } catch (InterruptedException e) {
+      throw new InterruptedIOException(e.getMessage());
     }
   }
 

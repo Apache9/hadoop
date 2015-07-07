@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.web.http2;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -39,6 +41,8 @@ public class Http2StreamBootstrap {
 
   private Http2Headers headers;
 
+  private ByteBuf data = Unpooled.EMPTY_BUFFER;
+
   private boolean endStream;
 
   private ChannelHandler handler;
@@ -50,6 +54,11 @@ public class Http2StreamBootstrap {
 
   public Http2StreamBootstrap headers(Http2Headers headers) {
     this.headers = headers;
+    return this;
+  }
+
+  public Http2StreamBootstrap data(ByteBuf data) {
+    this.data = data;
     return this;
   }
 
@@ -69,9 +78,9 @@ public class Http2StreamBootstrap {
     final Promise<Http2StreamChannel> registeredPromise =
         channel.eventLoop().<Http2StreamChannel> newPromise();
 
-    Http2HeadersAndPromise headersAndPromise =
-        new Http2HeadersAndPromise(headers, endStream, channel.eventLoop()
-            .<Http2StreamChannel> newPromise()
+    final StartHttp2StreamRequest request =
+        new StartHttp2StreamRequest(headers, data, endStream, channel
+            .eventLoop().<Http2StreamChannel> newPromise()
             .addListener(new FutureListener<Http2StreamChannel>() {
 
               @Override
@@ -100,7 +109,14 @@ public class Http2StreamBootstrap {
               }
 
             }));
-    channel.writeAndFlush(headersAndPromise);
+    channel.eventLoop().execute(new Runnable() {
+
+      @Override
+      public void run() {
+        channel.writeAndFlush(request);
+      }
+    });
+
     return registeredPromise;
   }
 }

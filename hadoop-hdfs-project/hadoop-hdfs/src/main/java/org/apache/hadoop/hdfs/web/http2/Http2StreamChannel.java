@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.web.http2;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.AbstractChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
@@ -168,10 +169,10 @@ public class Http2StreamChannel extends AbstractChannel {
 
   @Override
   protected void doClose() throws Exception {
-    if (stream.state() != Http2Stream.State.CLOSED) {
-      encoder.writeRstStream(http2ConnHandlerCtx, stream.id(),
-        Http2Error.INTERNAL_ERROR.code(), http2ConnHandlerCtx.newPromise());
-    }
+    // if (stream.state() != Http2Stream.State.CLOSED) {
+    // encoder.writeRstStream(http2ConnHandlerCtx, stream.id(),
+    // Http2Error.INTERNAL_ERROR.code(), http2ConnHandlerCtx.newPromise());
+    // }
     state = State.CLOSED;
   }
 
@@ -229,6 +230,10 @@ public class Http2StreamChannel extends AbstractChannel {
         && remoteFlowController.windowSize(connStream) > 0;
   }
 
+  private void writeMsg(Object msg) {
+
+  }
+
   @Override
   protected void doWrite(ChannelOutboundBuffer in) throws Exception {
     State currentState = this.state;
@@ -249,8 +254,8 @@ public class Http2StreamChannel extends AbstractChannel {
         this.state =
             currentState == State.HALF_CLOSED_REMOTE ? State.PRE_CLOSED
                 : State.HALF_CLOSED_LOCAL;
-        encoder.writeData(http2ConnHandlerCtx, stream.id(), http2ConnHandlerCtx
-            .alloc().buffer(0), 0, true, http2ConnHandlerCtx.newPromise());
+        encoder.writeData(http2ConnHandlerCtx, stream.id(),
+          Unpooled.EMPTY_BUFFER, 0, true, http2ConnHandlerCtx.newPromise());
       } else if (msg instanceof Http2Headers) {
         encoder.writeHeaders(http2ConnHandlerCtx, stream.id(),
           (Http2Headers) msg, 0, false, http2ConnHandlerCtx.newPromise());
@@ -266,7 +271,7 @@ public class Http2StreamChannel extends AbstractChannel {
       flush = true;
     }
     if (flush) {
-      http2ConnHandlerCtx.channel().flush();
+      http2ConnHandlerCtx.flush();
     }
   }
 

@@ -17,51 +17,61 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
+import java.io.EOFException;
 import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
-import org.apache.log4j.lf5.util.StreamUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
+@RunWith(Parameterized.class)
 public class TestHttp2Performance {
 
   private static final Configuration CONF = WebHdfsTestUtil.createConf();
 
-  private static final Configuration CONF2 = WebHdfsTestUtil.createConf();
-
   private static MiniDFSCluster CLUSTER;
 
-  private static MiniDFSCluster CLUSTER2;
+  private static Path FILE = new Path("/test");
+
+  private static int LEN = 2048;
+
+  private boolean http2;
+
+  @Parameters
+  public static Collection<Object[]> data() {
+    return Arrays.asList(new Object[] { true }, new Object[] { false });
+  }
+
+  public TestHttp2Performance(boolean http2) {
+    this.http2 = http2;
+  }
 
   @BeforeClass
   public static void setUp() throws Exception {
+    CONF.setBoolean(DFSConfigKeys.DFS_DATANODE_TRANSFERTO_ALLOWED_KEY, false);
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
-
-    CONF2.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, CONF.get(MiniDFSCluster.HDFS_MINIDFS_BASEDIR)
-        + "_2");
-    CONF2.setBoolean(HdfsClientConfigKeys.Read.Http2.KEY, true);
-
-    CLUSTER2 = new MiniDFSCluster.Builder(CONF2).numDataNodes(1).build();
-    CLUSTER2.waitActive();
+    FSDataOutputStream out = CLUSTER.getFileSystem().create(FILE);
+    byte[] b = new byte[LEN];
+    ThreadLocalRandom.current().nextBytes(b);
+    out.write(b);
+    out.close();
   }
 
   @AfterClass
@@ -69,88 +79,45 @@ public class TestHttp2Performance {
     if (CLUSTER != null) {
       CLUSTER.shutdown();
     }
+  }
 
-    if (CLUSTER2 != null) {
-      CLUSTER2.shutdown();
+  private void consume(FSDataInputStream in, int len, byte[] buf)
+      throws IOException {
+    for (int remaining = len; remaining > 0;) {
+      int read = in.read(buf, 0, Math.min(remaining, buf.length));
+      if (read < 0) {
+        throw new EOFException("Unexpected EOF got, should still have "
+            + remaining + " bytes remaining");
+      }
+      remaining -= read;
     }
   }
 
   @Test
-  public void testTcp() throws IllegalArgumentException, IOException, InterruptedException {
-    final String fileName = "/test";
-    FSDataOutputStream out = CLUSTER.getFileSystem().create(new Path(fileName));
-    final int len = 6 * 1024 * 1024 - 10;
-    byte[] b = new byte[len];
-    ThreadLocalRandom.current().nextBytes(b);
-    out.write(b);
-    out.close();
-    int concurrency = 100;
-    long start = System.currentTimeMillis();
-    ExecutorService executor =
-        Executors.newFixedThreadPool(concurrency,
-          new ThreadFactoryBuilder().setNameFormat("TCP-DFSClient-%d").setDaemon(true).build());
-
-    for (int i = 0; i < concurrency; ++i) {
-      executor.execute(new Runnable() {
-
-        @Override
-        public void run() {
-          try {
-            read(fileName, len, false);
-          } catch (IllegalArgumentException | IOException e) {
-            assertTrue(false);
-          }
+  public void test() throws IllegalArgumentException, IOException,
+      InterruptedException {
+    Configuration conf = new Configuration(CONF);
+    if (http2) {
+      conf.setBoolean(HdfsClientConfigKeys.Read.Http2.KEY, true);
+    }
+    try (final FileSystem fs = FileSystem.newInstance(conf)) {
+      // warm up
+      try (FSDataInputStream in = fs.open(FILE)) {
+        consume(in, LEN, new byte[4096]);
+      }
+      final int readPerThread = 50000;
+      byte[] buf = new byte[4096];
+      long cost;
+      try (FSDataInputStream in = fs.open(FILE)) {
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < readPerThread; i++) {
+          in.seek(0);
+          consume(in, LEN, buf);
         }
-      });
+        cost = System.currentTimeMillis() - start;
+      }
+      System.err.println("******* time based on " + (http2 ? "http2 " : "tcp ")
+          + cost + "ms");
     }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(10, TimeUnit.MINUTES));
-    System.err.println("******* time based on tcp " + (System.currentTimeMillis() - start));
   }
-
-  @Test
-  public void testHttp2() throws IllegalArgumentException, IOException, InterruptedException {
-    final String fileName = "/test2";
-    FSDataOutputStream out = FileSystem.get(CONF2).create(new Path(fileName));
-    final int len = 6 * 1024 * 1024 - 10;
-    byte[] b = new byte[len];
-    ThreadLocalRandom.current().nextBytes(b);
-    out.write(b);
-    out.close();
-    int concurrency = 100;
-    long start = System.currentTimeMillis();
-    ExecutorService executor =
-        Executors.newFixedThreadPool(concurrency,
-          new ThreadFactoryBuilder().setNameFormat("Http2-DFSClient-%d").setDaemon(true).build());
-
-    for (int i = 0; i < concurrency; ++i) {
-      executor.execute(new Runnable() {
-
-        @Override
-        public void run() {
-          try {
-            read(fileName, len, true);
-          } catch (IllegalArgumentException | IOException e) {
-            assertTrue(false);
-          }
-        }
-      });
-    }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(10, TimeUnit.MINUTES));
-    System.err.println("******* time based on http2 " + (System.currentTimeMillis() - start));
-  }
-
-  private void read(String fileName, int len, boolean useHttp2) throws IllegalArgumentException,
-      IOException {
-    FSDataInputStream inputStream = null;
-    if (useHttp2) {
-      inputStream = FileSystem.get(CONF2).open(new Path(fileName));
-    } else {
-      inputStream = FileSystem.get(CONF).open(new Path(fileName));
-    }
-    assertEquals(len, StreamUtils.getBytes(inputStream).length);
-    inputStream.close();
-  }
-
 }

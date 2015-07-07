@@ -23,6 +23,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.Http2Headers;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -108,7 +109,7 @@ class ReadBlockHandler extends
     }
   }
 
-  private void handleReadBlock(ChannelHandlerContext ctx,
+  private void handleReadBlock(final ChannelHandlerContext ctx,
       OpReadBlockRequestProto request) throws IOException {
     ExtendedBlock block =
         PBHelper.convert(request.getHeader().getBaseHeader().getBlock());
@@ -224,25 +225,35 @@ class ReadBlockHandler extends
       }
       blockInput = data.getBlockInputStream(block, startOffset);
       long length = endOffset - startOffset;
-      ctx.write(new DefaultHttp2Headers().status(HttpResponseStatus.OK
-          .codeAsText()));
-      ctx.write(OpReadBlockResponseProto
-          .newBuilder()
-          .setStatus(SUCCESS)
-          .setReadOpChecksumInfo(
-            ReadOpChecksumInfoProto.newBuilder()
-                .setChecksum(DataTransferProtoUtil.toProto(checksum))
-                .setChunkOffset(startOffset)).build());
-      ctx.write(
-        new ChunkedBlockInput(volumeRef, blockInput, checksumInput,
-            lastChunkChecksum == null ? null : lastChunkChecksum.getChecksum(),
-            checksum, Math.max(
-              1,
-              ChunkedBlockInput.numberOfBlockChunks(
-                DFSUtil.getIoFileBufferSize(datanode.getConf()),
-                checksum.getBytesPerChecksum())), length)).addListener(
-        ChannelFutureListener.CLOSE_ON_FAILURE);
-      ctx.writeAndFlush(LastHttp2Message.get());
+      final Http2Headers headers =
+          new DefaultHttp2Headers().status(HttpResponseStatus.OK.codeAsText());
+      final OpReadBlockResponseProto resp =
+          OpReadBlockResponseProto
+              .newBuilder()
+              .setStatus(SUCCESS)
+              .setReadOpChecksumInfo(
+                ReadOpChecksumInfoProto.newBuilder()
+                    .setChecksum(DataTransferProtoUtil.toProto(checksum))
+                    .setChunkOffset(startOffset)).build();
+      final ChunkedBlockInput input =
+          new ChunkedBlockInput(volumeRef, blockInput, checksumInput,
+              lastChunkChecksum == null ? null
+                  : lastChunkChecksum.getChecksum(), checksum, Math.max(
+                1,
+                ChunkedBlockInput.numberOfBlockChunks(
+                  DFSUtil.getIoFileBufferSize(datanode.getConf()),
+                  checksum.getBytesPerChecksum())), length);
+      ctx.channel().eventLoop().execute(new Runnable() {
+
+        @Override
+        public void run() {
+          ctx.write(headers);
+          ctx.write(resp);
+          ctx.write(input).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+          ctx.writeAndFlush(LastHttp2Message.get());
+        }
+      });
+
       success = true;
     } finally {
       if (!success) {

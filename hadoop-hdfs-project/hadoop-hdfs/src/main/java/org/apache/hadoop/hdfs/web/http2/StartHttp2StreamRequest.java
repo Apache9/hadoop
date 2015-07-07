@@ -17,23 +17,27 @@
  */
 package org.apache.hadoop.hdfs.web.http2;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.concurrent.Promise;
 
 /**
  *
  */
-class Http2HeadersAndPromise {
+class StartHttp2StreamRequest {
 
   final Http2Headers headers;
+
+  final ByteBuf data;
 
   final boolean endStream;
 
   final Promise<Http2StreamChannel> promise;
 
-  Http2HeadersAndPromise(Http2Headers headers, boolean endStream,
-      Promise<Http2StreamChannel> promise) {
+  StartHttp2StreamRequest(Http2Headers headers, ByteBuf data,
+      boolean endStream, Promise<Http2StreamChannel> promise) {
     this.headers = headers;
+    this.data = data;
     this.endStream = endStream;
     this.promise = promise;
   }

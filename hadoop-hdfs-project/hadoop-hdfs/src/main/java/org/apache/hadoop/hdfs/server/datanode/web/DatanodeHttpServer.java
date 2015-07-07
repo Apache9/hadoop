@@ -45,6 +45,7 @@ import java.net.URI;
 import java.nio.channels.ServerSocketChannel;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -118,7 +119,7 @@ public class DatanodeHttpServer implements Closeable {
     // maximumPoolSize and allow core thread timeout.
     ThreadPoolExecutor handlerExecutor =
         new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 1,
-            TimeUnit.MINUTES, new LinkedTransferQueue<Runnable>(),
+            TimeUnit.MINUTES, new LinkedBlockingQueue<Runnable>(),
             new ThreadFactoryBuilder().setNameFormat("Http-Handler-%d")
                 .setDaemon(true).build());
     handlerExecutor.allowCoreThreadTimeOut(true);

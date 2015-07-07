@@ -68,29 +68,31 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
   @Override
   public void write(ChannelHandlerContext ctx, Object msg,
       ChannelPromise promise) throws Exception {
-    if (msg instanceof Http2HeadersAndPromise) {
-      final Http2HeadersAndPromise headersAndPromise =
-          (Http2HeadersAndPromise) msg;
+    if (msg instanceof StartHttp2StreamRequest) {
+      final StartHttp2StreamRequest request = (StartHttp2StreamRequest) msg;
       final int streamId = nextStreamId();
       Http2ConnectionEncoder encoder = encoder();
-      encoder.writeHeaders(ctx, streamId, headersAndPromise.headers, 0,
-        headersAndPromise.endStream, promise).addListener(
+      encoder.writeHeaders(ctx, streamId, request.headers, 0,
+        !request.data.isReadable() && request.endStream, promise).addListener(
         new ChannelFutureListener() {
 
           @Override
           public void operationComplete(ChannelFuture future) throws Exception {
             if (future.isSuccess()) {
-              headersAndPromise.promise.setSuccess(connection()
-                  .stream(streamId).<Http2StreamChannel> getProperty(
-                    subChannelPropKey));
+              request.promise.setSuccess(connection().stream(streamId)
+                  .<Http2StreamChannel> getProperty(subChannelPropKey));
             } else {
-              headersAndPromise.promise.setFailure(future.cause());
+              request.promise.setFailure(future.cause());
             }
           }
         });
+      if (request.data.isReadable()) {
+        encoder.writeData(ctx, streamId, request.data, 0, request.endStream,
+          ctx.newPromise());
+      }
     } else {
       throw new UnsupportedMessageTypeException(msg,
-          Http2HeadersAndPromise.class);
+          StartHttp2StreamRequest.class);
     }
   }
 

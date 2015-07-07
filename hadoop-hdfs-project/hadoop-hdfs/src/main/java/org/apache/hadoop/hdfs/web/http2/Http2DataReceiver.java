@@ -131,7 +131,7 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
           }
           synchronized (queue) {
             if (error == null) {
-              error = new IOException("Stream already closed");
+              error = EOF;
             }
           }
           channel.close().addListener(new ChannelFutureListener() {

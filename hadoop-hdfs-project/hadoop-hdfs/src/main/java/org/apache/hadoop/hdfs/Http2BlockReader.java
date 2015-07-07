@@ -30,7 +30,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.ReadOption;
-import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
@@ -44,7 +43,6 @@ import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.shortcircuit.ClientMmap;
 import org.apache.hadoop.hdfs.web.http2.ByteBufferReadableInputStream;
 import org.apache.hadoop.hdfs.web.http2.Http2DataReceiver;
-import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
@@ -209,39 +207,28 @@ public class Http2BlockReader implements BlockReader {
           long startOffsetInBlock, long len, boolean verifyChecksum,
           String clientName, DatanodeID datanodeID,
           CachingStrategy cachingStrategy) throws IOException {
-    Http2StreamChannel streamChannel =
-        connPool.connect(new InetSocketAddress(datanodeID.getIpAddr(),
-            datanodeID.getInfoPort()));
+    OpReadBlockRequestProto req =
+        OpReadBlockRequestProto
+            .newBuilder()
+            .setHeader(
+              ClientOperationHeaderProto
+                  .newBuilder()
+                  .setBaseHeader(
+                    DataTransferProtoUtil.buildBaseHeader(block, blockToken))
+                  .setClientName(clientName)).setOffset(startOffsetInBlock)
+            .setLen(len).setSendChecksums(verifyChecksum).build();
     Http2DataReceiver receiver =
-        streamChannel.pipeline().get(Http2DataReceiver.class);
+        connPool.connect(new InetSocketAddress(datanodeID.getIpAddr(),
+            datanodeID.getInfoPort()), req);
+    ByteBufferReadableInputStream in = receiver.content();
     boolean succ = false;
     try {
-      OpReadBlockRequestProto req =
-          OpReadBlockRequestProto
-              .newBuilder()
-              .setHeader(
-                ClientOperationHeaderProto
-                    .newBuilder()
-                    .setBaseHeader(
-                      DataTransferProtoUtil.buildBaseHeader(block, blockToken))
-                    .setClientName(clientName)).setOffset(startOffsetInBlock)
-              .setLen(len).setSendChecksums(verifyChecksum).build();
-      streamChannel.writeAndFlush(req);
       Http2Headers headers = receiver.waitForResponse();
       if (!HttpResponseStatus.OK.codeAsText().equals(headers.status())) {
         // TODO: receive json error message
         throw new IOException("Unexpected http status code: "
             + headers.status());
       }
-      succ = true;
-    } finally {
-      if (!succ) {
-        streamChannel.close();
-      }
-    }
-    succ = false;
-    ByteBufferReadableInputStream in = receiver.content();
-    try {
       OpReadBlockResponseProto resp =
           OpReadBlockResponseProto.parseDelimitedFrom(in);
       if (resp.getStatus() != Status.SUCCESS) {
