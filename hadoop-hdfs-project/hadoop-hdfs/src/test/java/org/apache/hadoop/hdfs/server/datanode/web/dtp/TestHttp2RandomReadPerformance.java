@@ -63,6 +63,8 @@ public class TestHttp2RandomReadPerformance {
 
   private static int LEN = 2048;
 
+  private static int CONNECTION_COUNT = 2000;
+
   private boolean http2;
 
   @Parameters
@@ -76,6 +78,8 @@ public class TestHttp2RandomReadPerformance {
 
   @BeforeClass
   public static void setUp() throws Exception {
+    CONF.setInt(DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_KEY,
+      2 * CONNECTION_COUNT);
     CONF.setBoolean(DFSConfigKeys.DFS_DATANODE_TRANSFERTO_ALLOWED_KEY, false);
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
@@ -98,8 +102,7 @@ public class TestHttp2RandomReadPerformance {
     LocatedBlock block =
         CLUSTER.getFileSystem().getClient()
             .getLocatedBlocks(FILE.toUri().toString(), 0).get(0);
-    int connCount = 2000;
-    List<BlockReader> readerList = new ArrayList<BlockReader>(connCount);
+    List<BlockReader> readerList = new ArrayList<BlockReader>(CONNECTION_COUNT);
     EventLoopGroup workerGroup = null;
     PeerCache peerCache = null;
     List<Http2ConnectionPool> connPoolList =
@@ -108,7 +111,7 @@ public class TestHttp2RandomReadPerformance {
       DFSClient client = ((DistributedFileSystem) fs).getClient();
       if (http2) {
         workerGroup = new NioEventLoopGroup();
-        for (int i = 0; i < connCount; i++) {
+        for (int i = 0; i < CONNECTION_COUNT; i++) {
           Http2ConnectionPool connPool =
               new Http2ConnectionPool(CONF, workerGroup);
           connPoolList.add(connPool);
@@ -122,7 +125,7 @@ public class TestHttp2RandomReadPerformance {
         }
       } else {
         peerCache = new PeerCache(0, 0);
-        for (int i = 0; i < connCount; i++) {
+        for (int i = 0; i < CONNECTION_COUNT; i++) {
           InetSocketAddress addr =
               NetUtils.createSocketAddr(block.getLocations()[0].getXferAddr());
           Peer peer =
