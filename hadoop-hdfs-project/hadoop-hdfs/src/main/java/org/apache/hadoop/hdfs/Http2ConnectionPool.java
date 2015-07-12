@@ -59,15 +59,28 @@ public class Http2ConnectionPool implements Closeable {
 
   public static final Log LOG = LogFactory.getLog(Http2ConnectionPool.class);
 
-  private EventLoopGroup workerGroup = new NioEventLoopGroup();
+  private final boolean closeEventLoopGroup;
 
-  private Map<InetSocketAddress, Channel> addressToChannel =
+  private final EventLoopGroup workerGroup;
+
+  private final Map<InetSocketAddress, Channel> addressToChannel =
       new HashMap<InetSocketAddress, Channel>();
 
-  private Configuration conf;
+  private final Configuration conf;
 
   public Http2ConnectionPool(Configuration conf) {
+    this(conf, null);
+  }
+
+  public Http2ConnectionPool(Configuration conf, EventLoopGroup workerGroup) {
     this.conf = conf;
+    if (workerGroup != null) {
+      this.closeEventLoopGroup = false;
+      this.workerGroup = workerGroup;
+    } else {
+      this.closeEventLoopGroup = true;
+      this.workerGroup = new NioEventLoopGroup();
+    }
   }
 
   public Http2DataReceiver connect(InetSocketAddress address,
@@ -137,6 +150,8 @@ public class Http2ConnectionPool implements Closeable {
         channel.close();
       }
     }
-    workerGroup.shutdownGracefully();
+    if (closeEventLoopGroup) {
+      workerGroup.shutdownGracefully();
+    }
   }
 }

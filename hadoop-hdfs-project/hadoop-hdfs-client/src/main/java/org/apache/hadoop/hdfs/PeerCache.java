@@ -276,7 +276,7 @@ public class PeerCache {
   }
   
   @VisibleForTesting
-  void close() {
+  public void close() {
     clear();
     if (daemon != null) {
       daemon.interrupt();

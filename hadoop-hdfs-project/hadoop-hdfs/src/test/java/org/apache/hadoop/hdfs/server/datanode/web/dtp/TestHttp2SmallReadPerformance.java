@@ -66,11 +66,11 @@ public class TestHttp2SmallReadPerformance {
     CONF.setBoolean(DFSConfigKeys.DFS_DATANODE_TRANSFERTO_ALLOWED_KEY, false);
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
-    FSDataOutputStream out = CLUSTER.getFileSystem().create(FILE);
-    byte[] b = new byte[LEN];
-    ThreadLocalRandom.current().nextBytes(b);
-    out.write(b);
-    out.close();
+    try (FSDataOutputStream out = CLUSTER.getFileSystem().create(FILE)) {
+      byte[] b = new byte[LEN];
+      ThreadLocalRandom.current().nextBytes(b);
+      out.write(b);
+    }
   }
 
   @AfterClass
