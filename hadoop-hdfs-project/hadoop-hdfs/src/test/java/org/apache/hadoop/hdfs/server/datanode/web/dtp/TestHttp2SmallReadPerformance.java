@@ -21,7 +21,6 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.hadoop.conf.Configuration;
@@ -41,7 +40,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class TestHttp2Performance {
+public class TestHttp2SmallReadPerformance {
 
   private static final Configuration CONF = WebHdfsTestUtil.createConf();
 
@@ -58,7 +57,7 @@ public class TestHttp2Performance {
     return Arrays.asList(new Object[] { true }, new Object[] { false });
   }
 
-  public TestHttp2Performance(boolean http2) {
+  public TestHttp2SmallReadPerformance(boolean http2) {
     this.http2 = http2;
   }
 
