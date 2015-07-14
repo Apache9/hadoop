@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hdfs.web.http2;
 
-import static io.netty.handler.codec.http2.Http2CodecUtil.CONNECTION_STREAM_ID;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -28,7 +27,6 @@ import io.netty.handler.codec.http2.Http2EventAdapter;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
-import io.netty.handler.codec.http2.Http2StreamVisitor;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
@@ -66,7 +64,7 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
   public void onStreamClosed(Http2Stream stream) {
     Http2StreamChannel subChannel = stream.removeProperty(subChannelPropKey);
     if (subChannel != null && subChannel.isRegistered()) {
-      subChannel.close();
+      subChannel.setClosed();
     }
   }
 
@@ -80,19 +78,15 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
     return subChannel;
   }
 
-  private boolean writeInbound(int streamId, Object msg, boolean endOfStream,
+  private void writeInbound(int streamId, Object msg, boolean endOfStream,
       int pendingBytes) throws Http2Exception {
     Http2StreamChannel subChannel = getSubChannel(streamId);
-    subChannel.writeInbound(msg);
+    subChannel.writeInbound(msg, pendingBytes);
     if (endOfStream) {
-      subChannel.writeInbound(LastHttp2Message.get());
+      subChannel.writeInbound(LastHttp2Message.get(), 0);
     }
     if (subChannel.config().isAutoRead()) {
       subChannel.read();
-      return true;
-    } else {
-      subChannel.incrementPendingInboundBytes(pendingBytes);
-      return false;
     }
   }
 
@@ -115,36 +109,7 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
   public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data,
       int padding, boolean endOfStream) throws Http2Exception {
     int pendingBytes = data.readableBytes() + padding;
-    if (writeInbound(streamId, data.retain(), endOfStream, pendingBytes)) {
-      return pendingBytes;
-    } else {
-      return 0;
-    }
-  }
-
-  @Override
-  public void onWindowUpdateRead(ChannelHandlerContext ctx, int streamId,
-      int windowSizeIncrement) throws Http2Exception {
-    if (streamId == CONNECTION_STREAM_ID) {
-      conn.forEachActiveStream(new Http2StreamVisitor() {
-
-        @Override
-        public boolean visit(Http2Stream stream) throws Http2Exception {
-          Http2StreamChannel subChannel = stream.getProperty(subChannelPropKey);
-          if (subChannel != null) {
-            subChannel.tryWrite();
-          }
-          return true;
-        }
-      });
-    } else {
-      Http2Stream stream = conn.stream(streamId);
-      if (stream != null) {
-        Http2StreamChannel subChannel = stream.getProperty(subChannelPropKey);
-        if (subChannel != null) {
-          subChannel.tryWrite();
-        }
-      }
-    }
+    writeInbound(streamId, data.retain(), endOfStream, pendingBytes);
+    return 0;
   }
 }

@@ -22,6 +22,8 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.AbstractChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelMetadata;
 import io.netty.channel.ChannelOutboundBuffer;
@@ -33,10 +35,11 @@ import io.netty.handler.codec.UnsupportedMessageTypeException;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Error;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2LocalFlowController;
-import io.netty.handler.codec.http2.Http2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2Stream;
+import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.InternalThreadLocalMap;
 
 import java.net.SocketAddress;
@@ -60,23 +63,32 @@ public class Http2StreamChannel extends AbstractChannel {
 
   private final ChannelHandlerContext http2ConnHandlerCtx;
 
-  private final Http2Stream connStream;
-
   private final Http2Stream stream;
 
   private final Http2LocalFlowController localFlowController;
-
-  private final Http2RemoteFlowController remoteFlowController;
 
   private final Http2ConnectionEncoder encoder;
 
   private final DefaultChannelConfig config;
 
-  private final Queue<Object> inboundMessageQueue = new ArrayDeque<>();
+  private static final class InboundMessage {
 
-  private int pendingInboundBytes;
+    public final Object msg;
+
+    public final int length;
+
+    public InboundMessage(Object msg, int length) {
+      this.msg = msg;
+      this.length = length;
+    }
+
+  }
+
+  private final Queue<InboundMessage> inboundMessageQueue = new ArrayDeque<>();
 
   private boolean writePending = false;
+
+  private int pendingOutboundBytes;
 
   private enum State {
     OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, PRE_CLOSED, CLOSED
@@ -90,12 +102,9 @@ public class Http2StreamChannel extends AbstractChannel {
         parent.pipeline().context(Http2ConnectionHandler.class);
     Http2ConnectionHandler connHandler =
         (Http2ConnectionHandler) http2ConnHandlerCtx.handler();
-    this.connStream = connHandler.connection().connectionStream();
     this.stream = stream;
     this.localFlowController =
         connHandler.connection().local().flowController();
-    this.remoteFlowController =
-        connHandler.connection().remote().flowController();
     this.encoder = connHandler.encoder();
     this.config = new DefaultChannelConfig(this);
   }
@@ -169,11 +178,14 @@ public class Http2StreamChannel extends AbstractChannel {
 
   @Override
   protected void doClose() throws Exception {
-    // if (stream.state() != Http2Stream.State.CLOSED) {
-    // encoder.writeRstStream(http2ConnHandlerCtx, stream.id(),
-    // Http2Error.INTERNAL_ERROR.code(), http2ConnHandlerCtx.newPromise());
-    // }
+    if (state != State.PRE_CLOSED) {
+      encoder.writeRstStream(http2ConnHandlerCtx, stream.id(),
+        Http2Error.INTERNAL_ERROR.code(), http2ConnHandlerCtx.newPromise());
+    }
     state = State.CLOSED;
+    for (InboundMessage msg; (msg = inboundMessageQueue.poll()) != null;) {
+      ReferenceCountUtil.release(msg.msg);
+    }
   }
 
   private final Runnable readTask = new Runnable() {
@@ -182,34 +194,44 @@ public class Http2StreamChannel extends AbstractChannel {
       ChannelPipeline pipeline = pipeline();
       int maxMessagesPerRead = config().getMaxMessagesPerRead();
       for (int i = 0; i < maxMessagesPerRead; i++) {
-        Object m = inboundMessageQueue.poll();
+        InboundMessage m = inboundMessageQueue.poll();
         if (m == null) {
           break;
         }
-        if (m == LastHttp2Message.get()) {
+        if (m.msg == LastHttp2Message.get()) {
           state =
               state == State.HALF_CLOSED_LOCAL ? State.PRE_CLOSED
                   : State.HALF_CLOSED_REMOTE;
         }
-        pipeline.fireChannelRead(m);
+        try {
+          if (m.length > 0
+              && localFlowController.consumeBytes(http2ConnHandlerCtx, stream,
+                m.length)) {
+            http2ConnHandlerCtx.flush();
+          }
+        } catch (Http2Exception e) {
+          // an Http2Exception at least means the stream is broken(maybe the
+          // whole connection), so we are out.
+          http2ConnHandlerCtx.fireExceptionCaught(e);
+          return;
+        }
+        pipeline.fireChannelRead(m.msg);
       }
       pipeline.fireChannelReadComplete();
+      if (state == State.PRE_CLOSED) {
+        close();
+      }
     }
   };
 
   @Override
   protected void doBeginRead() throws Exception {
-    State currentState = this.state;
-    if (currentState == State.CLOSED) {
-      throw new ClosedChannelException();
-    }
-    if (pendingInboundBytes > 0) {
-      localFlowController.consumeBytes(http2ConnHandlerCtx, stream,
-        pendingInboundBytes);
-      pendingInboundBytes = 0;
-    }
     if (inboundMessageQueue.isEmpty()) {
       return;
+    }
+    State currentState = this.state;
+    if (remoteSideClosed(currentState)) {
+      throw new ClosedChannelException();
     }
     final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
     final Integer stackDepth = threadLocals.localChannelReaderStackDepth();
@@ -225,27 +247,25 @@ public class Http2StreamChannel extends AbstractChannel {
     }
   }
 
-  private boolean canWrite() {
-    return remoteFlowController.windowSize(stream) > 0
-        && remoteFlowController.windowSize(connStream) > 0;
-  }
-
-  private void writeMsg(Object msg) {
-
+  private void resumeWrite() {
+    writePending = false;
+    ((Http2Unsafe) unsafe()).forceFlush();
   }
 
   @Override
   protected void doWrite(ChannelOutboundBuffer in) throws Exception {
     State currentState = this.state;
-    if (currentState == State.CLOSED) {
+    if (localSideClosed(currentState)) {
       throw new ClosedChannelException();
     }
-    if (!canWrite()) {
-      writePending = true;
-      return;
-    }
+    int writeBufferHighWaterMark = config().getWriteBufferHighWaterMark();
+
     boolean flush = false;
     for (;;) {
+      if (pendingOutboundBytes >= writeBufferHighWaterMark) {
+        writePending = true;
+        break;
+      }
       Object msg = in.current();
       if (msg == null) {
         break;
@@ -261,8 +281,23 @@ public class Http2StreamChannel extends AbstractChannel {
           (Http2Headers) msg, 0, false, http2ConnHandlerCtx.newPromise());
       } else if (msg instanceof ByteBuf) {
         ByteBuf data = (ByteBuf) msg;
+        final int pendingBytes = data.readableBytes();
+        pendingOutboundBytes += pendingBytes;
         encoder.writeData(http2ConnHandlerCtx, stream.id(), data.retain(), 0,
-          false, http2ConnHandlerCtx.newPromise());
+          false, http2ConnHandlerCtx.newPromise()).addListener(
+          new ChannelFutureListener() {
+
+            @Override
+            public void operationComplete(ChannelFuture future)
+                throws Exception {
+              pendingOutboundBytes -= pendingBytes;
+              if (writePending
+                  && pendingOutboundBytes <= config()
+                      .getWriteBufferLowWaterMark()) {
+                resumeWrite();
+              }
+            }
+          });
       } else {
         throw new UnsupportedMessageTypeException(msg, Http2Headers.class,
             ByteBuf.class);
@@ -273,27 +308,23 @@ public class Http2StreamChannel extends AbstractChannel {
     if (flush) {
       http2ConnHandlerCtx.flush();
     }
-  }
-
-  public void writeInbound(Object msg) {
-    inboundMessageQueue.add(msg);
-  }
-
-  public void incrementPendingInboundBytes(int bytes) {
-    pendingInboundBytes += bytes;
-  }
-
-  public void tryWrite() {
-    if (writePending) {
-      writePending = false;
-      ((Http2Unsafe) unsafe()).forceFlush();
+    if (state == State.PRE_CLOSED) {
+      close();
     }
+  }
+
+  public void writeInbound(Object msg, int length) {
+    inboundMessageQueue.add(new InboundMessage(msg, length));
   }
 
   private static final ImmutableSet<State> REMOTE_SIDE_CLOSED_STATES =
       ImmutableSet.of(State.HALF_CLOSED_REMOTE, State.PRE_CLOSED, State.CLOSED);
 
   public boolean remoteSideClosed() {
+    return remoteSideClosed(state);
+  }
+
+  private boolean remoteSideClosed(State state) {
     return REMOTE_SIDE_CLOSED_STATES.contains(state);
   }
 
@@ -301,6 +332,28 @@ public class Http2StreamChannel extends AbstractChannel {
       ImmutableSet.of(State.HALF_CLOSED_LOCAL, State.PRE_CLOSED, State.CLOSED);
 
   public boolean localSideClosed() {
+    return localSideClosed(state);
+  }
+
+  private boolean localSideClosed(State state) {
     return LOCAL_SIDE_CLOSED_STATES.contains(state);
+  }
+
+  public void setClosed() {
+    State currentState = this.state;
+    if (!remoteSideClosed(currentState)) {
+      writeInbound(LastHttp2Message.get(), 0);
+      if (config().isAutoRead()) {
+        read();
+      }
+    }
+    if (!localSideClosed(currentState)) {
+      this.state =
+          currentState == State.HALF_CLOSED_REMOTE ? State.PRE_CLOSED
+              : State.HALF_CLOSED_LOCAL;
+      if (currentState == State.PRE_CLOSED) {
+        close();
+      }
+    }
   }
 }

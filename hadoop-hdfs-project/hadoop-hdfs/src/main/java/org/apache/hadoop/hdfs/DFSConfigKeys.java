@@ -1161,7 +1161,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final boolean DFS_HTTP2_VERBOSE_DEFAULT = false;
   
   public static final String  DFS_HTTP2_INITIAL_WINDOW_SIZE = "dfs.http2.initial.windows.size";
-  public static final int     DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT = 16 * 1024 * 1024;
+  public static final int     DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT = 64 * 1024;
   
   public static final String  DFS_HTTP2_WINDOW_UPDATE_RATIO = "dfs.http2.window.update.ratio";
   public static final float   DFS_HTTP2_WINDOW_UPDATE_RATIO_DEFAULT = 0.5f;

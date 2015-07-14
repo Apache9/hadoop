@@ -19,6 +19,8 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.util.ResourceLeakDetector;
+import io.netty.util.ResourceLeakDetector.Level;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -27,6 +29,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -63,7 +66,7 @@ public class TestHttp2RandomReadPerformance {
 
   private static int LEN = 2048;
 
-  private static int CONNECTION_COUNT = 2000;
+  private static int CONNECTION_COUNT = 3000;
 
   private boolean http2;
 
@@ -102,11 +105,11 @@ public class TestHttp2RandomReadPerformance {
     LocatedBlock block =
         CLUSTER.getFileSystem().getClient()
             .getLocatedBlocks(FILE.toUri().toString(), 0).get(0);
-    List<BlockReader> readerList = new ArrayList<BlockReader>(CONNECTION_COUNT);
     EventLoopGroup workerGroup = null;
     PeerCache peerCache = null;
     List<Http2ConnectionPool> connPoolList =
         new ArrayList<Http2ConnectionPool>();
+    byte[] buf = new byte[LEN];
     try (FileSystem fs = FileSystem.get(CONF)) {
       DFSClient client = ((DistributedFileSystem) fs).getClient();
       if (http2) {
@@ -121,10 +124,11 @@ public class TestHttp2RandomReadPerformance {
                     block.getBlock(), block.getBlockToken(), 0, LEN, true,
                     "testClient", block.getLocations()[0],
                     client.getDefaultReadCachingStrategy());
-          readerList.add(reader);
+          reader.close();
         }
       } else {
-        peerCache = new PeerCache(0, 0);
+        peerCache =
+            new PeerCache(CONNECTION_COUNT * 2, TimeUnit.DAYS.toMillis(1));
         for (int i = 0; i < CONNECTION_COUNT; i++) {
           InetSocketAddress addr =
               NetUtils.createSocketAddr(block.getLocations()[0].getXferAddr());
@@ -136,21 +140,37 @@ public class TestHttp2RandomReadPerformance {
                 block.getBlock(), block.getBlockToken(), 0, LEN, true,
                 "testClient", peer, block.getLocations()[0], peerCache,
                 client.getDefaultReadCachingStrategy());
-          readerList.add(reader);
+          reader.readFully(buf, 0, LEN);
+          reader.close();
         }
       }
-      byte[] buf = new byte[LEN];
       long start = System.currentTimeMillis();
-      for (BlockReader reader : readerList) {
-        reader.readFully(buf, 0, LEN);
+      if (http2) {
+        for (int i = 0; i < CONNECTION_COUNT; i++) {
+          Http2BlockReader reader =
+              Http2BlockReader.newBlockReader(connPoolList.get(i), FILE.toUri()
+                  .toString(), block.getBlock(), block.getBlockToken(), 0, LEN,
+                true, "testClient", block.getLocations()[0], client
+                    .getDefaultReadCachingStrategy());
+          reader.readFully(buf, 0, LEN);
+          reader.close();
+        }
+      } else {
+        for (int i = 0; i < CONNECTION_COUNT; i++) {
+          Peer peer = peerCache.get(block.getLocations()[0], false);
+          BlockReader reader =
+              RemoteBlockReader2.newBlockReader(FILE.toUri().toString(),
+                block.getBlock(), block.getBlockToken(), 0, LEN, true,
+                "testClient", peer, block.getLocations()[0], peerCache,
+                client.getDefaultReadCachingStrategy());
+          reader.readFully(buf, 0, LEN);
+          reader.close();
+        }
       }
       long cost = System.currentTimeMillis() - start;
       System.err.println("******* time based on " + (http2 ? "http2 " : "tcp ")
           + cost + "ms");
     } finally {
-      for (BlockReader reader : readerList) {
-        reader.close();
-      }
       if (http2) {
         for (Http2ConnectionPool connPool : connPoolList) {
           connPool.close();

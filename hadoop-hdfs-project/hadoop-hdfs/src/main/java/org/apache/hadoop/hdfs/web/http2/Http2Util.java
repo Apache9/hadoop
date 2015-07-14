@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.web.http2;
 
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
@@ -33,7 +34,9 @@ import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2InboundFrameLogger;
+import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
+import io.netty.handler.codec.http2.Http2Stream;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -41,7 +44,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 /**
  *
  */
-class Http2Util {
+public class Http2Util {
 
   public interface Http2ConnectionHandlerFactory<T extends Http2ConnectionHandler> {
     T create(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder);
@@ -69,9 +72,10 @@ class Http2Util {
         new DefaultHttp2LocalFlowController(conn, frameWriter, conf.getFloat(
           DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO,
           DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO_DEFAULT));
-    localFlowController.initialWindowSize(conf.getInt(
-      DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE,
-      DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT));
+    int initialWindowsSize =
+        conf.getInt(DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE,
+          DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT);
+    localFlowController.initialWindowSize(initialWindowsSize);
     conn.local().flowController(localFlowController);
 
     DefaultHttp2ConnectionEncoder encoder =
@@ -79,5 +83,17 @@ class Http2Util {
     DefaultHttp2ConnectionDecoder decoder =
         new DefaultHttp2ConnectionDecoder(conn, encoder, frameReader, listener);
     return handlerFactory.create(decoder, encoder);
+  }
+
+  public static void incrementConnectionWindowSize(ChannelHandlerContext ctx)
+      throws Http2Exception {
+    Http2ConnectionHandler handler = (Http2ConnectionHandler) ctx.handler();
+    Http2Connection conn = handler.connection();
+    Http2LocalFlowController localFlowController =
+        conn.local().flowController();
+    int initialWindowsSize = 2 * 1024 * 1024;
+    Http2Stream connStream = conn.connectionStream();
+    localFlowController.incrementWindowSize(ctx, connStream, initialWindowsSize
+        - localFlowController.initialWindowSize(connStream));
   }
 }

@@ -48,7 +48,7 @@ public class TestHttp2LargeReadPerformance {
 
   private static Path FILE = new Path("/test");
 
-  private static int LEN = 128 * 1024 * 1024;
+  private static int LEN = 512 * 1024 * 1024;
 
   private boolean http2;
 

@@ -18,8 +18,8 @@
 package org.apache.hadoop.hdfs.web.http2;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -39,12 +39,30 @@ import java.util.Deque;
  */
 public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
-  private static final ByteBuf END_OF_STREAM = Unpooled
-      .wrappedBuffer(new byte[1]);
+  private static final Component END_OF_STREAM = new Component(null, 0);
 
   private static final EOFException EOF = new EOFException();
 
-  private final Deque<ByteBuf> queue = new ArrayDeque<ByteBuf>();
+  private static final class Component {
+
+    public final ByteBuf buf;
+
+    public final int length;
+
+    public Component(ByteBuf buf) {
+      this(buf, buf.readableBytes());
+    }
+
+    public Component(ByteBuf buf, int length) {
+      this.buf = buf;
+      this.length = length;
+    }
+
+  }
+
+  private final Deque<Component> queue = new ArrayDeque<Component>();
+
+  private int queuedBytes;
 
   private Channel channel;
 
@@ -57,12 +75,12 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
         @Override
         public int read() throws IOException {
-          ByteBuf buf = peekUntilAvailable();
-          if (buf == END_OF_STREAM) {
+          Component comp = peekUntilAvailable();
+          if (comp == END_OF_STREAM) {
             return -1;
           }
-          int b = buf.readByte() & 0xFF;
-          if (!buf.isReadable()) {
+          int b = comp.buf.readByte() & 0xFF;
+          if (!comp.buf.isReadable()) {
             removeHead();
           }
           return b;
@@ -70,54 +88,54 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
-          ByteBuf buf = peekUntilAvailable();
-          if (buf == END_OF_STREAM) {
+          Component comp = peekUntilAvailable();
+          if (comp == END_OF_STREAM) {
             return -1;
           }
-          int bufReadableBytes = buf.readableBytes();
+          int bufReadableBytes = comp.buf.readableBytes();
           if (len >= bufReadableBytes) {
-            buf.readBytes(b, off, bufReadableBytes);
+            comp.buf.readBytes(b, off, bufReadableBytes);
             removeHead();
             return bufReadableBytes;
           } else {
-            buf.readBytes(b, off, len);
+            comp.buf.readBytes(b, off, len);
             return len;
           }
         }
 
         @Override
         public long skip(long n) throws IOException {
-          ByteBuf buf = peekUntilAvailable();
-          if (buf == END_OF_STREAM) {
-            return 0;
+          Component comp = peekUntilAvailable();
+          if (comp == END_OF_STREAM) {
+            return 0L;
           }
-          int bufReadableBytes = buf.readableBytes();
+          int bufReadableBytes = comp.buf.readableBytes();
           if (n >= bufReadableBytes) {
             removeHead();
             return bufReadableBytes;
           } else {
-            buf.skipBytes((int) n);
+            comp.buf.skipBytes((int) n);
             return n;
           }
         }
 
         @Override
         public int read(ByteBuffer bb) throws IOException {
-          ByteBuf buf = peekUntilAvailable();
-          if (buf == END_OF_STREAM) {
+          Component comp = peekUntilAvailable();
+          if (comp == END_OF_STREAM) {
             return -1;
           }
           int bbRemaining = bb.remaining();
-          int bufReadableBytes = buf.readableBytes();
+          int bufReadableBytes = comp.buf.readableBytes();
           if (bbRemaining >= bufReadableBytes) {
             int toRestoredLimit = bb.limit();
             bb.limit(bb.position() + bufReadableBytes);
-            buf.readBytes(bb);
+            comp.buf.readBytes(bb);
             bb.limit(toRestoredLimit);
             removeHead();
             return bufReadableBytes;
           } else {
-            buf.readBytes(bb);
+            comp.buf.readBytes(bb);
             return bbRemaining;
           }
         }
@@ -140,11 +158,11 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
             public void operationComplete(ChannelFuture future)
                 throws Exception {
               synchronized (queue) {
-                for (ByteBuf buf; (buf = queue.peek()) != null;) {
-                  if (buf == END_OF_STREAM) {
+                for (Component c; (c = queue.peek()) != null;) {
+                  if (c == END_OF_STREAM) {
                     return;
                   }
-                  buf.release();
+                  c.buf.release();
                   queue.remove();
                 }
               }
@@ -165,7 +183,12 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
         queue.notifyAll();
       }
     } else if (msg instanceof ByteBuf) {
-      enqueue((ByteBuf) msg);
+      ByteBuf buf = (ByteBuf) msg;
+      if (buf.isReadable()) {
+        enqueue(new Component(buf));
+      } else {
+        buf.release();
+      }
     } else {
       ctx.fireChannelRead(msg);
     }
@@ -193,8 +216,8 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
       if (error != null) {
         return;
       }
-      ByteBuf lastBuf = queue.peekLast();
-      if (lastBuf == END_OF_STREAM) {
+      Component lastComp = queue.peekLast();
+      if (lastComp == END_OF_STREAM) {
         return;
       }
       error = EOF;
@@ -202,18 +225,18 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
     }
   }
 
-  private void enqueue(ByteBuf buf) {
-    if (buf.isReadable()) {
-      synchronized (queue) {
-        queue.add(buf);
-        queue.notifyAll();
+  private void enqueue(Component comp) {
+    synchronized (queue) {
+      queuedBytes += comp.length;
+      if (queuedBytes >= channel.config().getWriteBufferHighWaterMark()) {
+        channel.config().setAutoRead(false);
       }
-    } else {
-      buf.release();
+      queue.add(comp);
+      queue.notifyAll();
     }
   }
 
-  private ByteBuf peekUntilAvailable() throws IOException {
+  private Component peekUntilAvailable() throws IOException {
     Throwable cause;
     synchronized (queue) {
       for (;;) {
@@ -235,11 +258,17 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
   }
 
   private void removeHead() {
-    ByteBuf buf;
+    Component comp;
     synchronized (queue) {
-      buf = queue.remove();
+      comp = queue.remove();
+      queuedBytes -= comp.length;
+      ChannelConfig config = channel.config();
+      if (!config.isAutoRead()
+          && queuedBytes < config.getWriteBufferLowWaterMark()) {
+        config.setAutoRead(true);
+      }
     }
-    buf.release();
+    comp.buf.release();
   }
 
   private IOException toIOE(Throwable cause) {
