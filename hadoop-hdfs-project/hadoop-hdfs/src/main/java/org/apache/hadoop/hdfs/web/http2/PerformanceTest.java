@@ -82,22 +82,25 @@ public class PerformanceTest {
         Executors.newFixedThreadPool(concurrency, new ThreadFactoryBuilder()
             .setNameFormat("DFSClient-%d").setDaemon(true).build());
     List<FSDataInputStream> inputs = new ArrayList<FSDataInputStream>();
+    long start;
     try {
       for (int i = 0; i < concurrency; i++) {
         final FSDataInputStream input = fs.open(file);
         inputs.add(input);
+      }
+      start = System.nanoTime();
+      for (int i = 0; i < concurrency; i++) {
+        final FSDataInputStream input = inputs.get(i);
         final Random rand = new Random(i);
         executor.execute(new Runnable() {
           @Override
           public void run() {
             try {
               byte[] buf = new byte[bufferSize];
-              long start = System.nanoTime();
               for (int j = 0; j < readCountPerThread; ++j) {
                 input.seek(rand.nextInt(seekBound));
                 consume(input, readLength, buf);
               }
-              cost.addAndGet((System.nanoTime() - start) / 1000);
             } catch (Exception e) {
               e.printStackTrace();
               System.exit(1);
@@ -105,6 +108,7 @@ public class PerformanceTest {
           }
         });
       }
+
     } finally {
       for (FSDataInputStream input : inputs) {
         input.close();
@@ -114,6 +118,7 @@ public class PerformanceTest {
     if (!executor.awaitTermination(15, TimeUnit.MINUTES)) {
       throw new IOException("wait timeout");
     }
+    cost.set((System.nanoTime() - start) / 1000);
   }
 
   public void testReadPerformance(String[] args) throws IOException,
