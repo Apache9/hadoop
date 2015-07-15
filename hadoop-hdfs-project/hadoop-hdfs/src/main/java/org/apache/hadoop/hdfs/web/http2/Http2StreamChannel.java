@@ -178,14 +178,16 @@ public class Http2StreamChannel extends AbstractChannel {
 
   @Override
   protected void doClose() throws Exception {
+    for (InboundMessage msg; (msg = inboundMessageQueue.poll()) != null;) {
+      ReferenceCountUtil.release(msg.msg);
+      localFlowController.consumeBytes(http2ConnHandlerCtx, stream, msg.length);
+    }
     if (state != State.PRE_CLOSED) {
       encoder.writeRstStream(http2ConnHandlerCtx, stream.id(),
         Http2Error.INTERNAL_ERROR.code(), http2ConnHandlerCtx.newPromise());
     }
     state = State.CLOSED;
-    for (InboundMessage msg; (msg = inboundMessageQueue.poll()) != null;) {
-      ReferenceCountUtil.release(msg.msg);
-    }
+
   }
 
   private final Runnable readTask = new Runnable() {
