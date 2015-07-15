@@ -98,7 +98,7 @@ public class PerformanceTest {
             try {
               byte[] buf = new byte[bufferSize];
               for (int j = 0; j < readCountPerThread; ++j) {
-                input.seek(rand.nextInt(seekBound));
+                input.seek(seekBound > 0 ? rand.nextInt(seekBound) : 0);
                 consume(input, readLength, buf);
               }
             } catch (Exception e) {
