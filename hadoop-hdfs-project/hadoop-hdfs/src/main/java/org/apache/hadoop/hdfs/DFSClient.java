@@ -602,7 +602,9 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   @Override
   public synchronized void close() throws IOException {
     if(clientRunning) {
-      http2ConnectionPool.close();
+      if (http2ConnectionPool != null) {
+        http2ConnectionPool.close();
+      }
       closeAllFilesBeingWritten(false);
       clientRunning = false;
       getLeaseRenewer().closeClient(this);
