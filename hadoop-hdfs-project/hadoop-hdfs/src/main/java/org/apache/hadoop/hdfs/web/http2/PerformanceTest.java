@@ -85,6 +85,10 @@ public class PerformanceTest {
   private void doTest(FileSystem fs, Path file, int concurrency,
       final int readCountPerThread, final int readLength, final boolean pread,
       final AtomicLong cost) throws IOException, InterruptedException {
+    // warm up
+    try (FSDataInputStream input = fs.open(file)) {
+      input.read();
+    }
     long fileLength = fs.getFileStatus(file).getLen();
     final int seekBound =
         (int) Math.min(fileLength, Integer.MAX_VALUE) - readLength;
