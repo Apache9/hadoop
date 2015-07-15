@@ -71,10 +71,20 @@ public class PerformanceTest {
     }
   }
 
-  private void
-      doTest(FileSystem fs, Path file, int concurrency,
-          final int readCountPerThread, final int readLength,
-          final AtomicLong cost) throws IOException, InterruptedException {
+  private void pread(FSDataInputStream in, int position, int len, byte[] buf)
+      throws IOException {
+    for (int remaining = len; remaining > 0;) {
+      int read = in.read(position + (len - remaining), buf, 0, remaining);
+      if (read < 0) {
+        throw new EOFException();
+      }
+      remaining -= read;
+    }
+  }
+
+  private void doTest(FileSystem fs, Path file, int concurrency,
+      final int readCountPerThread, final int readLength, final boolean pread,
+      final AtomicLong cost) throws IOException, InterruptedException {
     long fileLength = fs.getFileStatus(file).getLen();
     final int seekBound =
         (int) Math.min(fileLength, Integer.MAX_VALUE) - readLength;
@@ -96,10 +106,18 @@ public class PerformanceTest {
           @Override
           public void run() {
             try {
-              byte[] buf = new byte[bufferSize];
-              for (int j = 0; j < readCountPerThread; ++j) {
-                input.seek(seekBound > 0 ? rand.nextInt(seekBound) : 0);
-                consume(input, readLength, buf);
+              if (pread) {
+                byte[] buf = new byte[readLength];
+                for (int j = 0; j < readCountPerThread; ++j) {
+                  pread(input, seekBound > 0 ? rand.nextInt(seekBound) : 0,
+                    readLength, buf);
+                }
+              } else {
+                byte[] buf = new byte[bufferSize];
+                for (int j = 0; j < readCountPerThread; ++j) {
+                  input.seek(seekBound > 0 ? rand.nextInt(seekBound) : 0);
+                  consume(input, readLength, buf);
+                }
               }
             } catch (Exception e) {
               e.printStackTrace();
@@ -127,6 +145,7 @@ public class PerformanceTest {
     int concurrency = Integer.parseInt(args[2]);
     int readCountPerThread = Integer.parseInt(args[3]);
     int readLength = Integer.parseInt(args[4]);
+    boolean pread = args.length > 5 && args[5].equals("pread");
     Configuration conf = new Configuration();
     if (useHttp2) {
       conf.setBoolean(HdfsClientConfigKeys.Read.Http2.KEY, true);
@@ -137,7 +156,7 @@ public class PerformanceTest {
       try (FSDataInputStream in = fs.open(file)) {
         in.read();
       }
-      doTest(fs, file, concurrency, readCountPerThread, readLength, cost);
+      doTest(fs, file, concurrency, readCountPerThread, readLength, pread, cost);
     }
     if (useHttp2) {
       System.err.println("******* time based on http2 " + cost.get());
