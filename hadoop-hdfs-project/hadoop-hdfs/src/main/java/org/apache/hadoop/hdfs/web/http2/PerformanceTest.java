@@ -112,7 +112,7 @@ public class PerformanceTest {
       if (!executor.awaitTermination(15, TimeUnit.MINUTES)) {
         throw new IOException("wait timeout");
       }
-      cost.set((System.nanoTime() - start) / 1000);
+      cost.set((System.nanoTime() - start) / 1000000);
     } finally {
       for (FSDataInputStream input : inputs) {
         input.close();
