@@ -108,17 +108,16 @@ public class PerformanceTest {
           }
         });
       }
-
+      executor.shutdown();
+      if (!executor.awaitTermination(15, TimeUnit.MINUTES)) {
+        throw new IOException("wait timeout");
+      }
+      cost.set((System.nanoTime() - start) / 1000);
     } finally {
       for (FSDataInputStream input : inputs) {
         input.close();
       }
     }
-    executor.shutdown();
-    if (!executor.awaitTermination(15, TimeUnit.MINUTES)) {
-      throw new IOException("wait timeout");
-    }
-    cost.set((System.nanoTime() - start) / 1000);
   }
 
   public void testReadPerformance(String[] args) throws IOException,
