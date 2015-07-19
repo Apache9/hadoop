@@ -19,8 +19,6 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.util.ResourceLeakDetector;
-import io.netty.util.ResourceLeakDetector.Level;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

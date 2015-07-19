@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.web.http2;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -42,6 +44,8 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
 
   protected final PropertyKey subChannelPropKey;
 
+  protected final AtomicInteger numActiveStreams = new AtomicInteger(0);
+
   protected AbstractHttp2EventListener(Channel parentChannel,
       Http2Connection conn) {
     this.parentChannel = parentChannel;
@@ -54,6 +58,7 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
 
   @Override
   public void onStreamActive(final Http2Stream stream) {
+    numActiveStreams.incrementAndGet();
     Http2StreamChannel subChannel =
         new Http2StreamChannel(parentChannel, stream);
     stream.setProperty(subChannelPropKey, subChannel);
@@ -62,6 +67,7 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
 
   @Override
   public void onStreamClosed(Http2Stream stream) {
+    numActiveStreams.decrementAndGet();
     Http2StreamChannel subChannel = stream.removeProperty(subChannelPropKey);
     if (subChannel != null && subChannel.isRegistered()) {
       subChannel.setClosed();
@@ -111,5 +117,9 @@ public abstract class AbstractHttp2EventListener extends Http2EventAdapter {
     int pendingBytes = data.readableBytes() + padding;
     writeInbound(streamId, data.retain(), endOfStream, pendingBytes);
     return 0;
+  }
+
+  public int numActiveStreams() {
+    return numActiveStreams.get();
   }
 }

@@ -22,16 +22,20 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.ChannelPromiseAggregator;
 import io.netty.handler.codec.UnsupportedMessageTypeException;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2Connection.PropertyKey;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameLogger;
+import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.logging.LogLevel;
+import io.netty.util.concurrent.Promise;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -48,21 +52,39 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
   private static final Http2FrameLogger FRAME_LOGGER = new Http2FrameLogger(
       LogLevel.INFO, ClientHttp2ConnectionHandler.class);
 
-  private int nextStreamId = 3;
+  private AtomicInteger nextStreamId = new AtomicInteger(3);
 
-  private final PropertyKey subChannelPropKey;
+  private final ClientHttp2EventListener listener;
 
   private ClientHttp2ConnectionHandler(Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder) {
     super(decoder, encoder);
-    this.subChannelPropKey =
-        ((ClientHttp2EventListener) decoder.listener()).subChannelPropKey;
+    this.listener = (ClientHttp2EventListener) decoder.listener();
   }
 
   private int nextStreamId() {
-    int streamId = nextStreamId;
-    nextStreamId += 2;
-    return streamId;
+    return nextStreamId.getAndAdd(2);
+  }
+
+  private void writeHeaders(ChannelHandlerContext ctx,
+      Http2ConnectionEncoder encoder, final int streamId, Http2Headers headers,
+      boolean endStream, ChannelPromise promise,
+      final Promise<Http2StreamChannel> callback) {
+    encoder.writeHeaders(ctx, streamId, headers, 0, endStream, promise)
+        .addListener(new ChannelFutureListener() {
+
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              callback
+                  .setSuccess(connection().stream(streamId)
+                      .<Http2StreamChannel> getProperty(
+                        listener.subChannelPropKey));
+            } else {
+              callback.setFailure(future.cause());
+            }
+          }
+        });
   }
 
   @Override
@@ -72,28 +94,33 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
       final StartHttp2StreamRequest request = (StartHttp2StreamRequest) msg;
       final int streamId = nextStreamId();
       Http2ConnectionEncoder encoder = encoder();
-      encoder.writeHeaders(ctx, streamId, request.headers, 0,
-        !request.data.isReadable() && request.endStream, promise).addListener(
-        new ChannelFutureListener() {
-
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            if (future.isSuccess()) {
-              request.promise.setSuccess(connection().stream(streamId)
-                  .<Http2StreamChannel> getProperty(subChannelPropKey));
-            } else {
-              request.promise.setFailure(future.cause());
-            }
-          }
-        });
       if (request.data.isReadable()) {
+        ChannelPromiseAggregator aggregator =
+            new ChannelPromiseAggregator(promise);
+        ChannelPromise headerPromise = ctx.newPromise();
+        aggregator.add(headerPromise);
+        writeHeaders(ctx, encoder, streamId, request.headers, false,
+          headerPromise, request.promise);
+        ChannelPromise dataPromise = ctx.newPromise();
+        aggregator.add(dataPromise);
         encoder.writeData(ctx, streamId, request.data, 0, request.endStream,
-          ctx.newPromise());
+          dataPromise);
+      } else {
+        writeHeaders(ctx, encoder, streamId, request.headers,
+          request.endStream, promise, request.promise);
       }
     } else {
       throw new UnsupportedMessageTypeException(msg,
           StartHttp2StreamRequest.class);
     }
+  }
+
+  public int numActiveStreams() {
+    return listener.numActiveStreams();
+  }
+  
+  public int currentStreamId() {
+    return nextStreamId.get();
   }
 
   private static final Http2Util.Http2ConnectionHandlerFactory<ClientHttp2ConnectionHandler> FACTORY =

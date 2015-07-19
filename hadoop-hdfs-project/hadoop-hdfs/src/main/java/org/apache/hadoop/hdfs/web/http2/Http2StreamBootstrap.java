@@ -23,6 +23,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
@@ -109,13 +110,18 @@ public class Http2StreamBootstrap {
               }
 
             }));
-    channel.eventLoop().execute(new Runnable() {
+    EventLoop eventLoop = channel.eventLoop();
+    if (eventLoop.inEventLoop()) {
+      channel.writeAndFlush(request);
+    } else {
+      channel.eventLoop().execute(new Runnable() {
 
-      @Override
-      public void run() {
-        channel.writeAndFlush(request);
-      }
-    });
+        @Override
+        public void run() {
+          channel.writeAndFlush(request);
+        }
+      });
+    }
 
     return registeredPromise;
   }
