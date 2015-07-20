@@ -243,20 +243,20 @@ class ReadBlockHandler extends
                 ChunkedBlockInput.numberOfBlockChunks(
                   DFSUtil.getIoFileBufferSize(datanode.getConf()),
                   checksum.getBytesPerChecksum())), length);
-//      ctx.write(headers);
-//      ctx.write(resp);
-//      ctx.write(input).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
-//      ctx.writeAndFlush(LastHttp2Message.get());
-      ctx.channel().eventLoop().execute(new Runnable() {
-
-        @Override
-        public void run() {
-          ctx.write(headers);
-          ctx.write(resp);
-          ctx.write(input).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
-          ctx.writeAndFlush(LastHttp2Message.get());
-        }
-      });
+      ctx.write(headers);
+      ctx.write(resp);
+      ctx.write(input).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+      ctx.writeAndFlush(LastHttp2Message.get());
+//      ctx.channel().eventLoop().execute(new Runnable() {
+//
+//        @Override
+//        public void run() {
+//          ctx.write(headers);
+//          ctx.write(resp);
+//          ctx.write(input).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+//          ctx.writeAndFlush(LastHttp2Message.get());
+//        }
+//      });
 
       success = true;
     } finally {
@@ -275,18 +275,18 @@ class ReadBlockHandler extends
   @Override
   protected void channelRead0(final ChannelHandlerContext ctx,
       final OpReadBlockRequestProto msg) throws Exception {
-//    handleReadBlock(ctx, msg);
-    executor.execute(new Runnable() {
-
-      @Override
-      public void run() {
-        try {
-          handleReadBlock(ctx, msg);
-        } catch (Throwable t) {
-          ctx.channel().pipeline().fireExceptionCaught(t);
-        }
-      }
-    });
+    handleReadBlock(ctx, msg);
+//    executor.execute(new Runnable() {
+//
+//      @Override
+//      public void run() {
+//        try {
+//          handleReadBlock(ctx, msg);
+//        } catch (Throwable t) {
+//          ctx.channel().pipeline().fireExceptionCaught(t);
+//        }
+//      }
+//    });
   }
 
 }

@@ -28,6 +28,7 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -55,6 +56,8 @@ public class TestHttp2ReadBlockInsideEventLoop {
   private static Channel CHANNEL;
 
   private static NioEventLoopGroup WORKER_GROUP = new NioEventLoopGroup();
+
+  private static int READ_COUNT = 100000;
 
   private static TestHttp2SmallReadHandler HANDLER =
       new TestHttp2SmallReadHandler();
@@ -100,12 +103,27 @@ public class TestHttp2ReadBlockInsideEventLoop {
   }
 
   @Test
-  public void test() throws IOException, InterruptedException {
+  public void testHttp2() throws IOException, InterruptedException {
     LocatedBlock block =
         CLUSTER.getFileSystem().getClient()
             .getLocatedBlocks(FILE.toString(), 0).get(0);
-    CHANNEL.writeAndFlush(new ReadBlockTestContext(LEN, 10000, block));
+    CHANNEL.writeAndFlush(new ReadBlockTestContext(LEN, READ_COUNT, block));
     long cost = HANDLER.getCost();
     System.err.println("******* time based on http2 " + cost + "ms");
+  }
+
+  @Test
+  public void testTcp() throws IOException {
+    long cost;
+    try (FSDataInputStream in = CLUSTER.getFileSystem().open(FILE)) {
+      long start = System.nanoTime();
+      byte[] buf = new byte[LEN];
+      for (int i = 0; i < READ_COUNT; i++) {
+        in.seek(0);
+        in.readFully(buf);
+      }
+      cost = (System.nanoTime() - start) / 1000000;
+    }
+    System.err.println("******* time based on tcp " + +cost + "ms");
   }
 }

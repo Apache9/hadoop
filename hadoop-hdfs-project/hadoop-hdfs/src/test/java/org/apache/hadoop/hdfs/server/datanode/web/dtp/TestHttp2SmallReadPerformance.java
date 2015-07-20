@@ -104,7 +104,7 @@ public class TestHttp2SmallReadPerformance {
       try (FSDataInputStream in = fs.open(FILE)) {
         consume(in, LEN, new byte[4096]);
       }
-      final int readPerThread = 10000;
+      final int readPerThread = 100000;
       byte[] buf = new byte[4096];
       long cost;
       try (FSDataInputStream in = fs.open(FILE)) {
