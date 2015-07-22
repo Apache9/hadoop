@@ -810,4 +810,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.datanode.overused.freespace.threshold";
   public static final long DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD_DEFAULT =
       0; 
+
+  public static final String DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION =
+      "dfs.client.recover-on-close-exception.enable";
+  public static final boolean DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION_DEFAULT =
+      false;
 }
