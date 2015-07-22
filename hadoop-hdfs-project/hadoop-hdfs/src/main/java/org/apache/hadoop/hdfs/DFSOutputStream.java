@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -153,6 +154,8 @@ public class DFSOutputStream extends FSOutputSummer
   private boolean shouldSyncBlock = false; // force blocks to disk upon close
   private final AtomicReference<CachingStrategy> cachingStrategy;
   private boolean failPacket = false;
+  private boolean exceptionInClose = false;
+  private boolean leaseRecovered = false;
   
   private class Packet {
     final long seqno;           // sequencenumber of buffer in block
@@ -2125,13 +2128,60 @@ public class DFSOutputStream extends FSOutputSummer
     }
   }
   
+  @VisibleForTesting
+  public void setExceptionInClose(boolean enable) {
+    exceptionInClose = enable;
+  }
+
+  private class EmulateExceptionInClose {
+    Random rand = null;
+    int kickedNum = 0;
+
+    public EmulateExceptionInClose(int callNum) {
+      if (exceptionInClose) {
+        rand = new Random();
+      }
+      kickedNum = callNum;
+    }
+
+    public void kickRandomException() throws IOException {
+      if (exceptionInClose) {
+        if (kickedNum > 0) {
+          if (rand.nextInt(kickedNum) == 1) {
+            throw new IOException("Emulated random IOException in close");
+          }
+        }
+      }
+    }
+
+    public void kickException() throws IOException {
+      if (exceptionInClose) {
+        throw new IOException("Emulated IOException in close");
+      }
+    }
+  }
+
   /**
    * Closes this output stream and releases any system 
    * resources associated with this stream.
    */
   @Override
   public synchronized void close() throws IOException {
+    boolean recoverOnCloseException =
+        dfsClient.getConfiguration().getBoolean(
+            DFSConfigKeys.DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION,
+            DFSConfigKeys.DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION_DEFAULT);
+
     if (closed) {
+      if (recoverOnCloseException && !leaseRecovered) {
+        try {
+          dfsClient.endFileLease(fileId);
+          dfsClient.recoverLease(src);
+          leaseRecovered = true;
+        } catch (Exception e) {
+          DFSClient.LOG.warn("Fail to recover lease for " + src, e);
+        }
+      }
       IOException e = lastException.getAndSet(null);
       if (e == null)
         return;
@@ -2140,25 +2190,62 @@ public class DFSOutputStream extends FSOutputSummer
     }
 
     try {
-      flushBuffer();       // flush from all upper layers
+      boolean exceptionBeforeComplete = false;
+      IOException ioeBeforeComplete = null;
+      boolean threadsClosed = false;
+      try {
+        EmulateExceptionInClose eei = new EmulateExceptionInClose(5);
+        flushBuffer(); // flush from all upper layers
+        eei.kickRandomException();
+        if (currentPacket != null) {
+          waitAndQueueCurrentPacket();
+        }
 
-      if (currentPacket != null) { 
-        waitAndQueueCurrentPacket();
+        if (bytesCurBlock != 0) {
+          // send an empty packet to mark the end of the block
+          currentPacket = new Packet(0, 0, bytesCurBlock);
+          currentPacket.lastPacketInBlock = true;
+          currentPacket.syncBlock = shouldSyncBlock;
+        }
+
+        flushInternal(); // flush all data to Datanodes
+        eei.kickRandomException();
+
+        // get last block before destroying the streamer
+        ExtendedBlock lastBlock = streamer.getBlock();
+        closeThreads(false);
+        eei.kickRandomException();
+        threadsClosed = true;
+        eei.kickRandomException();
+        completeFile(lastBlock);
+        eei.kickException();
+      } catch (IOException ioe) {
+        exceptionBeforeComplete = true;
+        ioeBeforeComplete = ioe;
       }
-
-      if (bytesCurBlock != 0) {
-        // send an empty packet to mark the end of the block
-        currentPacket = new Packet(0, 0, bytesCurBlock);
-        currentPacket.lastPacketInBlock = true;
-        currentPacket.syncBlock = shouldSyncBlock;
+      if (!exceptionBeforeComplete) {
+        dfsClient.endFileLease(fileId);
+      } else {
+        if (recoverOnCloseException) {
+          if (!threadsClosed) {
+            try {
+              closeThreads(true);
+            } catch (Exception e) {
+              // Ignore exception rendered by close threads.
+            }
+          }
+          try {
+            dfsClient.endFileLease(fileId);
+            dfsClient.recoverLease(src);
+          } catch (Exception e) {
+            // Ignore exception rendered by recoverLease. Throw original
+            // exception.
+          }
+          throw ioeBeforeComplete;
+        } else {
+          throw ioeBeforeComplete;
+        }
       }
-
-      flushInternal();             // flush all data to Datanodes
-      // get last block before destroying the streamer
-      ExtendedBlock lastBlock = streamer.getBlock();
-      closeThreads(false);
-      completeFile(lastBlock);
-      dfsClient.endFileLease(fileId);
     } catch (ClosedChannelException e) {
     } finally {
       closed = true;
