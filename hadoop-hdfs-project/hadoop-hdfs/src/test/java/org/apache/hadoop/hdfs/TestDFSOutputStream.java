@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -64,6 +65,38 @@ public class TestDFSOutputStream {
     }
     Assert.assertEquals(null, ex.get());
     dos.close();
+  }
+
+  /**
+   * If dfs.client.recover-on-close-exception.enable is set and exception
+   * happens in close, the local lease should be closed and lease in namenode
+   * should be recovered.
+   */
+  @Test
+  public void testExceptionInClose() throws IOException {
+    String testStr = "Test exception in close";
+    DistributedFileSystem fs = cluster.getFileSystem();
+    Path testFile = new Path("/closeexception");
+    fs.getConf().setBoolean(
+        DFSConfigKeys.DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION, true);
+    FSDataOutputStream os = fs.create(testFile);
+    DFSOutputStream dos =
+        (DFSOutputStream) Whitebox.getInternalState(os, "wrappedStream");
+    dos.setExceptionInClose(true);
+    os.write(testStr.getBytes());
+    try {
+      dos.close();
+      // There should be exception
+      Assert.assertTrue(false);
+    } catch (IOException ioe) {
+      // Sleep a while for file recovery
+      try {
+        Thread.sleep(5000);
+      } catch (Exception e) {
+        // Ignore
+      }
+      Assert.assertTrue(fs.isFileClosed(testFile));
+    }
   }
 
   @AfterClass
