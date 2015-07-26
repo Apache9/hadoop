@@ -36,6 +36,8 @@ import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
 import org.apache.hadoop.hdfs.web.http2.ClientHttp2ConnectionHandler;
+import org.apache.hadoop.hdfs.web.http2.Http2SmallReadTestingHandler;
+import org.apache.hadoop.hdfs.web.http2.ReadBlockTestContext;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -59,8 +61,8 @@ public class TestHttp2ReadBlockInsideEventLoop {
 
   private static int READ_COUNT = 100000;
 
-  private static TestHttp2SmallReadHandler HANDLER =
-      new TestHttp2SmallReadHandler();
+  private static Http2SmallReadTestingHandler HANDLER =
+      new Http2SmallReadTestingHandler();
 
   @BeforeClass
   public static void setUp() throws Exception {

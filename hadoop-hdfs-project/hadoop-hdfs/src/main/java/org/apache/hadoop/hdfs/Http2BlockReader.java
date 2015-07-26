@@ -22,7 +22,6 @@ import io.netty.handler.codec.http2.Http2Headers;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.EnumSet;
 
@@ -218,8 +217,7 @@ public class Http2BlockReader implements BlockReader {
                   .setClientName(clientName)).setOffset(startOffsetInBlock)
             .setLen(len).setSendChecksums(verifyChecksum).build();
     Http2DataReceiver receiver =
-        connPool.connect(new InetSocketAddress(datanodeID.getIpAddr(),
-            datanodeID.getInfoPort()), req);
+        connPool.connect(datanodeID.getInfoAddr(), req);
     ByteBufferReadableInputStream in = receiver.content();
     boolean succ = false;
     try {

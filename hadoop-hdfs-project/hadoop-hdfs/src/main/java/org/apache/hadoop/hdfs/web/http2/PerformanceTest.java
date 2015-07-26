@@ -17,6 +17,12 @@
  */
 package org.apache.hadoop.hdfs.web.http2;
 
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioSocketChannel;
+
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -33,7 +39,10 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.net.NetUtils;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -169,9 +178,53 @@ public class PerformanceTest {
     }
   }
 
+  public void testHttp2SmallReadInsideEventLoop(String[] args)
+      throws IOException, InterruptedException {
+    String file = args[1];
+    int readCountPerThread = Integer.parseInt(args[2]);
+    int readLength = Integer.parseInt(args[3]);
+    NioEventLoopGroup workerGroup = new NioEventLoopGroup();
+    Channel channel = null;
+    final Configuration conf = new Configuration();
+    try (FileSystem fs = FileSystem.get(conf)) {
+      LocatedBlock block =
+          ((DistributedFileSystem) fs).getClient().getLocatedBlocks(file, 0)
+              .get(0);
+      final Http2SmallReadTestingHandler handler =
+          new Http2SmallReadTestingHandler();
+      channel =
+          new Bootstrap()
+              .group(workerGroup)
+              .channel(NioSocketChannel.class)
+              .handler(new ChannelInitializer<Channel>() {
+
+                @Override
+                protected void initChannel(Channel ch) throws Exception {
+                  ch.pipeline().addLast(
+                    ClientHttp2ConnectionHandler.create(ch, conf), handler);
+                }
+
+              })
+              .connect(
+                NetUtils.createSocketAddr(block.getLocations()[0].getInfoAddr()))
+              .sync().channel();
+      channel.writeAndFlush(new ReadBlockTestContext(readLength,
+          readCountPerThread, block));
+      long cost = handler.getCost();
+      System.err.println("******* time based on http2 " + cost);
+    } finally {
+      if (channel != null) {
+        channel.close();
+      }
+      workerGroup.shutdownGracefully();
+    }
+  }
+
   public void doWork(String[] args) throws IOException, InterruptedException {
     if (args[0].equals("prepare")) {
       prepare(args);
+    } else if (args[0].equals("noswitch")) {
+      testHttp2SmallReadInsideEventLoop(args);
     } else {
       testReadPerformance(args);
     }

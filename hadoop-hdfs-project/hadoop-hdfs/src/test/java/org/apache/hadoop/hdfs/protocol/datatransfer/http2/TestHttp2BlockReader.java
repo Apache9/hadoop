@@ -19,7 +19,6 @@ package org.apache.hadoop.hdfs.protocol.datatransfer.http2;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertTrue;
-import io.netty.channel.nio.NioEventLoopGroup;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -37,6 +36,7 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.Http2BlockReader;
 import org.apache.hadoop.hdfs.Http2ConnectionPool;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
 import org.junit.After;
@@ -58,7 +58,7 @@ public class TestHttp2BlockReader {
   public static void setUp() throws Exception {
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
-    CONN_POOL = new Http2ConnectionPool(CONF, new NioEventLoopGroup());
+    CONN_POOL = new Http2ConnectionPool(CONF, new DfsClientConf(CONF));
   }
 
   @AfterClass

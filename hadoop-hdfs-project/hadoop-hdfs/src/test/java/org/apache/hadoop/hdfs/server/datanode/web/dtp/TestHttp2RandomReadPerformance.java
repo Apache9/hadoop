@@ -42,6 +42,7 @@ import org.apache.hadoop.hdfs.Http2ConnectionPool;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.PeerCache;
 import org.apache.hadoop.hdfs.RemoteBlockReader2;
+import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
 import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
@@ -64,7 +65,7 @@ public class TestHttp2RandomReadPerformance {
 
   private static int LEN = 2048;
 
-  private static int CONNECTION_COUNT = 3000;
+  private static int CONNECTION_COUNT = 20;
 
   private boolean http2;
 
@@ -111,10 +112,11 @@ public class TestHttp2RandomReadPerformance {
     try (FileSystem fs = FileSystem.get(CONF)) {
       DFSClient client = ((DistributedFileSystem) fs).getClient();
       if (http2) {
+        final DfsClientConf clientConf = new DfsClientConf(CONF);
         workerGroup = new NioEventLoopGroup();
         for (int i = 0; i < CONNECTION_COUNT; i++) {
           Http2ConnectionPool connPool =
-              new Http2ConnectionPool(CONF, workerGroup);
+              new Http2ConnectionPool(CONF, clientConf, workerGroup);
           connPoolList.add(connPool);
           Http2BlockReader reader =
               Http2BlockReader

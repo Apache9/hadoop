@@ -131,6 +131,7 @@ public class DfsClientConf {
       replicaAccessorBuilderClasses;
 
   private final boolean http2ReadEnabled;
+  private final int maxHttp2ConnectionPerServer;
 
   public DfsClientConf(Configuration conf) {
     // The hdfsTimeout is currently the same as the ipc timeout
@@ -244,6 +245,10 @@ public class DfsClientConf {
     http2ReadEnabled =
         conf.getBoolean(HdfsClientConfigKeys.Read.Http2.KEY,
           HdfsClientConfigKeys.Read.Http2.DEFAULT);
+    maxHttp2ConnectionPerServer =
+        conf.getInt(
+          HdfsClientConfigKeys.Read.Http2.MAX_CONNECTION_PER_SERVER_KEY,
+          HdfsClientConfigKeys.Read.Http2.MAX_CONNECTION_PER_SERVER_DEFAULT);
   }
 
   @SuppressWarnings("unchecked")
@@ -545,6 +550,14 @@ public class DfsClientConf {
   public boolean isHttp2ReadEnabled() {
     return http2ReadEnabled;
   }
+
+  /**
+   * @return max connection per server for http2 connection pooling.
+   */
+  public int getMaxHttp2ConnectionPerServer() {
+    return maxHttp2ConnectionPerServer;
+  }
+
   /**
    * Configuration for short-circuit reads.
    */

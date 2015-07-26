@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.datanode.web.dtp;
+package org.apache.hadoop.hdfs.web.http2;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -29,20 +29,19 @@ import java.io.IOException;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
-import org.apache.hadoop.hdfs.web.http2.LastHttp2Message;
 import org.apache.hadoop.util.DataChecksum;
 
 /**
  *
  */
-public class TestHttp2SmallReadReceiveBlockHandler extends
+public class Http2SmallReadReceiveBlockHandler extends
     ChannelInboundHandlerAdapter {
 
-  private final TestHttp2SmallReadHandler handler;
+  private final Http2SmallReadTestingHandler handler;
 
   private CompositeByteBuf cumulation;
 
-  public TestHttp2SmallReadReceiveBlockHandler(TestHttp2SmallReadHandler handler) {
+  public Http2SmallReadReceiveBlockHandler(Http2SmallReadTestingHandler handler) {
     this.handler = handler;
   }
 

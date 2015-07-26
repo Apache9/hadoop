@@ -252,8 +252,11 @@ public interface HdfsClientConfigKeys {
     interface Http2 {
       String PREFIX = Read.PREFIX + "http2.";
       
-      String KEY = PREFIX.substring(0, PREFIX.length() - 1);
+      String   KEY = PREFIX.substring(0, PREFIX.length() - 1);
       boolean DEFAULT = false;
+
+      String MAX_CONNECTION_PER_SERVER_KEY = PREFIX + "max.connection.per.server";
+      int    MAX_CONNECTION_PER_SERVER_DEFAULT = 10;
     }
   }
 

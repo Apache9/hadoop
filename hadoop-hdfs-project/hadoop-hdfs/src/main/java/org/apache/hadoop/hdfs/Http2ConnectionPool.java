@@ -32,23 +32,28 @@ import io.netty.util.ByteString;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.web.http2.ClientHttp2ConnectionHandler;
 import org.apache.hadoop.hdfs.web.http2.Http2DataReceiver;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
+import org.apache.hadoop.net.NetUtils;
 import org.eclipse.jetty.http2.client.HTTP2Client;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.protobuf.CodedOutputStream;
 
 /**
@@ -63,17 +68,35 @@ public class Http2ConnectionPool implements Closeable {
 
   private final EventLoopGroup workerGroup;
 
-  private final Map<InetSocketAddress, Channel> addressToChannel =
-      new HashMap<InetSocketAddress, Channel>();
+  private final int maxConnPerServer;
+
+  private static final class PooledConnections {
+
+    public int allocated = 0;
+
+    public final List<Channel> conns = new ArrayList<Channel>();
+  }
+
+  private final LoadingCache<String, PooledConnections> cache = CacheBuilder
+      .newBuilder().concurrencyLevel(16)
+      .build(new CacheLoader<String, PooledConnections>() {
+
+        @Override
+        public PooledConnections load(String key) throws Exception {
+          return new PooledConnections();
+        }
+      });
 
   private final Configuration conf;
 
-  public Http2ConnectionPool(Configuration conf) {
-    this(conf, null);
+  public Http2ConnectionPool(Configuration conf, DfsClientConf clientConf) {
+    this(conf, clientConf, null);
   }
 
-  public Http2ConnectionPool(Configuration conf, EventLoopGroup workerGroup) {
+  public Http2ConnectionPool(Configuration conf, DfsClientConf clientConf,
+      EventLoopGroup workerGroup) {
     this.conf = conf;
+    this.maxConnPerServer = clientConf.getMaxHttp2ConnectionPerServer();
     if (workerGroup != null) {
       this.closeEventLoopGroup = false;
       this.workerGroup = workerGroup;
@@ -83,29 +106,64 @@ public class Http2ConnectionPool implements Closeable {
     }
   }
 
-  public Http2DataReceiver connect(InetSocketAddress address,
+  private Channel pickUp(String infoAddr) throws InterruptedException {
+    PooledConnections pool = cache.getUnchecked(infoAddr);
+    synchronized (pool) {
+      if (pool.conns.isEmpty()) {
+        pool.allocated++;
+      } else {
+        Channel least = null;
+        int leastNumActiveStreams = Integer.MAX_VALUE;
+        for (Channel ch : pool.conns) {
+          ClientHttp2ConnectionHandler handler =
+              ch.pipeline().get(ClientHttp2ConnectionHandler.class);
+          if (handler == null) {
+            continue;
+          }
+          int numActiveStreams = handler.numActiveStreams();
+          if (numActiveStreams == 0) {
+            return ch;
+          }
+          if (numActiveStreams < leastNumActiveStreams) {
+            least = ch;
+            leastNumActiveStreams = numActiveStreams;
+          }
+        }
+        if (least != null
+            && pool.conns.size() + pool.allocated >= maxConnPerServer) {
+          return least;
+        }
+        pool.allocated++;
+      }
+    }
+    Channel channel = null;
+    try {
+      channel =
+          new Bootstrap().group(workerGroup).channel(NioSocketChannel.class)
+              .handler(new ChannelInitializer<Channel>() {
+
+                @Override
+                protected void initChannel(Channel ch) throws Exception {
+                  ch.pipeline().addLast(
+                    ClientHttp2ConnectionHandler.create(ch, conf));
+                }
+
+              }).connect(NetUtils.createSocketAddr(infoAddr)).sync().channel();
+    } finally {
+      synchronized (pool) {
+        pool.allocated--;
+        if (channel != null) {
+          pool.conns.add(channel);
+        }
+      }
+    }
+    return channel;
+  }
+
+  public Http2DataReceiver connect(String infoAddr,
       OpReadBlockRequestProto request) throws IOException {
     try {
-      Channel channel = null;
-      synchronized (this.addressToChannel) {
-        channel = this.addressToChannel.get(address);
-        if (channel == null) {
-          channel =
-              new Bootstrap().group(workerGroup)
-                  .channel(NioSocketChannel.class)
-                  .handler(new ChannelInitializer<Channel>() {
-
-                    @Override
-                    protected void initChannel(Channel ch) throws Exception {
-                      ch.pipeline().addLast(
-                        ClientHttp2ConnectionHandler.create(ch, conf));
-                    }
-
-                  }).connect(address).sync().channel();
-          this.addressToChannel.put(address, channel);
-        }
-
-      }
+      Channel channel = pickUp(infoAddr);
       int serializedSize = request.getSerializedSize();
       ByteBuf data =
           channel.alloc().buffer(
@@ -129,27 +187,24 @@ public class Http2ConnectionPool implements Closeable {
                   new ByteString(HttpMethod.POST.name(), StandardCharsets.UTF_8))
                 .path(
                   new ByteString(DtpUrlDispatcher.URL_PREFIX
-                      + DtpUrlDispatcher.OP_READ_BLOCK, StandardCharsets.UTF_8))
-                .scheme(new ByteString("http", StandardCharsets.UTF_8))
-                .authority(
-                  new ByteString(address.getHostString() + ":"
-                      + address.getPort(), StandardCharsets.UTF_8))).data(data)
-          .endStream(true).connect().sync();
+                      + DtpUrlDispatcher.OP_READ_BLOCK, StandardCharsets.UTF_8)))
+          .data(data).endStream(true).connect().sync();
       return receiver;
     } catch (InterruptedException e) {
-      throw new InterruptedIOException(e.getMessage());
+      throw new InterruptedIOException();
     }
   }
 
   @Override
   public void close() throws IOException {
-    for (Map.Entry<InetSocketAddress, Channel> entry : this.addressToChannel
+    for (Map.Entry<String, PooledConnections> entry : this.cache.asMap()
         .entrySet()) {
-      Channel channel = entry.getValue();
-      if (channel != null) {
-        channel.close();
+      PooledConnections pool = entry.getValue();
+      for (Channel ch : pool.conns) {
+        ch.close();
       }
     }
+    this.cache.invalidateAll();
     if (closeEventLoopGroup) {
       workerGroup.shutdownGracefully();
     }

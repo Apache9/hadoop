@@ -15,9 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.datanode.web.dtp;
+package org.apache.hadoop.hdfs.web.http2;
 
-import static org.junit.Assert.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.ChannelHandlerContext;
@@ -36,15 +35,14 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
-import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
-import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
+import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 
 import com.google.protobuf.CodedOutputStream;
 
 /**
  *
  */
-public class TestHttp2SmallReadHandler extends ChannelOutboundHandlerAdapter {
+public class Http2SmallReadTestingHandler extends ChannelOutboundHandlerAdapter {
 
   private LocatedBlock block;
 
@@ -91,8 +89,8 @@ public class TestHttp2SmallReadHandler extends ChannelOutboundHandlerAdapter {
           @Override
           protected void initChannel(Http2StreamChannel ch) throws Exception {
             ch.pipeline().addLast(
-              new TestHttp2SmallReadReceiveBlockHandler(
-                  TestHttp2SmallReadHandler.this));
+              new Http2SmallReadReceiveBlockHandler(
+                  Http2SmallReadTestingHandler.this));
           }
         }).connect();
   }
@@ -113,7 +111,6 @@ public class TestHttp2SmallReadHandler extends ChannelOutboundHandlerAdapter {
 
   void receiveFinished(ByteBuffer data) {
     data.get(buf);
-    assertFalse(data.hasRemaining());
     remainingCount--;
     if (remainingCount == 0) {
       synchronized (this) {
