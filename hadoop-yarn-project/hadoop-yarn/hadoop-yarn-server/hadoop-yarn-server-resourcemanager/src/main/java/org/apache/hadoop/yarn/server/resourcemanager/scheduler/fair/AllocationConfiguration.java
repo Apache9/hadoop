@@ -76,6 +76,9 @@ public class AllocationConfiguration {
   // preempt other queues' tasks.
   private final Map<String, Float> fairSharePreemptionThresholds;
 
+  // If a queue is disabled with preemption, it cannot not be preempted.
+  private final Map<String, Boolean> fairSharePreemptionDisabled;
+
   private final Map<String, SchedulingPolicy> schedulingPolicies;
   
   private final SchedulingPolicy defaultSchedulingPolicy;
@@ -99,6 +102,7 @@ public class AllocationConfiguration {
       Map<String, Long> minSharePreemptionTimeouts,
       Map<String, Long> fairSharePreemptionTimeouts,
       Map<String, Float> fairSharePreemptionThresholds,
+      Map<String, Boolean> fairSharePreemptionDisabled,
       Map<String, Map<QueueACL, AccessControlList>> queueAcls,
       QueuePlacementPolicy placementPolicy,
       Map<FSQueueType, Set<String>> configuredQueues) {
@@ -116,6 +120,7 @@ public class AllocationConfiguration {
     this.minSharePreemptionTimeouts = minSharePreemptionTimeouts;
     this.fairSharePreemptionTimeouts = fairSharePreemptionTimeouts;
     this.fairSharePreemptionThresholds = fairSharePreemptionThresholds;
+    this.fairSharePreemptionDisabled = fairSharePreemptionDisabled;
     this.queueAcls = queueAcls;
     this.placementPolicy = placementPolicy;
     this.configuredQueues = configuredQueues;
@@ -135,6 +140,7 @@ public class AllocationConfiguration {
     minSharePreemptionTimeouts = new HashMap<String, Long>();
     fairSharePreemptionTimeouts = new HashMap<String, Long>();
     fairSharePreemptionThresholds = new HashMap<String, Float>();
+    fairSharePreemptionDisabled = new HashMap<String, Boolean>();
     schedulingPolicies = new HashMap<String, SchedulingPolicy>();
     defaultSchedulingPolicy = SchedulingPolicy.DEFAULT_POLICY;
     configuredQueues = new HashMap<FSQueueType, Set<String>>();
@@ -190,6 +196,15 @@ public class AllocationConfiguration {
         fairSharePreemptionThresholds.get(queueName);
     return (fairSharePreemptionThreshold == null) ?
         -1f : fairSharePreemptionThreshold;
+  }
+
+  /**
+   * Check if a queue is disabled with preemption
+   * Return false if not set.
+   */
+  public boolean isFairSharePreemptionDisabled(String queueName) {
+    Boolean enabled = fairSharePreemptionDisabled.get(queueName);
+    return (enabled == null) ? false : enabled;
   }
 
   public ResourceWeights getQueueWeight(String queue) {

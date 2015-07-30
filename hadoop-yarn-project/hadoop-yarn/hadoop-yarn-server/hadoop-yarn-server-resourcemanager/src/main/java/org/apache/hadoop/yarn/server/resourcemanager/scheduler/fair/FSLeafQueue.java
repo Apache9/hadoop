@@ -526,7 +526,9 @@ public class FSLeafQueue extends FSQueue {
    * @return true if check passes (can preempt) or false otherwise
    */
   private boolean preemptContainerPreCheck() {
-    return parent.getPolicy().checkIfUsageOverFairShare(getResourceUsage(),
+    return !scheduler.getAllocationConfiguration().
+        isFairSharePreemptionDisabled(getQueueName()) &&
+        parent.getPolicy().checkIfUsageOverFairShare(getResourceUsage(),
         getFairShare());
   }
 }

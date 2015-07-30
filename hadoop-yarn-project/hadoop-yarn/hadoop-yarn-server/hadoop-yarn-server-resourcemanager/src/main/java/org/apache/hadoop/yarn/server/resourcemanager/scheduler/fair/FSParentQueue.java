@@ -194,6 +194,11 @@ public class FSParentQueue extends FSQueue {
 
   @Override
   public void preemptResource() {
+    if (scheduler.getAllocationConfiguration().
+        isFairSharePreemptionDisabled(getQueueName())) {
+      return;
+    }
+
     // Try to process preemption request for this level
     preemptResourceBetweenChildren();
 
@@ -210,8 +215,11 @@ public class FSParentQueue extends FSQueue {
     FSQueue candidateQueue = null;
     Comparator<Schedulable> comparator = policy.getComparator();
     for (FSQueue queue : childQueues) {
-      if (candidateQueue == null ||
-          comparator.compare(queue, candidateQueue) > 0) {
+      // choose most over fair queue, and skip queue disabled with preemption
+      if (!scheduler.getAllocationConfiguration().
+          isFairSharePreemptionDisabled(queue.getQueueName()) && (
+          candidateQueue == null ||
+          comparator.compare(queue, candidateQueue) > 0)) {
         candidateQueue = queue;
       }
     }
