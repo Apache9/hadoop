@@ -90,13 +90,19 @@ public class AllocationConfiguration {
   //Configured queues in the alloc xml
   @VisibleForTesting
   Map<FSQueueType, Set<String>> configuredQueues;
-  
+
+  // if reservation is enabled
+  private boolean reservationEnabled;
+  // if reset reservation before assign
+  private boolean resetReservationBeforeScheduleEnabled;
+
   public AllocationConfiguration(Map<String, Resource> minQueueResources,
       Map<String, Resource> maxQueueResources,
       Map<String, Integer> queueMaxApps, Map<String, Integer> userMaxApps,
       Map<String, ResourceWeights> queueWeights,
       Map<String, Float> queueMaxAMShares, int userMaxAppsDefault,
       int queueMaxAppsDefault, float queueMaxAMShareDefault,
+      boolean reservationEnabled, boolean resetReservationBeforeScheduleEnabled,
       Map<String, SchedulingPolicy> schedulingPolicies,
       SchedulingPolicy defaultSchedulingPolicy,
       Map<String, Long> minSharePreemptionTimeouts,
@@ -115,6 +121,9 @@ public class AllocationConfiguration {
     this.userMaxAppsDefault = userMaxAppsDefault;
     this.queueMaxAppsDefault = queueMaxAppsDefault;
     this.queueMaxAMShareDefault = queueMaxAMShareDefault;
+    this.reservationEnabled = reservationEnabled;
+    this.resetReservationBeforeScheduleEnabled =
+        resetReservationBeforeScheduleEnabled;
     this.defaultSchedulingPolicy = defaultSchedulingPolicy;
     this.schedulingPolicies = schedulingPolicies;
     this.minSharePreemptionTimeouts = minSharePreemptionTimeouts;
@@ -136,6 +145,8 @@ public class AllocationConfiguration {
     userMaxAppsDefault = Integer.MAX_VALUE;
     queueMaxAppsDefault = Integer.MAX_VALUE;
     queueMaxAMShareDefault = 0.5f;
+    reservationEnabled = true;
+    resetReservationBeforeScheduleEnabled = false;
     queueAcls = new HashMap<String, Map<QueueACL, AccessControlList>>();
     minSharePreemptionTimeouts = new HashMap<String, Long>();
     fairSharePreemptionTimeouts = new HashMap<String, Long>();
@@ -276,5 +287,13 @@ public class AllocationConfiguration {
   
   public QueuePlacementPolicy getPlacementPolicy() {
     return placementPolicy;
+  }
+
+  public boolean isReservationEnabled() {
+    return reservationEnabled;
+  }
+
+  public boolean isResetReservationBeforeScheduleEnabled() {
+    return resetReservationBeforeScheduleEnabled;
   }
 }

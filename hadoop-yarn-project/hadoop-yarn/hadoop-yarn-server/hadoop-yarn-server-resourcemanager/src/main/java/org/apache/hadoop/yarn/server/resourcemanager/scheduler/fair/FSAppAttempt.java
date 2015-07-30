@@ -170,9 +170,13 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     Resource resource = reservedContainer.getContainer().getResource();
     Resources.subtractFrom(currentReservation, resource);
 
-    LOG.info("Application " + getApplicationId() + " unreserved " + " on node "
-        + node + ", currently has " + reservedContainers.size() + " at priority "
-        + priority + "; currentReservation " + currentReservation);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(
+          "Application " + getApplicationId() + " unreserved " + " on node "
+              + node + ", currently has " + reservedContainers.size()
+              + " at priority "
+              + priority + "; currentReservation " + currentReservation);
+    }
   }
 
   @Override
@@ -210,7 +214,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     
     // waitFactor can't be more than '1' 
     // i.e. no point skipping more than clustersize opportunities
-    return Math.min(((float)requiredResources / clusterNodes), 1.0f);
+    return Math.min(((float) requiredResources / clusterNodes), 1.0f);
   }
 
   /**
@@ -448,8 +452,10 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
    */
   private void reserve(Priority priority, FSSchedulerNode node,
       Container container, boolean alreadyReserved) {
-    LOG.info("Making reservation: node=" + node.getNodeName() +
-        " app_id=" + getApplicationId());
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Making reservation: node=" + node.getNodeName() +
+          " app_id=" + getApplicationId());
+    }
 
     if (!alreadyReserved) {
       getMetrics().reserveResource(getUser(), container.getResource());
@@ -545,9 +551,13 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     }
 
     // The desired container won't fit here, so reserve
-    reserve(request.getPriority(), node, container, reserved);
+    if (scheduler.getAllocationConfiguration().isReservationEnabled()) {
+      reserve(request.getPriority(), node, container, reserved);
+      return FairScheduler.CONTAINER_RESERVED;
+    } else {
+      return null;
+    }
 
-    return FairScheduler.CONTAINER_RESERVED;
   }
 
   private boolean hasNodeOrRackLocalRequests(Priority priority) {
@@ -699,10 +709,13 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     RMContainer rmContainer = node.getReservedContainer();
     Priority reservedPriority = rmContainer.getReservedPriority();
 
-    if (!isValidReservation(node)) {
+    if (scheduler.getAllocationConfiguration()
+        .isResetReservationBeforeScheduleEnabled() || !isValidReservation(node)) {
       // Don't hold the reservation if app can no longer use it
-      LOG.info("Releasing reservation that cannot be satisfied for " +
-          "application " + getApplicationAttemptId() + " on node " + node);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Releasing reservation that cannot be satisfied for " +
+            "application " + getApplicationAttemptId() + " on node " + node);
+      }
       unreserve(reservedPriority, node);
       return false;
     }

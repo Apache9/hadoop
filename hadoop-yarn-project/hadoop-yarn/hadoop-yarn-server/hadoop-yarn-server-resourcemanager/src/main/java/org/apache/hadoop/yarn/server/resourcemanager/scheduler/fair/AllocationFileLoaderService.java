@@ -87,7 +87,7 @@ public class AllocationFileLoaderService extends AbstractService {
   
   private Thread reloadThread;
   private volatile boolean running = true;
-  
+
   public AllocationFileLoaderService() {
     this(new SystemClock());
   }
@@ -257,6 +257,9 @@ public class AllocationFileLoaderService extends AbstractService {
     NodeList elements = root.getChildNodes();
     List<Element> queueElements = new ArrayList<Element>();
     Element placementPolicyElement = null;
+    boolean reservationEnabled = true;
+    boolean resetReservationBeforeScheduleEnabled = false;
+
     for (int i = 0; i < elements.getLength(); i++) {
       Node node = elements.item(i);
       if (node instanceof Element) {
@@ -319,6 +322,12 @@ public class AllocationFileLoaderService extends AbstractService {
           defaultSchedPolicy = SchedulingPolicy.parse(text);
         } else if ("queuePlacementPolicy".equals(element.getTagName())) {
           placementPolicyElement = element;
+        } else if ("reservationEnabled".equals(element.getTagName())) {
+          String text = ((Text)element.getFirstChild()).getData().trim();
+          reservationEnabled = Boolean.parseBoolean(text);
+        } else if ("resetReservationBeforeScheduleEnabled".equals(element.getTagName())) {
+          String text = ((Text)element.getFirstChild()).getData().trim();
+          resetReservationBeforeScheduleEnabled = Boolean.parseBoolean(text);
         } else {
           LOG.warn("Bad element in allocations file: " + element.getTagName());
         }
@@ -372,7 +381,9 @@ public class AllocationFileLoaderService extends AbstractService {
     AllocationConfiguration info = new AllocationConfiguration(minQueueResources,
         maxQueueResources, queueMaxApps, userMaxApps, queueWeights,
         queueMaxAMShares, userMaxAppsDefault, queueMaxAppsDefault,
-        queueMaxAMShareDefault, queuePolicies, defaultSchedPolicy,
+        queueMaxAMShareDefault, reservationEnabled,
+        resetReservationBeforeScheduleEnabled,
+        queuePolicies, defaultSchedPolicy,
         minSharePreemptionTimeouts, fairSharePreemptionTimeouts,
         fairSharePreemptionThresholds, fairSharePreemptionDisabled,
         queueAcls, newPlacementPolicy, configuredQueues);

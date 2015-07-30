@@ -4241,6 +4241,172 @@ public class TestFairScheduler extends FairSchedulerTestBase {
         12288, queue1.getAmResourceUsage().getMemory());
   }
 
+  /**
+   * The test verifies container gets reserved and reservation will be reset
+   * when other queue or app has less usage/fairshare
+   * 1. create three nodes: Node1 is 10G, Node2 is 10G and Node3 is 10G.
+   * 2. APP1 allocated 4G on Node1 and APP2 allocated 4G on Node2.
+   * 3. APP3 reserved 10G on Node1 and Node2.
+   * 4. APP4 allocated 5G on Node3, which makes APP3 over maxAMShare.
+   */
+  @Test
+  public void testScheduleWithResetReservationOn() throws
+      Exception {
+    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<resetReservationBeforeScheduleEnabled>true</resetReservationBeforeScheduleEnabled>");
+    out.println("<queue name=\"queue1\">");
+    out.println("<maxAMShare>0.8</maxAMShare>");
+    out.println("</queue>");
+    out.println("</allocations>");
+    out.close();
+
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, resourceManager.getRMContext());
+
+    RMNode node1 =
+        MockNodes.newNodeInfo(1, Resources.createResource(10240, 10),
+            1, "127.0.0.1");
+    RMNode node2 =
+        MockNodes.newNodeInfo(1, Resources.createResource(10240, 10),
+            2, "127.0.0.2");
+    RMNode node3 =
+        MockNodes.newNodeInfo(1, Resources.createResource(10240, 10),
+            3, "127.0.0.3");
+    NodeAddedSchedulerEvent nodeE1 = new NodeAddedSchedulerEvent(node1);
+    NodeUpdateSchedulerEvent updateE1 = new NodeUpdateSchedulerEvent(node1);
+    NodeAddedSchedulerEvent nodeE2 = new NodeAddedSchedulerEvent(node2);
+    NodeUpdateSchedulerEvent updateE2 = new NodeUpdateSchedulerEvent(node2);
+    NodeAddedSchedulerEvent nodeE3 = new NodeAddedSchedulerEvent(node3);
+    NodeUpdateSchedulerEvent updateE3 = new NodeUpdateSchedulerEvent(node3);
+    scheduler.handle(nodeE1);
+    scheduler.handle(nodeE2);
+    scheduler.handle(nodeE3);
+    scheduler.update();
+    FSLeafQueue queue1 = scheduler.getQueueManager().getLeafQueue("queue1",
+        true);
+    FSLeafQueue queue2 = scheduler.getQueueManager().getLeafQueue("default",
+        false);
+    Resource amResource1 = Resource.newInstance(4096, 1);
+    Resource amResource2 = Resource.newInstance(4096, 1);
+    Resource amResource3 = Resource.newInstance(1024, 1);
+    Resource amResource4 = Resource.newInstance(1024, 1);
+    Resource amResource5 = Resource.newInstance(1024, 1);
+    int amPriority = RMAppAttemptImpl.AM_CONTAINER_PRIORITY.getPriority();
+    int nonAMPriority = 10;
+    ApplicationAttemptId attId1 = createAppAttemptId(1, 1);
+    createApplicationWithAMResource(attId1, "queue1", "user1", amResource1);
+    createSchedulingRequestExistingApplication(4096, 4, amPriority, attId1);
+    FSAppAttempt app1 = scheduler.getSchedulerApp(attId1);
+    scheduler.update();
+    // Allocate app1's AM container on node1.
+    scheduler.handle(updateE1);
+    assertEquals("Application1's AM requests 4096 MB memory",
+        4096, app1.getAMResource().getMemory());
+    assertEquals("Application1's AM should be running",
+        1, app1.getLiveContainers().size());
+    assertEquals("Queue1's AM resource usage should be 4096 MB memory",
+        4096, queue1.getAmResourceUsage().getMemory());
+
+    ApplicationAttemptId attId2 = createAppAttemptId(2, 1);
+    createApplicationWithAMResource(attId2, "queue1", "user1", amResource2);
+    createSchedulingRequestExistingApplication(4096, 4, amPriority, attId2);
+    FSAppAttempt app2 = scheduler.getSchedulerApp(attId2);
+    scheduler.update();
+    // Allocate app2's AM container on node2.
+    scheduler.handle(updateE2);
+    assertEquals("Application2's AM requests 4096 MB memory",
+        4096, app2.getAMResource().getMemory());
+    assertEquals("Application2's AM should be running",
+        1, app2.getLiveContainers().size());
+    assertEquals("Queue1's AM resource usage should be 8192 MB memory",
+        8192, queue1.getAmResourceUsage().getMemory());
+
+    ApplicationAttemptId attId3 = createAppAttemptId(3, 1);
+    createApplicationWithAMResource(attId3, "queue1", "user1", amResource3);
+    createSchedulingRequestExistingApplication(1024, 1, amPriority, attId3);
+    FSAppAttempt app3 = scheduler.getSchedulerApp(attId3);
+    scheduler.update();
+    scheduler.handle(updateE1);
+    scheduler.handle(updateE2);
+    // app3 scheduled 1024 mb non AM container
+    createSchedulingRequestExistingApplication(1024, 1, nonAMPriority, attId3);
+    scheduler.update();
+    scheduler.handle(updateE1);
+    scheduler.handle(updateE2);
+    createSchedulingRequestExistingApplication(10240, 1, nonAMPriority, attId3);
+    scheduler.update();
+    // app3 reserves a container on node1 because node1's available resource
+    // is less than app3's container resource.
+    scheduler.handle(updateE1);
+    // Similarly app3 reserves a container on node2.
+    scheduler.handle(updateE2);
+    assertEquals("Application3's AM requests 1024 MB memory",
+        1024, app3.getAMResource().getMemory());
+    assertEquals("Application3's should has two container",
+        2, app3.getLiveContainers().size());
+    assertEquals("Queue1's total resource usage should be 10240 MB memory",
+        10240, queue1.getResourceUsage().getMemory());
+
+    createSchedulingRequestExistingApplication(2048, 1, nonAMPriority, attId1);
+    scheduler.update();
+    // app1 should not be scheduled because app3 has less usage than app1,
+    // and has reservation on node1 node2
+    scheduler.handle(updateE1);
+    scheduler.handle(updateE2);
+    assertEquals("Application1's should has only one AM container",
+        1, app1.getLiveContainers().size());
+
+    // app5 for queue default should be scheduled, cause its usage/fair lower
+    // than queue1. reservation should be reset.
+    ApplicationAttemptId attId4 = createAppAttemptId(4, 1);
+    createApplicationWithAMResource(attId4, "root.default", "user1",
+        amResource4);
+    createSchedulingRequestExistingApplication(1024, 1, amPriority, attId4);
+    FSAppAttempt app4 = scheduler.getSchedulerApp(attId4);
+    scheduler.update();
+    scheduler.handle(updateE1);
+    assertEquals("Application5's AM requests 1024 MB memory",
+        1024, app4.getAMResource().getMemory());
+    assertEquals("Application5's AM should be running",
+        1, app4.getLiveContainers().size());
+    assertEquals("Queue1's resource usage should be 10240 MB memory",
+        10240, queue1.getResourceUsage().getMemory());
+    assertEquals("Queue default's resource usage should be 1024 MB memory",
+        1024, queue2.getResourceUsage().getMemory());
+
+    createSchedulingRequestExistingApplication(1024, 1, amPriority, attId4);
+    scheduler.update();
+    scheduler.handle(updateE1);
+    assertEquals("Application4's should have 2 containers running",
+        2, app4.getLiveContainers().size());
+    assertEquals("Queue1's resource usage should be 10240 MB memory",
+        10240, queue1.getResourceUsage().getMemory());
+    assertEquals("Queue default's resource resource usage should be 2048 MB "
+            + "memory",
+        2048, queue2.getResourceUsage().getMemory());
+
+    // app5 for queue1 should be scheduled, cause its usage/fair lower
+    // than app3 in queue1. reservation should be reset.
+    ApplicationAttemptId attId5 = createAppAttemptId(5, 1);
+    createApplicationWithAMResource(attId5, "queue1", "user1", amResource5);
+    createSchedulingRequestExistingApplication(1024, 1, amPriority, attId5);
+    FSAppAttempt app5 = scheduler.getSchedulerApp(attId5);
+    scheduler.update();
+    scheduler.handle(updateE2);
+    assertEquals("Application5's AM requests 1024 MB memory",
+        1024, app5.getAMResource().getMemory());
+    assertEquals("Application5's AM should be running",
+        1, app5.getLiveContainers().size());
+    assertEquals("Queue1's resource usage should be 11264 MB memory",
+        11264, queue1.getResourceUsage().getMemory());
+    assertEquals("Queue default's resource usage should be 2048 MB memory",
+        2048, queue2.getResourceUsage().getMemory());
+  }
+
   @Test
   public void testMaxRunningAppsHierarchicalQueues() throws Exception {
     conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
