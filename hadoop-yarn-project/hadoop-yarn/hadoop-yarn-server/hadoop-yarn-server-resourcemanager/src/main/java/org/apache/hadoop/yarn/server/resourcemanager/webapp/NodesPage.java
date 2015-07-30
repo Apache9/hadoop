@@ -162,10 +162,10 @@ class NodesPage extends RmView {
 
   private String nodesTableInit() {
     StringBuilder b = tableInit().append(", aoColumnDefs: [");
-    b.append("{'bSearchable': false, 'aTargets': [ 6 ]}");
+    b.append("{'bSearchable': false, 'aTargets': [ 7 ]}");
     b.append(", {'sType': 'title-numeric', 'bSearchable': false, " +
-        "'aTargets': [ 7, 8 ] }");
-    b.append(", {'sType': 'title-numeric', 'aTargets': [ 4 ]}");
+        "'aTargets': [ 8, 9 ] }");
+    b.append(", {'sType': 'title-numeric', 'aTargets': [ 5 ]}");
     b.append("]}");
     return b.toString();
   }
