@@ -277,7 +277,7 @@ public class FairSchedulerPage extends RmView {
       .append("\n, {'sType':'numeric', 'aTargets': [6, 7]")
       .append(", 'mRender': renderHadoopDate }")
 
-      .append("\n, {'sType':'numeric', bSearchable:false, 'aTargets': [10]")
+      .append("\n, {'sType':'numeric', bSearchable:false, 'aTargets': [12]")
       .append(", 'mRender': parseHadoopProgress }]").toString();
   }
 }
