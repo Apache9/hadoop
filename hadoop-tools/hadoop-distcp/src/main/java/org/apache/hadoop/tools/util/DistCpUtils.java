@@ -308,10 +308,9 @@ public class DistCpUtils {
     CopyListingFileStatus copyListingFileStatus =
       new CopyListingFileStatus(fileStatus);
     if (preserveAcls) {
-      FsPermission perm = fileStatus.getPermission();
-      if (perm.getAclBit()) {
-        List<AclEntry> aclEntries = fileSystem.getAclStatus(
-          fileStatus.getPath()).getEntries();
+      List<AclEntry> aclEntries = fileSystem.getAclStatus(
+        fileStatus.getPath()).getEntries();
+      if (!aclEntries.isEmpty()) {
         copyListingFileStatus.setAclEntries(aclEntries);
       }
     }
