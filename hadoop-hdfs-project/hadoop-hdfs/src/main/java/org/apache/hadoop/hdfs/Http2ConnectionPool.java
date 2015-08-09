@@ -18,21 +18,15 @@
 package org.apache.hadoop.hdfs;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.util.ByteString;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -42,19 +36,13 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
-import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
-import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.web.http2.ClientHttp2ConnectionHandler;
-import org.apache.hadoop.hdfs.web.http2.Http2DataReceiver;
-import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
-import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.apache.hadoop.net.NetUtils;
 import org.eclipse.jetty.http2.client.HTTP2Client;
 
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import com.google.protobuf.CodedOutputStream;
 
 /**
  * A wrapper of {@link HTTP2Client} which will reuse session to the same server.
@@ -160,36 +148,9 @@ public class Http2ConnectionPool implements Closeable {
     return channel;
   }
 
-  public Http2DataReceiver connect(String infoAddr,
-      OpReadBlockRequestProto request) throws IOException {
+  public Channel connect(String infoAddr) throws IOException {
     try {
-      Channel channel = pickUp(infoAddr);
-      int serializedSize = request.getSerializedSize();
-      ByteBuf data =
-          channel.alloc().buffer(
-            CodedOutputStream.computeRawVarint32Size(serializedSize)
-                + serializedSize);
-      request.writeDelimitedTo(new ByteBufOutputStream(data));
-      final Http2DataReceiver receiver = new Http2DataReceiver();
-      new Http2StreamBootstrap()
-          .channel(channel)
-          .handler(new ChannelInitializer<Http2StreamChannel>() {
-
-            @Override
-            protected void initChannel(Http2StreamChannel ch) throws Exception {
-              ch.pipeline().addLast(receiver);
-            }
-
-          })
-          .headers(
-            new DefaultHttp2Headers()
-                .method(
-                  new ByteString(HttpMethod.POST.name(), StandardCharsets.UTF_8))
-                .path(
-                  new ByteString(DtpUrlDispatcher.URL_PREFIX
-                      + DtpUrlDispatcher.OP_READ_BLOCK, StandardCharsets.UTF_8)))
-          .data(data).endStream(true).connect().sync();
-      return receiver;
+      return pickUp(infoAddr);
     } catch (InterruptedException e) {
       throw new InterruptedIOException();
     }

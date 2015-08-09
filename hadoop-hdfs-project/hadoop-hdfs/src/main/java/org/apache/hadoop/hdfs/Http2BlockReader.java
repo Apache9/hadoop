@@ -17,12 +17,21 @@
  */
 package org.apache.hadoop.hdfs;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelInitializer;
+import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.util.ByteString;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.EnumSet;
 
 import org.apache.commons.logging.Log;
@@ -39,12 +48,17 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockReq
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
+import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.shortcircuit.ClientMmap;
 import org.apache.hadoop.hdfs.web.http2.ByteBufferReadableInputStream;
 import org.apache.hadoop.hdfs.web.http2.Http2DataReceiver;
+import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
+import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
+
+import com.google.protobuf.CodedOutputStream;
 
 /**
  * A block reader that reads data over HTTP/2.
@@ -206,7 +220,8 @@ public class Http2BlockReader implements BlockReader {
           long startOffsetInBlock, long len, boolean verifyChecksum,
           String clientName, DatanodeID datanodeID,
           CachingStrategy cachingStrategy) throws IOException {
-    OpReadBlockRequestProto req =
+    Channel channel = connPool.connect(datanodeID.getInfoAddr());
+    OpReadBlockRequestProto request =
         OpReadBlockRequestProto
             .newBuilder()
             .setHeader(
@@ -216,8 +231,35 @@ public class Http2BlockReader implements BlockReader {
                     DataTransferProtoUtil.buildBaseHeader(block, blockToken))
                   .setClientName(clientName)).setOffset(startOffsetInBlock)
             .setLen(len).setSendChecksums(verifyChecksum).build();
-    Http2DataReceiver receiver =
-        connPool.connect(datanodeID.getInfoAddr(), req);
+    int serializedSize = request.getSerializedSize();
+    ByteBuf data =
+        channel.alloc().buffer(
+          CodedOutputStream.computeRawVarint32Size(serializedSize)
+              + serializedSize);
+    request.writeDelimitedTo(new ByteBufOutputStream(data));
+    final Http2DataReceiver receiver = new Http2DataReceiver();
+    try {
+      new Http2StreamBootstrap()
+          .channel(channel)
+          .handler(new ChannelInitializer<Http2StreamChannel>() {
+
+            @Override
+            protected void initChannel(Http2StreamChannel ch) throws Exception {
+              ch.pipeline().addLast(receiver);
+            }
+
+          })
+          .headers(
+            new DefaultHttp2Headers()
+                .method(
+                  new ByteString(HttpMethod.POST.name(), StandardCharsets.UTF_8))
+                .path(
+                  new ByteString(DtpUrlDispatcher.URL_PREFIX
+                      + DtpUrlDispatcher.OP_READ_BLOCK, StandardCharsets.UTF_8)))
+          .data(data).endStream(true).connect().sync();
+    } catch (InterruptedException e) {
+      throw new InterruptedIOException();
+    }
     ByteBufferReadableInputStream in = receiver.content();
     boolean succ = false;
     try {

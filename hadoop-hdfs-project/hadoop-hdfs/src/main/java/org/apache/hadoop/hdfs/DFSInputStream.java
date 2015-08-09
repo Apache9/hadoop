@@ -17,10 +17,28 @@
  */
 package org.apache.hadoop.hdfs;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.protobuf.ProtobufDecoder;
+import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
+import io.netty.util.ByteString;
+import io.netty.util.concurrent.FutureListener;
+import io.netty.util.concurrent.Promise;
+
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -44,7 +62,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.google.common.base.Preconditions;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.ByteBufferReadable;
@@ -65,25 +82,35 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.InvalidEncryptionKeyException;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
+import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.shortcircuit.ClientMmap;
+import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
+import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.apache.hadoop.io.ByteBufferPool;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.IdentityHashStore;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
-import org.mortbay.log.Log;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.protobuf.CodedOutputStream;
 
 /****************************************************************
  * DFSInputStream provides bytes from a named file.  It handles 
@@ -1916,5 +1943,140 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   @Override
   public synchronized void unbuffer() {
     closeCurrentBlockReaders();
+  }
+
+  private static final class BlockFrameReceiver extends
+      SimpleChannelInboundHandler<ByteBuf> {
+
+    private final Promise<ByteBuffer> promise;
+
+    private final ByteBuffer bb;
+
+    private int firstFrameSkipBytes;
+
+    private final DataChecksum checksum;
+
+    private ByteBuf data;
+
+    public BlockFrameReceiver(Promise<ByteBuffer> promise, ByteBuffer bb,
+        int firstFrameSkipBytes, DataChecksum checksum) {
+      this.promise = promise;
+      this.bb = bb;
+      this.firstFrameSkipBytes = firstFrameSkipBytes;
+      this.checksum = checksum;
+    }
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg)
+        throws Exception {
+
+    }
+
+    @Override
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+      data.release();
+    }
+
+  }
+
+  public Promise<ByteBuffer> asyncRead(long position, final ByteBuffer buffer)
+      throws IOException {
+    Http2ConnectionPool connPool =
+        Preconditions.checkNotNull(dfsClient.getHttp2ConnectionPool(),
+          "enable http2 first");
+    LocatedBlock block = getBlockAt(position);
+    DNAddrPair dnAddrPair = chooseDataNode(block, null);
+    // TODO: should also get a promise here
+    Channel channel = connPool.connect(dnAddrPair.info.getInfoAddr());
+    final long startOffsetInBlock = position - block.getStartOffset();
+    OpReadBlockRequestProto request =
+        OpReadBlockRequestProto
+            .newBuilder()
+            .setHeader(
+              ClientOperationHeaderProto
+                  .newBuilder()
+                  .setBaseHeader(
+                    DataTransferProtoUtil.buildBaseHeader(block.getBlock(),
+                      block.getBlockToken()))
+                  .setClientName(dfsClient.getClientName()))
+            .setOffset(startOffsetInBlock).setLen(buffer.remaining())
+            .setSendChecksums(verifyChecksum).build();
+    int serializedSize = request.getSerializedSize();
+    ByteBuf data =
+        channel.alloc().buffer(
+          CodedOutputStream.computeRawVarint32Size(serializedSize)
+              + serializedSize);
+    request.writeDelimitedTo(new ByteBufOutputStream(data));
+    final Promise<ByteBuffer> promise = channel.eventLoop().newPromise();
+    new Http2StreamBootstrap()
+        .channel(channel)
+        .handler(new ChannelInitializer<Http2StreamChannel>() {
+
+          @Override
+          protected void initChannel(Http2StreamChannel ch) throws Exception {
+            ch.pipeline().addLast(
+              new SimpleChannelInboundHandler<Http2Headers>() {
+
+                @Override
+                protected void channelRead0(ChannelHandlerContext ctx,
+                    Http2Headers msg) throws Exception {
+                  if (!HttpResponseStatus.OK.equals(msg.status())) {
+                    promise.tryFailure(new IOException(
+                        "Unexpected http status code: " + msg.status()));
+                  }
+                  ctx.pipeline()
+                      .addLast(
+                        new ProtobufVarint32FrameDecoder(),
+                        new ProtobufDecoder(OpReadBlockResponseProto
+                            .getDefaultInstance()),
+                        new SimpleChannelInboundHandler<OpReadBlockResponseProto>() {
+
+                          @Override
+                          protected void channelRead0(
+                              ChannelHandlerContext ctx,
+                              OpReadBlockResponseProto msg) throws Exception {
+                            if (msg.getStatus() != Status.SUCCESS) {
+                              promise.tryFailure(new IOException(
+                                  "Unexpected status: " + msg.getStatus()));
+                            }
+                            long chunkOffset =
+                                msg.getReadOpChecksumInfo().getChunkOffset();
+                            int firstFrameSkipBytes =
+                                (int) (startOffsetInBlock - chunkOffset);
+                            DataChecksum checksum =
+                                DataTransferProtoUtil.fromProto(msg
+                                    .getReadOpChecksumInfo().getChecksum());
+                            ChannelPipeline p = ctx.pipeline();
+                            p.addLast(new BlockFrameReceiver(promise, buffer,
+                                firstFrameSkipBytes, checksum));
+                            p.remove(this).removeFirst();
+                            p.removeFirst();
+                          }
+                        });
+                }
+
+              });
+          }
+
+        })
+        .headers(
+          new DefaultHttp2Headers().method(
+            new ByteString(HttpMethod.POST.name(), StandardCharsets.UTF_8))
+              .path(
+                new ByteString(DtpUrlDispatcher.URL_PREFIX
+                    + DtpUrlDispatcher.OP_READ_BLOCK, StandardCharsets.UTF_8)))
+        .data(data).endStream(true).connect()
+        .addListener(new FutureListener<Http2StreamChannel>() {
+
+          @Override
+          public void operationComplete(
+              io.netty.util.concurrent.Future<Http2StreamChannel> future)
+              throws Exception {
+            if (!future.isSuccess()) {
+              promise.tryFailure(future.cause());
+            }
+          }
+        });
+    return promise;
   }
 }

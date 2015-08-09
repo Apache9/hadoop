@@ -187,7 +187,6 @@ public class Http2StreamChannel extends AbstractChannel {
         Http2Error.INTERNAL_ERROR.code(), http2ConnHandlerCtx.newPromise());
     }
     state = State.CLOSED;
-
   }
 
   private final Runnable readTask = new Runnable() {
@@ -349,6 +348,7 @@ public class Http2StreamChannel extends AbstractChannel {
         read();
       }
     }
+    currentState = this.state;
     if (!localSideClosed(currentState)) {
       this.state =
           currentState == State.HALF_CLOSED_REMOTE ? State.PRE_CLOSED
