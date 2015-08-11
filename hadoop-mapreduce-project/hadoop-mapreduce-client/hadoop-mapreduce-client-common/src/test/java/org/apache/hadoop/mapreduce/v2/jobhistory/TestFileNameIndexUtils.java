@@ -23,7 +23,7 @@ import java.io.IOException;
 import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.mapreduce.TypeConverter;
 import org.apache.hadoop.mapreduce.v2.api.records.JobId;
-
+import java.net.URLEncoder;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -84,7 +84,8 @@ public class TestFileNameIndexUtils {
   private static final String QUEUE_NAME_WITH_DELIMITER_ESCAPE = "test"
       + FileNameIndexUtils.DELIMITER_ESCAPE + "queue";
   private static final String JOB_START_TIME = "1317928742060";
-
+  private static final String JOB_NAME_EXCEED_THE_LIMIT_OF_HDFS
+      = "MapReduce history file中文作业名称长度估算不准导致文件名超过hdfs的上限";
   @Test
   public void testEncodingDecodingEquivalence() throws IOException {
     JobIndexInfo info = new JobIndexInfo();
@@ -301,5 +302,14 @@ public class TestFileNameIndexUtils {
         JOB_STATUS, info.getJobStatus());
     Assert.assertNull("Queue name incorrect after decoding old history file",
         info.getQueueName());
+  }
+  @Test
+  public void testTrimJobNameAvoidExceedLimit() throws IOException{ 
+    Assert.assertTrue(URLEncoder.encode(JOB_NAME_EXCEED_THE_LIMIT_OF_HDFS,"UTF-8")
+        .getBytes().length > FileNameIndexUtils.JOB_NAME_TRIM_LENGTH); 
+    String newJobName = FileNameIndexUtils
+        .trimJobName(JOB_NAME_EXCEED_THE_LIMIT_OF_HDFS);
+    Assert.assertTrue(URLEncoder.encode(newJobName,"UTF-8").getBytes().length
+        <= FileNameIndexUtils.JOB_NAME_TRIM_LENGTH);
   }
 }

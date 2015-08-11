@@ -29,7 +29,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.mapreduce.TypeConverter;
 import org.apache.hadoop.mapreduce.v2.api.records.JobId;
-
+import com.google.common.annotations.VisibleForTesting;
 public class FileNameIndexUtils {
 
   static final int JOB_NAME_TRIM_LENGTH = 50;
@@ -286,10 +286,14 @@ public class FileNameIndexUtils {
   /**
    * Trims the job-name if required
    */
-  private static String trimJobName(String jobName) {
-    if (jobName.length() > JOB_NAME_TRIM_LENGTH) {
-      jobName = jobName.substring(0, JOB_NAME_TRIM_LENGTH);
-    }
+  @VisibleForTesting
+  static String trimJobName(String jobName) throws IOException{
+    if (jobName.length() > JOB_NAME_TRIM_LENGTH)
+      jobName = jobName.substring(0, JOB_NAME_TRIM_LENGTH); 
+    while(URLEncoder.encode(jobName,"UTF-8").getBytes().length
+        > JOB_NAME_TRIM_LENGTH){
+      jobName = jobName.substring(0, jobName.length() - 1);
+    }  
     return jobName;
   }
 }
