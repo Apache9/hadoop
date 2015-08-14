@@ -50,6 +50,19 @@ public class TestCommitBlockSynchronization {
     final DatanodeStorageInfo[] targets = {};
 
     FSNamesystem namesystem = new FSNamesystem(conf, image);
+    
+    // set file's parent as root and put the file to inodeMap, so
+    // FSNamesystem's isFileDeleted() method will return false on this file
+    if (file.getParent() == null) {
+      INodeDirectory mparent = mock(INodeDirectory.class);
+      INodeDirectory parent = new INodeDirectory(mparent.getId(), new byte[0],
+          mparent.getPermissionStatus(), mparent.getAccessTime());
+      parent.setLocalName(new byte[0]);
+      parent.addChild(file);
+      file.setParent(parent);
+    }
+    namesystem.dir.getINodeMap().put(file);
+    
     FSNamesystem namesystemSpy = spy(namesystem);
     BlockInfoUnderConstruction blockInfo = new BlockInfoUnderConstruction(
         block, 1, HdfsServerConstants.BlockUCState.UNDER_CONSTRUCTION, targets);
