@@ -3039,8 +3039,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     // No further modification is allowed on a deleted file.
     // A file is considered deleted, if it has no parent or is marked
     // as deleted in the snapshot feature.
-    if (file.getParent() == null || (file.isWithSnapshot() &&
-        file.getFileWithSnapshotFeature().isCurrentFileDeleted())) {
+    if (isFileDeleted(file)) {
       throw new FileNotFoundException(src);
     }
     String clientName = file.getFileUnderConstructionFeature().getClientName();
@@ -3463,13 +3462,6 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     removeBlocks(collectedBlocks); // Incremental deletion of blocks
     collectedBlocks.clear();
 
-    dir.writeLock();
-    try {
-      dir.removeFromInodeMap(removedINodes);
-    } finally {
-      dir.writeUnlock();
-    }
-    removedINodes.clear();
     if (NameNode.stateChangeLog.isDebugEnabled()) {
       NameNode.stateChangeLog.debug("DIR* Namesystem.delete: "
         + src +" is removed");
@@ -3509,12 +3501,21 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    *                      inodesMap
    */
   void removePathAndBlocks(String src, BlocksMapUpdateInfo blocks,
-      List<INode> removedINodes) {
+      List<INode> removedINodes, final boolean acquireINodeMapLock) {
     assert hasWriteLock();
     leaseManager.removeLeaseWithPrefixPath(src);
     // remove inodes from inodesMap
     if (removedINodes != null) {
-      dir.removeFromInodeMap(removedINodes);
+      if (acquireINodeMapLock) {
+        dir.writeLock();
+      }
+      try {
+        dir.removeFromInodeMap(removedINodes);
+      } finally {
+        if (acquireINodeMapLock) {
+          dir.writeUnlock();
+        }
+      }
       removedINodes.clear();
     }
     if (blocks == null) {
@@ -4106,7 +4107,30 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
           throw new IOException("Block (=" + lastblock + ") not found");
         }
       }
-      INodeFile iFile = ((INode)storedBlock.getBlockCollection()).asFile();
+      //
+      // The implementation of delete operation (see @deleteInternal method)
+      // first removes the file paths from namespace, and delays the removal
+      // of blocks to later time for better performance. When 
+      // commitBlockSynchronization (this method) is called in between, the
+      // blockCollection of storedBlock could have been assigned to null by
+      // the delete operation, throw IOException here instead of NPE; if the
+      // file path is already removed from namespace by the delete operation,
+      // throw FileNotFoundException here, so not to proceed to the end of 
+      // this method to add a CloseOp to the edit log for an already deleted
+      // file (See HDFS-6825).
+      //
+      BlockCollection blockCollection = storedBlock.getBlockCollection();
+      if (blockCollection == null) {
+        throw new IOException("The blockCollection of " + storedBlock
+            + " is null, likely because the file owning this block was"
+            + " deleted and the block removal is delayed");
+      }
+      INodeFile iFile = ((INode)blockCollection).asFile();
+      if (isFileDeleted(iFile)) {
+        throw new FileNotFoundException("File not found: "
+            + iFile.getFullPathName() + ", likely due to delayed block"
+            + " removal");
+      }
       if (!iFile.isUnderConstruction() || storedBlock.isComplete()) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Unexpected block (=" + lastblock
@@ -5976,6 +6000,44 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     // NB: callers sync the log
     return blockId;
   }
+  
+  private boolean isFileDeleted(INodeFile file) {
+    // Not in the inodeMap or in the snapshot but marked deleted.
+    if (dir.getInode(file.getId()) == null) {
+      return true;
+    }    
+
+    // look at the path hierarchy to see if one parent is deleted by recursive
+    // deletion
+    INode tmpChild = file;
+    INodeDirectory tmpParent = file.getParent();
+    while (true) {
+      if (tmpParent == null) { 
+        return true;
+      }    
+
+      INode childINode = tmpParent.getChild(tmpChild.getLocalNameBytes(),
+          Snapshot.CURRENT_STATE_ID);
+      if (childINode == null || !childINode.equals(tmpChild)) {
+        // a newly created INode with the same name as an already deleted one
+        // would be a different INode than the deleted one
+        return true;
+      }    
+
+      if (tmpParent.isRoot()) {
+        break;
+      }    
+      tmpChild = tmpParent;
+      tmpParent = tmpParent.getParent();
+    }    
+
+    if (file.isWithSnapshot() &&
+        file.getFileWithSnapshotFeature().isCurrentFileDeleted()) {
+      return true;
+    }    
+    return false;
+  }
+
 
   private INodeFile checkUCBlock(ExtendedBlock block,
       String clientName) throws IOException {
@@ -5993,7 +6055,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     
     // check file inode
     final INodeFile file = ((INode)storedBlock.getBlockCollection()).asFile();
-    if (file == null || !file.isUnderConstruction()) {
+    if (file == null || !file.isUnderConstruction() || isFileDeleted(file)) {
       throw new IOException("The file " + storedBlock + 
           " belonged to does not exist or it is not under construction.");
     }
