@@ -1316,7 +1316,20 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
   }
 
   /**
+   * Create an input stream that obtains a nodelist from the namenode, and then
+   * reads from all the right places. Creates inner subclass of InputStream that
+   * does the right out-of-band work.
+   */
+  public DFSInputStream openEx(String src, int buffersize,
+      boolean verifyChecksum) throws IOException, UnresolvedLinkException {
+    checkOpen();
+    // Get block info from namenode
+    return new XmDFSInputStream(this, src, buffersize, verifyChecksum);
+  }
+
+  /**
    * Get the namenode associated with this DFSClient object
+   * 
    * @return the namenode associated with this DFSClient object
    */
   public ClientProtocol getNamenode() {
