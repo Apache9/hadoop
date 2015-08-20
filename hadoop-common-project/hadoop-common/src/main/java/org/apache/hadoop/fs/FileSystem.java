@@ -759,11 +759,31 @@ public abstract class FileSystem extends Configured implements Closeable {
     throws IOException;
     
   /**
+   * Opens an FSDataInputStream at the indicated Path. With this extended open
+   * method, the underlying input stream will be replaced with XmDFSInputStream.
+   * @param f the file name to open
+   * @param bufferSize the size of the buffer to be used.
+   */
+  public FSDataInputStream openEx(Path f, int bufferSize) throws IOException {
+    throw new UnsupportedOperationException(
+        "openEx is not supported by file system other than DistributedFileSystem");
+  }
+
+  /**
    * Opens an FSDataInputStream at the indicated Path.
    * @param f the file to open
    */
   public FSDataInputStream open(Path f) throws IOException {
     return open(f, getConf().getInt("io.file.buffer.size", 4096));
+  }
+
+  /**
+   * Opens an FSDataInputStream at the indicated Path. With this extended open
+   * method, the underlying input stream will be replaced with XmDFSInputStream.
+   * @param f the file name to open
+   */
+  public FSDataInputStream openEx(Path f) throws IOException {
+    return openEx(f, getConf().getInt("io.file.buffer.size", 4096));
   }
 
   /**
