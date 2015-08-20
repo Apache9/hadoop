@@ -321,8 +321,9 @@ public class DistributedFileSystem extends FileSystem {
       @Override
       public FSDataInputStream doCall(final Path p) throws IOException,
           UnresolvedLinkException {
-        return new HdfsDataInputStream(dfs.openEx(getPathName(p), bufferSize,
-            verifyChecksum));
+      final DFSInputStream dfsis =
+          dfs.openEx(getPathName(p), bufferSize, verifyChecksum);
+        return  dfs.createWrappedInputStream(dfsis);
       }
 
       @Override

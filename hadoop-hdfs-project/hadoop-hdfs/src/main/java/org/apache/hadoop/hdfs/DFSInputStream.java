@@ -1758,8 +1758,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     }
   }
 
-  protected void updateFileLength() throws IOException {
-    rwLock.writeLock().lock();
+  protected synchronized void updateFileLength() throws IOException {
     try {
       if (closed) {
         throw new IOException("Stream closed");
@@ -1810,7 +1809,6 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         getBlockAt(position, true);
       }
     } finally {
-      rwLock.writeLock().unlock();
-    }
+    } 
   }
 }
