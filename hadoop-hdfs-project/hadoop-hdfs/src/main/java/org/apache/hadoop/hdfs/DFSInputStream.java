@@ -40,7 +40,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.io.IOUtils;
@@ -1833,6 +1832,62 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       IOUtils.closeQuietly((ClientMmap)val);
     } else if (val instanceof ByteBufferPool) {
       ((ByteBufferPool)val).putBuffer(buffer);
+    }
+  }
+
+  protected void updateFileLength() throws IOException {
+    rwLock.writeLock().lock();
+    try {
+      if (closed) {
+        throw new IOException("Stream closed");
+      }
+      int retries = 3;
+      long lastBlockLength = 0;
+      while (retries > 0) {
+        final LocatedBlocks newInfo = dfsClient.getLocatedBlocks(src, 0);
+        if (DFSClient.LOG.isDebugEnabled()) {
+          DFSClient.LOG.debug("newInfo = " + newInfo);
+        }
+        if (newInfo == null) {
+          throw new IOException("Cannot open filename " + src);
+        }
+
+        locatedBlocks = newInfo;
+
+        if (!locatedBlocks.isLastBlockComplete()) {
+          final LocatedBlock last = locatedBlocks.getLastLocatedBlock();
+          if (last != null) {
+            if (last.getLocations().length == 0) {
+              if (last.getBlockSize() == 0) {
+                // if the length is zero, then no data has been written to
+                // datanode. So no need to wait for the locations.
+                break;
+              }
+              --retries;
+              continue;
+            }
+            lastBlockLength = readBlockLength(last);
+            last.getBlock().setNumBytes(lastBlockLength);
+            break;
+          }
+        } else {
+          lastBlockLength = 0;
+          break;
+        }
+      }
+      if (retries == 0) {
+        throw new IOException("Could not obtain the last block locations.");
+      }
+      currentNode = null;
+      lastBlockBeingWrittenLength = lastBlockLength;
+      if (pos >= locatedBlocks.getFileLength() + lastBlockBeingWrittenLength) {
+        return;
+      } else {
+        long position = pos;
+        getBlockAt(position, true);
+      }
+    } finally {
+      rwLock.writeLock().unlock();
     }
   }
 }

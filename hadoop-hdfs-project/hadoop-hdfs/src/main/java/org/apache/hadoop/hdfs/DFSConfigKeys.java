@@ -664,4 +664,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.client.recover-on-close-exception.enable";
   public static final boolean DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION_DEFAULT =
       false;
+
+  public static final String DFS_CLIENT_XIAOMI_INPUT_SLEEP_BEFORE_RETRY_MS =
+      "dfs.client.xiaomi.input.sleep-before-retry.ms";
+  public static final long DFS_CLIENT_XIAOMI_INPUT_SLEEP_BEFORE_RETRY_MS_DEFAULT =
+      10L;
 }
