@@ -280,6 +280,42 @@ public class DFSAdmin extends FsShell {
       dfs.setQuota(path, HdfsConstants.QUOTA_DONT_SET, quota);
     }
   }
+  
+  /** A class that supports command recoverLease*/
+  private static class RecoverLeaseCommand extends DFSAdminCommand {
+    private static final String NAME = "recoverLease";
+    private static final String USAGE = "-"+NAME+" <dirname>...<dirname>";
+    private static final String DESCRIPTION = USAGE + ": " +
+    "Recover lease for each file <fileName>.\n" +
+    "\t\tFor each file, attempt to recover the lease.";
+    
+    /** Constructor */
+    RecoverLeaseCommand(String[] args, int pos, FileSystem fs) {
+      super(fs);
+      CommandFormat c = new CommandFormat(1, Integer.MAX_VALUE);
+      List<String> parameters = c.parse(args, pos);
+      this.args = parameters.toArray(new String[parameters.size()]);
+    }
+    
+    /** Check if a command is the recoverLease command
+     * 
+     * @param cmd A string representation of a command starting with "-"
+     * @return true if this is a recoverLease command; false otherwise
+     */
+    public static boolean matches(String cmd) {
+      return ("-"+NAME).equals(cmd); 
+    }
+
+    @Override
+    public String getCommandName() {
+      return NAME;
+    }
+
+    @Override
+    public void run(Path path) throws IOException {
+      dfs.recoverLease(path);
+    }
+  }
 
   private static class RollingUpgradeCommand {
     static final String NAME = "rollingUpgrade";
@@ -750,6 +786,7 @@ public class DFSAdmin extends FsShell {
       "\t[" + ClearQuotaCommand.USAGE +"]\n" +
       "\t[" + SetSpaceQuotaCommand.USAGE + "]\n" +
       "\t[" + ClearSpaceQuotaCommand.USAGE +"]\n" +
+      "\t[" + RecoverLeaseCommand.USAGE +"]\n" +
       "\t[-finalizeUpgrade]\n" +
       "\t[" + RollingUpgradeCommand.USAGE +"]\n" +
       "\t[-refreshServiceAcl]\n" +
@@ -1328,7 +1365,11 @@ public class DFSAdmin extends FsShell {
     } else if (ClearSpaceQuotaCommand.matches(cmd)) {
       System.err.println("Usage: java DFSAdmin"
                          + " ["+ClearSpaceQuotaCommand.USAGE+"]");
-    } else if ("-refreshServiceAcl".equals(cmd)) {
+    } else if (RecoverLeaseCommand.USAGE.matches(cmd)) {
+      System.err.println("Usage: java DFSAdmin"
+                         + " ["+RecoverLeaseCommand.USAGE+"]");
+    }
+    else if ("-refreshServiceAcl".equals(cmd)) {
       System.err.println("Usage: java DFSAdmin"
                          + " [-refreshServiceAcl]");
     } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
@@ -1384,6 +1425,7 @@ public class DFSAdmin extends FsShell {
       System.err.println("           ["+ClearQuotaCommand.USAGE+"]");
       System.err.println("           ["+SetSpaceQuotaCommand.USAGE+"]");
       System.err.println("           ["+ClearSpaceQuotaCommand.USAGE+"]");      
+      System.err.println("           ["+RecoverLeaseCommand.USAGE+"]");      
       System.err.println("           [-setBalancerBandwidth <bandwidth in bytes per second>]");
       System.err.println("           [-fetchImage <local directory>]");
       System.err.println("           [-shutdownDatanode <datanode_host:ipc_port> [upgrade]]");
@@ -1566,6 +1608,8 @@ public class DFSAdmin extends FsShell {
         exitCode = new ClearSpaceQuotaCommand(argv, i, getDFS()).runAll();
       } else if (SetSpaceQuotaCommand.matches(cmd)) {
         exitCode = new SetSpaceQuotaCommand(argv, i, getDFS()).runAll();
+      } else if (RecoverLeaseCommand.matches(cmd)) {
+        exitCode = new RecoverLeaseCommand(argv, i, getDFS()).runAll();
       } else if ("-refreshServiceAcl".equals(cmd)) {
         exitCode = refreshServiceAcl();
       } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
