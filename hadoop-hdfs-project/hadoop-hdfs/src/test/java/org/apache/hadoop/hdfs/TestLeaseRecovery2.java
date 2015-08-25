@@ -46,6 +46,7 @@ import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.LeaseManager;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
+import org.apache.hadoop.hdfs.tools.DFSAdmin;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.log4j.Level;
@@ -535,6 +536,59 @@ public class TestLeaseRecovery2 {
     AppendTestUtil.checkFullFile(dfs, filePath, size, buffer, fileStr);
   }
   
+  @Test
+  public void testRecoverLeaseCommand() throws Exception {
+    // create a file
+    String filestr = "/recoveryLeaseCommand";
+    AppendTestUtil.LOG.info("filestr=" + filestr);
+    Path filepath = new Path(filestr);
+    FSDataOutputStream stm =
+        dfs.create(filepath, true, BUF_SIZE, REPLICATION_NUM, BLOCK_SIZE);
+    assertTrue(dfs.dfs.exists(filestr));
+
+    // write bytes into the file.
+    int size = AppendTestUtil.nextInt(FILE_SIZE);
+    AppendTestUtil.LOG.info("size=" + size);
+    stm.write(buffer, 0, size);
+
+    // hsync file
+    AppendTestUtil.LOG.info("hsync");
+    stm.hsync();
+
+    DFSAdmin admin = new DFSAdmin(conf);
+    runCommand(admin, new String[] { "-recoverLease", filestr }, false);
+
+    // Verify the last block is completed
+    Thread.sleep(1000);
+    LocatedBlocks locatedBlocks = dfs.dfs.getLocatedBlocks(filestr, 0L, size);
+    assertTrue("Last block is not completed",
+        locatedBlocks.isLastBlockComplete());
+
+    // make sure that the writer thread gets killed
+    try {
+      stm.write('b');
+      stm.close();
+      fail("Writer thread should have been killed");
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+
+    // verify data
+    AppendTestUtil.LOG
+        .info("File size is good. Now validating sizes from datanodes...");
+    AppendTestUtil.checkFullFile(dfs, filepath, size, buffer, filestr);
+  }
+
+  private void runCommand(DFSAdmin admin, String args[], boolean expectEror)
+      throws Exception {
+    int val = admin.run(args);
+    if (expectEror) {
+      assertEquals(val, -1);
+    } else {
+      assertTrue(val >= 0);
+    }
+  }
+
   static void checkLease(String f, int size) {
     final String holder = NameNodeAdapter.getLeaseHolderForPath(
         cluster.getNameNode(), f); 
