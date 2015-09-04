@@ -93,7 +93,7 @@ public class Http2Util {
         conn.local().flowController();
     int initialWindowsSize = 2 * 1024 * 1024;
     Http2Stream connStream = conn.connectionStream();
-    localFlowController.incrementWindowSize(ctx, connStream, initialWindowsSize
+    localFlowController.incrementWindowSize(connStream, initialWindowsSize
         - localFlowController.initialWindowSize(connStream));
   }
 }

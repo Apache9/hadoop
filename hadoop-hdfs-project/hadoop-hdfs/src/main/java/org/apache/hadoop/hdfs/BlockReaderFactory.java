@@ -190,7 +190,7 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
    */
   private int remainingCacheTries;
 
-  private Http2ConnectionPool http2ConnectionPool = null;
+  private Http2ConnectionPool http2ConnPool = null;
 
   public BlockReaderFactory(DfsClientConf conf) {
     this.conf = conf;
@@ -209,12 +209,6 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
 
   public BlockReaderFactory setBlockToken(Token<BlockTokenIdentifier> token) {
     this.token = token;
-    return this;
-  }
-
-  public BlockReaderFactory setHttp2ConnectionPool(
-      Http2ConnectionPool http2ConnectionPool) {
-    this.http2ConnectionPool = http2ConnectionPool;
     return this;
   }
 
@@ -370,7 +364,7 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
   }
 
   private Http2BlockReader getRemoteBlockReaderFromHttp2() throws IOException {
-    return Http2BlockReader.newBlockReader(http2ConnectionPool, fileName,
+    return Http2BlockReader.newBlockReader(http2ConnPool, fileName,
       block, token, startOffset, length, verifyChecksum, clientName, datanode,
       cachingStrategy);
   }

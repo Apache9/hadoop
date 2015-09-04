@@ -52,7 +52,7 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
-import org.apache.hadoop.hdfs.protocolPB.PBHelper;
+import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
 import org.apache.hadoop.hdfs.web.http2.ClientHttp2ConnectionHandler;
@@ -163,7 +163,7 @@ public class TestReadBlock {
                   .newBuilder()
                   .setBaseHeader(
                     BaseHeaderProto.newBuilder().setBlock(
-                      PBHelper.convert(block))).setClientName("Test"))
+                      PBHelperClient.convert(block))).setClientName("Test"))
             .setOffset(0).setLen(1).setSendChecksums(true).build();
     ByteBuf buf = CHANNEL.alloc().buffer();
     proto.writeDelimitedTo(new ByteBufOutputStream(buf));
@@ -233,7 +233,7 @@ public class TestReadBlock {
                   .newBuilder()
                   .setBaseHeader(
                     BaseHeaderProto.newBuilder().setBlock(
-                      PBHelper.convert(block))).setClientName("Test"))
+                      PBHelperClient.convert(block))).setClientName("Test"))
             .setOffset(0).setLen(1).setSendChecksums(true).build();
     ByteBuf buf = CHANNEL.alloc().buffer();
     proto.writeDelimitedTo(new ByteBufOutputStream(buf));

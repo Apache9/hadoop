@@ -707,7 +707,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         setClientCacheContext(dfsClient.getClientContext()).
         setUserGroupInformation(dfsClient.ugi).
         setConfiguration(dfsClient.getConfiguration()).
-        setHttp2ConnectionPool(dfsClient.getHttp2ConnectionPool()).
+        setHttp2ConnPool(dfsClient.getHttp2ConnectionPool()).
         build();
   }
 
@@ -1948,9 +1948,11 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   private static final class BlockFrameReceiver extends
       SimpleChannelInboundHandler<ByteBuf> {
 
-    private final Promise<ByteBuffer> promise;
+    private final Promise<Integer> promise;
 
-    private final ByteBuffer bb;
+    private final byte[] b;
+    
+    private final int off;
 
     private int firstFrameSkipBytes;
 
@@ -1958,10 +1960,11 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
     private ByteBuf data;
 
-    public BlockFrameReceiver(Promise<ByteBuffer> promise, ByteBuffer bb,
+    public BlockFrameReceiver(Promise<Integer> promise,byte[] b, int off,
         int firstFrameSkipBytes, DataChecksum checksum) {
       this.promise = promise;
-      this.bb = bb;
+      this.b = b;
+      this.off = off;
       this.firstFrameSkipBytes = firstFrameSkipBytes;
       this.checksum = checksum;
     }
@@ -1979,8 +1982,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
   }
 
-  public Promise<ByteBuffer> asyncRead(long position, final ByteBuffer buffer)
-      throws IOException {
+  public io.netty.util.concurrent.Future<Integer> asyncRead(long position,
+     final byte[] b, final int off, int len) throws IOException {
     Http2ConnectionPool connPool =
         Preconditions.checkNotNull(dfsClient.getHttp2ConnectionPool(),
           "enable http2 first");
@@ -1999,7 +2002,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
                     DataTransferProtoUtil.buildBaseHeader(block.getBlock(),
                       block.getBlockToken()))
                   .setClientName(dfsClient.getClientName()))
-            .setOffset(startOffsetInBlock).setLen(buffer.remaining())
+            .setOffset(startOffsetInBlock).setLen(len)
             .setSendChecksums(verifyChecksum).build();
     int serializedSize = request.getSerializedSize();
     ByteBuf data =
@@ -2007,7 +2010,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           CodedOutputStream.computeRawVarint32Size(serializedSize)
               + serializedSize);
     request.writeDelimitedTo(new ByteBufOutputStream(data));
-    final Promise<ByteBuffer> promise = channel.eventLoop().newPromise();
+    final Promise<Integer> promise = channel.eventLoop().newPromise();
     new Http2StreamBootstrap()
         .channel(channel)
         .handler(new ChannelInitializer<Http2StreamChannel>() {
@@ -2047,7 +2050,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
                                 DataTransferProtoUtil.fromProto(msg
                                     .getReadOpChecksumInfo().getChecksum());
                             ChannelPipeline p = ctx.pipeline();
-                            p.addLast(new BlockFrameReceiver(promise, buffer,
+                            p.addLast(new BlockFrameReceiver(promise, b, off,
                                 firstFrameSkipBytes, checksum));
                             p.remove(this).removeFirst();
                             p.removeFirst();

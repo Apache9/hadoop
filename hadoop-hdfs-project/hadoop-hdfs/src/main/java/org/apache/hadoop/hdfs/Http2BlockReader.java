@@ -179,7 +179,7 @@ public class Http2BlockReader implements BlockReader {
   @Override
   public int available() throws IOException {
     int blockAvailable = (int) Math.max(0, endOffsetInBlock - offsetInBlock);
-    return Math.min(blockAvailable, DFSClient.TCP_WINDOW_SIZE);
+    return Math.min(blockAvailable, RemoteBlockReader2.TCP_WINDOW_SIZE);
   }
 
   @Override
@@ -282,7 +282,7 @@ public class Http2BlockReader implements BlockReader {
       succ = true;
       return new Http2BlockReader(file, in, chunkOffset, firstFrameSkipBytes,
           startOffsetInBlock + len, checksum, verifyChecksum,
-          DFSClient.isLocalAddress(NetUtils.createSocketAddr(datanodeID
+          DFSUtilClient.isLocalAddress(NetUtils.createSocketAddr(datanodeID
               .getXferAddr())));
     } finally {
       if (!succ) {

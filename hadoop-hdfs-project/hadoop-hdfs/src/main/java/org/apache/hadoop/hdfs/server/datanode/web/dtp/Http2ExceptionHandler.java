@@ -20,7 +20,7 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.HttpUtil;
+import io.netty.handler.codec.http2.HttpConversionUtil;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
@@ -36,7 +36,7 @@ public class Http2ExceptionHandler {
       exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
           throws Exception {
     DefaultFullHttpResponse resp = ExceptionHandler.exceptionCaught(cause);
-    Http2Headers headers = HttpUtil.toHttp2Headers(resp);
+    Http2Headers headers = HttpConversionUtil.toHttp2Headers(resp);
     ctx.write(headers);
     if (resp.content().isReadable()) {
       ctx.write(resp.content());

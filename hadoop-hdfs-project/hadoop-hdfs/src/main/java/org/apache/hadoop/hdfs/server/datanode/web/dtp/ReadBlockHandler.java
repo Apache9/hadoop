@@ -42,6 +42,7 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ReadOpChecksumIn
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
+import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.server.datanode.BlockMetadataHeader;
 import org.apache.hadoop.hdfs.server.datanode.ChunkChecksum;
@@ -112,7 +113,7 @@ class ReadBlockHandler extends
   private void handleReadBlock(final ChannelHandlerContext ctx,
       OpReadBlockRequestProto request) throws IOException {
     ExtendedBlock block =
-        PBHelper.convert(request.getHeader().getBaseHeader().getBlock());
+        PBHelperClient.convert(request.getHeader().getBaseHeader().getBlock());
     Token<BlockTokenIdentifier> token =
         PBHelper.convert(request.getHeader().getBaseHeader().getToken());
     DtpUtil.checkAccess(datanode, block, token, Op.READ_BLOCK,

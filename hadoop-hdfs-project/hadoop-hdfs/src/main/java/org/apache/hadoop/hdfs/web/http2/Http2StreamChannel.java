@@ -180,7 +180,7 @@ public class Http2StreamChannel extends AbstractChannel {
   protected void doClose() throws Exception {
     for (InboundMessage msg; (msg = inboundMessageQueue.poll()) != null;) {
       ReferenceCountUtil.release(msg.msg);
-      localFlowController.consumeBytes(http2ConnHandlerCtx, stream, msg.length);
+      localFlowController.consumeBytes(stream, msg.length);
     }
     if (state != State.PRE_CLOSED) {
       encoder.writeRstStream(http2ConnHandlerCtx, stream.id(),
@@ -193,12 +193,7 @@ public class Http2StreamChannel extends AbstractChannel {
     @Override
     public void run() {
       ChannelPipeline pipeline = pipeline();
-      int maxMessagesPerRead = config().getMaxMessagesPerRead();
-      for (int i = 0; i < maxMessagesPerRead; i++) {
-        InboundMessage m = inboundMessageQueue.poll();
-        if (m == null) {
-          break;
-        }
+      for (InboundMessage m; (m = inboundMessageQueue.poll()) != null;) {
         if (m.msg == LastHttp2Message.get()) {
           state =
               state == State.HALF_CLOSED_LOCAL ? State.PRE_CLOSED
@@ -206,8 +201,7 @@ public class Http2StreamChannel extends AbstractChannel {
         }
         try {
           if (m.length > 0
-              && localFlowController.consumeBytes(http2ConnHandlerCtx, stream,
-                m.length)) {
+              && localFlowController.consumeBytes(stream, m.length)) {
             http2ConnHandlerCtx.flush();
           }
         } catch (Http2Exception e) {
@@ -307,7 +301,7 @@ public class Http2StreamChannel extends AbstractChannel {
       flush = true;
     }
     if (flush) {
-      http2ConnHandlerCtx.flush();
+      http2ConnHandlerCtx.channel().flush();
     }
     if (state == State.PRE_CLOSED) {
       close();
