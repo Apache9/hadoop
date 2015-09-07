@@ -238,4 +238,38 @@ public class TestXmReadWhileWriting {
     }
     Assert.assertTrue(validateSequentialBytes(readBuf, 0, readBuf.length));
   }
+  
+  // Test interface XmDFSInputStream::read()
+  @Test
+  public void testRead4() {
+    String file = "/read4";
+    XmTestWriter writer = new XmTestWriter(file);
+    writer.start();
+
+    try {
+      Thread.sleep(5);
+    } catch (InterruptedException ie) {
+      // Ignore
+    }
+
+    final byte[] readBuf = new byte[blockSize * numBlksToWrite];
+    XmTestReader reader = new XmTestReader(file, new ReadWrapper() {
+      @Override
+      public void read(FSDataInputStream in, int seq) throws IOException {
+        for (int i = 0; i < sizePerRead; i++) {
+        	readBuf[sizePerRead * seq + i] = (byte) in.read();
+        }
+      }
+    });
+    reader.start();
+
+    try {
+      writer.join();
+      reader.join();
+    } catch (InterruptedException e) {
+      LOG.info("interrupted waiting for writer or reader to complete", e);
+      Thread.currentThread().interrupt();
+    }
+    Assert.assertTrue(validateSequentialBytes(readBuf, 0, readBuf.length));
+  }
 }

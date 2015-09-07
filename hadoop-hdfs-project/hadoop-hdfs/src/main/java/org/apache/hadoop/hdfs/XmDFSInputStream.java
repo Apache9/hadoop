@@ -32,7 +32,6 @@ import org.apache.hadoop.fs.UnresolvedLinkException;
  ****************************************************************/
 @InterfaceAudience.Private
 public class XmDFSInputStream extends DFSInputStream {
-  private final byte[] oneByteBuf = new byte[1]; // used for 'int read()'
   private String srcFile;
   private DFSClient dfsClient;
   private long sleepBeforeRetry;
@@ -52,7 +51,7 @@ public class XmDFSInputStream extends DFSInputStream {
 
   @Override
   public int read() throws IOException {
-    return this.read(oneByteBuf, 0, 1);
+    return super.read();
   }
 
   private int readInternal(final ByteBuffer bBuf, long position,
