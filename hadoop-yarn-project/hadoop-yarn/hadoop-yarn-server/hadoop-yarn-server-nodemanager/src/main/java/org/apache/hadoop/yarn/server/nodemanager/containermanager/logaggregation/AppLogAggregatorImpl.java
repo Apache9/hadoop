@@ -507,6 +507,11 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
     this.notifyAll();
   }
 
+  @Override
+  public void disableLogAggregation() {
+    this.logAggregationDisabled = true;
+  }
+
   @Private
   @VisibleForTesting
   public synchronized void doLogAggregationOutOfBand() {
