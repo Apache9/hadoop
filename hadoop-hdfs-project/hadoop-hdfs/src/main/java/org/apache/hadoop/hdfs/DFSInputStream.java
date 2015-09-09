@@ -18,12 +18,17 @@
 package org.apache.hadoop.hdfs;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.CorruptedFrameException;
+import io.netty.handler.codec.UnsupportedMessageTypeException;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
@@ -86,6 +91,7 @@ import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.InvalidEncryptionKeyException;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
@@ -96,6 +102,7 @@ import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.shortcircuit.ClientMmap;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamBootstrap;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
+import org.apache.hadoop.hdfs.web.http2.LastHttp2Message;
 import org.apache.hadoop.io.ByteBufferPool;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RemoteException;
@@ -110,6 +117,7 @@ import org.apache.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
 
 /****************************************************************
@@ -1946,44 +1954,141 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   }
 
   private static final class BlockFrameReceiver extends
-      SimpleChannelInboundHandler<ByteBuf> {
+      ChannelInboundHandlerAdapter {
 
     private final Promise<Integer> promise;
 
     private final byte[] b;
     
-    private final int off;
+    private int off;
+    
+    private int len;
+    
+    private int bytesRead;
 
-    private int firstFrameSkipBytes;
+    private int frameSkipBytes;
 
     private final DataChecksum checksum;
+    
+    private OpReadBlockFrameHeaderProto header;
 
-    private ByteBuf data;
+    private ByteBuf cumulation;
 
-    public BlockFrameReceiver(Promise<Integer> promise,byte[] b, int off,
+    public BlockFrameReceiver(Promise<Integer> promise,byte[] b, int off, int len,
         int firstFrameSkipBytes, DataChecksum checksum) {
       this.promise = promise;
       this.b = b;
       this.off = off;
-      this.firstFrameSkipBytes = firstFrameSkipBytes;
+      this.len = len;
+      this.frameSkipBytes = firstFrameSkipBytes;
       this.checksum = checksum;
     }
 
-    @Override
-    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg)
-        throws Exception {
+    private OpReadBlockFrameHeaderProto receiveHeader(ByteBuf in) throws IOException {
+      final byte[] buf = new byte[5];
+      for (int i = 0; i < buf.length; i++) {
+        if (!in.isReadable()) {
+          return null;
+        }
 
+        buf[i] = in.readByte();
+        if (buf[i] >= 0) {
+          int length =
+              CodedInputStream.newInstance(buf, 0, i + 1).readRawVarint32();
+          if (length < 0) {
+            throw new CorruptedFrameException("negative length: " + length);
+          }
+          if (in.readableBytes() < length) {
+            return null;
+          } else {
+            return OpReadBlockFrameHeaderProto
+                .parseFrom(new ByteBufInputStream(in, length));
+          }
+        }
+      }
+
+      // Couldn't find the byte whose MSB is off.
+      throw new CorruptedFrameException("length wider than 32-bit");
+    }
+    
+    private boolean receiveData(ByteBuf in) throws ChecksumException {
+      if (in.readableBytes() < header.getDataLength()) {
+        return false;
+      }
+      int targetReaderIndex = in.readerIndex() + header.getDataLength();
+      checksum.verifyChunkedSums(in.nioBuffer(in.readerIndex(),
+        header.getDataLength()), header.getChecksums().asReadOnlyByteBuffer(),
+        "", 0);
+      header = null;
+      if (frameSkipBytes > 0) {
+        in.skipBytes(frameSkipBytes);
+        frameSkipBytes = 0;
+      }
+      if (len > 0) {
+        int toRead = Math.min(in.readableBytes(), len);
+        in.readBytes(b, off, toRead);
+        off += toRead;
+        len -= toRead;
+        bytesRead += toRead;
+        if (len == 0) {
+          promise.trySuccess(bytesRead);
+        }
+      }
+      in.readerIndex(targetReaderIndex);
+      return true;
+    }
+    
+    private void channelRead(ChannelHandlerContext ctx, ByteBuf msg)
+        throws IOException {
+      if (cumulation == null) {
+        cumulation = msg;
+      } else {
+        cumulation =
+            ByteToMessageDecoder.MERGE_CUMULATOR.cumulate(ctx.alloc(),
+              cumulation, msg);
+      }
+      cumulation.markReaderIndex();
+      if (header == null) {
+        OpReadBlockFrameHeaderProto header = receiveHeader(cumulation);
+        if (header == null) {
+          cumulation.resetReaderIndex();
+        } else {
+          this.header = header;
+        }
+      } else {
+        if (!receiveData(cumulation)) {
+          cumulation.resetReaderIndex();
+        }
+      }
+    }
+
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg)
+        throws Exception {
+      if (msg == LastHttp2Message.get()) {
+        if (!promise.isDone()) {
+          promise.trySuccess(bytesRead);
+        }
+        ctx.close();
+      } else if (msg instanceof ByteBuf) {
+        channelRead(ctx, (ByteBuf) msg);
+      } else {
+        throw new UnsupportedMessageTypeException(msg, ByteBuf.class,
+            LastHttp2Message.class);
+      }
     }
 
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-      data.release();
+      if (cumulation != null) {
+        cumulation.release();
+      }
     }
 
   }
 
   public io.netty.util.concurrent.Future<Integer> asyncRead(long position,
-     final byte[] b, final int off, int len) throws IOException {
+     final byte[] b, final int off, final int len) throws IOException {
     Http2ConnectionPool connPool =
         Preconditions.checkNotNull(dfsClient.getHttp2ConnectionPool(),
           "enable http2 first");
@@ -2023,41 +2128,44 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
                 @Override
                 protected void channelRead0(ChannelHandlerContext ctx,
                     Http2Headers msg) throws Exception {
-                  if (!HttpResponseStatus.OK.equals(msg.status())) {
+                  if (!HttpResponseStatus.OK.codeAsText().equals(msg.status())) {
                     promise.tryFailure(new IOException(
                         "Unexpected http status code: " + msg.status()));
+                    return;
                   }
-                  ctx.pipeline()
-                      .addLast(
-                        new ProtobufVarint32FrameDecoder(),
-                        new ProtobufDecoder(OpReadBlockResponseProto
-                            .getDefaultInstance()),
-                        new SimpleChannelInboundHandler<OpReadBlockResponseProto>() {
+                  ChannelPipeline p = ctx.pipeline();
+                  ProtobufVarint32FrameDecoder frameDecoder =
+                      new ProtobufVarint32FrameDecoder();
+                  frameDecoder.setSingleDecode(true);
+                  p.addLast(
+                    frameDecoder,
+                    new ProtobufDecoder(OpReadBlockResponseProto
+                        .getDefaultInstance()),
+                    new SimpleChannelInboundHandler<OpReadBlockResponseProto>() {
 
-                          @Override
-                          protected void channelRead0(
-                              ChannelHandlerContext ctx,
-                              OpReadBlockResponseProto msg) throws Exception {
-                            if (msg.getStatus() != Status.SUCCESS) {
-                              promise.tryFailure(new IOException(
-                                  "Unexpected status: " + msg.getStatus()));
-                            }
-                            long chunkOffset =
-                                msg.getReadOpChecksumInfo().getChunkOffset();
-                            int firstFrameSkipBytes =
-                                (int) (startOffsetInBlock - chunkOffset);
-                            DataChecksum checksum =
-                                DataTransferProtoUtil.fromProto(msg
-                                    .getReadOpChecksumInfo().getChecksum());
-                            ChannelPipeline p = ctx.pipeline();
-                            p.addLast(new BlockFrameReceiver(promise, b, off,
-                                firstFrameSkipBytes, checksum));
-                            p.remove(this).removeFirst();
-                            p.removeFirst();
-                          }
-                        });
+                      @Override
+                      protected void channelRead0(ChannelHandlerContext ctx,
+                          OpReadBlockResponseProto msg) throws Exception {
+                        if (msg.getStatus() != Status.SUCCESS) {
+                          promise.tryFailure(new IOException(
+                              "Unexpected status: " + msg.getStatus()));
+                        }
+                        long chunkOffset =
+                            msg.getReadOpChecksumInfo().getChunkOffset();
+                        int firstFrameSkipBytes =
+                            (int) (startOffsetInBlock - chunkOffset);
+                        DataChecksum checksum =
+                            DataTransferProtoUtil.fromProto(msg
+                                .getReadOpChecksumInfo().getChecksum());
+                        ChannelPipeline p = ctx.pipeline();
+                        p.addLast(new BlockFrameReceiver(promise, b, off, len,
+                            firstFrameSkipBytes, checksum));
+                        p.remove(this).remove(ProtobufDecoder.class);
+                        p.remove(ProtobufVarint32FrameDecoder.class);
+                      }
+                    });
+                  p.remove(this);
                 }
-
               });
           }
 

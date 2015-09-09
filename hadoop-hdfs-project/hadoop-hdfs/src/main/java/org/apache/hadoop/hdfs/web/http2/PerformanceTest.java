@@ -22,12 +22,15 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
@@ -39,6 +42,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSInputStream;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
@@ -91,6 +95,11 @@ public class PerformanceTest {
     }
   }
 
+  private int randPos(int seekBound) {
+    return seekBound > 0 ? ThreadLocalRandom.current().nextInt(seekBound) : 0;
+
+  }
+
   private void doTest(FileSystem fs, Path file, int concurrency,
       final int readCountPerThread, final int readLength, final boolean pread,
       final AtomicLong cost) throws IOException, InterruptedException {
@@ -122,8 +131,7 @@ public class PerformanceTest {
               if (pread) {
                 byte[] buf = new byte[readLength];
                 for (int j = 0; j < readCountPerThread; ++j) {
-                  pread(input, seekBound > 0 ? rand.nextInt(seekBound) : 0,
-                    readLength, buf);
+                  pread(input, randPos(seekBound), readLength, buf);
                 }
               } else {
                 byte[] buf = new byte[bufferSize];
@@ -165,10 +173,6 @@ public class PerformanceTest {
     }
     AtomicLong cost = new AtomicLong(0);
     try (FileSystem fs = FileSystem.get(conf)) {
-      // warm up
-      try (FSDataInputStream in = fs.open(file)) {
-        in.read();
-      }
       doTest(fs, file, concurrency, readCountPerThread, readLength, pread, cost);
     }
     if (useHttp2) {
@@ -220,11 +224,76 @@ public class PerformanceTest {
     }
   }
 
+  private void readAsync(final CountDownLatch latch,
+      final AtomicLong unscheduled, final AtomicLong remaining,
+      final DFSInputStream in, final int seekBound, final long position,
+      final byte[] b, final int off, final int len) throws IOException {
+    in.asyncRead(position, b, off, len).addListener(
+      new FutureListener<Integer>() {
+
+        @Override
+        public void operationComplete(Future<Integer> future) throws Exception {
+          if (future.isSuccess()) {
+            if (len == future.get().intValue()) {
+              if (remaining.decrementAndGet() == 0) {
+                latch.countDown();
+                return;
+              }
+              if (unscheduled.decrementAndGet() >= 0) {
+                readAsync(latch, unscheduled, remaining, in, seekBound,
+                  randPos(seekBound), b, 0, b.length);
+              }
+            } else {
+              readAsync(latch, unscheduled, remaining, in, seekBound, position
+                  + future.get().intValue(), b, off + future.get().intValue(),
+                len - future.get().intValue());
+            }
+          } else {
+            future.cause().printStackTrace();
+            System.exit(1);
+          }
+        }
+      });
+  }
+
+  public void testHttp2AsyncRead(String[] args) throws IOException,
+      InterruptedException {
+    String file = args[1];
+    int concurrency = Integer.parseInt(args[2]);
+    int readCountPerThread = Integer.parseInt(args[3]);
+    int readLength = Integer.parseInt(args[4]);
+    Configuration conf = new Configuration();
+    conf.setBoolean(HdfsClientConfigKeys.Read.Http2.KEY, true);
+    CountDownLatch latch = new CountDownLatch(1);
+    AtomicLong unscheduled =
+        new AtomicLong(concurrency * readCountPerThread - concurrency);
+    AtomicLong remaining = new AtomicLong(concurrency * readCountPerThread);
+    long cost;
+    try (FileSystem fs = FileSystem.get(conf)) {
+      long fileLength = fs.getFileStatus(new Path(file)).getLen();
+      int seekBound =
+          (int) Math.min(fileLength, Integer.MAX_VALUE) - readLength;
+      try (DFSInputStream in =
+          ((DistributedFileSystem) fs).getClient().open(file)) {
+        long start = System.nanoTime();
+        for (int i = 0; i < concurrency; i++) {
+          readAsync(latch, unscheduled, remaining, in, seekBound,
+            randPos(seekBound), new byte[readLength], 0, readLength);
+        }
+        latch.await(15, TimeUnit.MINUTES);
+        cost = (System.nanoTime() - start) / 1000000;
+      }
+    }
+    System.err.println("******* time based on http2 " + cost);
+  }
+
   public void doWork(String[] args) throws IOException, InterruptedException {
     if (args[0].equals("prepare")) {
       prepare(args);
     } else if (args[0].equals("noswitch")) {
       testHttp2SmallReadInsideEventLoop(args);
+    } else if (args[0].equals("async")) {
+      testHttp2AsyncRead(args);
     } else {
       testReadPerformance(args);
     }
