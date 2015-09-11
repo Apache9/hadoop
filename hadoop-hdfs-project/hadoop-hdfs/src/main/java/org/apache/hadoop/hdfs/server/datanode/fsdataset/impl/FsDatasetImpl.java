@@ -628,84 +628,149 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     return newReplicaInfo;
   }
 
-  private ReplicaInfo recoverCheck(ExtendedBlock b, long newGS, 
-      long expectedBlockLen) throws IOException {
-    ReplicaInfo replicaInfo = getReplicaInfo(b.getBlockPoolId(), b.getBlockId());
-    
-    // check state
-    if (replicaInfo.getState() != ReplicaState.FINALIZED &&
-        replicaInfo.getState() != ReplicaState.RBW) {
-      throw new ReplicaNotFoundException(
-          ReplicaNotFoundException.UNFINALIZED_AND_NONRBW_REPLICA + replicaInfo);
-    }
+  abstract class RecoverHandler<T> {
+    T res;
 
-    // check generation stamp
-    long replicaGenerationStamp = replicaInfo.getGenerationStamp();
-    if (replicaGenerationStamp < b.getGenerationStamp() ||
-        replicaGenerationStamp > newGS) {
-      throw new ReplicaNotFoundException(
-          ReplicaNotFoundException.UNEXPECTED_GS_REPLICA + replicaGenerationStamp
-          + ". Expected GS range is [" + b.getGenerationStamp() + ", " + 
-          newGS + "].");
+    abstract public void handle(ReplicaInfo replicaInfo) throws IOException;
+
+    public T getResult() {
+      return res;
     }
+  }
+
+  private void recoverCheckAndHandle(ExtendedBlock b, long newGS,
+      long expectedBlockLen, RecoverHandler handler) throws IOException {
+    long startTimeMs = Time.monotonicNow();
+    long writerStopTimeoutMs = datanode.getDnConf().getXceiverStopTimeout();
+    ReplicaBeingWritten rbw;
+
+    do {
+      synchronized (this) {
+        ReplicaInfo replicaInfo =
+            getReplicaInfo(b.getBlockPoolId(), b.getBlockId());
+        rbw = null;
     
-    // stop the previous writer before check a replica's length
-    long replicaLen = replicaInfo.getNumBytes();
-    if (replicaInfo.getState() == ReplicaState.RBW) {
-      ReplicaBeingWritten rbw = (ReplicaBeingWritten)replicaInfo;
-      // kill the previous writer
-      rbw.stopWriter(datanode.getDnConf().getXceiverStopTimeout());
-      rbw.setWriter(Thread.currentThread());
-      // check length: bytesRcvd, bytesOnDisk, and bytesAcked should be the same
-      if (replicaLen != rbw.getBytesOnDisk() 
-          || replicaLen != rbw.getBytesAcked()) {
-        throw new ReplicaAlreadyExistsException("RBW replica " + replicaInfo + 
-            "bytesRcvd(" + rbw.getNumBytes() + "), bytesOnDisk(" + 
-            rbw.getBytesOnDisk() + "), and bytesAcked(" + rbw.getBytesAcked() +
-            ") are not the same.");
+        // check state
+        if (replicaInfo == null) {
+          throw new ReplicaNotFoundException("Replica is not existing at all");
+        }
+        if (replicaInfo.getState() != ReplicaState.FINALIZED
+            && replicaInfo.getState() != ReplicaState.RBW) {
+          throw new ReplicaNotFoundException(
+              ReplicaNotFoundException.UNFINALIZED_AND_NONRBW_REPLICA
+                  + replicaInfo);
+        }
+
+        // check generation stamp
+        long replicaGenerationStamp = replicaInfo.getGenerationStamp();
+        if (replicaGenerationStamp < b.getGenerationStamp()
+            || replicaGenerationStamp > newGS) {
+          throw new ReplicaNotFoundException(
+              ReplicaNotFoundException.UNEXPECTED_GS_REPLICA
+                  + replicaGenerationStamp + ". Expected GS range is ["
+                  + b.getGenerationStamp() + ", " + newGS + "].");
+        }
+    
+        // stop the previous writer before check a replica's length
+        long replicaLen = replicaInfo.getNumBytes();
+        boolean needStopWriter = false;
+        if (replicaInfo.getState() == ReplicaState.RBW) {
+          rbw = (ReplicaBeingWritten) replicaInfo;
+          Thread curWriter = rbw.getWriter();
+          if (curWriter != null && curWriter != Thread.currentThread()
+              && curWriter.isAlive()) {
+            needStopWriter = true;
+          }
+          if (needStopWriter == false) {
+            rbw.setWriter(Thread.currentThread());
+          }
+        }
+
+        if (needStopWriter == false) {
+          // check length: bytesRcvd, bytesOnDisk, and bytesAcked should be the
+          // same
+          if (rbw != null) {
+            if (replicaLen != rbw.getBytesOnDisk()
+                || replicaLen != rbw.getBytesAcked()) {
+              throw new ReplicaAlreadyExistsException("RBW replica "
+                  + replicaInfo + "bytesRcvd(" + rbw.getNumBytes()
+                  + "), bytesOnDisk(" + rbw.getBytesOnDisk()
+                  + "), and bytesAcked(" + rbw.getBytesAcked()
+                  + ") are not the same.");
+            }
+          }
+    
+          // check block length
+          if (replicaLen != expectedBlockLen) {
+            throw new IOException("Corrupted replica " + replicaInfo
+                + " with a length of " + replicaLen + " expected length is "
+                + expectedBlockLen);
+          }
+    
+          handler.handle(replicaInfo);
+          return;
+        }
+      } // synchronized
+
+      // If hang too long, just bail out. This should not happen in normal
+      // condition.
+      long writerStopMs = Time.monotonicNow() - startTimeMs;
+      if (writerStopMs > writerStopTimeoutMs) {
+        LOG.warn("Unable to stop existing writer for block " + b + " after "
+            + writerStopMs + " miniseconds.");
+        throw new IOException("Unable to stop existing writer for block " + b
+            + " after " + writerStopMs + " miniseconds.");
       }
-    }
-    
-    // check block length
-    if (replicaLen != expectedBlockLen) {
-      throw new IOException("Corrupted replica " + replicaInfo + 
-          " with a length of " + replicaLen + 
-          " expected length is " + expectedBlockLen);
-    }
-    
-    return replicaInfo;
+
+      // kill the previous writer
+      rbw.stopWriter(writerStopTimeoutMs);
+    } while (true);
   }
   
   @Override  // FsDatasetSpi
-  public synchronized ReplicaInPipeline recoverAppend(ExtendedBlock b,
-      long newGS, long expectedBlockLen) throws IOException {
+  public ReplicaInPipeline recoverAppend(final ExtendedBlock b,
+      final long newGS, final long expectedBlockLen) throws IOException {
     LOG.info("Recover failed append to " + b);
 
-    ReplicaInfo replicaInfo = recoverCheck(b, newGS, expectedBlockLen);
-
-    // change the replica's state/gs etc.
-    if (replicaInfo.getState() == ReplicaState.FINALIZED ) {
-      return append(b.getBlockPoolId(), (FinalizedReplica) replicaInfo, newGS, 
-          b.getNumBytes());
-    } else { //RBW
-      bumpReplicaGS(replicaInfo, newGS);
-      return (ReplicaBeingWritten)replicaInfo;
-    }
+    RecoverHandler appendHandler = new RecoverHandler<ReplicaBeingWritten>() {
+      @Override
+      public void handle(ReplicaInfo replicaInfo) throws IOException {
+        // change the replica's state/gs etc.
+        if (replicaInfo.getState() == ReplicaState.FINALIZED ) {
+          res =  append(b.getBlockPoolId(), (FinalizedReplica) replicaInfo, newGS, 
+              b.getNumBytes());
+        } else { //RBW
+          bumpReplicaGS(replicaInfo, newGS);
+          res =  (ReplicaBeingWritten)replicaInfo;
+        }
+      }
+    };
+    
+    recoverCheckAndHandle(b, newGS, expectedBlockLen, appendHandler);
+    return (ReplicaBeingWritten) appendHandler.getResult();
   }
 
   @Override // FsDatasetSpi
-  public synchronized String recoverClose(ExtendedBlock b, long newGS,
-      long expectedBlockLen) throws IOException {
+  public String recoverClose(final ExtendedBlock b, final long newGS,
+      final long expectedBlockLen) throws IOException {
     LOG.info("Recover failed close " + b);
-    // check replica's state
-    ReplicaInfo replicaInfo = recoverCheck(b, newGS, expectedBlockLen);
-    // bump the replica's GS
-    bumpReplicaGS(replicaInfo, newGS);
-    // finalize the replica if RBW
-    if (replicaInfo.getState() == ReplicaState.RBW) {
-      finalizeReplica(b.getBlockPoolId(), replicaInfo);
-    }
-    return replicaInfo.getStorageUuid();
+
+
+    RecoverHandler closeHandler = new RecoverHandler<String>() {
+      @Override
+      public void handle(ReplicaInfo replicaInfo) throws IOException {
+        // bump the replica's GS
+        bumpReplicaGS(replicaInfo, newGS);
+        // finalize the replica if RBW
+        if (replicaInfo.getState() == ReplicaState.RBW) {
+          finalizeReplica(b.getBlockPoolId(), replicaInfo);
+        }
+        res = replicaInfo.getStorageUuid();
+      }
+    };
+
+    recoverCheckAndHandle(b, newGS, expectedBlockLen, closeHandler);
+    return (String) closeHandler.getResult();
   }
   
   /**
@@ -758,62 +823,84 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
   
   @Override // FsDatasetSpi
-  public synchronized ReplicaInPipeline recoverRbw(ExtendedBlock b,
+  public ReplicaInPipeline recoverRbw(ExtendedBlock b,
       long newGS, long minBytesRcvd, long maxBytesRcvd)
       throws IOException {
     LOG.info("Recover RBW replica " + b);
 
-    ReplicaInfo replicaInfo = getReplicaInfo(b.getBlockPoolId(), b.getBlockId());
-    
-    // check the replica's state
-    if (replicaInfo.getState() != ReplicaState.RBW) {
-      throw new ReplicaNotFoundException(
-          ReplicaNotFoundException.NON_RBW_REPLICA + replicaInfo);
-    }
-    ReplicaBeingWritten rbw = (ReplicaBeingWritten)replicaInfo;
-    
-    LOG.info("Recovering " + rbw);
+    long startTimeMs = Time.monotonicNow();
+    long writerStopTimeoutMs = datanode.getDnConf().getXceiverStopTimeout();
+    ReplicaBeingWritten rbw;
 
-    // Stop the previous writer
-    rbw.stopWriter(datanode.getDnConf().getXceiverStopTimeout());
-    rbw.setWriter(Thread.currentThread());
-
-    // check generation stamp
-    long replicaGenerationStamp = rbw.getGenerationStamp();
-    if (replicaGenerationStamp < b.getGenerationStamp() ||
-        replicaGenerationStamp > newGS) {
-      throw new ReplicaNotFoundException(
-          ReplicaNotFoundException.UNEXPECTED_GS_REPLICA + b +
-          ". Expected GS range is [" + b.getGenerationStamp() + ", " + 
-          newGS + "].");
-    }
+    do {
+      synchronized (this) {
+        ReplicaInfo replicaInfo = getReplicaInfo(b.getBlockPoolId(), b.getBlockId());
     
-    // check replica length
-    long bytesAcked = rbw.getBytesAcked();
-    long numBytes = rbw.getNumBytes();
-    if (bytesAcked < minBytesRcvd || numBytes > maxBytesRcvd){
-      throw new ReplicaNotFoundException("Unmatched length replica " + 
-          replicaInfo + ": BytesAcked = " + bytesAcked + 
-          " BytesRcvd = " + numBytes + " are not in the range of [" + 
-          minBytesRcvd + ", " + maxBytesRcvd + "].");
-    }
-
-    // Truncate the potentially corrupt portion.
-    // If the source was client and the last node in the pipeline was lost,
-    // any corrupt data written after the acked length can go unnoticed. 
-    if (numBytes > bytesAcked) {
-      final File replicafile = rbw.getBlockFile();
-      truncateBlock(replicafile, rbw.getMetaFile(), numBytes, bytesAcked);
-      rbw.setNumBytes(bytesAcked);
-      rbw.setLastChecksumAndDataLen(bytesAcked, null);
-    }
-
-    // bump the replica's generation stamp to newGS
-    bumpReplicaGS(rbw, newGS);
+        // check the replica's state
+        if (replicaInfo == null) {
+          throw new ReplicaNotFoundException(
+              "Replica is not existing at all");
+        } 
+        if (replicaInfo.getState() != ReplicaState.RBW) {
+          throw new ReplicaNotFoundException(
+              ReplicaNotFoundException.NON_RBW_REPLICA + replicaInfo);
+        }
+        rbw = (ReplicaBeingWritten)replicaInfo;
+        Thread curWriter = rbw.getWriter();
+        if (curWriter == null || curWriter == Thread.currentThread() || !curWriter.isAlive()) {
+          LOG.info("Recovering " + rbw);
+          rbw.setWriter(Thread.currentThread());
+          // check generation stamp
+          long replicaGenerationStamp = rbw.getGenerationStamp();
+          if (replicaGenerationStamp < b.getGenerationStamp() ||
+              replicaGenerationStamp > newGS) {
+              throw new ReplicaNotFoundException(
+                  ReplicaNotFoundException.UNEXPECTED_GS_REPLICA + b +
+                  ". Expected GS range is [" + b.getGenerationStamp() + ", " + 
+                  newGS + "].");
+          }
     
-    return rbw;
-  }
-  
+          // check replica length
+          long bytesAcked = rbw.getBytesAcked();
+          long numBytes = rbw.getNumBytes();
+          if (bytesAcked < minBytesRcvd || numBytes > maxBytesRcvd){
+            throw new ReplicaNotFoundException("Unmatched length replica " + 
+                replicaInfo + ": BytesAcked = " + bytesAcked + 
+                " BytesRcvd = " + numBytes + " are not in the range of [" + 
+                minBytesRcvd + ", " + maxBytesRcvd + "].");
+          }
+
+          // Truncate the potentially corrupt portion.
+          // If the source was client and the last node in the pipeline was lost,
+          // any corrupt data written after the acked length can go unnoticed. 
+          if (numBytes > bytesAcked) {
+            final File replicafile = rbw.getBlockFile();
+            truncateBlock(replicafile, rbw.getMetaFile(), numBytes, bytesAcked);
+            rbw.setNumBytes(bytesAcked);
+            rbw.setLastChecksumAndDataLen(bytesAcked, null);
+          }
+
+          // bump the replica's generation stamp to newGS
+          bumpReplicaGS(rbw, newGS);
+    
+          return rbw;
+        }   
+      } // synchronized
+
+      // If hang too long, just bail out. This should not happen in normal condition.
+      long writerStopMs = Time.monotonicNow() - startTimeMs;
+      if (writerStopMs > writerStopTimeoutMs) {
+        LOG.warn("Unable to stop existing writer for block " + b + " after "
+            + writerStopMs + " miniseconds.");
+        throw new IOException("Unable to stop existing writer for block " + b
+            + " after " + writerStopMs + " miniseconds.");
+      }
+
+      // Stop the previous writer
+      rbw.stopWriter(writerStopTimeoutMs);
+    } while (true);
+  }   
+
   @Override // FsDatasetSpi
   public synchronized ReplicaInPipeline convertTemporaryToRbw(
       final ExtendedBlock b) throws IOException {
@@ -1574,7 +1661,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   @Override // FsDatasetSpi
-  public synchronized ReplicaRecoveryInfo initReplicaRecovery(
+  public ReplicaRecoveryInfo initReplicaRecovery(
       RecoveringBlock rBlock) throws IOException {
     return initReplicaRecovery(rBlock.getBlock().getBlockPoolId(), volumeMap,
         rBlock.getBlock().getLocalBlock(), rBlock.getNewGenerationStamp(),
@@ -1582,68 +1669,93 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   /** static version of {@link #initReplicaRecovery(Block, long)}. */
-  static ReplicaRecoveryInfo initReplicaRecovery(String bpid, ReplicaMap map,
+  ReplicaRecoveryInfo initReplicaRecovery(String bpid, ReplicaMap map,
       Block block, long recoveryId, long xceiverStopTimeout) throws IOException {
-    final ReplicaInfo replica = map.get(bpid, block.getBlockId());
-    LOG.info("initReplicaRecovery: " + block + ", recoveryId=" + recoveryId
-        + ", replica=" + replica);
 
-    //check replica
-    if (replica == null) {
-      return null;
-    }
+    long startTimeMs = Time.monotonicNow();
+    long writerStopTimeoutMs = datanode.getDnConf().getXceiverStopTimeout();
 
-    //stop writer if there is any
-    if (replica instanceof ReplicaInPipeline) {
-      final ReplicaInPipeline rip = (ReplicaInPipeline)replica;
+    do {
+      ReplicaInPipeline rip = null;
+      synchronized (this) {
+        final ReplicaInfo replica = map.get(bpid, block.getBlockId());
+        LOG.info("initReplicaRecovery: " + block + ", recoveryId=" + recoveryId
+            + ", replica=" + replica);
+        // check replica
+        if (replica == null) {
+          return null;
+        }
+
+        // stop writer if there is any
+        boolean needStopWriter = false;
+        if (replica instanceof ReplicaInPipeline) {
+          rip = (ReplicaInPipeline) replica;
+          Thread curWriter = rip.getWriter();
+          if (curWriter != null && curWriter != Thread.currentThread()
+              && curWriter.isAlive()) {
+            needStopWriter = true;
+          }
+        }
+        if (needStopWriter == false) {
+          if (rip != null) {
+            // check replica bytes on disk.
+            if (rip.getBytesOnDisk() < rip.getVisibleLength()) {
+              throw new IOException("THIS IS NOT SUPPOSED TO HAPPEN:"
+                  + " getBytesOnDisk() < getVisibleLength(), rip=" + rip);
+            }
+
+            // check the replica's files
+            checkReplicaFiles(rip);
+          }
+
+          // check generation stamp
+          if (replica.getGenerationStamp() < block.getGenerationStamp()) {
+            throw new IOException(
+                "replica.getGenerationStamp() < block.getGenerationStamp(), block="
+                    + block + ", replica=" + replica);
+          }
+
+          // check recovery id
+          if (replica.getGenerationStamp() >= recoveryId) {
+            throw new IOException("THIS IS NOT SUPPOSED TO HAPPEN:"
+                + " replica.getGenerationStamp() >= recoveryId = " + recoveryId
+                + ", block=" + block + ", replica=" + replica);
+          }
+
+          // check RUR
+          final ReplicaUnderRecovery rur;
+          if (replica.getState() == ReplicaState.RUR) {
+            rur = (ReplicaUnderRecovery) replica;
+            if (rur.getRecoveryID() >= recoveryId) {
+              throw new RecoveryInProgressException(
+                  "rur.getRecoveryID() >= recoveryId = " + recoveryId
+                      + ", block=" + block + ", rur=" + rur);
+            }
+            final long oldRecoveryID = rur.getRecoveryID();
+            rur.setRecoveryID(recoveryId);
+            LOG.info("initReplicaRecovery: update recovery id for " + block
+                + " from " + oldRecoveryID + " to " + recoveryId);
+          } else {
+            rur = new ReplicaUnderRecovery(replica, recoveryId);
+            map.add(bpid, rur);
+            LOG.info("initReplicaRecovery: changing replica state for " + block
+                + " from " + replica.getState() + " to " + rur.getState());
+          }
+          return rur.createInfo();
+        }
+      } // synchronized
+
+      // If hang too long, just bail out. This should not happen in normal
+      // condition.
+      long writerStopMs = Time.monotonicNow() - startTimeMs;
+      if (writerStopMs > writerStopTimeoutMs) {
+        LOG.warn("Unable to stop existing writer for block " + block
+            + " after " + writerStopMs + " miniseconds.");
+        throw new IOException("Unable to stop existing writer for block "
+            + block + " after " + writerStopMs + " miniseconds.");
+      }
       rip.stopWriter(xceiverStopTimeout);
-
-      //check replica bytes on disk.
-      if (rip.getBytesOnDisk() < rip.getVisibleLength()) {
-        throw new IOException("THIS IS NOT SUPPOSED TO HAPPEN:"
-            + " getBytesOnDisk() < getVisibleLength(), rip=" + rip);
-      }
-
-      //check the replica's files
-      checkReplicaFiles(rip);
-    }
-
-    //check generation stamp
-    if (replica.getGenerationStamp() < block.getGenerationStamp()) {
-      throw new IOException(
-          "replica.getGenerationStamp() < block.getGenerationStamp(), block="
-          + block + ", replica=" + replica);
-    }
-
-    //check recovery id
-    if (replica.getGenerationStamp() >= recoveryId) {
-      throw new IOException("THIS IS NOT SUPPOSED TO HAPPEN:"
-          + " replica.getGenerationStamp() >= recoveryId = " + recoveryId
-          + ", block=" + block + ", replica=" + replica);
-    }
-
-    //check RUR
-    final ReplicaUnderRecovery rur;
-    if (replica.getState() == ReplicaState.RUR) {
-      rur = (ReplicaUnderRecovery)replica;
-      if (rur.getRecoveryID() >= recoveryId) {
-        throw new RecoveryInProgressException(
-            "rur.getRecoveryID() >= recoveryId = " + recoveryId
-            + ", block=" + block + ", rur=" + rur);
-      }
-      final long oldRecoveryID = rur.getRecoveryID();
-      rur.setRecoveryID(recoveryId);
-      LOG.info("initReplicaRecovery: update recovery id for " + block
-          + " from " + oldRecoveryID + " to " + recoveryId);
-    }
-    else {
-      rur = new ReplicaUnderRecovery(replica, recoveryId);
-      map.add(bpid, rur);
-      LOG.info("initReplicaRecovery: changing replica state for "
-          + block + " from " + replica.getState()
-          + " to " + rur.getState());
-    }
-    return rur.createInfo();
+    } while (true);
   }
 
   @Override // FsDatasetSpi

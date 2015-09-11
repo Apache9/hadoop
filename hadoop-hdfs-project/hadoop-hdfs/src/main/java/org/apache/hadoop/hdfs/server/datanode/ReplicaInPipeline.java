@@ -138,8 +138,12 @@ public class ReplicaInPipeline extends ReplicaInfo
    * Set the thread that is writing to this replica
    * @param writer a thread writing to this replica
    */
-  public void setWriter(Thread writer) {
+  public synchronized void setWriter(Thread writer) {
     this.writer = writer;
+  }
+
+  public synchronized Thread getWriter() {
+    return this.writer;
   }
   
   @Override  // Object
@@ -152,13 +156,17 @@ public class ReplicaInPipeline extends ReplicaInfo
    * @throws IOException the waiting is interrupted
    */
   public void stopWriter(long xceiverStopTimeout) throws IOException {
-    if (writer != null && writer != Thread.currentThread() && writer.isAlive()) {
-      writer.interrupt();
+    Thread earlierWriter;
+    synchronized (this) {
+      earlierWriter = writer;
+    }
+    if (earlierWriter != null && earlierWriter != Thread.currentThread() && earlierWriter.isAlive()) {
+      earlierWriter.interrupt();
       try {
-        writer.join(xceiverStopTimeout);
-        if (writer.isAlive()) {
-          final String msg = "Join on writer thread " + writer + " timed out";
-          DataNode.LOG.warn(msg + "\n" + StringUtils.getStackTrace(writer));
+        earlierWriter.join(xceiverStopTimeout);
+        if (earlierWriter.isAlive()) {
+          final String msg = "Join on writer thread " + earlierWriter + " timed out";
+          DataNode.LOG.warn(msg + "\n" + StringUtils.getStackTrace(earlierWriter));
           throw new IOException(msg);
         }
       } catch (InterruptedException e) {
