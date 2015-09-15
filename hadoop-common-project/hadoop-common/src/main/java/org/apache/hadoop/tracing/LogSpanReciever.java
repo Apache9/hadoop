@@ -62,12 +62,11 @@ public class LogSpanReciever implements SpanReceiver {
         .append(formatTime(span.getStartTimeMillis())).append("\n");
 
     if (span.getKVAnnotations() != null && span.getKVAnnotations().size() > 0) {
-      buf.append("---> ").append("KVAnnotations [");
+      buf.append("KVAnnotations\n");
       for (Map.Entry<byte[], byte[]> entry : span.getKVAnnotations().entrySet()) {
-        buf.append(new String(entry.getKey())).append("=").append(new String(entry.getValue()))
-            .append(", ");
+        buf.append("---> ").append(new String(entry.getKey())).append("=")
+            .append(new String(entry.getValue())).append("\n");
       }
-      buf.append("]").append("\n");
     }
 
     if (span.getTimelineAnnotations() != null && span.getTimelineAnnotations().size() > 0) {

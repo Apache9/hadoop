@@ -21,7 +21,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.nio.channels.ClosedChannelException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
@@ -33,7 +35,7 @@ import org.apache.htrace.Span;
  * to send them to datanodes.
  ****************************************************************/
 
-class DFSPacket {
+public class DFSPacket {
   public static final long HEART_BEAT_SEQNO = -1L;
   private static long[] EMPTY = new long[0];
   private final long seqno; // sequence number of buffer in block
@@ -62,8 +64,7 @@ class DFSPacket {
   private int checksumPos;
   private final int dataStart;
   private int dataPos;
-  private long[] traceParents = EMPTY;
-  private int traceParentsUsed;
+  private List<Span> traceParents;
   private Span span;
 
   /**
@@ -90,6 +91,7 @@ class DFSPacket {
     dataStart = checksumStart + (chunksPerPkt * checksumSize);
     dataPos = dataStart;
     maxChunks = chunksPerPkt;
+    this.traceParents = new ArrayList<Span>();
   }
 
   /**
@@ -286,17 +288,7 @@ class DFSPacket {
     if (span == null) {
       return;
     }
-    addTraceParent(span.getSpanId());
-  }
-
-  public void addTraceParent(long id) {
-    if (traceParentsUsed == traceParents.length) {
-      int newLength = (traceParents.length == 0) ? 8 :
-          traceParents.length * 2;
-      traceParents = Arrays.copyOf(traceParents, newLength);
-    }
-    traceParents[traceParentsUsed] = id;
-    traceParentsUsed++;
+    traceParents.add(span);
   }
 
   /**
@@ -306,28 +298,7 @@ class DFSPacket {
    *
    * Protected by the DFSOutputStream dataQueue lock.
    */
-  public long[] getTraceParents() {
-    // Remove duplicates from the array.
-    int len = traceParentsUsed;
-    Arrays.sort(traceParents, 0, len);
-    int i = 0, j = 0;
-    long prevVal = 0; // 0 is not a valid span id
-    while (true) {
-      if (i == len) {
-        break;
-      }
-      long val = traceParents[i];
-      if (val != prevVal) {
-        traceParents[j] = val;
-        j++;
-        prevVal = val;
-      }
-      i++;
-    }
-    if (j < traceParents.length) {
-      traceParents = Arrays.copyOf(traceParents, j);
-      traceParentsUsed = traceParents.length;
-    }
+  public List<Span> getTraceParents() {
     return traceParents;
   }
 

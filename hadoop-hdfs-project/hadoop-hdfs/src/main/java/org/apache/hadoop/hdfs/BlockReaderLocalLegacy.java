@@ -594,6 +594,9 @@ class BlockReaderLocalLegacy implements BlockReader {
     if (LOG.isTraceEnabled()) {
       LOG.trace("read off " + off + " len " + len);
     }
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("Local read off " + off + " len " + len);
+    }
     if (!verifyChecksum) {
       return dataIn.read(buf, off, len);
     }

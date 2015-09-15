@@ -444,6 +444,9 @@ class BlockSender implements java.io.Closeable {
     long end = System.nanoTime();
     if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
       LOG.info("waitForMinLength cost:" + (end - begin) + "ns");
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("waitForMinLength cost:" + (end - begin) + "ns");
+      }
     }
     long bytesOnDisk = rbw.getBytesOnDisk();
     if (bytesOnDisk < len) {
@@ -535,11 +538,17 @@ class BlockSender implements java.io.Closeable {
     
     int dataOff = checksumOff + checksumDataLen;
     if (!transferTo) { // normal transfer
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("BlockSender normal transfer1");
+      }
       long begin = System.nanoTime();
       IOUtils.readFully(blockIn, buf, dataOff, dataLen);
       long end = System.nanoTime();
       if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
         LOG.info("BlockSender normal transfer1 cost:" + (end - begin) + "ns");
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("BlockSender normal transfer1 cost:" + (end - begin) + "ns");
+        }
       }
       if (verifyChecksum) {
         verifyChecksum(buf, dataOff, dataLen, numChunks, checksumOff);
@@ -568,6 +577,12 @@ class BlockSender implements java.io.Closeable {
               + "ns, sendDataPacketTransfer cost:" + transferTime.get() + "ns"
               + ", writeHeader cost:" + (endOfWriteHeader - begin) + "ns, write packet cost:"
               + (end - endOfWriteHeader) + "ns");
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("BlockSender sendDataPacketBlockedOnNetwork cost:"
+                + waitTime.get() + "ns, sendDataPacketTransfer cost:" + transferTime.get() + "ns"
+                + ", writeHeader cost:" + (endOfWriteHeader - begin) + "ns, write packet cost:"
+                + (end - endOfWriteHeader) + "ns");
+          }
         }
         blockInPosition += dataLen;
       } else {
@@ -577,6 +592,9 @@ class BlockSender implements java.io.Closeable {
         long end = System.nanoTime();
         if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
           LOG.info("BlockSender normal transfer2 cost:" + (end - begin) + "ns");
+        }
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("BlockSender normal transfer2 cost:" + (end - begin) + "ns");
         }
       }
     } catch (IOException e) {
@@ -629,11 +647,18 @@ class BlockSender implements java.io.Closeable {
       return;
     }
     try {
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("BlockSender.readChecksum");
+      }
       long begin = System.nanoTime();
       checksumIn.readFully(buf, checksumOffset, checksumLen);
       long end = System.nanoTime();
+
       if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
         LOG.info("BlockSender.readChecksum cost:" + (end - begin) + "ns");
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("BlockSender.readChecksum cost:" + (end - begin) + "ns");
+        }
       }
     } catch (IOException e) {
       LOG.warn(" Could not read or failed to veirfy checksum for data"
@@ -699,13 +724,10 @@ class BlockSender implements java.io.Closeable {
    */
   long sendBlock(DataOutputStream out, OutputStream baseStream, 
                  DataTransferThrottler throttler) throws IOException {
-    TraceScope scope =
-        Trace.startSpan("sendBlock_" + block.getBlockId(), Sampler.NEVER);
-    try {
-      return doSendBlock(out, baseStream, throttler);
-    } finally {
-      scope.close();
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("sendBlock: " + block.getBlockId());
     }
+    return doSendBlock(out, baseStream, throttler);
   }
 
   private long doSendBlock(DataOutputStream out, OutputStream baseStream,
@@ -720,6 +742,9 @@ class BlockSender implements java.io.Closeable {
     lastCacheDropOffset = initialOffset;
 
     if (isLongRead() && blockInFd != null) {
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("BlockSender POSIX_FADV_SEQUENTIAL");
+      }
       // Advise that this file descriptor will be accessed sequentially.
       long begin = System.nanoTime();
       NativeIO.POSIX.getCacheManipulator().posixFadviseIfPossible(
@@ -728,6 +753,9 @@ class BlockSender implements java.io.Closeable {
       long end = System.nanoTime();
       if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
         LOG.info("BlockSender POSIX_FADV_SEQUENTIAL cost:" + (end - begin) + "ns");
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("BlockSender POSIX_FADV_SEQUENTIAL cost:" + (end - begin) + "ns");
+        }
       }
     }
     
@@ -784,6 +812,10 @@ class BlockSender implements java.io.Closeable {
         final long endTime = System.nanoTime();
         ClientTraceLog.info(String.format(clientTraceFmt, totalRead,
             initialOffset, endTime - startTime));
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation(String.format(clientTraceFmt, totalRead, initialOffset,
+            endTime - startTime));
+        }
       }
       close();
     }
@@ -821,6 +853,9 @@ class BlockSender implements java.io.Closeable {
         long end = System.nanoTime();
         if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
           LOG.info("BlockSender POSIX_FADV_DONTNEED cost:" + (end - begin) + "ns");
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("BlockSender POSIX_FADV_DONTNEED cost:" + (end - begin) + "ns");
+          }
         }
         lastCacheDropOffset = offset;
       }

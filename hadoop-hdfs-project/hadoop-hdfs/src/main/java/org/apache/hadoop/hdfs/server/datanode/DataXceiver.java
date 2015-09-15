@@ -82,6 +82,7 @@ import org.apache.hadoop.net.unix.DomainSocket;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
+import org.apache.htrace.Trace;
 
 import com.google.common.net.InetAddresses;
 import com.google.protobuf.ByteString;
@@ -634,11 +635,17 @@ class DataXceiver extends Receiver implements Runnable {
       // Connect to downstream machine, if appropriate
       //
       if (targets.length > 0) {
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("targets: " + Arrays.asList(targets));
+        }
         InetSocketAddress mirrorTarget = null;
         // Connect to backup machine
         mirrorNode = targets[0].getXferAddr(connectToDnViaHostname);
         if (LOG.isDebugEnabled()) {
           LOG.debug("Connecting to datanode " + mirrorNode);
+        }
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("Connecting to datanode " + mirrorNode);
         }
         mirrorTarget = NetUtils.createSocketAddr(mirrorNode);
         mirrorSock = datanode.newSocket();

@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.hdfs.DFSPacket;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.PacketHeaderProto;
 import org.apache.hadoop.hdfs.util.ByteBufferOutputStream;
 
@@ -104,6 +105,10 @@ public class PacketHeader {
 
   public long getSeqno() {
     return proto.getSeqno();
+  }
+
+  public boolean isHeartbeatPacket() {
+    return proto.getSeqno() == DFSPacket.HEART_BEAT_SEQNO;
   }
 
   public long getOffsetInBlock() {

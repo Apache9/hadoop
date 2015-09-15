@@ -61,8 +61,8 @@ import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.SnapshotAccessControlException;
 import org.apache.hadoop.hdfs.protocol.UnresolvedPathException;
 import org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage;
-import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtocol;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferEncryptor;
+import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtocol;
 import org.apache.hadoop.hdfs.protocol.datatransfer.IOStreamPair;
 import org.apache.hadoop.hdfs.protocol.datatransfer.InvalidEncryptionKeyException;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
@@ -90,7 +90,6 @@ import org.apache.htrace.NullScope;
 import org.apache.htrace.Sampler;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
-import org.apache.htrace.TraceInfo;
 import org.apache.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -340,7 +339,10 @@ public class DFSOutputStream extends FSOutputSummer
     @Override
     public void run() {
       long lastPacket = Time.now();
-      TraceScope scope = NullScope.INSTANCE;
+      TraceScope scope = Trace.startSpan("dataStreamer", Sampler.ALWAYS);
+      if (Trace.isTracing()) {
+        Trace.addKVAnnotation("path".getBytes(), src.getBytes());
+      }
       while (!streamerClosed && dfsClient.clientRunning) {
         // if the Responder encountered an error, shutdown Responder
         if (hasError && response != null) {
@@ -388,12 +390,12 @@ public class DFSOutputStream extends FSOutputSummer
               assert one != null;
             } else {
               one = dataQueue.getFirst(); // regular data packet
-              long parents[] = one.getTraceParents();
-              if (parents.length > 0) {
-                scope = Trace.startSpan("dataStreamer", new TraceInfo(0, parents[0]));
+              List<Span> parents = one.getTraceParents();
+              if (parents.size() > 0) {
+                // scope = Trace.startSpan("dataStreamer", new TraceInfo(0, parents[0]));
                 // TODO: use setParents API once it's available from HTrace 3.2
-//                scope = Trace.startSpan("dataStreamer", Sampler.ALWAYS);
-//                scope.getSpan().setParents(parents);
+                // scope = Trace.startSpan("dataStreamer", Sampler.ALWAYS);
+                // scope.getSpan().setParents(parents);
               }
             }
           }
@@ -445,7 +447,8 @@ public class DFSOutputStream extends FSOutputSummer
           synchronized (dataQueue) {
             // move packet from dataQueue to ackQueue
             if (!one.isHeartbeatPacket()) {
-              span = scope.detach();
+              TraceScope packetScope = Trace.startSpan("sendPacket");
+              span = packetScope.detach();
               one.setTraceSpan(span);
               dataQueue.removeFirst();
               ackQueue.addLast(one);
@@ -459,10 +462,17 @@ public class DFSOutputStream extends FSOutputSummer
           }
 
           // write out data to remote datanode
-          TraceScope writeScope = Trace.startSpan("writeTo", span);
+          TraceScope writeScope = NullScope.INSTANCE;
+          if (!one.isHeartbeatPacket()) {
+            writeScope = Trace.startSpan("writeTo", span);
+          }
           try {
             one.writeTo(blockStream);
-            blockStream.flush();   
+            blockStream.flush();
+            if (Trace.isTracing() && nodes != null) {
+              Trace.addKVAnnotation("pipeline".getBytes(), Arrays.asList(nodes).toString()
+                  .getBytes());
+            }
           } catch (IOException e) {
             // HDFS-3398 treat primary DN is down since client is unable to 
             // write to primary DN. If a failed or restarting node has already
@@ -521,11 +531,10 @@ public class DFSOutputStream extends FSOutputSummer
             // Not a datanode issue
             streamerClosed = true;
           }
-        } finally {
-          scope.close();
         }
       }
       closeInternal();
+      scope.close();
     }
 
     private void closeInternal() {
@@ -1632,6 +1641,9 @@ public class DFSOutputStream extends FSOutputSummer
       if (DFSClient.LOG.isDebugEnabled()) {
         DFSClient.LOG.debug("Queued packet " + currentPacket.getSeqno());
       }
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("Queued packet " + currentPacket.getSeqno());
+      }
       currentPacket = null;
       dataQueue.notifyAll();
     }
@@ -1726,6 +1738,10 @@ public class DFSOutputStream extends FSOutputSummer
     currentPacket.writeData(b, offset, len);
     currentPacket.incNumChunks();
     bytesCurBlock += len;
+
+    if (Trace.isTracing()) {
+      Trace.addKVAnnotation("Path".getBytes(), src.getBytes());
+    }
 
     // If packet is full, enqueue it for transmission
     //
@@ -1842,6 +1858,9 @@ public class DFSOutputStream extends FSOutputSummer
       throws IOException {
     dfsClient.checkOpen();
     checkClosed();
+    if (Trace.isTracing()) {
+      Trace.addKVAnnotation("path".getBytes(), src.getBytes());
+    }
     try {
       long toWaitFor;
       long lastBlockLength = -1L;
@@ -2034,9 +2053,14 @@ public class DFSOutputStream extends FSOutputSummer
       long duration = Time.monotonicNow() - begin;
       if (duration > dfsClient.getConf().slowLogThresholdMs) {
         DatanodeInfo[] nodes = getPipeline();
-        DFSClient.LOG.warn("Slow waitForAckedSeqno took " + duration
-            + " ms (threshold=" + dfsClient.getConf().slowLogThresholdMs +  "ms)"
-            + " ms, pipeline: " + ((nodes == null) ? "[]" : Arrays.asList(nodes)));
+        DFSClient.LOG.warn("Slow waitForAckedSeqno took " + duration + " ms (threshold="
+            + dfsClient.getConf().slowLogThresholdMs + "ms)" + " ms, pipeline: "
+            + ((nodes == null) ? "[]" : Arrays.asList(nodes)));
+      }
+      if (Trace.isTracing()) {
+        DatanodeInfo[] nodes = getPipeline();
+        Trace.addTimelineAnnotation("Wait finished. Pipeline: "
+            + ((nodes == null) ? "[]" : Arrays.asList(nodes)));
       }
     } finally {
       scope.close();

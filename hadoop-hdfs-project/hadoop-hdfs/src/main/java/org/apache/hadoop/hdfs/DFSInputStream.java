@@ -635,6 +635,10 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
               setUserGroupInformation(dfsClient.ugi).
               setConfiguration(dfsClient.getConfiguration()).
               build();
+          if (Trace.isTracing()) {
+            Trace.currentSpan().addTimelineAnnotation(
+              "Create a BlockReader: " + blockReader.hashCode());
+          }
           if(connectFailedOnce) {
             DFSClient.LOG.info("Successfully connected to " + targetAddr +
                                " for " + blk);
@@ -805,6 +809,12 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       while (true) {
         // retry as many times as seekToNewSource allows.
         try {
+          if (Trace.isTracing()) {
+            Trace.addKVAnnotation("BlockReaderId".getBytes(),
+              (blockReader.hashCode() + "").getBytes());
+            Trace.addTimelineAnnotation("readBuffer, length: " + len + " from dataNode: "
+                + currentNode);
+          }
           long startTS = Time.monotonicNow();
           int nread = reader.doRead(blockReader, off, len, readStatistics);
           long cost = Time.monotonicNow() - startTS;
@@ -1121,9 +1131,13 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       BlockReader reader = null;
 
       try {
+        int len = (int) (end - start + 1);
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("readAll, read length: " + len + " from chosenNode: " + chosenNode);
+        }
+        long startTS = Time.monotonicNow();
         DFSClientFaultInjector.get().fetchFromDatanodeException();
         Token<BlockTokenIdentifier> blockToken = block.getBlockToken();
-        int len = (int) (end - start + 1);
         reader = new BlockReaderFactory(dfsClient.getConf()).
             setInetSocketAddress(targetAddr).
             setRemotePeerFactory(dfsClient).
@@ -1141,10 +1155,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             setUserGroupInformation(dfsClient.ugi).
             setConfiguration(dfsClient.getConfiguration()).
             build();
-        long startTS = Time.monotonicNow();
         int nread = reader.readAll(buf, offset, len);
         updateReadStatistics(readStatistics, nread, reader);
-
         if (nread != len) {
           throw new IOException("truncated return from reader.read(): " +
                                 "excpected " + len + ", got " + nread);
@@ -1524,6 +1536,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         int diff = (int)(targetPos - pos);
         if (diff <= blockReader.available()) {
           try {
+            if (Trace.isTracing()) {
+              Trace.addTimelineAnnotation("Seek from datanode: " + currentNode);
+            }
             long startTS = Time.monotonicNow();
             pos += blockReader.skip(diff);
             long cost = Time.monotonicNow() - startTS;

@@ -530,6 +530,10 @@ class BlockReaderLocal implements BlockReader {
     int nRead;
     try {
       String traceString = null;
+      if (Trace.isTracing()) {
+        Trace.addKVAnnotation("filename".getBytes(), filename.getBytes());
+        Trace.addTimelineAnnotation("Local read off " + off + " len " + len);
+      }
       if (LOG.isTraceEnabled()) {
         traceString = new StringBuilder().
             append("read(arr.length=").append(arr.length).
