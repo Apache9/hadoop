@@ -12,6 +12,7 @@ Release 2.4.0-mdh2 - UNRELEASED
 
   BUG FIXES 
     HADOOP-11802. DomainSocketWatcher thread terminates sometimes after there is an I/O error during requestShortCircuitShm (cmccabe)
+    HDFS-8429. Avoid stuck threads if there is an error in DomainSocketWatcher that stops the thread.  (zhouyingchao via cmccabe)
 
 Release 2.4.0 - 2014-04-07 
 

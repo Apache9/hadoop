@@ -210,7 +210,7 @@ done:
   free(carr);
   if (jthr) {
     (*env)->DeleteLocalRef(env, jarr);
-    jarr = NULL;
+    (*env)->Throw(env, jthr);
   }
   return jarr;
 }
