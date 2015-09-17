@@ -1,6 +1,6 @@
 Hadoop Change Log
 
-Release 2.4.1 - UNRELEASED
+Release 2.4.0-mdh2 - UNRELEASED
 
   INCOMPATIBLE CHANGES
 
@@ -11,6 +11,7 @@ Release 2.4.1 - UNRELEASED
   OPTIMIZATIONS
 
   BUG FIXES 
+    HADOOP-11802. DomainSocketWatcher thread terminates sometimes after there is an I/O error during requestShortCircuitShm (cmccabe)
 
 Release 2.4.0 - 2014-04-07 
 

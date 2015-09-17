@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
+import java.io.IOException;
+
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -35,4 +37,8 @@ public class DataNodeFaultInjector {
   }
 
   public void getHdfsBlocksMetadata() {}
+
+  public void writeBlockAfterFlush() throws IOException {}
+
+  public void sendShortCircuitShmResponse() throws IOException {}
 }
