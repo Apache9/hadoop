@@ -52,13 +52,13 @@ public class ConfiguredFailoverProxyProvider<T> implements
   private static final Log LOG =
       LogFactory.getLog(ConfiguredFailoverProxyProvider.class);
   
-  private final Configuration conf;
-  private final List<AddressRpcProxyPair<T>> proxies =
+  protected final Configuration conf;
+  protected final List<AddressRpcProxyPair<T>> proxies =
       new ArrayList<AddressRpcProxyPair<T>>();
   private final UserGroupInformation ugi;
   private final Class<T> xface;
-  
-  private int currentProxyIndex = 0;
+
+  protected int currentProxyIndex = 0;
 
   public ConfiguredFailoverProxyProvider(Configuration conf, URI uri,
       Class<T> xface) {
@@ -140,7 +140,7 @@ public class ConfiguredFailoverProxyProvider<T> implements
    * A little pair object to store the address and connected RPC proxy object to
    * an NN. Note that {@link AddressRpcProxyPair#namenode} may be null.
    */
-  private static class AddressRpcProxyPair<T> {
+  protected static class AddressRpcProxyPair<T> {
     public final InetSocketAddress address;
     public T namenode;
     

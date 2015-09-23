@@ -23,6 +23,7 @@ import java.util.Random;
 
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.Time;
 import org.junit.After;
@@ -51,7 +52,7 @@ public class TestZKFailoverControllerStress extends ClientBaseWithFixes {
     // skip tests on Windows until after resolution of ZooKeeper client bug
     assumeTrue(!Shell.WINDOWS);
     conf = new Configuration();
-    conf.set(ZKFailoverController.ZK_QUORUM_KEY, hostPort);
+    conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     this.cluster = new MiniZKFCCluster(conf, getServer(serverFactory));
   }
   

@@ -32,6 +32,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ha.ActiveStandbyElector.ActiveNotFoundException;
 import org.apache.hadoop.ha.ActiveStandbyElector.ActiveStandbyElectorCallback;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
@@ -61,25 +62,16 @@ public abstract class ZKFailoverController {
 
   static final Log LOG = LogFactory.getLog(ZKFailoverController.class);
   
-  public static final String ZK_QUORUM_KEY = "ha.zookeeper.quorum";
-  private static final String ZK_SESSION_TIMEOUT_KEY = "ha.zookeeper.session-timeout.ms";
-  private static final int ZK_SESSION_TIMEOUT_DEFAULT = 5*1000;
-  private static final String ZK_PARENT_ZNODE_KEY = "ha.zookeeper.parent-znode";
-  public static final String ZK_ACL_KEY = "ha.zookeeper.acl";
-  private static final String ZK_ACL_DEFAULT = "world:anyone:rwcda";
-  public static final String ZK_AUTH_KEY = "ha.zookeeper.auth";
-  static final String ZK_PARENT_ZNODE_DEFAULT = "/hadoop-ha";
 
   /**
    * All of the conf keys used by the ZKFC. This is used in order to allow
    * them to be overridden on a per-nameservice or per-namenode basis.
    */
   protected static final String[] ZKFC_CONF_KEYS = new String[] {
-    ZK_QUORUM_KEY,
-    ZK_SESSION_TIMEOUT_KEY,
-    ZK_PARENT_ZNODE_KEY,
-    ZK_ACL_KEY,
-    ZK_AUTH_KEY
+      CommonConfigurationKeys.ZK_QUORUM_KEY,
+      CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
+      CommonConfigurationKeys.ZK_PARENT_ZNODE_KEY,
+      CommonConfigurationKeys.ZK_ACL_KEY, CommonConfigurationKeys.ZK_AUTH_KEY
   };
   
   protected static final String USAGE = 
@@ -189,7 +181,8 @@ public abstract class ZKFailoverController {
     } catch (KeeperException ke) {
       LOG.fatal("Unable to start failover controller. Unable to connect "
           + "to ZooKeeper quorum at " + zkQuorum + ". Please check the "
-          + "configured value for " + ZK_QUORUM_KEY + " and ensure that "
+          + "configured value for " + CommonConfigurationKeys.ZK_QUORUM_KEY
+          + " and ensure that "
           + "ZooKeeper is running.");
       return ERR_CODE_NO_ZK;
     }
@@ -328,11 +321,14 @@ public abstract class ZKFailoverController {
 
   private void initZK() throws HadoopIllegalArgumentException, IOException,
       KeeperException {
-    zkQuorum = conf.get(ZK_QUORUM_KEY);
-    int zkTimeout = conf.getInt(ZK_SESSION_TIMEOUT_KEY,
-        ZK_SESSION_TIMEOUT_DEFAULT);
+    zkQuorum = conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
+    int zkTimeout =
+        conf.getInt(CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
+            CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT);
     // Parse ACLs from configuration.
-    String zkAclConf = conf.get(ZK_ACL_KEY, ZK_ACL_DEFAULT);
+    String zkAclConf =
+        conf.get(CommonConfigurationKeys.ZK_ACL_KEY,
+            CommonConfigurationKeys.ZK_ACL_DEFAULT);
     zkAclConf = ZKUtil.resolveConfIndirection(zkAclConf);
     List<ACL> zkAcls = ZKUtil.parseACLs(zkAclConf);
     if (zkAcls.isEmpty()) {
@@ -340,7 +336,7 @@ public abstract class ZKFailoverController {
     }
     
     // Parse authentication from configuration.
-    String zkAuthConf = conf.get(ZK_AUTH_KEY);
+    String zkAuthConf = conf.get(CommonConfigurationKeys.ZK_AUTH_KEY);
     zkAuthConf = ZKUtil.resolveConfIndirection(zkAuthConf);
     List<ZKAuthInfo> zkAuths;
     if (zkAuthConf != null) {
@@ -352,7 +348,7 @@ public abstract class ZKFailoverController {
     // Sanity check configuration.
     Preconditions.checkArgument(zkQuorum != null,
         "Missing required configuration '%s' for ZooKeeper quorum",
-        ZK_QUORUM_KEY);
+        CommonConfigurationKeys.ZK_QUORUM_KEY);
     Preconditions.checkArgument(zkTimeout > 0,
         "Invalid ZK session timeout %s", zkTimeout);
     
@@ -363,8 +359,9 @@ public abstract class ZKFailoverController {
   }
   
   private String getParentZnode() {
-    String znode = conf.get(ZK_PARENT_ZNODE_KEY,
-        ZK_PARENT_ZNODE_DEFAULT);
+    String znode =
+        conf.get(CommonConfigurationKeys.ZK_PARENT_ZNODE_KEY,
+            CommonConfigurationKeys.ZK_PARENT_ZNODE_DEFAULT);
     if (!znode.endsWith("/")) {
       znode += "/";
     }

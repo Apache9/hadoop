@@ -272,4 +272,14 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String HADOOP_RAID_FILESYSTEM_CLASS_KEY = "hdfs.raid.filesystem.class";
   public static final String HADOOP_RAID_ENABLED_KEY = "hdfs.raid.enabled";
   public static final boolean HADOOP_RAID_ENABLED_DEFAULT = false;
+
+  public static final String ZK_QUORUM_KEY = "ha.zookeeper.quorum";
+  public static final String ZK_SESSION_TIMEOUT_KEY =
+      "ha.zookeeper.session-timeout.ms";
+  public static final int ZK_SESSION_TIMEOUT_DEFAULT = 5 * 1000;
+  public static final String ZK_PARENT_ZNODE_KEY = "ha.zookeeper.parent-znode";
+  public static final String ZK_PARENT_ZNODE_DEFAULT = "/hadoop-ha";
+  public static final String ZK_ACL_KEY = "ha.zookeeper.acl";
+  public static final String ZK_ACL_DEFAULT = "world:anyone:rwcda";
+  public static final String ZK_AUTH_KEY = "ha.zookeeper.auth";
 }
