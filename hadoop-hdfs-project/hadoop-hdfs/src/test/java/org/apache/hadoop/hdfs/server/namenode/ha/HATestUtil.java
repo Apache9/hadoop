@@ -194,6 +194,20 @@ public abstract class HATestUtil {
     conf.set("fs.defaultFS", "hdfs://" + logicalName);
   }
   
+  /**
+   * Sets ZK based failover configuration
+   */
+  public static FileSystem configureZKBasedFailoverFs(MiniDFSCluster cluster,
+      Configuration conf) throws IOException, URISyntaxException {
+    conf = new Configuration(conf);
+    String logicalName = getLogicalHostname(cluster);
+    setFailoverConfigurations(cluster, conf, logicalName, 0);
+    conf.set(DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "." + logicalName,
+        ZkConfiguredFailoverProxyProvider.class.getName());
+    FileSystem fs =
+        FileSystem.get(new URI("hdfs://" + getLogicalHostname(cluster)), conf);
+    return fs;
+  }
 
   public static String getLogicalHostname(MiniDFSCluster cluster) {
     return String.format(LOGICAL_HOSTNAME, cluster.getInstanceId());

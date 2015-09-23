@@ -23,6 +23,7 @@ import java.security.NoSuchAlgorithmException;
 
 import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.ha.HAServiceProtocol.StateChangeRequestInfo;
 import org.apache.hadoop.ha.HealthMonitor.State;
@@ -67,10 +68,10 @@ public class TestZKFailoverController extends ClientBaseWithFixes {
   @Before
   public void setupConfAndServices() {
     conf = new Configuration();
-    conf.set(ZKFailoverController.ZK_ACL_KEY, TEST_ACL);
-    conf.set(ZKFailoverController.ZK_AUTH_KEY, TEST_AUTH_GOOD);
+    conf.set(CommonConfigurationKeys.ZK_ACL_KEY, TEST_ACL);
+    conf.set(CommonConfigurationKeys.ZK_AUTH_KEY, TEST_AUTH_GOOD);
 
-    conf.set(ZKFailoverController.ZK_QUORUM_KEY, hostPort);
+    conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     this.cluster = new MiniZKFCCluster(conf, getServer(serverFactory));
   }
 
@@ -172,7 +173,7 @@ public class TestZKFailoverController extends ClientBaseWithFixes {
     try {
       // client without auth should not be able to read it
       Stat stat = new Stat();
-      otherClient.getData(ZKFailoverController.ZK_PARENT_ZNODE_DEFAULT,
+      otherClient.getData(CommonConfigurationKeys.ZK_PARENT_ZNODE_DEFAULT,
           false, stat);
       fail("Was able to read data without authenticating!");
     } catch (KeeperException.NoAuthException nae) {

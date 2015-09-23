@@ -269,4 +269,14 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final boolean RPC_METRICS_QUANTILE_ENABLE_DEFAULT = false;
   public static final String  RPC_METRICS_PERCENTILES_INTERVALS_KEY =
       "rpc.metrics.percentiles.intervals";
+
+  public static final String ZK_QUORUM_KEY = "ha.zookeeper.quorum";
+  public static final String ZK_SESSION_TIMEOUT_KEY =
+      "ha.zookeeper.session-timeout.ms";
+  public static final int ZK_SESSION_TIMEOUT_DEFAULT = 5 * 1000;
+  public static final String ZK_PARENT_ZNODE_KEY = "ha.zookeeper.parent-znode";
+  public static final String ZK_PARENT_ZNODE_DEFAULT = "/hadoop-ha";
+  public static final String ZK_ACL_KEY = "ha.zookeeper.acl";
+  public static final String ZK_ACL_DEFAULT = "world:anyone:rwcda";
+  public static final String ZK_AUTH_KEY = "ha.zookeeper.auth";
 }

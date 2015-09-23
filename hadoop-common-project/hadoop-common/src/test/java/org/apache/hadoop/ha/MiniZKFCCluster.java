@@ -265,7 +265,7 @@ public class MiniZKFCCluster {
   static class DummyZKFC extends ZKFailoverController {
     private static final String DUMMY_CLUSTER = "dummy-cluster";
     public static final String SCOPED_PARENT_ZNODE =
-      ZKFailoverController.ZK_PARENT_ZNODE_DEFAULT + "/" +
+        CommonConfigurationKeys.ZK_PARENT_ZNODE_DEFAULT + "/" +
       DUMMY_CLUSTER;
     private static final String LOCK_ZNODE = 
       SCOPED_PARENT_ZNODE + "/" + ActiveStandbyElector.LOCK_FILENAME;
