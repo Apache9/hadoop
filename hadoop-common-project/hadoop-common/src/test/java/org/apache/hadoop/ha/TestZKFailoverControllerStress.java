@@ -22,6 +22,7 @@ import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.Time;
 import org.junit.After;
 import org.junit.Before;
@@ -47,7 +48,7 @@ public class TestZKFailoverControllerStress extends ClientBaseWithFixes {
   @Before
   public void setupConfAndServices() throws Exception {
     conf = new Configuration();
-    conf.set(ZKFailoverController.ZK_QUORUM_KEY, hostPort);
+    conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     this.cluster = new MiniZKFCCluster(conf, getServer(serverFactory));
   }
   

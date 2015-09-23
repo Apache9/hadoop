@@ -2697,4 +2697,8 @@ public class MiniDFSCluster {
       writer.close();
     }
   }
+
+  public static int nextInstanceId() {
+    return instanceCount;
+  }
 }

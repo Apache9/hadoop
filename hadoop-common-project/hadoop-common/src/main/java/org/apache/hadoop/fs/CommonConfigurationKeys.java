@@ -298,4 +298,14 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String NFS_EXPORTS_ALLOWED_HOSTS_SEPARATOR = ";";
   public static final String NFS_EXPORTS_ALLOWED_HOSTS_KEY = "nfs.exports.allowed.hosts";
   public static final String NFS_EXPORTS_ALLOWED_HOSTS_KEY_DEFAULT = "* rw";
+
+  public static final String ZK_QUORUM_KEY = "ha.zookeeper.quorum";
+  public static final String ZK_SESSION_TIMEOUT_KEY =
+      "ha.zookeeper.session-timeout.ms";
+  public static final int ZK_SESSION_TIMEOUT_DEFAULT = 5 * 1000;
+  public static final String ZK_PARENT_ZNODE_KEY = "ha.zookeeper.parent-znode";
+  public static final String ZK_PARENT_ZNODE_DEFAULT = "/hadoop-ha";
+  public static final String ZK_ACL_KEY = "ha.zookeeper.acl";
+  public static final String ZK_ACL_DEFAULT = "world:anyone:rwcda";
+  public static final String ZK_AUTH_KEY = "ha.zookeeper.auth";
 }

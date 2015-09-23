@@ -117,6 +117,18 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final int     DFS_CLIENT_FAILOVER_CONNECTION_RETRIES_ON_SOCKET_TIMEOUTS_DEFAULT = 0;
   public static final String  DFS_CLIENT_RETRY_MAX_ATTEMPTS_KEY = "dfs.client.retry.max.attempts";
   public static final int     DFS_CLIENT_RETRY_MAX_ATTEMPTS_DEFAULT = 10;
+  public static final String DFS_CLIENT_FAILOVER_QUERY_ZOOKEEPER_ONCE =
+      "dfs.client.failover.query.zookeeper.once";
+  public static final boolean DFS_CLIENT_FAILOVER_QUERY_ZOOKEEPER_ONCE_DEFAULT =
+      false;
+  public static final String DFS_CLIENT_FAILOVER_USE_UNCONFIGED_NAMENODE =
+      "dfs.client.failover.use.unconfigured.namenode";
+  public static final boolean DFS_CLIENT_FAILOVER_USE_UNCONFIGED_NAMENODE_DEFAULT =
+      true;
+  public static final String DFS_CLIENT_ZK_FAILOVER_FENCE_PERIOD_INMS =
+      "dfs.client.zk.failover.fence.period.inMs";
+  public static final long DFS_CLIENT_ZK_FAILOVER_FENCE_PERIOD_INMS_DEFAULT =
+      2000;
   
   public static final String  DFS_CLIENT_SOCKET_CACHE_EXPIRY_MSEC_KEY = "dfs.client.socketcache.expiryMsec";
   public static final long    DFS_CLIENT_SOCKET_CACHE_EXPIRY_MSEC_DEFAULT = 3000;

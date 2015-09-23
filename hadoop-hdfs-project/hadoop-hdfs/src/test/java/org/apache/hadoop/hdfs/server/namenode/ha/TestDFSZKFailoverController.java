@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -65,7 +66,7 @@ public class TestDFSZKFailoverController extends ClientBaseWithFixes {
     conf = new Configuration();
     // Specify the quorum per-nameservice, to ensure that these configs
     // can be nameservice-scoped.
-    conf.set(ZKFailoverController.ZK_QUORUM_KEY + ".ns1", hostPort);
+    conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY + ".ns1", hostPort);
     conf.set(DFSConfigKeys.DFS_HA_FENCE_METHODS_KEY,
         AlwaysSucceedFencer.class.getName());
     conf.setBoolean(DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_KEY, true);
