@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hdfs;
 
-import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
@@ -1153,4 +1151,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   @Deprecated
   public static final long    DFS_CLIENT_KEY_PROVIDER_CACHE_EXPIRY_DEFAULT =
       HdfsClientConfigKeys.DFS_CLIENT_KEY_PROVIDER_CACHE_EXPIRY_DEFAULT;
+
+  // http2 related configs
+  public static final String  DFS_HTTP2_INITIAL_WINDOW_SIZE = "dfs.http2.initial.windows.size";
+  public static final int     DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT = 64 * 1024;
+
+  public static final String  DFS_HTTP2_WINDOW_UPDATE_RATIO = "dfs.http2.window.update.ratio";
+  public static final float   DFS_HTTP2_WINDOW_UPDATE_RATIO_DEFAULT = 0.5f;
 }
