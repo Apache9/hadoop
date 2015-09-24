@@ -42,10 +42,12 @@ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
+import org.apache.htrace.Trace;
 
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
+
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -388,6 +390,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       }
 
       if (seekOffset > 0) {
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("Seek to offset");
+        }
         blockInFile.seek(seekOffset);
       }
       return new FileInputStream(blockInFile.getFD());

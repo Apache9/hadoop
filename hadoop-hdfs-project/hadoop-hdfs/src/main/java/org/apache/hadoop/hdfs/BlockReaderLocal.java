@@ -33,6 +33,9 @@ import org.apache.hadoop.hdfs.server.datanode.BlockMetadataHeader;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.util.DirectBufferPool;
 import org.apache.hadoop.util.DataChecksum;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -305,48 +308,54 @@ class BlockReaderLocal implements BlockReader {
    */
   private synchronized int fillBuffer(ByteBuffer buf, boolean canSkipChecksum)
       throws IOException {
-    int total = 0;
-    long startDataPos = dataPos;
-    int startBufPos = buf.position();
-    while (buf.hasRemaining()) {
-      int nRead = dataIn.read(buf, dataPos);
-      if (nRead < 0) {
-        break;
-      }
-      dataPos += nRead;
-      total += nRead;
-    }
-    if (canSkipChecksum) {
-      freeChecksumBufIfExists();
-      return total;
-    }
-    if (total > 0) {
-      try {
-        buf.limit(buf.position());
-        buf.position(startBufPos);
-        createChecksumBufIfNeeded();
-        int checksumsNeeded = (total + bytesPerChecksum - 1) / bytesPerChecksum;
-        checksumBuf.clear();
-        checksumBuf.limit(checksumsNeeded * checksumSize);
-        long checksumPos =
-          7 + ((startDataPos / bytesPerChecksum) * checksumSize);
-        while (checksumBuf.hasRemaining()) {
-          int nRead = checksumIn.read(checksumBuf, checksumPos);
-          if (nRead < 0) {
-            throw new IOException("Got unexpected checksum file EOF at " +
-                checksumPos + ", block file position " + startDataPos + " for " +
-                "block " + block + " of file " + filename);
-          }
-          checksumPos += nRead;
+    TraceScope scope = Trace.startSpan("BlockReaderLocal#fillBuffer(" +
+        block.getBlockId() + ")", Sampler.NEVER);
+    try {
+      int total = 0;
+      long startDataPos = dataPos;
+      int startBufPos = buf.position();
+      while (buf.hasRemaining()) {
+        int nRead = dataIn.read(buf, dataPos);
+        if (nRead < 0) {
+          break;
         }
-        checksumBuf.flip();
-  
-        checksum.verifyChunkedSums(buf, checksumBuf, filename, startDataPos);
-      } finally {
-        buf.position(buf.limit());
+        dataPos += nRead;
+        total += nRead;
       }
+      if (canSkipChecksum) {
+        freeChecksumBufIfExists();
+        return total;
+      }
+      if (total > 0) {
+        try {
+          buf.limit(buf.position());
+          buf.position(startBufPos);
+          createChecksumBufIfNeeded();
+          int checksumsNeeded = (total + bytesPerChecksum - 1) / bytesPerChecksum;
+          checksumBuf.clear();
+          checksumBuf.limit(checksumsNeeded * checksumSize);
+          long checksumPos =
+              7 + ((startDataPos / bytesPerChecksum) * checksumSize);
+          while (checksumBuf.hasRemaining()) {
+            int nRead = checksumIn.read(checksumBuf, checksumPos);
+            if (nRead < 0) {
+              throw new IOException("Got unexpected checksum file EOF at " +
+                  checksumPos + ", block file position " + startDataPos + " for " +
+                  "block " + block + " of file " + filename);
+            }
+            checksumPos += nRead;
+          }
+          checksumBuf.flip();
+
+          checksum.verifyChunkedSums(buf, checksumBuf, filename, startDataPos);
+        } finally {
+          buf.position(buf.limit());
+        }
+      }
+      return total;
+    } finally {
+      scope.close();
     }
-    return total;
   }
 
   private boolean createNoChecksumContext() {
@@ -521,6 +530,10 @@ class BlockReaderLocal implements BlockReader {
     int nRead;
     try {
       String traceString = null;
+      if (Trace.isTracing()) {
+        Trace.addKVAnnotation("filename".getBytes(), filename.getBytes());
+        Trace.addTimelineAnnotation("Local read off " + off + " len " + len);
+      }
       if (LOG.isTraceEnabled()) {
         traceString = new StringBuilder().
             append("read(arr.length=").append(arr.length).

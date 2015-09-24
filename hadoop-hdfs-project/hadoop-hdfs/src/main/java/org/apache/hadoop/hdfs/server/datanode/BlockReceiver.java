@@ -56,6 +56,7 @@ import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.htrace.Trace;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -143,6 +144,8 @@ class BlockReceiver implements Closeable {
       this.isDatanode = clientname.length() == 0;
       this.isClient = !this.isDatanode;
       this.restartBudget = datanode.getDnConf().restartReplicaExpiry;
+
+      this.SLOW_LOG_THRESHOLD_MS = datanode.getDnConf().slowBlockReadThresholdMs;
 
       //for datanode, we have
       //1: clientName.length() == 0, and
@@ -341,6 +344,9 @@ class BlockReceiver implements Closeable {
    * @throws IOException
    */
   void flushOrSync(boolean isSync) throws IOException {
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("Sync checkSum");
+    }
     long flushTotalNanos = 0;
     long begin = System.nanoTime();
     if (checksumOut != null) {
@@ -353,6 +359,10 @@ class BlockReceiver implements Closeable {
         datanode.metrics.addFsyncNanos(System.nanoTime() - fsyncStartNanos);
       }
       flushTotalNanos += flushEndNanos - flushStartNanos;
+    }
+
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("Sync data");
     }
     if (out != null) {
       long flushStartNanos = System.nanoTime();
@@ -375,6 +385,12 @@ class BlockReceiver implements Closeable {
     if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
       LOG.info("flushOrSync cost:" + (end - begin) + "ns, isSync:" + isSync + ", flushTotalNanos="
           + flushTotalNanos + ", volume:" + datanode.data.getVolume(block));
+      if (Trace.isTracing()) {
+        Trace
+            .addTimelineAnnotation("flushOrSync cost:" + (end - begin) + "ns, isSync:" + isSync
+                + ", flushTotalNanos=" + flushTotalNanos + ", volume:"
+                + datanode.data.getVolume(block));
+      }
     }
   }
 
@@ -461,6 +477,10 @@ class BlockReceiver implements Closeable {
                 ": " + header);
     }
 
+    if (Trace.isTracing() && (!header.isHeartbeatPacket())) {
+      Trace.addTimelineAnnotation("Receiving one packet for block " + block);
+    }
+
     // Sanity check the header
     if (header.getOffsetInBlock() > replicaInfo.getNumBytes()) {
       throw new IOException("Received an out-of-sequence packet for " + block + 
@@ -501,6 +521,10 @@ class BlockReceiver implements Closeable {
     //First write the packet to the mirror:
     if (mirrorOut != null && !mirrorError) {
       try {
+        if (Trace.isTracing() && (!header.isHeartbeatPacket())) {
+          Trace.addTimelineAnnotation("write the packet to the mirror");
+        }
+        // TODO
         long t1 = Time.monotonicNow();
         packetReceiver.mirrorPacketTo(mirrorOut);
         mirrorOut.flush();
@@ -508,6 +532,10 @@ class BlockReceiver implements Closeable {
         if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
           LOG.info("write the packet to the mirror cost:" + (t2 - t1) + "ms, volume:"
               + datanode.data.getVolume(block));
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("write the packet to the mirror cost:" + (t2 - t1)
+                + "ms, volume:" + datanode.data.getVolume(block));
+          }
         }
       } catch (IOException e) {
         handleMirrorOutError(e);
@@ -599,6 +627,9 @@ class BlockReceiver implements Closeable {
           }
 
           // Write data to disk.
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("Write data to disk");
+          }
           long t1 = Time.monotonicNow();
           out.write(dataBuf.array(), startByteToDisk, numBytesToDisk);
           long t2 = Time.monotonicNow();
@@ -608,6 +639,9 @@ class BlockReceiver implements Closeable {
             datanode.metrics.addSlowWriteDataToDiskMs(t2 - t1);
           }
 
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("Write checksum to disk");
+          }
           // If this is a partial chunk, then verify that this is the only
           // chunk in the packet. Calculate new crc for this chunk.
           if (partialCrc != null) {
@@ -668,6 +702,10 @@ class BlockReceiver implements Closeable {
     if (receivePacketEnd - receivePacketStart > SLOW_LOG_THRESHOLD_MS) {
       LOG.info("receivePacket cost:" + (receivePacketEnd - receivePacketStart) + "ms");
     }
+    if (Trace.isTracing() && (!header.isHeartbeatPacket())) {
+      Trace.addTimelineAnnotation("receivePacket cost:" + (receivePacketEnd - receivePacketStart)
+          + "ms");
+    }
     return lastPacketInBlock?-1:len;
   }
 
@@ -712,6 +750,10 @@ class BlockReceiver implements Closeable {
         if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
           LOG.info("dropOsCacheBehindWriter cost:" + (t2 - t1) + "ms, volume:"
               + datanode.data.getVolume(block));
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("dropOsCacheBehindWriter cost:" + (t2 - t1) + "ms, volume:"
+                + datanode.data.getVolume(block));
+          }
         }
       }
     } catch (Throwable t) {
@@ -1353,6 +1395,10 @@ class BlockReceiver implements Closeable {
       if (t2 - t1 > SLOW_LOG_THRESHOLD_MS) {
         LOG.info("PacketResponder send ack to upstream cost:" + (t2 - t1)
             + "ms, " + myString + ", replyAck=" + replyAck);
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("PacketResponder send ack to upstream cost:" + (t2 - t1)
+              + "ms, " + myString + ", replyAck=" + replyAck);
+        }
       } else if (LOG.isDebugEnabled()) {
         LOG.debug(myString + ", replyAck=" + replyAck);
       }

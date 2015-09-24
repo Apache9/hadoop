@@ -30,6 +30,7 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ChecksumProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.DataTransferTraceInfoProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpBlockChecksumProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpCopyBlockProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpReadBlockProto;
@@ -45,6 +46,9 @@ import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
+
+import org.apache.htrace.Trace;
+import org.apache.htrace.Span;
 
 import com.google.protobuf.Message;
 
@@ -178,19 +182,29 @@ public class Sender implements DataTransferProtocol {
   
   @Override
   public void releaseShortCircuitFds(SlotId slotId) throws IOException {
-    ReleaseShortCircuitAccessRequestProto proto = 
+    ReleaseShortCircuitAccessRequestProto.Builder builder =
         ReleaseShortCircuitAccessRequestProto.newBuilder().
-        setSlotId(PBHelper.convert(slotId)).
-        build();
+        setSlotId(PBHelper.convert(slotId));
+    if (Trace.isTracing()) {
+      Span s = Trace.currentSpan();
+      builder.setTraceInfo(DataTransferTraceInfoProto.newBuilder()
+          .setTraceId(s.getTraceId()).setParentId(s.getSpanId()));
+    }
+    ReleaseShortCircuitAccessRequestProto proto = builder.build();
     send(out, Op.RELEASE_SHORT_CIRCUIT_FDS, proto);
   }
 
   @Override
   public void requestShortCircuitShm(String clientName) throws IOException {
-    ShortCircuitShmRequestProto proto =
+    ShortCircuitShmRequestProto.Builder builder =
         ShortCircuitShmRequestProto.newBuilder().
-        setClientName(clientName).
-        build();
+        setClientName(clientName);
+    if (Trace.isTracing()) {
+      Span s = Trace.currentSpan();
+      builder.setTraceInfo(DataTransferTraceInfoProto.newBuilder()
+          .setTraceId(s.getTraceId()).setParentId(s.getSpanId()));
+    }
+    ShortCircuitShmRequestProto proto = builder.build();
     send(out, Op.REQUEST_SHORT_CIRCUIT_SHM, proto);
   }
   

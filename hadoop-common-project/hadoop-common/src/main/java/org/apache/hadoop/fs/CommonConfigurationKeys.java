@@ -139,6 +139,9 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String 
   HADOOP_SECURITY_SERVICE_AUTHORIZATION_REFRESH_USER_MAPPINGS =
       "security.refresh.user.mappings.protocol.acl";
+  public static final String
+  HADOOP_SECURITY_SERVICE_AUTHORIZATION_TRACING =
+      "security.trace.protocol.acl";
   public static final String 
   SECURITY_HA_SERVICE_PROTOCOL_ACL = "security.ha.service.protocol.acl";
   public static final String 
@@ -269,6 +272,7 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final boolean RPC_METRICS_QUANTILE_ENABLE_DEFAULT = false;
   public static final String  RPC_METRICS_PERCENTILES_INTERVALS_KEY =
       "rpc.metrics.percentiles.intervals";
+
   public static final String HADOOP_RAID_FILESYSTEM_CLASS_KEY = "hdfs.raid.filesystem.class";
   public static final String HADOOP_RAID_ENABLED_KEY = "hdfs.raid.enabled";
   public static final boolean HADOOP_RAID_ENABLED_DEFAULT = false;
@@ -282,4 +286,7 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String ZK_ACL_KEY = "ha.zookeeper.acl";
   public static final String ZK_ACL_DEFAULT = "world:anyone:rwcda";
   public static final String ZK_AUTH_KEY = "ha.zookeeper.auth";
+
+  public static final String  HADOOP_TRACE_SAMPLER = "hadoop.htrace.sampler";
+  public static final String  HADOOP_TRACE_SAMPLER_DEFAULT = "NeverSampler";
 }
