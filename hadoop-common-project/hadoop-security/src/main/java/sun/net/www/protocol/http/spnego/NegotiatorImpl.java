@@ -92,14 +92,7 @@ public class NegotiatorImpl extends Negotiator {
 
         // RFC 4559 4.1 uses uppercase service name "HTTP".
         // RFC 4120 6.2.1 demands the host be lowercase
-        // String peerName = "HTTP@" + hci.host.toLowerCase();
-        String kerberosInstanceName = System.getProperty("kerberos.instance");
-        String peerName = null;
-        if (kerberosInstanceName == null) {
-          peerName = "HTTP/" + hci.host.toLowerCase();
-        } else {
-          peerName = "HTTP/" + kerberosInstanceName;
-        }
+        String peerName = "HTTP@" + hci.host.toLowerCase();
 
         GSSName serverName = manager.createName(peerName,
                 GSSName.NT_HOSTBASED_SERVICE);

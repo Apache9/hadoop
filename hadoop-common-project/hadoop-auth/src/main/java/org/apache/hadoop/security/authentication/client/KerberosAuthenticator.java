@@ -265,11 +265,8 @@ public class KerberosAuthenticator implements Authenticator {
           GSSContext gssContext = null;
           try {
             GSSManager gssManager = GSSManager.getInstance();
-            /**
             String servicePrincipal = KerberosUtil.getServicePrincipal("HTTP",
                 KerberosAuthenticator.this.url.getHost());
-            */
-            String servicePrincipal = KerberosUtil.getServicePrincipal("HTTP", "hadoop");
             Oid oid = KerberosUtil.getOidInstance("NT_GSS_KRB5_PRINCIPAL");
             GSSName serviceName = gssManager.createName(servicePrincipal,
                                                         oid);
