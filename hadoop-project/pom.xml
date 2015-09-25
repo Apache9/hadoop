@@ -69,6 +69,7 @@
     <scribe-log4j.version>1.0.0-SNAPSHOT</scribe-log4j.version>
     <ext-log4j.version>1.0.0-SNAPSHOT</ext-log4j.version>
     <zookeeper-mdh.version>3.4.5-mdh1.2.0</zookeeper-mdh.version>
+    <htrace-mdh.version>3.1.1-mdh1.0-SNAPSHOT</htrace-mdh.version>
   </properties>
 
   <dependencyManagement>
@@ -689,7 +690,7 @@
       <dependency>
         <groupId>org.apache.htrace</groupId>
         <artifactId>htrace-core</artifactId>
-        <version>3.1.0-incubating</version>
+        <version>${htrace-mdh.version}</version>
       </dependency>
       <dependency>
         <groupId>org.jdom</groupId>

@@ -1,4 +1,6 @@
 {
   "project_id" : "HadoopCommon",
-  "conduit_uri" : "https://phabricator.d.xiaomi.net/"
+  "conduit_uri" : "https://phabricator.d.xiaomi.net/",
+  "base" : "git:merge-base(origin/hadoop-2.4.0-mdh2), arc:prompt",
+  "arc.land.onto.default": "hadoop-2.4.0-mdh2"
 }
