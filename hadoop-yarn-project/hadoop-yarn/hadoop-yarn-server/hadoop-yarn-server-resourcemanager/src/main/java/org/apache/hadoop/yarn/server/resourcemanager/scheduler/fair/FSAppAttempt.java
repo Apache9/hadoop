@@ -54,6 +54,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.NodeType;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FSPreemptionPolicy;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FifoPolicy;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
@@ -604,7 +605,12 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
         // Skip it for reserved container, since
         // we already check it in isValidReservation.
         if (!reserved && !hasContainerForNode(priority, node)) {
-          continue;
+          SchedulingPolicy policy = getQueue().getPolicy();
+          if (FifoPolicy.NAME.equals(policy.getName()) && !fitInQueue(priority)) {
+            return Resources.queueFull();
+          } else {
+            continue;
+          }
         }
 
         addSchedulingOpportunity(priority);
@@ -694,6 +700,11 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
                 node.getRMNode().getTotalCapability()) &&
             // The requested container must fit in queue maximum share:
             getQueue().fitsInMaxShare(anyRequest.getCapability());
+  }
+
+  private boolean fitInQueue(Priority prio) {
+    ResourceRequest anyRequest = getResourceRequest(prio, ResourceRequest.ANY);
+    return getQueue().fitsInMaxShare(anyRequest.getCapability());
   }
 
   private boolean isValidReservation(FSSchedulerNode node) {

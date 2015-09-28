@@ -94,6 +94,34 @@ public class Resources {
     
   };
 
+  private static final Resource QUEUE_FULL = new Resource() {
+
+    @Override
+    public int getMemory() {
+      return Integer.MIN_VALUE;
+    }
+
+    @Override
+    public void setMemory(int memory) {
+      throw new RuntimeException("NONE cannot be modified!");
+    }
+
+    @Override
+    public int getVirtualCores() {
+      return Integer.MIN_VALUE;
+    }
+
+    @Override
+    public void setVirtualCores(int cores) {
+      throw new RuntimeException("NONE cannot be modified!");
+    }
+
+    @Override
+    public int compareTo(Resource o) {
+      throw new RuntimeException("NONE cannot be modified!");
+    }
+  };
+
   public static Resource createResource(int memory) {
     return createResource(memory, (memory > 0) ? 1 : 0);
   }
@@ -111,6 +139,10 @@ public class Resources {
   
   public static Resource unbounded() {
     return UNBOUNDED;
+  }
+
+  public static Resource queueFull() {
+    return QUEUE_FULL;
   }
 
   public static Resource clone(Resource res) {

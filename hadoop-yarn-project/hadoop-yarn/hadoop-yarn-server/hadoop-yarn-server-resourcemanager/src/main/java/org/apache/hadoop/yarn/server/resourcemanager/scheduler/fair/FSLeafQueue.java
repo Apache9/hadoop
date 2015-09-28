@@ -329,6 +329,10 @@ public class FSLeafQueue extends FSQueue {
         if (!assigned.equals(Resources.none())) {
           break;
         }
+        if (assigned.equals(Resources.queueFull())) {
+          assigned = Resources.none();
+          break;
+        }
       }
     } finally {
       readLock.unlock();
