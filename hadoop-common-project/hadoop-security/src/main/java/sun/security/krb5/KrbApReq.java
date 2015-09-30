@@ -1,336 +1,516 @@
 /*
- * %W% %E%
+ * Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * Copyright (c) 2006, Oracle and/or its affiliates. All rights reserved.
- * ORACLE PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
+
+/*
+ *
+ *  (C) Copyright IBM Corp. 1999 All Rights Reserved.
+ *  Copyright 1997 The Open Group Research Institute.  All rights reserved.
  */
 
 package sun.security.krb5;
 
+import sun.security.krb5.internal.*;
+import sun.security.krb5.internal.crypto.*;
+import sun.security.jgss.krb5.Krb5AcceptCredential;
+import java.net.InetAddress;
+import sun.security.util.*;
 import java.io.IOException;
-import java.io.PrintStream;
+import java.util.Arrays;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import sun.security.krb5.internal.rcache.AuthTimeWithHash;
 
-import sun.security.krb5.internal.APOptions;
-import sun.security.krb5.internal.APReq;
-import sun.security.krb5.internal.Authenticator;
-import sun.security.krb5.internal.AuthorizationData;
-import sun.security.krb5.internal.EncTicketPart;
-import sun.security.krb5.internal.HostAddress;
-import sun.security.krb5.internal.HostAddresses;
-import sun.security.krb5.internal.KRBError;
-import sun.security.krb5.internal.KdcErrException;
-import sun.security.krb5.internal.KerberosTime;
-import sun.security.krb5.internal.Krb5;
-import sun.security.krb5.internal.KrbApErrException;
-import sun.security.krb5.internal.LocalSeqNumber;
-import sun.security.krb5.internal.SeqNumber;
-import sun.security.krb5.internal.Ticket;
-import sun.security.krb5.internal.TicketFlags;
-import sun.security.krb5.internal.crypto.EType;
-import sun.security.krb5.internal.rcache.AuthTime;
-import sun.security.krb5.internal.rcache.CacheTable;
-import sun.security.util.DerValue;
+/**
+ * This class encapsulates a KRB-AP-REQ that a client sends to a
+ * server for authentication.
+ */
+public class KrbApReq {
 
-public class KrbApReq
-{
-  private byte[] obuf;
-  private KerberosTime ctime;
-  private int cusec;
-  private Authenticator authenticator;
-  private Credentials creds;
-  private APReq apReqMessg;
-  private static CacheTable table = new CacheTable();
+    private byte[] obuf;
+    private KerberosTime ctime;
+    private int cusec;
+    private Authenticator authenticator;
+    private Credentials creds;
+    private APReq apReqMessg;
 
-  private static boolean DEBUG = Krb5.DEBUG;
+    // Used by acceptor side
+    private static ReplayCache rcache = ReplayCache.getInstance();
+    private static boolean DEBUG = Krb5.DEBUG;
+    private static final char[] hexConst = "0123456789ABCDEF".toCharArray();
 
-  public KrbApReq(Credentials paramCredentials,
-      boolean paramBoolean1, boolean paramBoolean2,
-      boolean paramBoolean3, Checksum paramChecksum)
-    throws Asn1Exception, KrbCryptoException,
-           KrbException, IOException
-  {
-    APOptions localAPOptions =
-      paramBoolean1 ? new APOptions(2) : new APOptions();
+    private static final MessageDigest md;
 
-    if (DEBUG) {
-      System.out.println(">>> KrbApReq: APOptions are " + localAPOptions);
-    }
-    EncryptionKey localEncryptionKey =
-      paramBoolean2 ? new EncryptionKey(paramCredentials.getSessionKey()) : null;
-
-    LocalSeqNumber localLocalSeqNumber = new LocalSeqNumber();
-
-    init(localAPOptions, paramCredentials, paramChecksum,
-        localEncryptionKey, localLocalSeqNumber, null, 11);
-  }
-
-  public KrbApReq(byte[] paramArrayOfByte,
-      EncryptionKey[] paramArrayOfEncryptionKey)
-    throws KrbException, IOException
-  {
-    this.obuf = paramArrayOfByte;
-    if (this.apReqMessg == null)
-      decode();
-    authenticate(paramArrayOfEncryptionKey, null);
-  }
-
-  KrbApReq(APOptions paramAPOptions,
-      Ticket paramTicket, EncryptionKey paramEncryptionKey1,
-      Realm paramRealm, PrincipalName paramPrincipalName,
-      Checksum paramChecksum, KerberosTime paramKerberosTime,
-      EncryptionKey paramEncryptionKey2, SeqNumber paramSeqNumber,
-      AuthorizationData paramAuthorizationData)
-    throws Asn1Exception, IOException, KdcErrException, KrbCryptoException
-  {
-    init(paramAPOptions, paramTicket, paramEncryptionKey1, paramRealm,
-        paramPrincipalName, paramChecksum, paramKerberosTime,
-        paramEncryptionKey2, paramSeqNumber, paramAuthorizationData, 7);
-  }
-
-  private void init(APOptions paramAPOptions, Credentials paramCredentials,
-      Checksum paramChecksum, EncryptionKey paramEncryptionKey,
-      SeqNumber paramSeqNumber, AuthorizationData paramAuthorizationData,
-      int paramInt) throws KrbException, IOException
-  {
-    this.ctime = new KerberosTime(true);
-    init(paramAPOptions, paramCredentials.ticket, paramCredentials.key,
-        paramCredentials.client.getRealm(), paramCredentials.client,
-        paramChecksum, this.ctime, paramEncryptionKey, paramSeqNumber,
-        paramAuthorizationData, paramInt);
-  }
-
-  private void init(APOptions paramAPOptions, Ticket paramTicket,
-      EncryptionKey paramEncryptionKey1, Realm paramRealm,
-      PrincipalName paramPrincipalName, Checksum paramChecksum,
-      KerberosTime paramKerberosTime, EncryptionKey paramEncryptionKey2,
-      SeqNumber paramSeqNumber, AuthorizationData paramAuthorizationData,
-      int paramInt)
-    throws Asn1Exception, IOException, KdcErrException, KrbCryptoException
-  {
-    createMessage(paramAPOptions, paramTicket, paramEncryptionKey1, paramRealm,
-        paramPrincipalName, paramChecksum, paramKerberosTime,
-        paramEncryptionKey2, paramSeqNumber, paramAuthorizationData, paramInt);
-
-    this.obuf = this.apReqMessg.asn1Encode();
-  }
-
-  void decode() throws KrbException, IOException
-  {
-    DerValue localDerValue = new DerValue(this.obuf);
-    decode(localDerValue);
-  }
-
-  void decode(DerValue paramDerValue) throws KrbException, IOException {
-    this.apReqMessg = null;
-    try {
-      this.apReqMessg = new APReq(paramDerValue);
-    } catch (Asn1Exception localAsn1Exception) {
-      this.apReqMessg = null;
-      KRBError localKRBError = new KRBError(paramDerValue);
-      String str1 = localKRBError.getErrorString();
-      String str2;
-      if (str1.charAt(str1.length() - 1) == 0)
-        str2 = str1.substring(0, str1.length() - 1);
-      else
-        str2 = str1;
-      KrbException localKrbException = new KrbException(
-          localKRBError.getErrorCode(), str2);
-      localKrbException.initCause(localAsn1Exception);
-      throw localKrbException;
-    }
-  }
-
-  private void authenticate(EncryptionKey[] paramArrayOfEncryptionKey,
-      HostAddress paramHostAddress) throws KrbException, IOException
-  {
-    int i = this.apReqMessg.ticket.encPart.getEType();
-    Integer localInteger = this.apReqMessg.ticket.encPart.getKeyVersionNumber();
-    EncryptionKey localEncryptionKey = EncryptionKey.findKey(i,
-        localInteger, paramArrayOfEncryptionKey);
-
-    if (localEncryptionKey == null) {
-      throw new KrbException(400,
-          "Cannot find key of appropriate type to decrypt AP REP - "
-          + EType.toString(i));
+    static {
+        try {
+            md = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException ex) {
+            throw new RuntimeException("Impossible");
+        }
     }
 
-    byte[] arrayOfByte1 = this.apReqMessg.ticket.encPart.decrypt(
-        localEncryptionKey, 2);
+    /**
+     * Constructs an AP-REQ message to send to the peer.
+     * @param tgsCred the <code>Credentials</code> to be used to construct the
+     *          AP Request  protocol message.
+     * @param mutualRequired Whether mutual authentication is required
+     * @param useSubkey Whether the subkey is to be used to protect this
+     *        specific application session. If this is not set then the
+     *        session key from the ticket will be used.
+     * @throws KrbException for any Kerberos protocol specific error
+     * @throws IOException for any IO related errors
+     *          (e.g. socket operations)
+     */
+     /*
+     // Not Used
+    public KrbApReq(Credentials tgsCred,
+                    boolean mutualRequired,
+                    boolean useSubKey,
+                    boolean useSeqNumber) throws Asn1Exception,
+                    KrbCryptoException, KrbException, IOException {
 
-    byte[] arrayOfByte2 = this.apReqMessg.ticket.encPart.reset(
-        arrayOfByte1, true);
-    EncTicketPart localEncTicketPart = new EncTicketPart(arrayOfByte2);
-
-    checkPermittedEType(localEncTicketPart.key.getEType());
-
-    byte[] arrayOfByte3 = this.apReqMessg.authenticator.decrypt(
-        localEncTicketPart.key, 11);
-
-    byte[] arrayOfByte4 = this.apReqMessg.authenticator.reset(
-        arrayOfByte3, true);
-    this.authenticator = new Authenticator(arrayOfByte4);
-    this.ctime = this.authenticator.ctime;
-    this.cusec = this.authenticator.cusec;
-    this.authenticator.ctime.setMicroSeconds(this.authenticator.cusec);
-    this.authenticator.cname.setRealm(this.authenticator.crealm);
-    this.apReqMessg.ticket.sname.setRealm(this.apReqMessg.ticket.realm);
-    localEncTicketPart.cname.setRealm(localEncTicketPart.crealm);
-
-    if (!this.authenticator.cname.equals(localEncTicketPart.cname)) {
-      throw new KrbApErrException(36);
+        this(tgsCred, mutualRequired, useSubKey, useSeqNumber, null);
     }
-    KerberosTime localKerberosTime1 = new KerberosTime(true);
-    if (!this.authenticator.ctime.inClockSkew(localKerberosTime1)) {
-      throw new KrbApErrException(37);
-    }
+*/
 
-    // Turn off the replay attack detection during client<->server mutual authentication
-    // AuthTime localAuthTime = new AuthTime(this.authenticator.ctime.getTime(),
-    //     this.authenticator.cusec);
+    /**
+     * Constructs an AP-REQ message to send to the peer.
+     * @param tgsCred the <code>Credentials</code> to be used to construct the
+     *          AP Request  protocol message.
+     * @param mutualRequired Whether mutual authentication is required
+     * @param useSubkey Whether the subkey is to be used to protect this
+     *        specific application session. If this is not set then the
+     *        session key from the ticket will be used.
+     * @param checksum checksum of the the application data that accompanies
+     *        the KRB_AP_REQ.
+     * @throws KrbException for any Kerberos protocol specific error
+     * @throws IOException for any IO related errors
+     *          (e.g. socket operations)
+     */
+     // Used in InitSecContextToken
+    public KrbApReq(Credentials tgsCred,
+                    boolean mutualRequired,
+                    boolean useSubKey,
+                    boolean useSeqNumber,
+                    Checksum cksum) throws Asn1Exception,
+                    KrbCryptoException, KrbException, IOException  {
 
-    // String str = this.authenticator.cname.toString();
-    // if (table.get(localAuthTime, this.authenticator.cname.toString()) != null) {
-    //   throw new KrbApErrException(34);
-    // }
-    // table.put(str, localAuthTime, localKerberosTime1.getTime());
+        APOptions apOptions = (mutualRequired?
+                               new APOptions(Krb5.AP_OPTS_MUTUAL_REQUIRED):
+                               new APOptions());
+        if (DEBUG)
+            System.out.println(">>> KrbApReq: APOptions are " + apOptions);
 
-    if ((paramHostAddress != null) &&
-      (localEncTicketPart.caddr != null)) {
-      if (paramHostAddress == null)
-        throw new KrbApErrException(38);
-      if (!localEncTicketPart.caddr.inList(paramHostAddress)) {
-        throw new KrbApErrException(38);
-      }
+        EncryptionKey subKey = (useSubKey?
+                                new EncryptionKey(tgsCred.getSessionKey()):
+                                null);
+
+        SeqNumber seqNum = new LocalSeqNumber();
+
+        init(apOptions,
+             tgsCred,
+             cksum,
+             subKey,
+             seqNum,
+             null,   // AuthorizationData authzData
+            KeyUsage.KU_AP_REQ_AUTHENTICATOR);
 
     }
 
-    KerberosTime localKerberosTime2 = new KerberosTime(true);
-
-    if (((localEncTicketPart.starttime != null) &&
-          (localEncTicketPart.starttime.greaterThanWRTClockSkew(
-              localKerberosTime2))) || (localEncTicketPart.flags.get(7)))
-    {
-      throw new KrbApErrException(33);
+    /**
+     * Constructs an AP-REQ message from the bytes received from the
+     * peer.
+     * @param message The message received from the peer
+     * @param keys <code>EncrtyptionKey</code>s to decrypt the message;
+     *       key selected will depend on etype used to encrypte data
+     * @throws KrbException for any Kerberos protocol specific error
+     * @throws IOException for any IO related errors
+     *          (e.g. socket operations)
+     */
+     // Used in InitSecContextToken (for AP_REQ and not TGS REQ)
+    public KrbApReq(byte[] message,
+                    Krb5AcceptCredential cred,
+                    InetAddress initiator)
+        throws KrbException, IOException {
+        obuf = message;
+        if (apReqMessg == null)
+            decode();
+        authenticate(cred, initiator);
     }
 
-    if ((localEncTicketPart.endtime != null) &&
-        (localKerberosTime2.greaterThanWRTClockSkew(localEncTicketPart.endtime)))
-    {
-      throw new KrbApErrException(32);
+    /**
+     * Constructs an AP-REQ message from the bytes received from the
+     * peer.
+     * @param value The <code>DerValue</code> that contains the
+     *              DER enoded AP-REQ protocol message
+     * @param keys <code>EncrtyptionKey</code>s to decrypt the message;
+     *
+     * @throws KrbException for any Kerberos protocol specific error
+     * @throws IOException for any IO related errors
+     *          (e.g. socket operations)
+     */
+     /*
+    public KrbApReq(DerValue value, EncryptionKey[] key, InetAddress initiator)
+        throws KrbException, IOException {
+        obuf = value.toByteArray();
+        if (apReqMessg == null)
+            decode(value);
+        authenticate(keys, initiator);
     }
 
-    this.creds = new Credentials(this.apReqMessg.ticket,
-        this.authenticator.cname, this.apReqMessg.ticket.sname,
-        localEncTicketPart.key, null, localEncTicketPart.authtime,
-        localEncTicketPart.starttime, localEncTicketPart.endtime,
-        localEncTicketPart.renewTill, localEncTicketPart.caddr);
-
-    if (DEBUG)
-      System.out.println(">>> KrbApReq: authenticate succeed.");
-  }
-
-  public Credentials getCreds()
-  {
-    return this.creds;
-  }
-
-  KerberosTime getCtime() {
-    if (this.ctime != null)
-      return this.ctime;
-    return this.authenticator.ctime;
-  }
-
-  int cusec() {
-    return this.cusec;
-  }
-
-  APOptions getAPOptions() throws KrbException, IOException {
-    if (this.apReqMessg == null)
-      decode();
-    if (this.apReqMessg != null)
-      return this.apReqMessg.apOptions;
-    return null;
-  }
-
-  public boolean getMutualAuthRequired()
-    throws KrbException, IOException
-  {
-    if (this.apReqMessg == null)
-      decode();
-    if (this.apReqMessg != null)
-      return this.apReqMessg.apOptions.get(2);
-    return false;
-  }
-
-  boolean useSessionKey() throws KrbException, IOException {
-    if (this.apReqMessg == null)
-      decode();
-    if (this.apReqMessg != null)
-      return this.apReqMessg.apOptions.get(1);
-    return false;
-  }
-
-  public EncryptionKey getSubKey()
-  {
-    return this.authenticator.getSubKey();
-  }
-
-  public Integer getSeqNumber()
-  {
-    return this.authenticator.getSeqNumber();
-  }
-
-  public Checksum getChecksum()
-  {
-    return this.authenticator.getChecksum();
-  }
-
-  public byte[] getMessage()
-  {
-    return this.obuf;
-  }
-
-  public PrincipalName getClient()
-  {
-    return this.creds.getClient();
-  }
-
-  private void createMessage(APOptions paramAPOptions, Ticket paramTicket,
-      EncryptionKey paramEncryptionKey1, Realm paramRealm,
-      PrincipalName paramPrincipalName, Checksum paramChecksum,
-      KerberosTime paramKerberosTime, EncryptionKey paramEncryptionKey2,
-      SeqNumber paramSeqNumber, AuthorizationData paramAuthorizationData,
-      int paramInt)
-    throws Asn1Exception, IOException, KdcErrException, KrbCryptoException
-  {
-    Integer localInteger = null;
-
-    if (paramSeqNumber != null) {
-      localInteger = new Integer(paramSeqNumber.current());
+    KrbApReq(APOptions options,
+             Credentials tgs_creds,
+             Checksum cksum,
+             EncryptionKey subKey,
+             SeqNumber seqNumber,
+             AuthorizationData authorizationData)
+        throws KrbException, IOException {
+        init(options, tgs_creds, cksum, subKey, seqNumber, authorizationData);
     }
-    this.authenticator = new Authenticator(paramRealm, paramPrincipalName,
-        paramChecksum, paramKerberosTime.getMicroSeconds(), paramKerberosTime,
-        paramEncryptionKey2, localInteger, paramAuthorizationData);
+*/
 
-    byte[] arrayOfByte = this.authenticator.asn1Encode();
+     /** used by KrbTgsReq **/
+    KrbApReq(APOptions apOptions,
+             Ticket ticket,
+             EncryptionKey key,
+             PrincipalName cname,
+             Checksum cksum,
+             KerberosTime ctime,
+             EncryptionKey subKey,
+             SeqNumber seqNumber,
+        AuthorizationData authorizationData)
+        throws Asn1Exception, IOException,
+               KdcErrException, KrbCryptoException {
 
-    EncryptedData localEncryptedData = new EncryptedData(paramEncryptionKey1,
-        arrayOfByte, paramInt);
+        init(apOptions, ticket, key, cname,
+             cksum, ctime, subKey, seqNumber, authorizationData,
+            KeyUsage.KU_PA_TGS_REQ_AUTHENTICATOR);
 
-    this.apReqMessg = new APReq(paramAPOptions, paramTicket, localEncryptedData);
-  }
-
-  private static void checkPermittedEType(int paramInt)
-    throws KrbException
-  {
-    int[] arrayOfInt = EType.getDefaults("permitted_enctypes");
-    if (arrayOfInt == null) {
-      throw new KrbException(
-          "No supported encryption types listed in permitted_enctypes");
     }
 
-    if (!EType.isSupported(paramInt, arrayOfInt))
-      throw new KrbException(EType.toString(paramInt) +
-          " encryption type not in permitted_enctypes list");
-  }
+    private void init(APOptions options,
+                      Credentials tgs_creds,
+                      Checksum cksum,
+                      EncryptionKey subKey,
+                      SeqNumber seqNumber,
+                      AuthorizationData authorizationData,
+        int usage)
+        throws KrbException, IOException {
+
+        ctime = KerberosTime.now();
+        init(options,
+             tgs_creds.ticket,
+             tgs_creds.key,
+             tgs_creds.client,
+             cksum,
+             ctime,
+             subKey,
+             seqNumber,
+             authorizationData,
+            usage);
+    }
+
+    private void init(APOptions apOptions,
+                      Ticket ticket,
+                      EncryptionKey key,
+                      PrincipalName cname,
+                      Checksum cksum,
+                      KerberosTime ctime,
+                      EncryptionKey subKey,
+                      SeqNumber seqNumber,
+                      AuthorizationData authorizationData,
+        int usage)
+        throws Asn1Exception, IOException,
+               KdcErrException, KrbCryptoException {
+
+        createMessage(apOptions, ticket, key, cname,
+                      cksum, ctime, subKey, seqNumber, authorizationData,
+            usage);
+        obuf = apReqMessg.asn1Encode();
+    }
+
+
+    void decode() throws KrbException, IOException {
+        DerValue encoding = new DerValue(obuf);
+        decode(encoding);
+    }
+
+    void decode(DerValue encoding) throws KrbException, IOException {
+        apReqMessg = null;
+        try {
+            apReqMessg = new APReq(encoding);
+        } catch (Asn1Exception e) {
+            apReqMessg = null;
+            KRBError err = new KRBError(encoding);
+            String errStr = err.getErrorString();
+            String eText;
+            if (errStr.charAt(errStr.length() - 1) == 0)
+                eText = errStr.substring(0, errStr.length() - 1);
+            else
+                eText = errStr;
+            KrbException ke = new KrbException(err.getErrorCode(), eText);
+            ke.initCause(e);
+            throw ke;
+        }
+    }
+
+    private void authenticate(Krb5AcceptCredential cred, InetAddress initiator)
+        throws KrbException, IOException {
+        int encPartKeyType = apReqMessg.ticket.encPart.getEType();
+        Integer kvno = apReqMessg.ticket.encPart.getKeyVersionNumber();
+        EncryptionKey[] keys = cred.getKrb5EncryptionKeys(apReqMessg.ticket.sname);
+        EncryptionKey dkey = EncryptionKey.findKey(encPartKeyType, kvno, keys);
+
+        if (dkey == null) {
+            throw new KrbException(Krb5.API_INVALID_ARG,
+                "Cannot find key of appropriate type to decrypt AP REP - " +
+                                   EType.toString(encPartKeyType));
+        }
+
+        byte[] bytes = apReqMessg.ticket.encPart.decrypt(dkey,
+            KeyUsage.KU_TICKET);
+        byte[] temp = apReqMessg.ticket.encPart.reset(bytes);
+        EncTicketPart enc_ticketPart = new EncTicketPart(temp);
+
+        checkPermittedEType(enc_ticketPart.key.getEType());
+
+        byte[] bytes2 = apReqMessg.authenticator.decrypt(enc_ticketPart.key,
+            KeyUsage.KU_AP_REQ_AUTHENTICATOR);
+        byte[] temp2 = apReqMessg.authenticator.reset(bytes2);
+        authenticator = new Authenticator(temp2);
+        ctime = authenticator.ctime;
+        cusec = authenticator.cusec;
+        authenticator.ctime =
+                authenticator.ctime.withMicroSeconds(authenticator.cusec);
+
+        if (!authenticator.cname.equals(enc_ticketPart.cname)) {
+            throw new KrbApErrException(Krb5.KRB_AP_ERR_BADMATCH);
+        }
+
+        if (!authenticator.ctime.inClockSkew())
+            throw new KrbApErrException(Krb5.KRB_AP_ERR_SKEW);
+
+        byte[] hash = md.digest(apReqMessg.authenticator.cipher);
+        char[] h = new char[hash.length * 2];
+        for (int i=0; i<hash.length; i++) {
+            h[2*i] = hexConst[(hash[i]&0xff)>>4];
+            h[2*i+1] = hexConst[hash[i]&0xf];
+        }
+        AuthTimeWithHash time = new AuthTimeWithHash(
+                authenticator.cname.toString(),
+                apReqMessg.ticket.sname.toString(),
+                authenticator.ctime.getSeconds(),
+                authenticator.cusec,
+                new String(h));
+        rcache.checkAndStore(KerberosTime.now(), time);
+
+        if (initiator != null) {
+            // sender host address
+            HostAddress sender = new HostAddress(initiator);
+            if (enc_ticketPart.caddr != null
+                    && !enc_ticketPart.caddr.inList(sender)) {
+                if (DEBUG) {
+                    System.out.println(">>> KrbApReq: initiator is "
+                            + sender.getInetAddress()
+                            + ", but caddr is "
+                            + Arrays.toString(
+                                enc_ticketPart.caddr.getInetAddresses()));
+                }
+                throw new KrbApErrException(Krb5.KRB_AP_ERR_BADADDR);
+            }
+        }
+
+        // XXX check for repeated authenticator
+        // if found
+        //    throw new KrbApErrException(Krb5.KRB_AP_ERR_REPEAT);
+        // else
+        //    save authenticator to check for later
+
+        KerberosTime now = KerberosTime.now();
+
+        if ((enc_ticketPart.starttime != null &&
+             enc_ticketPart.starttime.greaterThanWRTClockSkew(now)) ||
+            enc_ticketPart.flags.get(Krb5.TKT_OPTS_INVALID))
+            throw new KrbApErrException(Krb5.KRB_AP_ERR_TKT_NYV);
+
+        // if the current time is later than end time by more
+        // than the allowable clock skew, throws ticket expired exception.
+        if (enc_ticketPart.endtime != null &&
+            now.greaterThanWRTClockSkew(enc_ticketPart.endtime)) {
+            throw new KrbApErrException(Krb5.KRB_AP_ERR_TKT_EXPIRED);
+        }
+
+        creds = new Credentials(
+                                apReqMessg.ticket,
+                                authenticator.cname,
+                                apReqMessg.ticket.sname,
+                                enc_ticketPart.key,
+                                enc_ticketPart.flags,
+                                enc_ticketPart.authtime,
+                                enc_ticketPart.starttime,
+                                enc_ticketPart.endtime,
+                                enc_ticketPart.renewTill,
+                                enc_ticketPart.caddr,
+                                enc_ticketPart.authorizationData);
+        if (DEBUG) {
+            System.out.println(">>> KrbApReq: authenticate succeed.");
+        }
+    }
+
+    /**
+     * Returns the credentials that are contained in the ticket that
+     * is part of this this AP-REP.
+     */
+    public Credentials getCreds() {
+        return creds;
+    }
+
+    KerberosTime getCtime() {
+        if (ctime != null)
+            return ctime;
+        return authenticator.ctime;
+    }
+
+    int cusec() {
+        return cusec;
+    }
+
+    APOptions getAPOptions() throws KrbException, IOException {
+        if (apReqMessg == null)
+            decode();
+        if (apReqMessg != null)
+            return apReqMessg.apOptions;
+        return null;
+    }
+
+    /**
+     * Returns true if mutual authentication is required and hence an
+     * AP-REP will need to be generated.
+     * @throws KrbException
+     * @throws IOException
+     */
+    public boolean getMutualAuthRequired() throws KrbException, IOException {
+        if (apReqMessg == null)
+            decode();
+        if (apReqMessg != null)
+            return apReqMessg.apOptions.get(Krb5.AP_OPTS_MUTUAL_REQUIRED);
+        return false;
+    }
+
+    boolean useSessionKey() throws KrbException, IOException {
+        if (apReqMessg == null)
+            decode();
+        if (apReqMessg != null)
+            return apReqMessg.apOptions.get(Krb5.AP_OPTS_USE_SESSION_KEY);
+        return false;
+    }
+
+    /**
+     * Returns the optional subkey stored in the Authenticator for
+     * this message. Returns null if none is stored.
+     */
+    public EncryptionKey getSubKey() {
+        // XXX Can authenticator be null
+        return authenticator.getSubKey();
+    }
+
+    /**
+     * Returns the optional sequence number stored in the
+     * Authenticator for this message. Returns null if none is
+     * stored.
+     */
+    public Integer getSeqNumber() {
+        // XXX Can authenticator be null
+        return authenticator.getSeqNumber();
+    }
+
+    /**
+     * Returns the optional Checksum stored in the
+     * Authenticator for this message. Returns null if none is
+     * stored.
+     */
+    public Checksum getChecksum() {
+        return authenticator.getChecksum();
+    }
+
+    /**
+     * Returns the ASN.1 encoding that should be sent to the peer.
+     */
+    public byte[] getMessage() {
+        return obuf;
+    }
+
+    /**
+     * Returns the principal name of the client that generated this
+     * message.
+     */
+    public PrincipalName getClient() {
+        return creds.getClient();
+    }
+
+    private void createMessage(APOptions apOptions,
+                               Ticket ticket,
+                               EncryptionKey key,
+                               PrincipalName cname,
+                               Checksum cksum,
+                               KerberosTime ctime,
+                               EncryptionKey subKey,
+                               SeqNumber seqNumber,
+                               AuthorizationData authorizationData,
+        int usage)
+        throws Asn1Exception, IOException,
+               KdcErrException, KrbCryptoException {
+
+        Integer seqno = null;
+
+        if (seqNumber != null)
+            seqno = new Integer(seqNumber.current());
+
+        authenticator =
+            new Authenticator(cname,
+                              cksum,
+                              ctime.getMicroSeconds(),
+                              ctime,
+                              subKey,
+                              seqno,
+                              authorizationData);
+
+        byte[] temp = authenticator.asn1Encode();
+
+        EncryptedData encAuthenticator =
+            new EncryptedData(key, temp, usage);
+
+        apReqMessg =
+            new APReq(apOptions, ticket, encAuthenticator);
+    }
+
+     // Check that key is one of the permitted types
+     private static void checkPermittedEType(int target) throws KrbException {
+        int[] etypes = EType.getDefaults("permitted_enctypes");
+        if (!EType.isSupported(target, etypes)) {
+            throw new KrbException(EType.toString(target) +
+                " encryption type not in permitted_enctypes list");
+        }
+     }
 }
