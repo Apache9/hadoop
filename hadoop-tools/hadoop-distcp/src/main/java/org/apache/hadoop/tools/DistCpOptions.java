@@ -21,6 +21,7 @@ package org.apache.hadoop.tools;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.tools.util.DistCpUtils;
+import org.mortbay.log.Log;
 
 import java.util.EnumSet;
 import java.util.Iterator;
@@ -36,6 +37,8 @@ public class DistCpOptions {
 
   private boolean atomicCommit = false;
   private boolean syncFolder = false;
+  private boolean skipOpen = false;
+  private boolean ignoreDeleted = false;
   private boolean deleteMissing = false;
   private boolean ignoreFailures = false;
   private boolean overwrite = false;
@@ -62,6 +65,9 @@ public class DistCpOptions {
   private List<Path> sourcePaths;
 
   private Path targetPath;
+
+  private String includedStr = null;
+  private String excludedStr = null;
 
   // targetPathExist is a derived field, it's initialized in the 
   // beginning of distcp.
@@ -132,6 +138,8 @@ public class DistCpOptions {
       this.sourcePaths = that.getSourcePaths();
       this.targetPath = that.getTargetPath();
       this.targetPathExists = that.getTargetPathExists();
+      this.includedStr = that.includedStr;
+      this.excludedStr = that.excludedStr;
     }
   }
 
@@ -171,6 +179,38 @@ public class DistCpOptions {
   public void setSyncFolder(boolean syncFolder) {
     validate(DistCpOptionSwitch.SYNC_FOLDERS, syncFolder);
     this.syncFolder = syncFolder;
+  }
+
+  /**
+   * Should files under writing being skipped ?
+   *
+   * @return true if files should be skipped. false otherwise
+   */
+  public boolean shouldSkipOpen() {
+    return skipOpen;
+  }
+
+  /**
+   * Set if files being written should be skipped
+   *
+   * @param skipOpen - boolean switch
+   */
+  public void setSkipOpen(boolean skipOpen) {
+    // validate(DistCpOptionSwitch.SKIP_OPEN, skipOpen);
+    this.skipOpen = skipOpen;
+  }
+
+  public boolean shouldIgnoreDeleted() {
+    return ignoreDeleted;
+  }
+
+  /**
+   * Set if files deleted should be ignored
+   *
+   * @param ignoreDeleted - boolean switch
+   */
+  public void setIgnoreDeleted(boolean ignoreDeleted) {
+    this.ignoreDeleted = ignoreDeleted;
   }
 
   /**
@@ -445,8 +485,46 @@ public class DistCpOptions {
   }
 
   /**
-   * File path (hdfs:// or file://) that contains the list of actual
-   * files to copy
+   * Get the included string.
+   * 
+   * @return a string, only files whose path contain a matched sub string will
+   *         be copied
+   */
+  public String getIncludedStr() {
+    return includedStr;
+  }
+
+  /**
+   * Set the included string to use.
+   * 
+   * @param str - included string
+   */
+  public void setIncludedStr(String str) {
+    this.includedStr = str;
+  }
+
+  /**
+   * Get the excluded string.
+   * 
+   * @return a string, only files whose path contain a matched sub string will
+   *         be copied
+   */
+  public String getExcludedStr() {
+    return excludedStr;
+  }
+
+  /**
+   * Set the excluded string to use.
+   * 
+   * @param str - included string
+   */
+  public void setExcludedStr(String str) {
+    this.excludedStr = str;
+  }
+
+  /**
+   * File path (hdfs:// or file://) that contains the list of actual files to
+   * copy
    *
    * @return - Source listing file path
    */
@@ -550,6 +628,10 @@ public class DistCpOptions {
         String.valueOf(ignoreFailures));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.SYNC_FOLDERS,
         String.valueOf(syncFolder));
+    DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.SKIP_OPEN,
+        String.valueOf(skipOpen));
+    DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.IGNORE_DELETED,
+        String.valueOf(ignoreDeleted));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.DELETE_MISSING,
         String.valueOf(deleteMissing));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.OVERWRITE,
@@ -562,6 +644,16 @@ public class DistCpOptions {
         String.valueOf(mapBandwidth));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.PRESERVE_STATUS,
         DistCpUtils.packAttributes(preserveStatus));
+    Log.debug("included str " + (includedStr == null ? "null" : includedStr)
+        + " excluded str " + (excludedStr == null ? "null" : excludedStr));
+    if (includedStr != null) {
+      DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.INCLUDED_WILDMATCH,
+          includedStr);
+    }
+    if (excludedStr != null) {
+      DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.EXCLUDED_WILDMATCH,
+          excludedStr);
+    }
   }
 
   /**

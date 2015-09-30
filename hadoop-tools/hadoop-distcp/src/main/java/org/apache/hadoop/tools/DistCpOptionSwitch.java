@@ -68,10 +68,35 @@ public enum DistCpOptionSwitch {
           "files or directories")),
 
   /**
-   * Deletes missing files in target that are missing from source
-   * This allows the target to be in sync with the source contents
-   * Typically used in conjunction with SYNC_FOLDERS
-   * Incompatible with ATOMIC_COMMIT
+   * Skip files which are being written at either the source site or the target
+   * site.
+   */
+  SKIP_OPEN(DistCpConstants.CONF_LABEL_SKIP_OPEN, new Option("skipopen", false,
+      "Skip files being written at either the source site or the target site")),
+
+  /**
+   * Ignore files which have been deleted at the source site.
+   */
+  IGNORE_DELETED(DistCpConstants.CONF_LABEL_IGNORE_DELETED, new Option(
+      "ignoreDeleted", false,
+      "Ignore files has been deleted from the source site")),
+
+  /**
+   * Only copy files which match the included string
+   */
+  INCLUDED_WILDMATCH(DistCpConstants.CONF_LABEL_INCLUDED_WILDMATCH, new Option(
+      "include", true, "Onlcy copy files whose path match the string")),
+
+  /**
+   * Skip copying files which match the excluded string
+   */
+  EXCLUDED_WILDMATCH(DistCpConstants.CONF_LABEL_EXCLUDED_WILDMATCH, new Option(
+      "exclude", true, "Skip coppying files whose path match the string")),
+
+  /**
+   * Deletes missing files in target that are missing from source This allows
+   * the target to be in sync with the source contents Typically used in
+   * conjunction with SYNC_FOLDERS Incompatible with ATOMIC_COMMIT
    */
   DELETE_MISSING(DistCpConstants.CONF_LABEL_DELETE_MISSING,
       new Option("delete", false, "Delete from target, " +

@@ -136,6 +136,24 @@ public class OptionsParser {
       option.setSyncFolder(true);
     }
 
+    if (command.hasOption(DistCpOptionSwitch.SKIP_OPEN.getSwitch())) {
+      option.setSkipOpen(true);
+    }
+
+    if (command.hasOption(DistCpOptionSwitch.IGNORE_DELETED.getSwitch())) {
+      option.setIgnoreDeleted(true);
+    }
+
+    if (command.hasOption(DistCpOptionSwitch.INCLUDED_WILDMATCH.getSwitch())) {
+      option.setIncludedStr(getVal(command,
+          DistCpOptionSwitch.INCLUDED_WILDMATCH.getSwitch()));
+    }
+
+    if (command.hasOption(DistCpOptionSwitch.EXCLUDED_WILDMATCH.getSwitch())) {
+      option.setExcludedStr(getVal(command,
+          DistCpOptionSwitch.EXCLUDED_WILDMATCH.getSwitch()));
+    }
+
     if (command.hasOption(DistCpOptionSwitch.OVERWRITE.getSwitch())) {
       option.setOverwrite(true);
     }

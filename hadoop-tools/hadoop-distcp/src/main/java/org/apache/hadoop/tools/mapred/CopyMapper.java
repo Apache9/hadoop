@@ -24,10 +24,13 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -78,6 +81,8 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   private Configuration conf;
 
   private boolean syncFolders = false;
+  private boolean skipOpen = false;
+  private boolean ignoreDeleted = false;
   private boolean ignoreFailures = false;
   private boolean skipCrc = false;
   private boolean overWrite = false;
@@ -86,6 +91,11 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
 
   private FileSystem targetFS = null;
   private Path    targetWorkPath = null;
+
+  private String includedStr = null;
+  private String excludedStr = null;
+  private Pattern pIncluded = null;
+  private Pattern pExcluded = null;
 
   /**
    * Implementation of the Mapper::setup() method. This extracts the DistCp-
@@ -99,6 +109,11 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
     conf = context.getConfiguration();
 
     syncFolders = conf.getBoolean(DistCpOptionSwitch.SYNC_FOLDERS.getConfigLabel(), false);
+    skipOpen =
+        conf.getBoolean(DistCpOptionSwitch.SKIP_OPEN.getConfigLabel(), false);
+    ignoreDeleted =
+        conf.getBoolean(DistCpOptionSwitch.IGNORE_DELETED.getConfigLabel(),
+            false);
     ignoreFailures = conf.getBoolean(DistCpOptionSwitch.IGNORE_FAILURES.getConfigLabel(), false);
     skipCrc = conf.getBoolean(DistCpOptionSwitch.SKIP_CRC.getConfigLabel(), false);
     overWrite = conf.getBoolean(DistCpOptionSwitch.OVERWRITE.getConfigLabel(), false);
@@ -110,6 +125,17 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
     Path targetFinalPath = new Path(conf.get(
             DistCpConstants.CONF_LABEL_TARGET_FINAL_PATH));
     targetFS = targetFinalPath.getFileSystem(conf);
+
+    includedStr =
+        conf.get(DistCpOptionSwitch.INCLUDED_WILDMATCH.getConfigLabel(), null);
+    if (includedStr != null) {
+      pIncluded = Pattern.compile(includedStr);
+    }
+    excludedStr =
+        conf.get(DistCpOptionSwitch.EXCLUDED_WILDMATCH.getConfigLabel(), null);
+    if (excludedStr != null) {
+      pExcluded = Pattern.compile(excludedStr);
+    }
 
     if (targetFS.exists(targetFinalPath) && targetFS.isFile(targetFinalPath)) {
       overWrite = true; // When target is an existing file, overwrite it.
@@ -220,6 +246,9 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
           fileAttributes.contains(FileAttribute.ACL), 
           preserveXAttrs, preserveRawXattrs);
       } catch (FileNotFoundException e) {
+        if (ignoreDeleted) {
+          return;
+        }
         throw new IOException(new RetriableFileCopyCommand.CopyReadException(e));
       }
 
@@ -242,6 +271,30 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
         return;
       }
 
+      LOG.debug("include str " + (pIncluded == null ? "null" : pIncluded));
+      LOG.debug("exclude str " + (pExcluded == null ? "null" : pExcluded));
+      boolean violateIncExc = false;
+      if (pIncluded != null) {
+        violateIncExc = true;
+        Matcher m = pIncluded.matcher(sourcePath.toString());
+        if (m.find()) {
+          violateIncExc = false;
+        }
+      }
+      if (!violateIncExc && pExcluded != null) {
+        Matcher m = pExcluded.matcher(sourcePath.toString());
+        if (m.find()) {
+          violateIncExc = true;
+        }
+      }
+      if (violateIncExc) {
+        LOG.info("Skipping copy of " + sourceCurrStatus.getPath() + " to "
+            + target + " since it violate the include/exclude specification");
+        updateSkipCounters(context, sourceCurrStatus);
+        context.write(null, new Text("SKIP: " + sourceCurrStatus.getPath()));
+        return;
+      }
+
       FileAction action = checkUpdate(sourceFS, sourceCurrStatus, target);
       if (action == FileAction.SKIP) {
         LOG.info("Skipping copy of " + sourceCurrStatus.getPath()
@@ -256,7 +309,10 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
       DistCpUtils.preserve(target.getFileSystem(conf), target, sourceCurrStatus,
           fileAttributes, preserveRawXattrs);
     } catch (IOException exception) {
-      handleFailures(exception, sourceFileStatus, target, context);
+      if (!(exception instanceof FileNotFoundException) || !ignoreDeleted) {
+        // Ignore if file is deleted and ignoreDeleted is set
+        handleFailures(exception, sourceFileStatus, target, context);
+      }
     }
   }
 
@@ -331,10 +387,36 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   private FileAction checkUpdate(FileSystem sourceFS, FileStatus source,
       Path target) throws IOException {
     final FileStatus targetFileStatus;
+    if (skipOpen) {
+      try {
+        if ((sourceFS instanceof DistributedFileSystem)
+            && !((DistributedFileSystem) sourceFS).isFileClosed(source
+                .getPath())) {
+          return FileAction.SKIP;
+        }
+      } catch (FileNotFoundException e) {
+        // source is deleted, most likely by TTL. Skip the file if
+        // ignoreDeleted.
+        if (ignoreDeleted) {
+          return FileAction.SKIP;
+        }
+      }
+    }
     try {
       targetFileStatus = targetFS.getFileStatus(target);
     } catch (FileNotFoundException e) {
       return FileAction.OVERWRITE;
+    }
+    if (skipOpen) {
+      try {
+        if (targetFileStatus != null
+            && (targetFS instanceof DistributedFileSystem)
+            && !((DistributedFileSystem) targetFS).isFileClosed(target)) {
+          return FileAction.SKIP;
+        }
+      } catch (FileNotFoundException e) {
+        // In case file is deleted by TTL
+      }
     }
     if (targetFileStatus != null && !overWrite) {
       if (canSkip(sourceFS, source, targetFileStatus)) {
