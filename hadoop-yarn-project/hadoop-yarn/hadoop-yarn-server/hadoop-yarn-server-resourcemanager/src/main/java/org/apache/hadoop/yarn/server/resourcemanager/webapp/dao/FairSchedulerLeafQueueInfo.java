@@ -23,6 +23,8 @@ import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
 
+import org.apache.hadoop.security.authorize.AccessControlList;
+import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSLeafQueue;
 
@@ -31,7 +33,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSLeafQueue;
 public class FairSchedulerLeafQueueInfo extends FairSchedulerQueueInfo {
   private int numPendingApps;
   private int numActiveApps;
-  
+  private String aclString;
+
   public FairSchedulerLeafQueueInfo() {
   }
   
@@ -39,6 +42,9 @@ public class FairSchedulerLeafQueueInfo extends FairSchedulerQueueInfo {
     super(queue, scheduler);
     numPendingApps = queue.getNumPendingApps();
     numActiveApps = queue.getNumActiveApps();
+
+    AccessControlList acl = scheduler.getAllocationConfiguration().getQueueAcl(getQueueName(), QueueACL.SUBMIT_APPLICATIONS);
+    aclString = acl.getAclString();
   }
   
   public int getNumActiveApplications() {
@@ -48,4 +54,9 @@ public class FairSchedulerLeafQueueInfo extends FairSchedulerQueueInfo {
   public int getNumPendingApplications() {
     return numPendingApps;
   }
+
+  public String getAclString() {
+    return aclString;
+  }
+
 }
