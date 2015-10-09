@@ -91,7 +91,13 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
     result.setStartTimeMs(System.currentTimeMillis());
 
     Path rootDir = new Path("/");
-    traverseDirectoryTree(rootDir);
+    try {
+    	traverseDirectoryTree(rootDir);
+    } catch (Throwable t) {
+    	LOG.fatal("Fail to run ttl policy", t);
+    	LOG.fatal("Will abort");
+    	System.exit(-1);
+    }
 
     result.setEndTimeMs(System.currentTimeMillis());
     return result;
@@ -167,6 +173,7 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
           ProcessTtlInfos(path, ttlInfos);
           ttlInfos.remove(ttlInfos.size() - 1);
           stack.pop();
+          childrenInfos.remove(path);
         }
       } catch (IOException e) {
         // The current path is error, just remove from the stack
