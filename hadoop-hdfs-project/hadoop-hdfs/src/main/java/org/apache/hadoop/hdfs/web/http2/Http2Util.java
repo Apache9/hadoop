@@ -34,18 +34,21 @@ import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2InboundFrameLogger;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
+import io.netty.handler.codec.http2.Http2Settings;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 
 /**
- *
+ * Helper class for creating Http2ConnectionHandler.
  */
 @InterfaceAudience.Private
 public class Http2Util {
+
   public interface Http2ConnectionHandlerFactory<T extends Http2ConnectionHandler> {
-    T create(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder);
+    T create(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
+        Http2Settings initialSettings);
   }
 
   @SuppressWarnings("resource")
@@ -66,20 +69,25 @@ public class Http2Util {
       frameReader = rawFrameReader;
       frameWriter = rawFrameWriter;
     }
-    DefaultHttp2LocalFlowController localFlowController =
-        new DefaultHttp2LocalFlowController(conn, frameWriter, conf.getFloat(
-          DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO,
-          DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO_DEFAULT));
+
+    float windowUpdateRation =
+        conf.getFloat(DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO,
+          DFSConfigKeys.DFS_HTTP2_WINDOW_UPDATE_RATIO_DEFAULT);
     int initialWindowsSize =
         conf.getInt(DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE,
           DFSConfigKeys.DFS_HTTP2_INITIAL_WINDOW_SIZE_DEFAULT);
+    DefaultHttp2LocalFlowController localFlowController =
+        new DefaultHttp2LocalFlowController(conn, frameWriter,
+            windowUpdateRation);
     localFlowController.initialWindowSize(initialWindowsSize);
     conn.local().flowController(localFlowController);
 
     DefaultHttp2ConnectionEncoder encoder =
         new DefaultHttp2ConnectionEncoder(conn, frameWriter);
     DefaultHttp2ConnectionDecoder decoder =
-        new DefaultHttp2ConnectionDecoder(conn, encoder, frameReader, listener);
-    return handlerFactory.create(decoder, encoder);
+        new DefaultHttp2ConnectionDecoder(conn, encoder, frameReader);
+    decoder.frameListener(listener);
+
+    return handlerFactory.create(decoder, encoder, decoder.localSettings());
   }
 }

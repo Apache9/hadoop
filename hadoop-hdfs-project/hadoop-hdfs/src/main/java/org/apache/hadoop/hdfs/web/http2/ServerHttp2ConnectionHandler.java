@@ -26,6 +26,7 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameLogger;
+import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.logging.LogLevel;
 
 import org.apache.commons.logging.Log;
@@ -46,8 +47,8 @@ public class ServerHttp2ConnectionHandler extends Http2ConnectionHandler {
       LogLevel.INFO, ServerHttp2ConnectionHandler.class);
 
   private ServerHttp2ConnectionHandler(Http2ConnectionDecoder decoder,
-      Http2ConnectionEncoder encoder) {
-    super(decoder, encoder);
+      Http2ConnectionEncoder encoder, Http2Settings initialSettings) {
+    super(decoder, encoder, initialSettings);
   }
 
   private static final Http2Util.Http2ConnectionHandlerFactory<ServerHttp2ConnectionHandler> FACTORY =
@@ -55,8 +56,10 @@ public class ServerHttp2ConnectionHandler extends Http2ConnectionHandler {
 
         @Override
         public ServerHttp2ConnectionHandler create(
-            Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder) {
-          return new ServerHttp2ConnectionHandler(decoder, encoder);
+            Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
+            Http2Settings initialSettings) {
+          return new ServerHttp2ConnectionHandler(decoder, encoder,
+              initialSettings);
         }
       };
 

@@ -322,4 +322,14 @@ public class DNConf {
   public int getTransferSocketSendBufferSize() {
     return transferSocketSendBufferSize;
   }
+
+  public boolean isDropCacheBehindReads() {
+    return dropCacheBehindReads;
+  }
+
+  public long getReadaheadLength() {
+    return readaheadLength;
+  }
+  
+
 }

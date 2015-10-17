@@ -93,6 +93,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
                   <include>acl.proto</include>
                   <include>xattr.proto</include>
                   <include>datatransfer.proto</include>
+                  <include>datatransferv2.proto</include>
                   <include>hdfs.proto</include>
                   <include>encryption.proto</include>
                   <include>inotify.proto</include>

@@ -73,7 +73,6 @@ public class TestHttp2Server extends AbstractTestHttp2Server {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
       handlerClosedCount.incrementAndGet();
     }
-
   }
 
   @Override

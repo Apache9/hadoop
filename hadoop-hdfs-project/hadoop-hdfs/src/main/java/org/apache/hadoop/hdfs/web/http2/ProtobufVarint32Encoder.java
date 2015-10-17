@@ -15,33 +15,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.datanode.web.dtp;
+package org.apache.hadoop.hdfs.web.http2;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.MessageToMessageEncoder;
 
-import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.hdfs.web.http2.LastHttp2Message;
+
+import com.google.protobuf.CodedOutputStream;
+import com.google.protobuf.Message;
 
 /**
- * A dummy handler that just write back a string message.
+ * Encoding a protobuf message with writeDelimitedTo.
  */
 @InterfaceAudience.Private
-public class DtpChannelHandler extends
-    SimpleChannelInboundHandler<Http2Headers> {
+public class ProtobufVarint32Encoder extends MessageToMessageEncoder<Message> {
 
   @Override
-  protected void channelRead0(ChannelHandlerContext ctx, Http2Headers msg)
-      throws Exception {
-    ctx.write(new DefaultHttp2Headers().status(HttpResponseStatus.OK
-        .codeAsText()));
-    ctx.write(ctx.alloc().buffer()
-        .writeBytes("HTTP/2 DTP".getBytes(StandardCharsets.UTF_8)));
-    ctx.writeAndFlush(LastHttp2Message.get());
+  protected void
+      encode(ChannelHandlerContext ctx, Message msg, List<Object> out)
+          throws Exception {
+    int serializedSize = msg.getSerializedSize();
+    int size =
+        CodedOutputStream.computeRawVarint32Size(serializedSize)
+            + serializedSize;
+    ByteBuf buf = ctx.alloc().buffer(size);
+    msg.writeDelimitedTo(new ByteBufOutputStream(buf));
+    out.add(buf);
   }
+
 }

@@ -32,6 +32,7 @@ import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.logging.LogLevel;
 import io.netty.util.concurrent.Promise;
 
@@ -59,9 +60,9 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
   private final ClientHttp2EventListener listener;
 
   private ClientHttp2ConnectionHandler(Http2ConnectionDecoder decoder,
-      Http2ConnectionEncoder encoder) {
-    super(decoder, encoder);
-    this.listener = (ClientHttp2EventListener) decoder.listener();
+      Http2ConnectionEncoder encoder, Http2Settings initialSettings) {
+    super(decoder, encoder, initialSettings);
+    this.listener = (ClientHttp2EventListener) decoder.frameListener();
   }
 
   private int nextStreamId() {
@@ -130,8 +131,10 @@ public class ClientHttp2ConnectionHandler extends Http2ConnectionHandler {
 
         @Override
         public ClientHttp2ConnectionHandler create(
-            Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder) {
-          return new ClientHttp2ConnectionHandler(decoder, encoder);
+            Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
+            Http2Settings initialSettings) {
+          return new ClientHttp2ConnectionHandler(decoder, encoder,
+              initialSettings);
         }
       };
 

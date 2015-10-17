@@ -33,6 +33,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.apache.commons.logging.Log;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.web.JsonUtil;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
@@ -43,10 +44,10 @@ import com.google.common.base.Charsets;
 import com.sun.jersey.api.ParamException;
 import com.sun.jersey.api.container.ContainerException;
 
-class ExceptionHandler {
+public class ExceptionHandler {
   static Log LOG = WebHdfsHandler.LOG;
 
-  static DefaultFullHttpResponse exceptionCaught(Throwable cause) {
+  public static DefaultFullHttpResponse exceptionCaught(Throwable cause) {
     Exception e = cause instanceof Exception ? (Exception) cause : new Exception(cause);
 
     if (LOG.isTraceEnabled()) {
@@ -71,7 +72,8 @@ class ExceptionHandler {
       s = FORBIDDEN;
     } else if (e instanceof AuthorizationException) {
       s = FORBIDDEN;
-    } else if (e instanceof FileNotFoundException) {
+    } else if (e instanceof FileNotFoundException
+        || e instanceof ReplicaNotFoundException) {
       s = NOT_FOUND;
     } else if (e instanceof IOException) {
       s = FORBIDDEN;

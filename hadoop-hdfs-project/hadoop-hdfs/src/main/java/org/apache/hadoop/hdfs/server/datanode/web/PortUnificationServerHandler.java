@@ -29,10 +29,12 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpChannelHandler;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 import org.apache.hadoop.hdfs.web.http2.Http2StreamChannel;
 import org.apache.hadoop.hdfs.web.http2.ServerHttp2ConnectionHandler;
 
@@ -55,11 +57,18 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
 
   private final Configuration confForCreate;
 
+  private final DataNode datanode;
+  
+  private final ExecutorService executor;
+
   public PortUnificationServerHandler(InetSocketAddress proxyHost,
-      Configuration conf, Configuration confForCreate) {
+      Configuration conf, Configuration confForCreate, DataNode datanode,
+      ExecutorService executor) {
     this.proxyHost = proxyHost;
     this.conf = conf;
     this.confForCreate = confForCreate;
+    this.datanode = datanode;
+    this.executor = executor;
   }
 
   private void configureHttp1(ChannelHandlerContext ctx) {
@@ -73,8 +82,9 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
         new ChannelInitializer<Http2StreamChannel>() {
 
           @Override
-          protected void initChannel(Http2StreamChannel ch) throws Exception {
-            ch.pipeline().addLast(new DtpChannelHandler());
+          protected void initChannel(Http2StreamChannel ch)
+              throws Exception {
+            ch.pipeline().addLast(new DtpUrlDispatcher(datanode, executor));
           }
         }, conf));
   }

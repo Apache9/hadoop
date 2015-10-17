@@ -3255,6 +3255,18 @@ public class DataNode extends ReconfigurableBase
     return shortCircuitRegistry;
   }
 
+  public boolean isBlockTokenEnabled() {
+    return isBlockTokenEnabled;
+  }
+
+  public BlockPoolTokenSecretManager getBlockPoolTokenSecretManager() {
+    return blockPoolTokenSecretManager;
+  }
+
+  public ReadaheadPool getReadaheadPool() {
+    return readaheadPool;
+  }
+
   /**
    * Check the disk error
    */
