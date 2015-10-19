@@ -5292,4 +5292,68 @@ public class TestFairScheduler extends FairSchedulerTestBase {
 
     assertEquals("App 4 should be running", 1, scheduler.getSchedulerApp(attId4).getLiveContainers().size());
   }
+
+  @Test
+  public void testFifoNotBlockingOthers()
+      throws Exception {
+    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"root\">");
+    out.println("<queue name=\"queue\">");
+    out.println("<maxResources>3072mb,2vcores</maxResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"another\">");
+    out.println("<maxResources>3072mb,2vcores</maxResources>");
+    out.println("</queue>");
+    out.println("</queue>");
+    out.println("</allocations>");
+    out.close();
+
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, resourceManager.getRMContext());
+
+    FSLeafQueue queue1 = scheduler.getQueueManager().getLeafQueue("queue", true);
+    queue1.setPolicy(new FifoPolicy());
+
+    scheduler.update();
+
+    // Add a node
+    RMNode node1 =
+        MockNodes
+            .newNodeInfo(1, Resources.createResource(10240, 10), 1, "127.0.0.1");
+    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
+    scheduler.handle(nodeEvent1);
+
+    // Request for app 1
+    ApplicationAttemptId attId1 = createSchedulingRequest(1024, "queue",
+        "user1", 1);
+
+    scheduler.update();
+    NodeUpdateSchedulerEvent updateEvent = new NodeUpdateSchedulerEvent(node1);
+    scheduler.handle(updateEvent);
+
+    ApplicationAttemptId attId2 = createSchedulingRequest(1024 * 2, "another",
+        "user1", 1);
+    scheduler.update();
+    scheduler.handle(updateEvent);
+
+    ApplicationAttemptId attId3 = createSchedulingRequest(1024 * 3, "queue",
+        "user1", 1);
+
+    scheduler.update();
+    scheduler.handle(updateEvent);
+
+    ApplicationAttemptId attId4 = createSchedulingRequest(1024, "another",
+        "user1", 1);
+    scheduler.update();
+    scheduler.handle(updateEvent);
+
+    assertEquals("App 3 should not be running", 0, scheduler.getSchedulerApp(attId3).getLiveContainers().size());
+    assertEquals("App 4 should be running", 1, scheduler.getSchedulerApp(attId4).getLiveContainers().size());
+
+
+  }
 }

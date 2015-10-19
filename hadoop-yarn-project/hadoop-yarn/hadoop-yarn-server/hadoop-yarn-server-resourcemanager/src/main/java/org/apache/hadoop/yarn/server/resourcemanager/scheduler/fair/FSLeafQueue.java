@@ -326,13 +326,15 @@ public class FSLeafQueue extends FSQueue {
         }
 
         assigned = sched.assignContainer(node);
-        if (!assigned.equals(Resources.none())) {
-          break;
-        }
         if (assigned.equals(Resources.queueFull())) {
           assigned = Resources.none();
           break;
         }
+        if (!assigned.equals(Resources.none())) {
+          break;
+        }
+
+
       }
     } finally {
       readLock.unlock();
