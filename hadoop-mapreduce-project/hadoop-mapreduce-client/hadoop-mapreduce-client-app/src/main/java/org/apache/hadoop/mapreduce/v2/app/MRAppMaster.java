@@ -577,7 +577,12 @@ public class MRAppMaster extends CompositeService {
       // Stop all services
       // This will also send the final report to the ResourceManager
       LOG.info("Calling stop for all the services");
-      MRAppMaster.this.stop();
+
+      try {
+        MRAppMaster.this.stop();
+      } catch (YarnRuntimeException e) {
+        Thread.sleep(60000);
+      }
 
       if (isLastAMRetry) {
         // Send job-end notification when it is safe to report termination to
