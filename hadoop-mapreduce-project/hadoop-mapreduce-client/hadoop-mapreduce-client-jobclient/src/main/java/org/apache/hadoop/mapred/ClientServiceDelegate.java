@@ -63,6 +63,7 @@ import org.apache.hadoop.mapreduce.v2.api.records.JobState;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskAttemptReport;
 import org.apache.hadoop.mapreduce.v2.util.MRApps;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -335,6 +336,11 @@ public class ClientServiceDelegate {
         }
         usingAMProxy.set(false);
         lastException = new IOException(e.getTargetException());
+
+        if (e.getTargetException() instanceof AccessControlException) {
+          maxClientRetry = 0;
+        }
+
         try {
           Thread.sleep(100);
         } catch (InterruptedException ie) {
