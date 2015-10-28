@@ -48,6 +48,7 @@ import org.apache.hadoop.mapreduce.v2.api.records.Counters;
 import org.apache.hadoop.mapreduce.v2.api.records.JobReport;
 import org.apache.hadoop.mapreduce.v2.api.records.JobState;
 import org.apache.hadoop.mapreduce.v2.util.MRBuilderUtils;
+import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
@@ -182,6 +183,49 @@ public class TestClientServiceDelegate {
     verify(amProxy, times(5)).getJobReport(any(GetJobReportRequest.class));
   }
 
+  @Test (timeout=10000)
+  public void testRetriesOnAMACLFailures() throws Exception {
+    if (!isAMReachableFromClient) {
+      return;
+    }
+
+    ResourceMgrDelegate rm = mock(ResourceMgrDelegate.class);
+    when(rm.getApplicationReport(TypeConverter.toYarn(oldJobId).getAppId()))
+        .thenReturn(getRunningApplicationReport("am1", 78));
+
+    // throw exception in 1st, 2nd, 3rd and 4th call of getJobReport, and
+    // succeed in the 5th call.
+    final MRClientProtocol amProxy = mock(MRClientProtocol.class);
+    when(amProxy.getJobReport(any(GetJobReportRequest.class)))
+        .thenThrow(new AccessControlException("11"))
+        .thenThrow(new AccessControlException("22"))
+        .thenThrow(new AccessControlException("33"))
+        .thenThrow(new AccessControlException("44"));
+    Configuration conf = new YarnConfiguration();
+    conf.set(MRConfig.FRAMEWORK_NAME, MRConfig.YARN_FRAMEWORK_NAME);
+    conf.setBoolean(MRJobConfig.JOB_AM_ACCESS_DISABLED,
+        !isAMReachableFromClient);
+    ClientServiceDelegate clientServiceDelegate =
+        new ClientServiceDelegate(conf, rm, oldJobId, null) {
+          @Override
+          MRClientProtocol instantiateAMProxy(
+              final InetSocketAddress serviceAddr) throws IOException {
+            super.instantiateAMProxy(serviceAddr);
+            return amProxy;
+          }
+        };
+
+    try {
+      JobStatus jobStatus = clientServiceDelegate.getJobStatus(oldJobId);
+      Assert.fail("It should throw exception after retries");
+    } catch (IOException e) {
+      System.out.println("fail to get job status,and e=" + e.toString());
+    }
+
+    // assert maxClientRetry is not decremented.
+    verify(amProxy, times(1)).getJobReport(any(GetJobReportRequest.class));
+  }
+
   @Test
   public void testHistoryServerNotConfigured() throws Exception {
     //RM doesn't have app report and job History Server is not configured
@@ -205,8 +249,8 @@ public class TestClientServiceDelegate {
   
   @Test
   public void testJobReportFromHistoryServer() throws Exception {                                 
-    MRClientProtocol historyServerProxy = mock(MRClientProtocol.class);                           
-    when(historyServerProxy.getJobReport(getJobReportRequest())).thenReturn(                      
+    MRClientProtocol historyServerProxy = mock(MRClientProtocol.class);
+    when(historyServerProxy.getJobReport(getJobReportRequest())).thenReturn(
         getJobReportResponseFromHistoryServer());                                                 
     ResourceMgrDelegate rm = mock(ResourceMgrDelegate.class);                                     
     when(rm.getApplicationReport(TypeConverter.toYarn(oldJobId).getAppId()))                      
@@ -217,7 +261,7 @@ public class TestClientServiceDelegate {
     JobStatus jobStatus = clientServiceDelegate.getJobStatus(oldJobId);
     Assert.assertNotNull(jobStatus);
     Assert.assertEquals("TestJobFilePath", jobStatus.getJobFile());                               
-    Assert.assertEquals("http://TestTrackingUrl", jobStatus.getTrackingUrl());                    
+    Assert.assertEquals("http://TestTrackingUrl", jobStatus.getTrackingUrl());
     Assert.assertEquals(1.0f, jobStatus.getMapProgress(), 0.0f);
     Assert.assertEquals(1.0f, jobStatus.getReduceProgress(), 0.0f);
   }
@@ -381,7 +425,7 @@ public class TestClientServiceDelegate {
         MRJobConfig.MR_CLIENT_MAX_RETRIES,
         MRJobConfig.DEFAULT_MR_CLIENT_MAX_RETRIES));
   }
-  
+
   @Test
   public void testRMDownRestoreForJobStatusBeforeGetAMReport()
       throws IOException {
@@ -441,7 +485,7 @@ public class TestClientServiceDelegate {
     } catch (YarnException e) {
       throw new IOException(e);
     }
-  }  
+  }
 
   private GetJobReportRequest getJobReportRequest() {
     GetJobReportRequest request = Records.newRecord(GetJobReportRequest.class);
