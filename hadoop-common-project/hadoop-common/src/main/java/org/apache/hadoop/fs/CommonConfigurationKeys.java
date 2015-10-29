@@ -282,4 +282,6 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String ZK_ACL_KEY = "ha.zookeeper.acl";
   public static final String ZK_ACL_DEFAULT = "world:anyone:rwcda";
   public static final String ZK_AUTH_KEY = "ha.zookeeper.auth";
+  public static final String SECURITY_RAID_DATANODE_PROTOCOL_ACL =
+      "security.raid.datanode.protocol.acl";
 }

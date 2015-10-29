@@ -189,6 +189,7 @@ public class BlockCodec {
         }
       }
     }
+    fileStatus = fs.getFileStatus(file);
     long fileModTime = fileStatus.getModificationTime();
     long currentTimeMs = System.currentTimeMillis();
     if ((fileModTime + raidTimeWindowMs > currentTimeMs)
@@ -738,10 +739,17 @@ public class BlockCodec {
       if (corruptedBlocks[i] < totalDataBlocksNum) {
         // data blocks
         int index = corruptedBlocks[i] / dataBlocksNum;
+        LOG.info("corruptedBlocks " + corruptedBlocks[i]
+            + "  totalDataBlocksNum " + totalDataBlocksNum + " dataBlocksNum "
+            + dataBlocksNum + " grpSize " + dataBlocksGroup.length);
         dataBlocksGroup[index].put(corruptedBlocks[i], DUMMY_STREAM);
       } else {
         // coding blocks
         int index = (corruptedBlocks[i] - totalDataBlocksNum) / codingBlocksNum;
+        LOG.info("corruptedBlocks " + corruptedBlocks[i]
+            + "  totalDataBlocksNum " + totalDataBlocksNum
+            + " codingBlocksNum " + codingBlocksNum + " grpSize "
+            + codingBlocksGroup.length);
         codingBlocksGroup[index].put(corruptedBlocks[i] - totalDataBlocksNum, DUMMY_STREAM);
       }
     }

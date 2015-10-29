@@ -431,6 +431,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
               <source>
                 <directory>${basedir}/src/main/proto</directory>
                 <includes>
+                  <include>RaidDatanodeProtocol.proto</include>
                   <include>ClientDatanodeProtocol.proto</include>
                   <include>ClientNamenodeProtocol.proto</include>
                   <include>DatanodeProtocol.proto</include>

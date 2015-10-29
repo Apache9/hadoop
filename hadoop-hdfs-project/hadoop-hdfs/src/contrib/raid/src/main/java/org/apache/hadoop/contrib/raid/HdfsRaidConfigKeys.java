@@ -75,6 +75,10 @@ public class HdfsRaidConfigKeys {
                                                                                                   // a
                                                                                                   // week
 
+  public static final String HDFS_RAIDNODE_ORPHAN_FILE_GRACE_PERIOD = "hdfs.raidnode.orphan.file.grace.period";
+  public static final long HDFS_RAIDNODE_ORPHAN_FILE_GRACE_PERIOD_DEFAULT = 60 * 24 * 3600 * 1000l; // two
+                                                                                                    // months
+
   /**
    * To define the frequency of encoder.
    */

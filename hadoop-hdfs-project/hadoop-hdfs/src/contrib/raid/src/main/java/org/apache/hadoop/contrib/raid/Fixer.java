@@ -126,6 +126,10 @@ public class Fixer {
       HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_DATA_BLOCKS_NUM_DEFAULT);
     int codingBlocksNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_KEY,
       HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_CODING_BLOCKS_NUM_DEFAULT);
+    int replicaAfterEncode =
+        (short) conf.getInt(
+            HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA,
+            HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA_DEFAULT);
 
     while (true) {
       try {
@@ -154,6 +158,10 @@ public class Fixer {
           // This is the source file corruption
           FileStatus fileStatus = fs.getFileStatus(file);
           BlockLocation[] blkLocs = fs.getFileBlockLocations(file, 0, fileStatus.getLen());
+          if (fileStatus.getReplication() > replicaAfterEncode) {
+            // The file has not been fully encoded yet. Do not try to fix it.
+            continue;
+          }
           for (BlockLocation blk : blkLocs) {
             if (blk.isCorrupt()) {
               int blkIndex = (int) (blk.getOffset() / fileStatus.getBlockSize());
@@ -178,6 +186,10 @@ public class Fixer {
           Path sourceFile = BlockCodec.getCodingFileSource(file);
           FileStatus sourceStatus = fs.getFileStatus(sourceFile);
           FileStatus fileStatus = fs.getFileStatus(file);
+          if (sourceStatus.getReplication() > replicaAfterEncode) {
+            // The file has not been fully encoded yet. Do not try to fix it.
+            continue;
+          }
           BlockLocation[] blkLocs = fs.getFileBlockLocations(file, 0, fileStatus.getLen());
           for (BlockLocation blk : blkLocs) {
             if (blk.isCorrupt()) {

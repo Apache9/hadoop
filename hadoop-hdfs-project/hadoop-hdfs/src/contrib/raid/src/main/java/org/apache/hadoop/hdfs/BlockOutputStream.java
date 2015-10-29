@@ -18,7 +18,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.URI;
 import java.nio.BufferOverflowException;
+import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -29,6 +31,8 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.contrib.raid.ClientRaidnodeProtocolTranslatorPB;
 import org.apache.hadoop.contrib.raid.HdfsRaidConfigKeys;
 import org.apache.hadoop.fs.FSOutputSummer;
 import org.apache.hadoop.fs.Options.ChecksumOpt;
@@ -45,13 +49,21 @@ import org.apache.hadoop.hdfs.protocol.datatransfer.PipelineAck;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BlockOpResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
+import org.apache.hadoop.hdfs.protocol.RaidDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
+import org.apache.hadoop.hdfs.protocolPB.RaidDatanodeProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
+import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
+import org.apache.hadoop.hdfs.security.token.block.ExportedBlockKeys;
 import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
+import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
+import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.net.NetworkTopology;
+import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
@@ -177,11 +189,11 @@ public class BlockOutputStream extends FSOutputSummer {
       triedNodes.add(target);
       try {
         long gs = block.getBlock().getGenerationStamp();
-        createBlockOutputStream(target, gs);
         LOG.info("Create output stream to " + target + " for " + block);
+        createBlockOutputStream(target, gs);
         break;
       } catch (IOException e) {
-        LOG.warn("Create block output stream failed", e);
+        LOG.warn("Create block output stream failed for " + block, e);
         --retryCount;
         if (retryCount == 0) {
           throw e;
@@ -331,10 +343,12 @@ public class BlockOutputStream extends FSOutputSummer {
   void createBlockOutputStream(DatanodeInfo node, long newGS) throws IOException {
     Status status = null;
     int refetchEncryptionKey = 1;
+    boolean deletedReplica = false;
     BlockConstructionStage stage = BlockConstructionStage.PIPELINE_SETUP_CREATE;
     while (true) {
       boolean result = false;
       try {
+        LOG.info("Create output stream from datanode " + node);
         socket = createSocket(node);
         long writeTimeout = dfsClient.getDatanodeWriteTimeout(1);
         OutputStream unbufOut = NetUtils.getOutputStream(socket, writeTimeout);
@@ -377,6 +391,25 @@ public class BlockOutputStream extends FSOutputSummer {
           dfsClient.clearDataEncryptionKey();
           continue;
         }
+        if (deletedReplica == false) {
+          final UserGroupInformation ugi = UserGroupInformation.getLoginUser();
+          Configuration conf = dfsClient.getConfiguration();
+          InetSocketAddress dnAddr =
+              NetUtils
+                  .createSocketAddr(node.getIpcAddr(dfsClient.getConf().connectToDnViaHostname));
+          RaidDatanodeProtocol rdp =
+              RaidDatanodeProtocolTranslatorPB.createRaidDatanodeProtocolProxy(
+                  dnAddr, ugi, conf);
+          if (!rdp.getRaidReplicaState(block.getBlock()).equals("undef")
+              && !rdp.getRaidReplicaState(block.getBlock()).equals("finalized")) {
+            rdp.deleteReplica(block.getBlock());
+            LOG.info("Deleted a partially decoded block, will retry to create block ouput stream with datanode "
+                + node);
+            deletedReplica = true;
+            continue;
+          }
+        }
+        		
         if (stage == BlockConstructionStage.PIPELINE_SETUP_CREATE) {
           LOG.warn("Setup pipeline failed ", e);
           // LOG.info("Trying to recover streaming.");
