@@ -24,7 +24,6 @@ import java.nio.ByteBuffer;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.util.Time;
-import org.apache.htrace.Trace;
 import org.mortbay.log.Log;
 
 
