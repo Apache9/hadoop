@@ -1486,7 +1486,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
    * Same as {@link #seekToNewSource(long)} except that it does not exclude
    * the current datanode and might connect to the same node.
    */
-  private synchronized boolean seekToBlockSource(long targetPos)
+  protected synchronized boolean seekToBlockSource(long targetPos)
                                                  throws IOException {
     currentNode = blockSeekTo(targetPos);
     return true;
@@ -1791,6 +1791,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             lastBlockLength = readBlockLength(last);
             last.getBlock().setNumBytes(lastBlockLength);
             break;
+          } else {
+            lastBlockLength = 0;
+            break;
           }
         } else {
           lastBlockLength = 0;
@@ -1810,5 +1813,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       }
     } finally {
     } 
+  }
+  
+  protected boolean isDFSStreamClosed() {
+    return closed;
   }
 }

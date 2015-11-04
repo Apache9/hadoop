@@ -98,7 +98,7 @@ public class TestXmReadWhileWriting {
         }
         in.close();
       } catch (IOException ioe) {
-        LOG.warn("Fail to write file ", ioe);
+        LOG.warn("Fail to read file ", ioe);
         Assert.assertTrue(false);
       }
     }
@@ -258,6 +258,42 @@ public class TestXmReadWhileWriting {
       public void read(FSDataInputStream in, int seq) throws IOException {
         for (int i = 0; i < sizePerRead; i++) {
         	readBuf[sizePerRead * seq + i] = (byte) in.read();
+        }
+      }
+    });
+    reader.start();
+
+    try {
+      writer.join();
+      reader.join();
+    } catch (InterruptedException e) {
+      LOG.info("interrupted waiting for writer or reader to complete", e);
+      Thread.currentThread().interrupt();
+    }
+    Assert.assertTrue(validateSequentialBytes(readBuf, 0, readBuf.length));
+  }
+
+  @Test
+  public void testSeekRead() {
+    String file = "/read5";
+    XmTestWriter writer = new XmTestWriter(file);
+    writer.start();
+
+    try {
+      Thread.sleep(5);
+    } catch (InterruptedException ie) {
+      // Ignore
+    }
+    final byte[] readBuf = new byte[blockSize * numBlksToWrite];
+    XmTestReader reader = new XmTestReader(file, new ReadWrapper() {
+      @Override
+      public void read(FSDataInputStream in, int seq) throws IOException {
+        long fileSize = blockSize * numBlksToWrite;
+        int numToRead = (int) (fileSize / sizePerRead);
+        int reverseSeq = numToRead - 1 - seq;
+        in.seek((long) sizePerRead * reverseSeq);
+        for (int i = 0; i < sizePerRead; i++) {
+          readBuf[sizePerRead * reverseSeq + i] = (byte) in.read();
         }
       }
     });

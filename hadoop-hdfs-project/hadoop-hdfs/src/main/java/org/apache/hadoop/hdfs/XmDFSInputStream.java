@@ -23,6 +23,9 @@ import java.nio.ByteBuffer;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.UnresolvedLinkException;
+import org.apache.hadoop.util.Time;
+import org.apache.htrace.Trace;
+import org.mortbay.log.Log;
 
 
 /****************************************************************
@@ -129,5 +132,51 @@ public class XmDFSInputStream extends DFSInputStream {
   public int read(long position, byte[] buffer, int offset, int length)
       throws IOException {
     return readInternal(null, position, buffer, offset, length);
+  }
+
+  /**
+   * Seek to a new arbitrary location
+   */
+  @Override
+  public void seek(long targetPos) throws IOException {
+    while (true) {
+      IOException originalExp = null;
+      long origLen = getFileLength();
+      try {
+        seekToBlockSource(targetPos);
+        super.seek(targetPos);
+        break;
+      } catch (IOException ioe) {
+        if (isDFSStreamClosed()) {
+          throw ioe;
+        } else {
+          originalExp = ioe;
+        }
+      } catch (NullPointerException npe) {
+        originalExp = new IOException("Fail to seek to " + targetPos);
+      }
+
+      boolean fileClosed = dfsClient.isFileClosed(srcFile);
+      updateFileLength();
+      long newLen = getFileLength();
+      if (origLen == newLen) {
+        if (fileClosed) {
+          // Nobody is writing the file then nothing to read
+          throw originalExp;
+        } else {
+          if (sleepBeforeRetry != 0) {
+            try {
+              Thread.sleep(sleepBeforeRetry);
+            } catch (InterruptedException ie) {
+              break;
+            }
+          } else {
+            // Yield so that there is a higher possibility that some more data
+            // is written to the file when calling following updateFileLength().
+            Thread.yield();
+          }
+        }
+      }
+    }
   }
 }
