@@ -548,7 +548,7 @@ public class BlockCodec {
       int blockIdx = groupNo * dataBlocksNum + i;
       if (blockIdx < totalBlockNum && dataErasures.get(blockIdx) == null) {
         try {
-          int pos = (int) (blockIdx * blockSize + offset + roundNo * stripSize);
+          long pos = blockIdx * blockSize + offset + roundNo * stripSize;
           if (blockIdx == totalBlockNum - 1 && lastBlockLen != blockSize) {
             // Process the last block whose length is smaller than block size
             if (pos + data[i].length < fileStatus.getLen()) {
