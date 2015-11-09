@@ -64,10 +64,10 @@ public class HdfsAdmin {
    */
   public HdfsAdmin(URI uri, Configuration conf) throws IOException {
     FileSystem fs = FileSystem.get(uri, conf);
-    if (!(fs instanceof DistributedFileSystem)) {
+    if (!(fs.isDistributedFileSystem())) {
       throw new IllegalArgumentException("'" + uri + "' is not an HDFS URI.");
     } else {
-      dfs = (DistributedFileSystem)fs;
+      dfs = (DistributedFileSystem) fs.getDistributedFileSystem();
     }
   }
   

@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.hdfs;
 
@@ -72,17 +65,69 @@ public class TestDistributedRaidFileSystem {
     Assert.assertArrayEquals(data.getBytes(), buffer);
   }
 
+  public void testAppend() throws Exception {
+    String data = "Hello, this is some test data";
+    String data1 = " Hello, this is some appended data";
+    Path file = new Path("/test.txt");
+
+    FSDataOutputStream out = dfs.create(file);
+    out.write(data.getBytes());
+    out.close();
+    out = dfs.append(file, 4096, null);
+    out.write(data1.getBytes());
+    out.close();
+
+    byte[] buffer = new byte[data.length() + data1.length()];
+    FSDataInputStream in = dfs.open(file);
+    in.read(buffer);
+    in.close();
+    Assert.assertArrayEquals((data + data1).getBytes(), buffer);
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testAppendEncodedFile() throws Exception {
+    String data = "Hello, this is some test data";
+    Path file = new Path("/test.txt");
+    Path encodedFile = BlockCodec.getCodingFile(file);
+
+    FSDataOutputStream out = dfs.create(file);
+    out.write(data.getBytes());
+    out.close();
+    FSDataOutputStream encodedOut = dfs.create(encodedFile);
+    encodedOut.close();
+    out = dfs.append(file, 4096, null);
+    out.write(data.getBytes());
+    out.close();
+  }
+
+  @Test
+  public void testReadFully() throws Exception {
+    String data = "Hello, this is some test data";
+    Path file = new Path("/test.txt");
+
+    FSDataOutputStream out = dfs.create(file);
+    out.write(data.getBytes());
+    out.close();
+
+    FSDataInputStream in = dfs.open(file);
+    byte[] buf = new byte[data.getBytes().length];
+    long origPos = in.getPos();
+    in.readFully(0, buf);
+    long posAfterRf = in.getPos();
+    in.close();
+
+    Assert.assertEquals(origPos, posAfterRf);
+  }
+
   @Test
   public void testBasicReadWriteAfterEncoding() throws Exception {
     Path file = new Path("/test2.txt");
-    DFSTestUtil.createFile(dfs, file, 4096, 10<<20, 1<<20, (short)3,
-        System.currentTimeMillis());
+    DFSTestUtil.createFile(dfs, file, 4096, 10 << 20, 1 << 20, (short) 3,
+      System.currentTimeMillis());
     byte[] fileContent = DFSTestUtil.readFileBuffer(dfs, file);
     Thread.sleep(1000);
 
-    conf.setLong(
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
-        1000);
+    conf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 1000);
     BlockCodec codec = new BlockCodec(conf);
     codec.encode(file);
     FileStatus fileStatus = dfs.getFileStatus(file);
@@ -101,22 +146,19 @@ public class TestDistributedRaidFileSystem {
   @Test
   public void testReadWithMissingBlock() throws Exception {
     Path file = new Path("/test3.txt");
-    DFSTestUtil.createFile(dfs, file, 4096, 10<<20, 1<<20, (short)3,
-        System.currentTimeMillis());
+    DFSTestUtil.createFile(dfs, file, 4096, 10 << 20, 1 << 20, (short) 3,
+      System.currentTimeMillis());
     byte[] fileContent = DFSTestUtil.readFileBuffer(dfs, file);
     Thread.sleep(1000);
 
-    conf.setLong(
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
-        1000);
+    conf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 1000);
     BlockCodec codec = new BlockCodec(conf);
     codec.encode(file);
     FileStatus fileStatus = dfs.getFileStatus(file);
     Assert.assertEquals(1, fileStatus.getReplication());
 
     DFSClient dfsClient = new DFSClient(dfsCluster.getURI(), conf);
-    LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(),
-        4 << 20, 1 << 20);
+    LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(), 4 << 20, 1 << 20);
     Assert.assertEquals(1, blocks.getLocatedBlocks().size());
     LocatedBlock block = blocks.get(0);
     deleteBlockFile(block);
@@ -127,22 +169,19 @@ public class TestDistributedRaidFileSystem {
   @Test
   public void testReadWithChecksumCorrupted() throws Exception {
     Path file = new Path("/test4.txt");
-    DFSTestUtil.createFile(dfs, file, 4096, 10<<20, 1<<20, (short)3,
-        System.currentTimeMillis());
+    DFSTestUtil.createFile(dfs, file, 4096, 10 << 20, 1 << 20, (short) 3,
+      System.currentTimeMillis());
     byte[] fileContent = DFSTestUtil.readFileBuffer(dfs, file);
     Thread.sleep(1000);
 
-    conf.setLong(
-        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
-        1000);
+    conf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 1000);
     BlockCodec codec = new BlockCodec(conf);
     codec.encode(file);
     FileStatus fileStatus = dfs.getFileStatus(file);
     Assert.assertEquals(1, fileStatus.getReplication());
 
     DFSClient dfsClient = new DFSClient(dfsCluster.getURI(), conf);
-    LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(),
-        4 << 20, 1 << 20);
+    LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(), 4 << 20, 1 << 20);
     Assert.assertEquals(1, blocks.getLocatedBlocks().size());
     LocatedBlock block = blocks.get(0);
     corruptChecksumFile(block);
@@ -165,15 +204,15 @@ public class TestDistributedRaidFileSystem {
     in.close();
 
     // Pread part of the file and verify the data
-    int blockSize = (int)(fileStatus.getBlockSize());
+    int blockSize = (int) (fileStatus.getBlockSize());
     data = new byte[blockSize];
     in = dfs.open(file);
     long offset = corruptedBlockIdx * fileStatus.getBlockSize();
     int readLen = in.read(offset, data, 0, data.length);
     Assert.assertEquals(data.length, readLen);
     Assert.assertArrayEquals(
-        Arrays.copyOfRange(fileContent, corruptedBlockIdx * blockSize,
-            (corruptedBlockIdx + 1) * blockSize), data);
+      Arrays.copyOfRange(fileContent, corruptedBlockIdx * blockSize, (corruptedBlockIdx + 1)
+          * blockSize), data);
     in.close();
 
     // Readfully and verify
@@ -183,8 +222,7 @@ public class TestDistributedRaidFileSystem {
     byte[] buffer = new byte[len];
     in = dfs.open(file);
     in.readFully(pos, buffer, 0, buffer.length);
-    Assert.assertArrayEquals(
-        Arrays.copyOfRange(fileContent, (int)pos, (int)(pos + len)), buffer);
+    Assert.assertArrayEquals(Arrays.copyOfRange(fileContent, (int) pos, (int) (pos + len)), buffer);
     in.close();
   }
 
@@ -197,8 +235,8 @@ public class TestDistributedRaidFileSystem {
     String blockFile = null;
     FileSystem fs = FileSystem.getLocal(new Configuration());
     do {
-      blockFile = dataDir + "/data" + (dirIdx++) + "/current/" + bpId +
-          "/current/finalized/blk_" + blockId;
+      blockFile = dataDir + "/data" + (dirIdx++) + "/current/" + bpId + "/current/finalized/blk_"
+          + blockId;
       if (fs.exists(new Path(blockFile))) {
         break;
       }
@@ -217,9 +255,8 @@ public class TestDistributedRaidFileSystem {
     String metaFile = null;
     FileSystem fs = FileSystem.getLocal(new Configuration());
     do {
-      metaFile = dataDir + "/data" + (dirIdx++) + "/current/" + bpId +
-          "/current/finalized/blk_" + blockId + "_" +
-          block.getBlock().getGenerationStamp() + ".meta";
+      metaFile = dataDir + "/data" + (dirIdx++) + "/current/" + bpId + "/current/finalized/subdir0/subdir0/blk_"
+          + blockId + "_" + block.getBlock().getGenerationStamp() + ".meta";
       if (fs.exists(new Path(metaFile))) {
         break;
       }
@@ -227,7 +264,7 @@ public class TestDistributedRaidFileSystem {
     Assert.assertNotNull(metaFile);
 
     FileStatus status = fs.getFileStatus(new Path(metaFile));
-    int fileLen = (int)(status.getLen());
+    int fileLen = (int) (status.getLen());
 
     byte[] fileContent = DFSTestUtil.readFileBuffer(fs, new Path(metaFile));
 

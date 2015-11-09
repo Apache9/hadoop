@@ -3250,4 +3250,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   public SaslDataTransferClient getSaslDataTransferClient() {
     return saslClient;
   }
+  
+  public ChecksumOpt getDefaultChecksumOpt() {
+  	return dfsClientConf.defaultChecksumOpt;
+  }
 }

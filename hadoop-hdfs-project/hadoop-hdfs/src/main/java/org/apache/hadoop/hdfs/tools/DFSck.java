@@ -237,7 +237,7 @@ public class DFSck extends Configured implements Tool {
           + StringUtils.stringifyException(ioe));
       return null;
     }
-    if (!(fs instanceof DistributedFileSystem)) {
+    if (!(fs.isDistributedFileSystem())) {
       System.err.println("FileSystem is " + fs.getUri());
       return null;
     }

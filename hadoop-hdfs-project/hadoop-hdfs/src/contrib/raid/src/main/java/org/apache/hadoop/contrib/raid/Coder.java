@@ -1,19 +1,12 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
  */
 package org.apache.hadoop.contrib.raid;
 
@@ -27,12 +20,14 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
-import com.google.common.base.Preconditions;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.contrib.raid.Collector.TaskType;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
@@ -46,19 +41,18 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
+import com.google.common.base.Preconditions;
+
 /**
- * A Coder is used to do the encoding and decoding jobs according to the
- * files information collected by the Collector{@link Collector}. It will
- * use a MapReduce job to do the work.
+ * A Coder is used to do the encoding and decoding jobs according to the files information collected
+ * by the Collector{@link Collector}. It will use a MapReduce job to do the work.
  */
 public class Coder {
 
+  private static final Log LOG = LogFactory.getLog(Coder.class);
+
   public enum CounterName {
-    EncodeSuccess,
-    EncodeFail,
-    DecodeSuccess,
-    DecodeFail,
-    InvalidTaskType
+    EncodeFiles, EncodeFail, EncodeBytes, DecodeSuccess, DecodeFail, InvalidTaskType
   }
 
   private final Path collectorResultFile;
@@ -67,8 +61,7 @@ public class Coder {
   private final Configuration conf;
   private Job job;
 
-  public Coder(Path collectorResultFile, int mapTaskNum, Path outputPath,
-      Configuration conf) {
+  public Coder(Path collectorResultFile, int mapTaskNum, Path outputPath, Configuration conf) {
     Preconditions.checkNotNull(collectorResultFile);
     Preconditions.checkArgument(mapTaskNum > 0);
     Preconditions.checkNotNull(conf);
@@ -78,12 +71,10 @@ public class Coder {
     this.conf = conf;
   }
 
-  public void run() throws IOException, ClassNotFoundException,
-      InterruptedException {
-    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
-        mapTaskNum);
+  public void run() throws IOException, ClassNotFoundException, InterruptedException {
+    conf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY, mapTaskNum);
     conf.set(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY,
-        collectorResultFile.toString());
+      collectorResultFile.toString());
 
     job = Job.getInstance(conf, "RaidNode-Coder");
     job.setJarByClass(Coder.class);
@@ -92,6 +83,7 @@ public class Coder {
     job.setInputFormatClass(RaidFileInfoInputFormat.class);
     FileOutputFormat.setOutputPath(job, outputPath);
 
+    job.setSpeculativeExecution(false);
     job.setNumReduceTasks(0);
     job.submit();
     MRUtils.writeJobId(conf, getJobIdFilePath(), getJobId());
@@ -123,54 +115,61 @@ public class Coder {
 
     private Configuration conf;
     private BlockCodec blockCodec;
-    private Counter encodeSuccess;
+    private Counter encodeFiles;
+    private Counter encodeBytes;
     private Counter encodeFail;
     private Counter decodeSuccess;
     private Counter decodeFail;
     private Counter invalidTaskType;
+    private long encodeTimeWindow;
+    private DistributedFileSystem dfs;
+    private long maxFilesPerMapper;
 
     @Override
-    protected void setup(Context context)
-        throws IOException, InterruptedException {
+    protected void setup(Context context) throws IOException, InterruptedException {
       this.conf = context.getConfiguration();
       this.blockCodec = new BlockCodec(this.conf);
-      this.encodeSuccess = context.getCounter(CounterName.EncodeSuccess);
+      this.encodeFiles = context.getCounter(CounterName.EncodeFiles);
+      this.encodeBytes = context.getCounter(CounterName.EncodeBytes);
       this.encodeFail = context.getCounter(CounterName.EncodeFail);
       this.decodeSuccess = context.getCounter(CounterName.DecodeSuccess);
       this.decodeFail = context.getCounter(CounterName.DecodeFail);
       this.invalidTaskType = context.getCounter(CounterName.InvalidTaskType);
+      this.encodeTimeWindow = this.conf.getLong(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS_DEFAULT);
+      this.dfs = (DistributedFileSystem) FileSystem.get(this.conf);
+      this.maxFilesPerMapper = this.conf.getLong(
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER_DEFAULT);
     }
 
     @Override
-    protected void map(Object key, Text value, Context context)
-        throws IOException, InterruptedException {
+    protected void map(Object key, Text value, Context context) throws IOException,
+        InterruptedException {
       String info = value.toString();
       String[] tokens = info.split("\t");
       Path file = new Path(tokens[0].trim());
-
-      TaskType taskType = null;
+      // TBD: The second token should be the group num to be encoded
       try {
-        taskType = TaskType.valueOf(tokens[1].trim());
-        switch (taskType) {
-          case Encode:
-            blockCodec.encode(file);
-            encodeSuccess.increment(1);
-            break;
-          case Decode:
-            decodeSuccess.increment(1);
-            break;
+        if (encodeFiles.getValue() >= maxFilesPerMapper) {
+          // Use the HDFS_RAIDNODE_CODER_MAX_FILES_PER_MAPPER to prevent coder from running too long
+          return;
         }
-      } catch (IllegalArgumentException e) {
-        invalidTaskType.increment(1);
+        FileStatus status = FileSystem.get(conf).getFileStatus(file);
+        long fileModTime = status.getModificationTime();
+        long currentTimeMs = System.currentTimeMillis();
+        if ((fileModTime + encodeTimeWindow > currentTimeMs) || !dfs.isFileClosed(file)) {
+          // The file might have been re-opened for write
+          return;
+        }
+        blockCodec.encode(file);
+        LOG.debug("Encoded file " + file.toString());
+        encodeFiles.increment(1);
+        encodeBytes.increment(((status.getLen() + status.getBlockSize() - 1) / status
+            .getBlockSize()) * status.getBlockSize());
       } catch (Exception e) {
-        switch (taskType) {
-          case Encode:
-            encodeFail.increment(1);
-            break;
-          case Decode:
-            decodeFail.increment(1);
-            break;
-        }
+        encodeFail.increment(1);
       }
     }
   }
@@ -178,18 +177,18 @@ public class Coder {
   /**
    * The raid file information input format class.
    */
+  // TBD: Load balance - creating splits according to blocks to be encoded.
+  // Collecting task should also put the file blocks information in its result file
   private static class RaidFileInfoInputFormat extends InputFormat {
     @Override
-    public List<InputSplit> getSplits(JobContext context)
-        throws IOException, InterruptedException {
+    public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
       Configuration conf = context.getConfiguration();
       FileSystem fs = FileSystem.get(conf);
 
-      String collectResultFile = conf.get(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY);
-      int mapTaskNum = conf.getInt(
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
-          HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
+      String collectResultFile = conf
+          .get(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_FILE_KEY);
+      int mapTaskNum = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_KEY,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_MAP_TASK_NUM_DEFAULT);
       List<InputSplit> result = new ArrayList<InputSplit>(mapTaskNum);
 
       FSDataInputStream in = fs.open(new Path(collectResultFile));
@@ -202,18 +201,19 @@ public class Coder {
           split = new RaidFileInfoSplit();
           result.add(split);
         } else {
-          split = (RaidFileInfoSplit)result.get(count++ % mapTaskNum);
+          split = (RaidFileInfoSplit) result.get(count++ % mapTaskNum);
         }
         split.addFileInfo(line.trim());
       }
       reader.close();
+      LOG.debug("Get " + result.size() + " splits for coder");
       return result;
     }
 
     @Override
-    public RecordReader createRecordReader(InputSplit split,
-        TaskAttemptContext context) throws IOException, InterruptedException {
-      RaidFileInfoSplit raidFileInfoSplit = (RaidFileInfoSplit)split;
+    public RecordReader createRecordReader(InputSplit split, TaskAttemptContext context)
+        throws IOException, InterruptedException {
+      RaidFileInfoSplit raidFileInfoSplit = (RaidFileInfoSplit) split;
       RaidFileInfoReader reader = new RaidFileInfoReader();
       reader.initialize(split, context);
       return reader;
@@ -223,8 +223,7 @@ public class Coder {
   /**
    * The raid file information split class.
    */
-  private static class RaidFileInfoSplit extends InputSplit
-      implements Writable {
+  private static class RaidFileInfoSplit extends InputSplit implements Writable {
 
     private List<String> raidFileInfos;
 
@@ -273,9 +272,9 @@ public class Coder {
     private int nextIndex;
 
     @Override
-    public void initialize(InputSplit split, TaskAttemptContext context)
-        throws IOException, InterruptedException {
-      this.split = (RaidFileInfoSplit)split;
+    public void initialize(InputSplit split, TaskAttemptContext context) throws IOException,
+        InterruptedException {
+      this.split = (RaidFileInfoSplit) split;
       this.nextIndex = 0;
     }
 

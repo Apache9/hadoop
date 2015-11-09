@@ -72,7 +72,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private long staleInterval;   // interval used to identify stale DataNodes
   private int overUsedPercentageThreshold;
   private long overUsedFreespaceThreshold;
-
+  private boolean randomlyDelete;
+  private Random rand;
   
   /**
    * A miss of that many heartbeats is tolerated for replica deletion policy.
@@ -106,7 +107,10 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     this.overUsedFreespaceThreshold =
         conf.getLong(DFSConfigKeys.DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD,
             DFSConfigKeys.DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD_DEFAULT);
-
+    this.randomlyDelete =
+        conf.getBoolean(DFSConfigKeys.DFS_NAMENODE_REPLICA_DELETE_RANDOMLY,
+            DFSConfigKeys.DFS_NAMENODE_REPLICA_DELETE_RANDOMLY_DEFAULT);
+    this.rand = new Random();
   }
 
   @Override
@@ -940,42 +944,59 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       Collection<DatanodeStorageInfo> first,
       Collection<DatanodeStorageInfo> second,
       final List<StorageType> excessTypes) {
-    long oldestHeartbeat =
-      now() - heartbeatInterval * tolerateHeartbeatMultiplier;
-    DatanodeStorageInfo oldestHeartbeatStorage = null;
-    long minSpace = Long.MAX_VALUE;
-    DatanodeStorageInfo minSpaceStorage = null;
+    if (!randomlyDelete) {
+      long oldestHeartbeat =
+        now() - heartbeatInterval * tolerateHeartbeatMultiplier;
+      DatanodeStorageInfo oldestHeartbeatStorage = null;
+      long minSpace = Long.MAX_VALUE;
+      DatanodeStorageInfo minSpaceStorage = null;
 
-    // Pick the node with the oldest heartbeat or with the least free space,
-    // if all hearbeats are within the tolerable heartbeat interval
-    for(DatanodeStorageInfo storage : pickupReplicaSet(first, second)) {
-      if (!excessTypes.contains(storage.getStorageType())) {
-        continue;
+      // Pick the node with the oldest heartbeat or with the least free space,
+      // if all hearbeats are within the tolerable heartbeat interval
+      for(DatanodeStorageInfo storage : pickupReplicaSet(first, second)) {
+        if (!excessTypes.contains(storage.getStorageType())) {
+          continue;
+        }
+
+        final DatanodeDescriptor node = storage.getDatanodeDescriptor();
+        long free = node.getRemaining();
+        long lastHeartbeat = node.getLastUpdate();
+        if(lastHeartbeat < oldestHeartbeat) {
+          oldestHeartbeat = lastHeartbeat;
+          oldestHeartbeatStorage = storage;
+        }
+        if (minSpace > free) {
+          minSpace = free;
+          minSpaceStorage = storage;
+        }
       }
 
-      final DatanodeDescriptor node = storage.getDatanodeDescriptor();
-      long free = node.getRemaining();
-      long lastHeartbeat = node.getLastUpdate();
-      if(lastHeartbeat < oldestHeartbeat) {
-        oldestHeartbeat = lastHeartbeat;
-        oldestHeartbeatStorage = storage;
+      final DatanodeStorageInfo storage;
+      if (oldestHeartbeatStorage != null) {
+        storage = oldestHeartbeatStorage;
+      } else if (minSpaceStorage != null) {
+        storage = minSpaceStorage;
+      } else {
+        return null;
       }
-      if (minSpace > free) {
-        minSpace = free;
-        minSpaceStorage = storage;
-      }
-    }
-
-    final DatanodeStorageInfo storage;
-    if (oldestHeartbeatStorage != null) {
-      storage = oldestHeartbeatStorage;
-    } else if (minSpaceStorage != null) {
-      storage = minSpaceStorage;
+      excessTypes.remove(storage.getStorageType());
+      return storage;
     } else {
+      int totalReplica = first.size() + second.size();
+      int toDelete = rand.nextInt(totalReplica);
+      Collection<DatanodeStorageInfo> target = first;
+      if (toDelete >= first.size()) {
+        toDelete -= first.size();
+        target = second;
+      }
+      for (DatanodeStorageInfo storage : target) {
+        if (toDelete == 0) {
+          return storage;
+        }
+        --toDelete;
+      }
       return null;
     }
-    excessTypes.remove(storage.getStorageType());
-    return storage;
   }
 
   /**

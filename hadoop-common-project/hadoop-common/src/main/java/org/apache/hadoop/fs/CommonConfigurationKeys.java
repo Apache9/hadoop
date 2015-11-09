@@ -299,6 +299,10 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String NFS_EXPORTS_ALLOWED_HOSTS_KEY = "nfs.exports.allowed.hosts";
   public static final String NFS_EXPORTS_ALLOWED_HOSTS_KEY_DEFAULT = "* rw";
 
+  public static final String HADOOP_RAID_FILESYSTEM_CLASS_KEY = "hdfs.raid.filesystem.class";
+  public static final String HADOOP_RAID_ENABLED_KEY = "hdfs.raid.enabled";
+  public static final boolean HADOOP_RAID_ENABLED_DEFAULT = false;
+
   public static final String ZK_QUORUM_KEY = "ha.zookeeper.quorum";
   public static final String ZK_SESSION_TIMEOUT_KEY =
       "ha.zookeeper.session-timeout.ms";
@@ -308,4 +312,6 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String ZK_ACL_KEY = "ha.zookeeper.acl";
   public static final String ZK_ACL_DEFAULT = "world:anyone:rwcda";
   public static final String ZK_AUTH_KEY = "ha.zookeeper.auth";
+  public static final String SECURITY_RAID_DATANODE_PROTOCOL_ACL =
+      "security.raid.datanode.protocol.acl";
 }

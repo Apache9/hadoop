@@ -101,11 +101,11 @@ public class CacheAdmin extends Configured implements Tool {
   private static DistributedFileSystem getDFS(Configuration conf)
       throws IOException {
     FileSystem fs = FileSystem.get(conf);
-    if (!(fs instanceof DistributedFileSystem)) {
+    if (!(fs.isDistributedFileSystem())) {
       throw new IllegalArgumentException("FileSystem " + fs.getUri() + 
       " is not an HDFS file system");
     }
-    return (DistributedFileSystem)fs;
+    return (DistributedFileSystem) fs.getDistributedFileSystem();
   }
 
   /**

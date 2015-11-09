@@ -822,7 +822,10 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.datanode.overused.freespace.threshold";
   public static final long DFS_DATANODE_OVERUSED_FREESPACE_THRESHOLD_DEFAULT =
       0; 
-
+  public static final String DFS_NAMENODE_REPLICA_DELETE_RANDOMLY = 
+      "dfs.namenode.replica.delete.randomly";
+  public static final boolean DFS_NAMENODE_REPLICA_DELETE_RANDOMLY_DEFAULT = 
+      false;
   public static final String DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION =
       "dfs.client.recover-on-close-exception.enable";
   public static final boolean DFS_CLIENT_RECOVER_ON_CLOSE_EXCEPTION_DEFAULT =
@@ -832,4 +835,8 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.client.xiaomi.input.sleep-before-retry.ms";
   public static final long DFS_CLIENT_XIAOMI_INPUT_SLEEP_BEFORE_RETRY_MS_DEFAULT =
       10L;
+
+  public static final String DFS_DATANODE_ENABLE_RAID_SERVICE =
+      "dfs.datanode.enable.raid.service";
+  public static final boolean DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT = false;
 }

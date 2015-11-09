@@ -41,6 +41,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_KERBEROS_PRINCIP
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_KEYTAB_FILE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PLUGINS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ENABLE_RAID_SERVICE;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_STARTUP_KEY;
@@ -125,6 +127,7 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.Client
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.DNTransferAckProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
 import org.apache.hadoop.hdfs.protocol.proto.InterDatanodeProtocolProtos.InterDatanodeProtocolService;
+import org.apache.hadoop.hdfs.protocol.proto.RaidDatanodeProtocolProtos.RaidDatanodeProtocolService;
 import org.apache.hadoop.hdfs.protocolPB.ClientDatanodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientDatanodeProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
@@ -132,6 +135,9 @@ import org.apache.hadoop.hdfs.protocolPB.InterDatanodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.InterDatanodeProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.InterDatanodeProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
+import org.apache.hadoop.hdfs.protocolPB.RaidDatanodeProtocolPB;
+import org.apache.hadoop.hdfs.protocolPB.RaidDatanodeProtocolServerSideTranslatorPB;
+import org.apache.hadoop.hdfs.RaidPolicyProvider;
 import org.apache.hadoop.hdfs.security.token.block.BlockPoolTokenSecretManager;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
@@ -720,12 +726,29 @@ public class DataNode extends ReconfigurableBase
     DFSUtil.addPBProtocol(conf, TraceAdminProtocolPB.class, traceAdminService,
         ipcServer);
 
+    if (conf.getBoolean(DFS_DATANODE_ENABLE_RAID_SERVICE,
+        DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT)) {
+      RaidDatanodeProtocolServerSideTranslatorPB raidDatanodeProtocolXlator =
+          new RaidDatanodeProtocolServerSideTranslatorPB(new RaidService(this));
+      service =
+          RaidDatanodeProtocolService
+              .newReflectiveBlockingService(raidDatanodeProtocolXlator);
+      DFSUtil.addPBProtocol(conf, RaidDatanodeProtocolPB.class, service,
+          ipcServer);
+      LOG.info("Added raid service to IPC server");
+    }
+
     LOG.info("Opened IPC server at " + ipcServer.getListenerAddress());
 
     // set service-level authorization security policy
     if (conf.getBoolean(
         CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
       ipcServer.refreshServiceAcl(conf, new HDFSPolicyProvider());
+      if (conf.getBoolean(DFS_DATANODE_ENABLE_RAID_SERVICE,
+          DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT)) {
+        ipcServer.refreshServiceAcl(conf, new RaidPolicyProvider());
+        LOG.info("Refreshed raid service acl");
+      }
     }
   }
 

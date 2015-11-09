@@ -109,11 +109,11 @@ public class DFSAdmin extends FsShell {
     /** Constructor */
     public DFSAdminCommand(FileSystem fs) {
       super(fs.getConf());
-      if (!(fs instanceof DistributedFileSystem)) {
+      if (!(fs.isDistributedFileSystem())) {
         throw new IllegalArgumentException("FileSystem " + fs.getUri() + 
             " is not an HDFS file system");
       }
-      this.dfs = (DistributedFileSystem)fs;
+      this.dfs = (DistributedFileSystem) fs.getDistributedFileSystem();
     }
   }
   
@@ -453,11 +453,11 @@ public class DFSAdmin extends FsShell {
   
   protected DistributedFileSystem getDFS() throws IOException {
     FileSystem fs = getFS();
-    if (!(fs instanceof DistributedFileSystem)) {
+    if (!(fs.isDistributedFileSystem())) {
       throw new IllegalArgumentException("FileSystem " + fs.getUri() + 
       " is not an HDFS file system");
     }
-    return (DistributedFileSystem)fs;
+    return (DistributedFileSystem) fs.getDistributedFileSystem();
   }
   
   /**
@@ -834,12 +834,12 @@ public class DFSAdmin extends FsShell {
     }
 
     FileSystem fs = getFS();
-    if (!(fs instanceof DistributedFileSystem)) {
+    if (!(fs.isDistributedFileSystem())) {
       System.err.println("FileSystem is " + fs.getUri());
       return exitCode;
     }
 
-    DistributedFileSystem dfs = (DistributedFileSystem) fs;
+    DistributedFileSystem dfs = (DistributedFileSystem) fs.getDistributedFileSystem();
     Configuration dfsConf = dfs.getConf();
     URI dfsUri = dfs.getUri();
     boolean isHaEnabled = HAUtil.isLogicalUri(dfsConf, dfsUri);

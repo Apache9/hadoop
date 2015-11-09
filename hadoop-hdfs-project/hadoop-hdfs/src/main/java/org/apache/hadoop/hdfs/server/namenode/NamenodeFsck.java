@@ -443,6 +443,9 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
             sb.append(']');
             report.append(" " + sb.toString());
         }
+        if (isRaidFile(path)) {
+          report.append(" It's a raid file, might be fixed by raid a little bit later");
+        }
         res.addMissing(block.toString(), block.getNumBytes());
         missing++;
         missize += block.getNumBytes();
@@ -731,6 +734,24 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       LOG.warn("Cannot initialize /lost+found .");
       lfInitedOk = false;
       internalError = true;
+    }
+  }
+
+  /**
+   * "/raid" and ".ec" are defined in BlockCodec of the raid package. We do not want to include
+   * the whole raid package in hdfs in near future, so just simply hard-coded these string at now. 
+   */
+  private boolean isRaidFile(String file) {
+    // Check if this is a coding file
+    if (file.startsWith("/raid") && file.endsWith(".ec")) {
+      return true;
+    }
+    String codeFile = "/raid" + file + ".ec";
+    try {
+      boolean exist =  (namenode.getRpcServer().getFileInfo(codeFile) != null);
+      return exist;
+    } catch (Exception e) {
+      return false;
     }
   }
 
