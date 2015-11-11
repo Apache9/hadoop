@@ -137,7 +137,6 @@ import org.apache.hadoop.hdfs.protocolPB.InterDatanodeProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.protocolPB.RaidDatanodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.RaidDatanodeProtocolServerSideTranslatorPB;
-import org.apache.hadoop.hdfs.RaidPolicyProvider;
 import org.apache.hadoop.hdfs.security.token.block.BlockPoolTokenSecretManager;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
@@ -744,11 +743,6 @@ public class DataNode extends ReconfigurableBase
     if (conf.getBoolean(
         CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
       ipcServer.refreshServiceAcl(conf, new HDFSPolicyProvider());
-      if (conf.getBoolean(DFS_DATANODE_ENABLE_RAID_SERVICE,
-          DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT)) {
-        ipcServer.refreshServiceAcl(conf, new RaidPolicyProvider());
-        LOG.info("Refreshed raid service acl");
-      }
     }
   }
 
