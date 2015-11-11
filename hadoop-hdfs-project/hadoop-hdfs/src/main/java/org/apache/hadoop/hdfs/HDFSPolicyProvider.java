@@ -23,6 +23,7 @@ import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.ha.ZKFCProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+import org.apache.hadoop.hdfs.protocol.RaidDatanodeProtocol;
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocol;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
@@ -64,7 +65,10 @@ public class HDFSPolicyProvider extends PolicyProvider {
         RefreshUserMappingsProtocol.class),
     new Service(
         CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_AUTHORIZATION_GET_USER_MAPPINGS,
-        GetUserMappingsProtocol.class)
+        GetUserMappingsProtocol.class),
+    new Service(
+        CommonConfigurationKeys.SECURITY_RAID_DATANODE_PROTOCOL_ACL,
+        RaidDatanodeProtocol.class)
   };
   
   @Override

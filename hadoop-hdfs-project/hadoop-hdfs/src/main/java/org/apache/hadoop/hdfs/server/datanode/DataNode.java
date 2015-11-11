@@ -47,7 +47,6 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
 import org.apache.hadoop.hdfs.protocol.proto.InterDatanodeProtocolProtos.InterDatanodeProtocolService;
 import org.apache.hadoop.hdfs.protocol.proto.RaidDatanodeProtocolProtos.RaidDatanodeProtocolService;
 import org.apache.hadoop.hdfs.protocolPB.*;
-import org.apache.hadoop.hdfs.RaidPolicyProvider;
 import org.apache.hadoop.hdfs.security.token.block.*;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager.AccessMode;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
@@ -447,11 +446,6 @@ public class DataNode extends Configured
     if (conf.getBoolean(
         CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
       ipcServer.refreshServiceAcl(conf, new HDFSPolicyProvider());
-      if (conf.getBoolean(DFS_DATANODE_ENABLE_RAID_SERVICE,
-          DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT)) {
-        ipcServer.refreshServiceAcl(conf, new RaidPolicyProvider());
-        LOG.info("Refreshed raid service acl");
-      }
     }
   }
   
