@@ -19,10 +19,13 @@
 package org.apache.hadoop.hdfs;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.logging.Log;
@@ -62,6 +65,9 @@ public class TestDFSClientZKBasedFailover {
     TestContext ctx;
     ZKFCThread thr1 = null, thr2 = null;
     FileSystem fs = null;
+    private boolean configRetryTime = false;
+    private int retryTimes;
+    private int sleepBetweenRetry;
     private final String nameservice = nameservicePrefix
         + MiniDFSCluster.nextInstanceId();
 
@@ -90,6 +96,14 @@ public class TestDFSClientZKBasedFailover {
       conf.setInt(
           CommonConfigurationKeysPublic.IPC_CLIENT_CONNECTION_MAXIDLETIME_KEY,
           0);
+
+      //Change the failover retry times and interval
+      if (configRetryTime) {
+        conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_NUM_RETRIES,
+                retryTimes);
+        conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_SLEEP_BETWEEN_RETRY,
+                sleepBetweenRetry);
+      }
 
       conf.setInt(DFSConfigKeys.DFS_HA_ZKFC_PORT_KEY + "." + nameservice
           + ".nn1", 10023);
@@ -143,7 +157,13 @@ public class TestDFSClientZKBasedFailover {
       ctx.addThread(thr2 = new ZKFCThread(cluster, ctx, 1));
       thr2.start();
       ZKFCTestUtil.waitForHealthState(thr2.zkfc,
-          HealthMonitor.State.SERVICE_HEALTHY, ctx);
+              HealthMonitor.State.SERVICE_HEALTHY, ctx);
+    }
+
+    public void setRetryTime(int times, int interval) {
+      configRetryTime = true;
+      retryTimes = times;
+      sleepBetweenRetry = interval;
     }
 
     public void runTest() throws Exception {
@@ -164,7 +184,24 @@ public class TestDFSClientZKBasedFailover {
       }
       super.tearDown();
     }
+  }
+
+  public class StartNameNodeTask extends TimerTask {
+    private FailoverTestContext ftc;
+
+    public StartNameNodeTask(FailoverTestContext ctx) {
+      ftc = ctx;
     }
+
+    @Override
+    public void run() {
+      try {
+        ftc.cluster.restartNameNode(1);
+      } catch (IOException e) {
+        LOG.info("start NameNode failed!!");
+      }
+    }
+  }
 
   private interface FailoverTest {
     public void runTest(FailoverTestContext ftc) throws IOException,
@@ -214,6 +251,66 @@ public class TestDFSClientZKBasedFailover {
 
     FailoverTestContext ftc = new FailoverTestContext(ft);
     ftc.setup(true);
+    ft.runTest(ftc);
+    ftc.shutdown();
+  }
+
+  @Test
+  public void testFailOverDefaultStrategy() throws Exception {
+    FailoverTest ft = new FailoverTest() {
+      public void runTest(FailoverTestContext ftc) throws IOException,
+          URISyntaxException {
+        FileSystem fs = ftc.fs;
+        // Test failover timeout
+        Path testDir1 = new Path("/dir1");
+        fs.mkdirs(testDir1);
+        assertTrue(fs.exists(testDir1));
+
+        ftc.cluster.shutdownNameNode(0);
+        ftc.cluster.shutdownNameNode(1);
+        //zk re-election may last around 20s, using current 5 * 6s will success
+        new Timer().schedule(new StartNameNodeTask(ftc), 20000);
+
+        assertTrue(fs.exists(testDir1));
+      }
+    };
+
+    FailoverTestContext ftc = new FailoverTestContext(ft);
+    ftc.setup(false);
+    ft.runTest(ftc);
+    ftc.shutdown();
+  }
+
+  @Test
+  public void testFailOverTimeOut() throws Exception {
+    FailoverTest ft = new FailoverTest() {
+      public void runTest(FailoverTestContext ftc) throws IOException,
+          URISyntaxException {
+        FileSystem fs = ftc.fs;
+        // Test failover timeout
+        Path testDir1 = new Path("/dir1");
+        fs.mkdirs(testDir1);
+        assertTrue(fs.exists(testDir1));
+
+        ftc.cluster.shutdownNameNode(0);
+        ftc.cluster.shutdownNameNode(1);
+        //zk re-election may last around 20s
+        new Timer().schedule(new StartNameNodeTask(ftc), 20000);
+
+        boolean getActiveNNSuccess = true;
+        try {
+          fs.exists(testDir1);
+        } catch (Exception e) {
+          getActiveNNSuccess = false;
+        }
+        assertFalse(getActiveNNSuccess);
+      }
+    };
+
+    FailoverTestContext ftc = new FailoverTestContext(ft);
+    //inappropriate config, maybe too short to handle zk re-election
+    ftc.setRetryTime(3, 5000);
+    ftc.setup(false);
     ft.runTest(ftc);
     ftc.shutdown();
   }
