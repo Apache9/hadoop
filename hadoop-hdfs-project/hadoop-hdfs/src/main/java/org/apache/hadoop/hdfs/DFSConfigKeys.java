@@ -129,7 +129,15 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.client.zk.failover.fence.period.inMs";
   public static final long DFS_CLIENT_ZK_FAILOVER_FENCE_PERIOD_INMS_DEFAULT =
       2000;
-  
+  public static final String  DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_NUM_RETRIES =
+      "dfs.client.failover.get.active.namenode.num.retries";
+  public static final int     DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_NUM_RETRIES_DEFAULT =
+      5;
+  public static final String  DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_SLEEP_BETWEEN_RETRY =
+      "dfs.client.failover.get.active.namenode.sleep.between.retry";
+  public static final int     DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_SLEEP_BETWEEN_RETRY_DEFAULT =
+      6000;
+
   public static final String  DFS_CLIENT_SOCKET_CACHE_EXPIRY_MSEC_KEY = "dfs.client.socketcache.expiryMsec";
   public static final long    DFS_CLIENT_SOCKET_CACHE_EXPIRY_MSEC_DEFAULT = 3000;
   public static final String  DFS_CLIENT_WRITE_EXCLUDE_NODES_CACHE_EXPIRY_INTERVAL = "dfs.client.write.exclude.nodes.cache.expiry.interval.millis";
