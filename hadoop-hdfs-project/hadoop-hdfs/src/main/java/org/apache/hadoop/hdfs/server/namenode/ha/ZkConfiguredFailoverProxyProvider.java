@@ -42,7 +42,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
  * ConfiguredFailoverProxyProvider. The extra functionality is to get active
  * namenode information from zookeeper.
  * 
- * With ConfiguredFailoverProxyProvider, if a nemnode restart, the client might
+ * With ConfiguredFailoverProxyProvider, if a namenode restart, the client might
  * be hung on that namenode for a while before failover to the active namenode
  * since there is usually full GC during bootstrap (due to block reporting burst
  * etc.)
@@ -56,12 +56,12 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
   private static final Log LOG = LogFactory
       .getLog(ZkConfiguredFailoverProxyProvider.class);
 
-  private static final int NUM_RETRIES = 3;
-  private static final int SLEEP_BETWEEN_RETRY = 5000;
   private static final String LOCK_FILENAME = "ActiveStandbyElectorLock";
 
   private boolean queryZkOnce;
   private boolean useUnConfiguredNN;
+  private int numRetries;
+  private int sleepBetweenRetry;
 
   private String nsId;
   private long failoverFencePeriodInMs;
@@ -76,6 +76,12 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
         conf.getBoolean(
             DFSConfigKeys.DFS_CLIENT_FAILOVER_USE_UNCONFIGED_NAMENODE,
             DFSConfigKeys.DFS_CLIENT_FAILOVER_USE_UNCONFIGED_NAMENODE_DEFAULT);
+    numRetries =
+        conf.getInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_NUM_RETRIES,
+            DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_NUM_RETRIES_DEFAULT);
+    sleepBetweenRetry =
+        conf.getInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_SLEEP_BETWEEN_RETRY,
+            DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_SLEEP_BETWEEN_RETRY_DEFAULT);
     Collection<String> nsIds = DFSUtil.getNameServiceIds(conf);
 
     if (nsIds.size() == 1) {
@@ -136,10 +142,9 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
           }
         } catch (KeeperException ke) {
           LOG.warn("Fail to get active namenode information from zooker", ke);
-          LOG.warn("Will retry " + (NUM_RETRIES - retry) + "times");
-          if (++retry < NUM_RETRIES) {
-            Thread.sleep(SLEEP_BETWEEN_RETRY);
-            continue;
+          LOG.warn("Will retry " + (numRetries - retry) + "times");
+          if (++retry < numRetries) {
+            Thread.sleep(sleepBetweenRetry);
           } else {
             break;
           }
