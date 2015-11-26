@@ -23,6 +23,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsAction;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
@@ -161,7 +163,7 @@ public class TestHadoopArchiveLogs {
     Assert.assertTrue(hal.eligibleApplications.contains(app3));
   }
 
-  @Test(timeout = 10000)
+  @Test(timeout = 30000)
   public void testFilterAppsByAggregatedStatus() throws Exception {
     MiniYARNCluster yarnCluster = null;
     try {
@@ -244,6 +246,11 @@ public class TestHadoopArchiveLogs {
 
   @Test(timeout = 10000)
   public void testGenerateScript() throws Exception {
+    _testGenerateScript(false);
+    _testGenerateScript(true);
+  }
+
+  private void _testGenerateScript(boolean proxy) throws Exception {
     Configuration conf = new Configuration();
     HadoopArchiveLogs hal = new HadoopArchiveLogs(conf);
     ApplicationId app1 = ApplicationId.newInstance(CLUSTER_TIMESTAMP, 1);
@@ -252,6 +259,7 @@ public class TestHadoopArchiveLogs {
         USER));
     hal.eligibleApplications.add(new HadoopArchiveLogs.AppInfo(app2.toString(),
         USER));
+    hal.proxy = proxy;
 
     File localScript = new File("target", "script.sh");
     Path workingDir = new Path("/tmp", "working");
@@ -284,10 +292,22 @@ public class TestHadoopArchiveLogs {
     Assert.assertEquals("fi", lines[12]);
     Assert.assertEquals("export HADOOP_CLIENT_OPTS=\"-Xmx1024m\"", lines[13]);
     Assert.assertTrue(lines[14].startsWith("export HADOOP_CLASSPATH="));
-    Assert.assertEquals("\"$HADOOP_HOME\"/bin/hadoop org.apache.hadoop.tools." +
-        "HadoopArchiveLogsRunner -appId \"$appId\" -user \"$user\" -workingDir "
-        + workingDir.toString() + " -remoteRootLogDir " +
-        remoteRootLogDir.toString() + " -suffix " + suffix, lines[15]);
+
+    if (proxy) {
+      Assert.assertEquals(
+          "\"$HADOOP_PREFIX\"/bin/hadoop org.apache.hadoop.tools." +
+              "HadoopArchiveLogsRunner -appId \"$appId\" -user \"$user\" " +
+              "-workingDir " + workingDir.toString() + " -remoteRootLogDir " +
+              remoteRootLogDir.toString() + " -suffix " + suffix,
+          lines[15]);
+    } else {
+      Assert.assertEquals(
+          "\"$HADOOP_PREFIX\"/bin/hadoop org.apache.hadoop.tools." +
+              "HadoopArchiveLogsRunner -appId \"$appId\" -user \"$user\" " +
+              "-workingDir " + workingDir.toString() + " -remoteRootLogDir " +
+              remoteRootLogDir.toString() + " -suffix " + suffix + " -noProxy",
+          lines[15]);
+    }
   }
 
 //  /**
@@ -308,6 +328,47 @@ public class TestHadoopArchiveLogs {
 //    statuses[6] = LogAggregationStatus.TIME_OUT;
 //    Assert.assertArrayEquals(statuses, LogAggregationStatus.values());
 //  }
+
+  @Test(timeout = 5000)
+  public void testPrepareWorkingDir() throws Exception {
+    Configuration conf = new Configuration();
+    HadoopArchiveLogs hal = new HadoopArchiveLogs(conf);
+    FileSystem fs = FileSystem.getLocal(conf);
+    Path workingDir = new Path("target", "testPrepareWorkingDir");
+    fs.delete(workingDir, true);
+    Assert.assertFalse(fs.exists(workingDir));
+    // -force is false and the dir doesn't exist so it will create one
+    hal.force = false;
+    boolean dirPrepared = hal.prepareWorkingDir(fs, workingDir);
+    Assert.assertTrue(dirPrepared);
+    Assert.assertTrue(fs.exists(workingDir));
+    Assert.assertEquals(
+        new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL, true),
+        fs.getFileStatus(workingDir).getPermission());
+    // Throw a file in the dir
+    Path dummyFile = new Path(workingDir, "dummy.txt");
+    fs.createNewFile(dummyFile);
+    Assert.assertTrue(fs.exists(dummyFile));
+    // -force is false and the dir exists, so nothing will happen and the dummy
+    // still exists
+    dirPrepared = hal.prepareWorkingDir(fs, workingDir);
+    Assert.assertFalse(dirPrepared);
+    Assert.assertTrue(fs.exists(workingDir));
+    Assert.assertTrue(fs.exists(dummyFile));
+    Assert.assertEquals(
+        new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL, true),
+        fs.getFileStatus(workingDir).getPermission());
+    // -force is true and the dir exists, so it will recreate it and the dummy
+    // won't exist anymore
+    hal.force = true;
+    dirPrepared = hal.prepareWorkingDir(fs, workingDir);
+    Assert.assertTrue(dirPrepared);
+    Assert.assertTrue(fs.exists(workingDir));
+    Assert.assertEquals(
+        new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL, true),
+        fs.getFileStatus(workingDir).getPermission());
+    Assert.assertFalse(fs.exists(dummyFile));
+  }
 
   private static void createFile(FileSystem fs, Path p, long sizeMultiple)
       throws IOException {

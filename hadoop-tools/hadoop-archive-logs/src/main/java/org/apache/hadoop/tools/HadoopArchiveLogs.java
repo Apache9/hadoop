@@ -70,6 +70,8 @@ public class HadoopArchiveLogs implements Tool {
   private static final String MAX_TOTAL_LOGS_SIZE_OPTION = "maxTotalLogsSize";
   private static final String MEMORY_OPTION = "memory";
   private static final String VERBOSE_OPTION = "verbose";
+  private static final String FORCE_OPTION = "force";
+  private static final String NO_PROXY_OPTION = "noProxy";
 
   private static final int DEFAULT_MAX_ELIGIBLE = -1;
   private static final int DEFAULT_MIN_NUM_LOG_FILES = 20;
@@ -85,6 +87,10 @@ public class HadoopArchiveLogs implements Tool {
   @VisibleForTesting
   long memory = DEFAULT_MEMORY;
   private boolean verbose = false;
+  @VisibleForTesting
+  boolean force = false;
+  @VisibleForTesting
+  boolean proxy = true;
 
   @VisibleForTesting
   Set<AppInfo> eligibleApplications;
@@ -196,12 +202,24 @@ public class HadoopArchiveLogs implements Tool {
     memoryOpt.setArgName("megabytes");
     Option verboseOpt = new Option(VERBOSE_OPTION, false,
         "Print more details.");
+    Option forceOpt = new Option(FORCE_OPTION, false,
+        "Force recreating the working directory if an existing one is found. " +
+            "This should only be used if you know that another instance is " +
+            "not currently running");
+    Option noProxyOpt = new Option(NO_PROXY_OPTION, false,
+        "When specified, all processing will be done as the user running this" +
+            " command (or the Yarn user if DefaultContainerExecutor is in " +
+            "use). When not specified, all processing will be done as the " +
+            "user who owns that application; if the user running this command" +
+            " is not allowed to impersonate that user, it will fail");
     opts.addOption(helpOpt);
     opts.addOption(maxEligibleOpt);
     opts.addOption(minNumLogFilesOpt);
     opts.addOption(maxTotalLogsSizeOpt);
     opts.addOption(memoryOpt);
     opts.addOption(verboseOpt);
+    opts.addOption(forceOpt);
+    opts.addOption(noProxyOpt);
 
     try {
       CommandLineParser parser = new GnuParser();
@@ -235,6 +253,12 @@ public class HadoopArchiveLogs implements Tool {
       }
       if (commandLine.hasOption(VERBOSE_OPTION)) {
         verbose = true;
+      }
+      if (commandLine.hasOption(FORCE_OPTION)) {
+        force = true;
+      }
+      if (commandLine.hasOption(NO_PROXY_OPTION)) {
+        proxy = false;
       }
     } catch (ParseException pe) {
       HelpFormatter formatter = new HelpFormatter();
@@ -285,6 +309,26 @@ public class HadoopArchiveLogs implements Tool {
 //      }
 //    }
 //  }
+
+  @VisibleForTesting
+  boolean prepareWorkingDir(FileSystem fs, Path workingDir) throws IOException {
+    if (fs.exists(workingDir)) {
+      if (force) {
+        LOG.info("Existing Working Dir detected: -" + FORCE_OPTION +
+            " specified -> recreating Working Dir");
+        fs.delete(workingDir, true);
+      } else {
+        LOG.info("Existing Working Dir detected: -" + FORCE_OPTION +
+            " not specified -> exiting");
+        return false;
+      }
+    }
+    fs.mkdirs(workingDir);
+    fs.setPermission(workingDir,
+        new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL, true));
+    return true;
+  }
+
 
   @VisibleForTesting
   void checkFilesAndSeedApps(FileSystem fs, Path remoteRootLogDir,
@@ -444,6 +488,9 @@ public class HadoopArchiveLogs implements Tool {
       fw.write(remoteRootLogDir.toString());
       fw.write(" -suffix ");
       fw.write(suffix);
+      if (!proxy) {
+        fw.write(" -noProxy\n");
+      }
       fw.write("\n");
     } finally {
       if (fw != null) {
