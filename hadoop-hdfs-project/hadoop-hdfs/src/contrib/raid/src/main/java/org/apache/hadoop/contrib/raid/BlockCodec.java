@@ -216,6 +216,15 @@ public class BlockCodec {
   public void decode(Path file, int[] corruptedBlocks, BlockTokenSecretManager tokenManager)
       throws IOException {
     FSDataOutputStream lockOut = beginDecoding(fs, file);
+    if (lockOut == null) {
+      // Two conditions:
+      // (1) Somebody else is decoding the file. We should do nothing then.
+      // (2) An earlier Fixer create this file and then exit abnormally without
+      // deleting it in finally. (i.e. killed by yarn or os etc.) In this case,
+      // the file would be closed in an hour. The later incarnation of fixer
+      // after an hour would then be able to move on with this file.
+      return;
+    }
     Map<Integer, OutputStream>[] erasuredDataInfos = null;
     Map<Integer, OutputStream>[] erasuredCodingInfos = null;
     Map<Integer, List<LocatedBlock>> dataGrpLocs = null;
@@ -978,6 +987,11 @@ public class BlockCodec {
     try {
       if (((DistributedFileSystem) fs).isFileClosed(lockFile)) {
         fs.delete(lockFile, false);
+      } else {
+        if (((DistributedFileSystem) fs).exists(lockFile)) {
+          // Do not rely on FileNotFoundException
+          return null;
+        }
       }
     } catch (FileNotFoundException e) {
       // Ignored
