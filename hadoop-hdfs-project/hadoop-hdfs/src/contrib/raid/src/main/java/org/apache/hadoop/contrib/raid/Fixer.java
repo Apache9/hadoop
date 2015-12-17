@@ -184,6 +184,12 @@ public class Fixer {
         } else {
           // The corrupted file is a coding file
           Path sourceFile = BlockCodec.getCodingFileSource(file);
+          if (!fs.exists(sourceFile)) {
+            // EC file is corrupted while the source file does not exist. Delete
+            // the corruptted EC file then.
+            fs.delete(file, false);
+            continue;
+          }
           FileStatus sourceStatus = fs.getFileStatus(sourceFile);
           FileStatus fileStatus = fs.getFileStatus(file);
           if (sourceStatus.getReplication() > replicaAfterEncode) {
