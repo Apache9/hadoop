@@ -133,8 +133,6 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <dependency>
       <groupId>com.xiaomi.infra</groupId>
       <artifactId>ext-log4j</artifactId>
-      <version>${ext-log4j.version}</version>
-      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
@@ -401,8 +399,8 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
                 <loadfile property="hdfs.servlet.definitions" srcFile="${project.build.directory}/hdfs-jsp-servlet-definitions.xml"/>
                 <loadfile property="secondary.servlet.definitions" srcFile="${project.build.directory}/secondary-jsp-servlet-definitions.xml"/>
                 <loadfile property="datanode.servlet.definitions" srcFile="${project.build.directory}/datanode-jsp-servlet-definitions.xml"/>
-                <loadfile property="journal.servlet.definitions" srcFile="${project.build.directory}/journal-jsp-servlet-definitions.xml"/>               
-                <loadfile property="ttlmanager.servlet.definitions" srcFile="${project.build.directory}/ttlmanager-jsp-servlet-definitions.xml"/>               
+                <loadfile property="journal.servlet.definitions" srcFile="${project.build.directory}/journal-jsp-servlet-definitions.xml"/>
+                <loadfile property="ttlmanager.servlet.definitions" srcFile="${project.build.directory}/ttlmanager-jsp-servlet-definitions.xml"/>
                 <echoproperties destfile="${project.build.directory}/webxml.properties">
                   <propertyset>
                     <propertyref regex=".*.servlet.definitions"/>
@@ -675,7 +673,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
                 <configuration>
                   <target>
                     <mkdir dir="${project.build.directory}/native"/>
-                    <exec executable="cmake" dir="${project.build.directory}/native" 
+                    <exec executable="cmake" dir="${project.build.directory}/native"
                         failonerror="true">
                       <arg line="${basedir}/src/ -DGENERATED_JAVAH=${project.build.directory}/native/javah -DJVM_ARCH_DATA_MODEL=${sun.arch.data.model} -DREQUIRE_LIBWEBHDFS=${require.libwebhdfs} -DREQUIRE_FUSE=${require.fuse}"/>
                     </exec>
@@ -728,7 +726,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
             <artifactId>maven-antrun-plugin</artifactId>
             <executions>
               <execution>
-                <id>create-parallel-tests-dirs</id>               
+                <id>create-parallel-tests-dirs</id>
                 <phase>test-compile</phase>
                 <configuration>
                   <target>

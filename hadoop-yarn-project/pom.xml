@@ -75,6 +75,10 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-server-web-proxy</artifactId>
     </dependency>
+    <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-network-yarn_${scala.binary.version}</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

@@ -35,7 +35,6 @@
     <is.hadoop.component>true</is.hadoop.component>
     <wsce.config.dir>../etc/hadoop</wsce.config.dir>
     <wsce.config.file>wsce-site.xml</wsce.config.file>
-    <scribe-log4j.version>1.0.0-SNAPSHOT</scribe-log4j.version>
   </properties>
 
   <dependencies>
@@ -155,7 +154,6 @@
     <dependency>
       <groupId>com.xiaomi.infra</groupId>
       <artifactId>scribe-log4j</artifactId>
-      <version>${scribe-log4j.version}</version>
     </dependency>
     <dependency>
       <groupId>net.java.dev.jets3t</groupId>
@@ -571,7 +569,7 @@
                       <family>unix</family>
                       <message>native build only supported on Mac or Unix</message>
                     </requireOS>
-                  </rules>  
+                  </rules>
                   <fail>true</fail>
                 </configuration>
               </execution>
@@ -726,7 +724,7 @@
                       <family>windows</family>
                       <message>native-win build only supported on Windows</message>
                     </requireOS>
-                  </rules>  
+                  </rules>
                   <fail>true</fail>
                 </configuration>
               </execution>
