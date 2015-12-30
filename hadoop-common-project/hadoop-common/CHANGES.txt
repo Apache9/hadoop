@@ -862,6 +862,8 @@ Release 2.5.0 - 2014-08-11
     for Java 7 and above. (szetszwo)
 
   BUG FIXES 
+    HADOOP-11802. DomainSocketWatcher thread terminates sometimes after there is an I/O error during requestShortCircuitShm (cmccabe)
+    HDFS-8429. Avoid stuck threads if there is an error in DomainSocketWatcher that stops the thread.  (zhouyingchao via cmccabe)
 
     HADOOP-10378. Typo in help printed by hdfs dfs -help.
     (Mit Desai via suresh)
