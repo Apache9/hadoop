@@ -468,6 +468,7 @@ public final class DomainSocketWatcher implements Closeable {
               // Handle pending additions (before pending removes).
               for (Iterator<Entry> iter = toAdd.iterator(); iter.hasNext(); ) {
                 Entry entry = iter.next();
+                iter.remove();
                 DomainSocket sock = entry.getDomainSocket();
                 Entry prevEntry = entries.put(sock.fd, entry);
                 Preconditions.checkState(prevEntry == null,
@@ -477,7 +478,6 @@ public final class DomainSocketWatcher implements Closeable {
                   LOG.trace(this + ": adding fd " + sock.fd);
                 }
                 fdSet.add(sock.fd);
-                iter.remove();
               }
               // Handle pending removals
               while (true) {
@@ -510,8 +510,8 @@ public final class DomainSocketWatcher implements Closeable {
         }
       } catch (InterruptedException e) {
         LOG.info(toString() + " terminating on InterruptedException");
-      } catch (IOException e) {
-        LOG.error(toString() + " terminating on IOException", e);
+      } catch (Throwable e) {
+        LOG.error(toString() + " terminating on exception", e);
       } finally {
         lock.lock();
         try {
@@ -523,7 +523,27 @@ public final class DomainSocketWatcher implements Closeable {
           }
           entries.clear();
           fdSet.close();
+          if (!(toAdd.isEmpty() && toRemove.isEmpty())) {
+            // Items in toAdd might not be added to entries, handle it here
+            for (Iterator<Entry> iter = toAdd.iterator(); iter.hasNext();) {
+              Entry entry = iter.next();
+              entry.getDomainSocket().refCount.unreference();
+              entry.getHandler().handle(entry.getDomainSocket());
+              IOUtils.cleanup(LOG, entry.getDomainSocket());
+              iter.remove();
+            }
+            // Items in toRemove might not be really removed, handle it here
+            while (true) {
+              Map.Entry<Integer, DomainSocket> entry = toRemove.firstEntry();
+              if (entry == null)
+                break;
+              sendCallback("close", entries, fdSet, entry.getValue().fd);
+            }
+          }
+          processedCond.signalAll();
         } finally {
+          // TBD: Add metrics for alarm
+          closed = true;
           lock.unlock();
         }
       }
