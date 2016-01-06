@@ -512,6 +512,8 @@ public class ContainerLaunch implements Callable<Integer> {
         System.getProperty("line.separator");
     private final StringBuilder sb = new StringBuilder();
 
+    public void watcher(String watcherScript) throws IOException {}
+
     public abstract void command(List<String> command) throws IOException;
 
     public abstract void env(String key, String value) throws IOException;
@@ -565,9 +567,13 @@ public class ContainerLaunch implements Callable<Integer> {
       line();
     }
 
+    @Override public void watcher(String watcherScript) throws IOException {
+      line("./" + watcherScript + " $$ &");
+    }
+
     @Override
     public void command(List<String> command) {
-      line("exec /bin/bash -c \"", StringUtils.join(" ", command), "\"");
+      line("exec ", StringUtils.join(" ", command));
       errorCheck();
     }
 
