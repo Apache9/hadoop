@@ -137,7 +137,9 @@ public class Client {
   private final byte[] clientId;
   
   final static int CONNECTION_CONTEXT_CALL_ID = -3;
-  
+
+  // flag to ignore dns lookup kerberos host
+  private final boolean kerberosHostIgnoreDnsLookup;
   /**
    * Executor on which IPC calls' parameters are sent.
    * Deferring the sending of parameters to a separate
@@ -600,10 +602,12 @@ public class Client {
               String host = 
                 SecurityUtil.getHostFromPrincipal(remoteId.getTicket().getUserName());
               
-              // If host name is a valid local address then bind socket to it
-              InetAddress localAddr = NetUtils.getLocalInetAddress(host);
-              if (localAddr != null) {
-                this.socket.bind(new InetSocketAddress(localAddr, 0));
+              if (!kerberosHostIgnoreDnsLookup) {
+                // If host name is a valid local address then bind socket to it
+                InetAddress localAddr = NetUtils.getLocalInetAddress(host);
+                if (localAddr != null) {
+                  this.socket.bind(new InetSocketAddress(localAddr, 0));
+                }
               }
             }
           }
@@ -1212,6 +1216,7 @@ public class Client {
         CommonConfigurationKeys.IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH_ALLOWED_DEFAULT);
     this.clientId = ClientId.getClientId();
     this.sendParamsExecutor = clientExcecutorFactory.refAndGetInstance();
+    this.kerberosHostIgnoreDnsLookup = "true".equals(System.getProperty("kerberos.host.ignore.dns.lookup"));
   }
 
   /**
