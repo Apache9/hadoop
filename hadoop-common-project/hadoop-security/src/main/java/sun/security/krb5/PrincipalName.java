@@ -382,18 +382,24 @@ public class PrincipalName
         switch (type) {
         case KRB_NT_SRV_HST:
             if (nameParts.length >= 2) {
-                try {
-                    // Canonicalize the hostname as per the
-                    // RFC4120 Section 6.2.1 and
-                    // RFC1964 Section 2.1.2
-                    // we assume internet domain names
-                    String hostName =
-                        (InetAddress.getByName(nameParts[1])).
-                        getCanonicalHostName();
-                    nameParts[1] = hostName.toLowerCase();
-                } catch (UnknownHostException e) {
-                    // no canonicalization, just convert to lowercase
+                // add flag to ignore dns lookup kerberos host
+                if ("true".equals(System.getProperty("kerberos.host.ignore.dns.lookup"))) {
+                    // keep same with catch UnknownHostException
                     nameParts[1] = nameParts[1].toLowerCase();
+                } else {
+                    try {
+                        // Canonicalize the hostname as per the
+                        // RFC4120 Section 6.2.1 and
+                        // RFC1964 Section 2.1.2
+                        // we assume internet domain names
+                        String hostName =
+                            (InetAddress.getByName(nameParts[1])).
+                            getCanonicalHostName();
+                        nameParts[1] = hostName.toLowerCase();
+                    } catch (UnknownHostException e) {
+                        // no canonicalization, just convert to lowercase
+                        nameParts[1] = nameParts[1].toLowerCase();
+                    }
                 }
             }
             nameStrings = nameParts;
