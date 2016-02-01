@@ -69,6 +69,9 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.Time;
+
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_KERBEROS_FORCE_RELOGIN;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_KERBEROS_FORCE_RELOGIN_DEFAULT;
 import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -215,6 +218,8 @@ public class UserGroupInformation {
   private static Groups groups;
   /** Min time (in seconds) before relogin for Kerberos */
   private static long kerberosMinSecondsBeforeRelogin;
+  /** Whether force relogin for Kerberos before ticket expires */
+  private static boolean kerberosForceRelogin;
   /** The configuration to use */
   private static Configuration conf;
 
@@ -281,6 +286,8 @@ public class UserGroupInformation {
         metrics.getGroupsQuantiles = getGroupsQuantiles;
       }
     }
+    kerberosForceRelogin = conf.getBoolean(HADOOP_KERBEROS_FORCE_RELOGIN,
+        HADOOP_KERBEROS_FORCE_RELOGIN_DEFAULT);
   }
 
   /**
@@ -1108,7 +1115,7 @@ public class UserGroupInformation {
 
     KerberosTicket tgt = getTGT();
     //Return if TGT is valid and is not going to expire soon.
-    if (tgt != null && now < getRefreshTime(tgt)) {
+    if (!kerberosForceRelogin && tgt != null && now < getRefreshTime(tgt)) {
       return;
     }
 

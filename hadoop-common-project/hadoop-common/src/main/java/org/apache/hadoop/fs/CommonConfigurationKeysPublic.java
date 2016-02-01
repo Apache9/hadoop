@@ -284,6 +284,11 @@ public class CommonConfigurationKeysPublic {
   /** Default value for HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN */
   public static final int HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN_DEFAULT = 60;
 
+  /** See <a href="{@docRoot}/../core-default.html">core-default.xml</a> */
+  public static final String HADOOP_KERBEROS_FORCE_RELOGIN = "hadoop.kerberos.force.relogin";
+  /** Default value for HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN */
+  public static final boolean HADOOP_KERBEROS_FORCE_RELOGIN_DEFAULT = false;
+
   // HTTP policies to be used in configuration
   // Use HttpPolicy.name() instead
   @Deprecated
