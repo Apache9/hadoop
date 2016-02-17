@@ -65,13 +65,13 @@ public class FileBasedCopyListing extends CopyListing {
   @Override
   public void doBuildListing(Path pathToListFile, DistCpOptions options) throws IOException {
     DistCpOptions newOption = new DistCpOptions(options);
-    newOption.setSourcePaths(fetchFileList(options.getSourceFileListing()));
+    newOption.setSourcePaths(fetchFileList(options.getSourceFileListing(), getConf()));
     globbedListing.buildListing(pathToListFile, newOption);
   }
 
-  private List<Path> fetchFileList(Path sourceListing) throws IOException {
+  public static List<Path> fetchFileList(Path sourceListing, Configuration conf) throws IOException {
     List<Path> result = new ArrayList<Path>();
-    FileSystem fs = sourceListing.getFileSystem(getConf());
+    FileSystem fs = sourceListing.getFileSystem(conf);
     BufferedReader input = null;
     try {
       input = new BufferedReader(new InputStreamReader(fs.open(sourceListing)));
