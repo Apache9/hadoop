@@ -190,6 +190,31 @@ public class DistCp extends Configured implements Tool {
     getConf().setBoolean(DistCpConstants.CONF_LABEL_TARGET_PATH_EXISTS, 
         targetExists);
   }
+  
+  private void saveSourcePathInConf(Job job) throws IOException {
+    StringBuilder sourceSb = new StringBuilder();
+    boolean firstPath = true;
+    if (inputOptions.getSourcePaths() != null) {
+      for (Path path : inputOptions.getSourcePaths()) {
+        if (!firstPath) {
+          sourceSb.append(" ");
+        }
+        firstPath = false;
+        sourceSb.append(path.toString());
+      }
+    }
+    if (inputOptions.getSourceFileListing() != null) {
+      if (!firstPath) {
+        sourceSb.append(" ");
+      }
+      firstPath = false;
+      for (Path path : FileBasedCopyListing.fetchFileList(inputOptions.getSourceFileListing(), job.getConfiguration())) {
+        sourceSb.append(path.toString());
+      }
+    }
+    job.getConfiguration().set(DistCpConstants.CONF_LABEL_SOURCE_PATHES, sourceSb.toString());
+  }
+  
   /**
    * Create Job object for submitting it, with all the configuration
    *
@@ -206,6 +231,7 @@ public class DistCp extends Configured implements Tool {
     job.setInputFormatClass(DistCpUtils.getStrategy(getConf(), inputOptions));
     job.setJarByClass(CopyMapper.class);
     configureOutputFormat(job);
+    saveSourcePathInConf(job);
 
     job.setMapperClass(CopyMapper.class);
     job.setNumReduceTasks(0);
