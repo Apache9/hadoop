@@ -21,6 +21,7 @@ import static org.apache.hadoop.hdfs.server.namenode.FSImageFormat.renameReserve
 import static org.apache.hadoop.util.Time.now;
 
 import java.io.FilterInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
@@ -455,7 +456,18 @@ public class FSEditLogLoader {
         FSNamesystem.LOG.debug(op.opCode + ": " + path +
             " new block id : " + addBlockOp.getLastBlock().getBlockId());
       }
-      INodeFile oldFile = INodeFile.valueOf(fsDir.getINode(path), path);
+      INodeFile oldFile;
+      try {
+        // There should be a bug to be fixed in the write or delete path.
+        // Before figuring out the root cause of the issue, we skip the
+        // adding block operation if the file does not exist. It should 
+        // be ok since the block will be delted any way even if those edit
+        // logs are not out of order.
+        oldFile = INodeFile.valueOf(fsDir.getINode(path), path);
+      } catch (FileNotFoundException e) {
+        LOG.warn("OP_ADD_BLOCK is adding block to non-exist file " + path);  
+        break;
+      }
       // add the new block to the INodeFile
       addNewBlock(fsDir, addBlockOp, oldFile);
       break;
