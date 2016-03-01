@@ -19,12 +19,12 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project</artifactId>
+    <artifactId>hadoop-project_1.8</artifactId>
     <version>2.6.0-mdh3.7-SNAPSHOT</version>
     <relativePath>../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-hdfs-project</artifactId>
+  <artifactId>hadoop-hdfs-project_1.8</artifactId>
   <version>2.6.0-mdh3.7-SNAPSHOT</version>
   <description>Apache Hadoop HDFS Project</description>
   <name>Apache Hadoop HDFS Project</name>

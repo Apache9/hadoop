@@ -17,13 +17,13 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                       http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <parent>
-    <artifactId>hadoop-mapreduce-client</artifactId>
+    <artifactId>hadoop-mapreduce-client_1.8</artifactId>
     <groupId>org.apache.hadoop</groupId>
     <version>2.6.0-mdh3.7-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-mapreduce-client-hs-plugins</artifactId>
+  <artifactId>hadoop-mapreduce-client-hs-plugins_1.8</artifactId>
   <version>2.6.0-mdh3.7-SNAPSHOT</version>
   <name>hadoop-mapreduce-client-hs-plugins</name>
 
@@ -35,11 +35,11 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-common</artifactId>
+      <artifactId>hadoop-yarn-common_1.8</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-common</artifactId>
+      <artifactId>hadoop-mapreduce-client-common_1.8</artifactId>
     </dependency>
   </dependencies>
 

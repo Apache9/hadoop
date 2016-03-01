@@ -19,12 +19,12 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project</artifactId>
+    <artifactId>hadoop-project_1.8</artifactId>
     <version>2.6.0-mdh3.7-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-hdfs-nfs</artifactId>
+  <artifactId>hadoop-hdfs-nfs_1.8</artifactId>
   <version>2.6.0-mdh3.7-SNAPSHOT</version>
   <description>Apache Hadoop HDFS-NFS</description>
   <name>Apache Hadoop HDFS-NFS</name>
@@ -33,17 +33,17 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations</artifactId>
+      <artifactId>hadoop-annotations_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-auth</artifactId>
+      <artifactId>hadoop-auth_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-nfs</artifactId>
+      <artifactId>hadoop-nfs_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -53,23 +53,23 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
+      <artifactId>hadoop-hdfs_1.8</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
+      <artifactId>hadoop-hdfs_1.8</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
+      <artifactId>hadoop-common_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
+      <artifactId>hadoop-common_1.8</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
@@ -205,7 +205,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
             <dependencies>
               <dependency>
                 <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-assemblies</artifactId>
+                <artifactId>hadoop-assemblies_1.8</artifactId>
                 <version>${project.version}</version>
               </dependency>
             </dependencies>

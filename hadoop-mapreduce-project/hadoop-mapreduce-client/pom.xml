@@ -19,12 +19,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project</artifactId>
+    <artifactId>hadoop-project_1.8</artifactId>
     <version>2.6.0-mdh3.7-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-mapreduce-client</artifactId>
+  <artifactId>hadoop-mapreduce-client_1.8</artifactId>
   <version>2.6.0-mdh3.7-SNAPSHOT</version>
   <name>hadoop-mapreduce-client</name>
   <packaging>pom</packaging>
@@ -70,7 +70,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
+      <artifactId>hadoop-common_1.8</artifactId>
       <scope>provided</scope>
       <exclusions>
         <exclusion>
@@ -102,7 +102,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations</artifactId>
+      <artifactId>hadoop-annotations_1.8</artifactId>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
@@ -111,13 +111,13 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
+      <artifactId>hadoop-common_1.8</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
+      <artifactId>hadoop-hdfs_1.8</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

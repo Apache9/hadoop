@@ -17,12 +17,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project-dist</artifactId>
+    <artifactId>hadoop-project-dist_1.8</artifactId>
     <version>2.6.0-mdh3.7-SNAPSHOT</version>
     <relativePath>../hadoop-project-dist</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-client</artifactId>
+  <artifactId>hadoop-client_1.8</artifactId>
   <version>2.6.0-mdh3.7-SNAPSHOT</version>
   <packaging>jar</packaging>
 
@@ -36,7 +36,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
+      <artifactId>hadoop-common_1.8</artifactId>
       <scope>compile</scope>
       <exclusions>
         <exclusion>
@@ -120,7 +120,7 @@
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
+      <artifactId>hadoop-hdfs_1.8</artifactId>
       <scope>compile</scope>
       <exclusions>
         <exclusion>
@@ -160,7 +160,7 @@
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-app</artifactId>
+      <artifactId>hadoop-mapreduce-client-app_1.8</artifactId>
       <scope>compile</scope>
       <exclusions>
         <exclusion>
@@ -169,15 +169,15 @@
         </exclusion>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-server-nodemanager</artifactId>
+          <artifactId>hadoop-yarn-server-nodemanager_1.8</artifactId>
         </exclusion>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-server-web-proxy</artifactId>
+          <artifactId>hadoop-yarn-server-web-proxy_1.8</artifactId>
         </exclusion>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-annotations</artifactId>
+          <artifactId>hadoop-annotations_1.8</artifactId>
         </exclusion>
         <exclusion>
           <groupId>com.google.inject.extensions</groupId>
@@ -204,12 +204,12 @@
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-api</artifactId>
+      <artifactId>hadoop-yarn-api_1.8</artifactId>
       <scope>compile</scope>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-annotations</artifactId>
+          <artifactId>hadoop-annotations_1.8</artifactId>
         </exclusion>
         <exclusion>
           <groupId>com.google.inject</groupId>
@@ -252,7 +252,7 @@
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <artifactId>hadoop-mapreduce-client-core_1.8</artifactId>
       <scope>compile</scope>
       <exclusions>
         <exclusion>
@@ -281,7 +281,7 @@
         </exclusion>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-annotations</artifactId>
+          <artifactId>hadoop-annotations_1.8</artifactId>
         </exclusion>
         <exclusion>
           <groupId>com.google.inject.extensions</groupId>
@@ -300,7 +300,7 @@
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+      <artifactId>hadoop-mapreduce-client-jobclient_1.8</artifactId>
       <scope>compile</scope>
       <exclusions>
         <exclusion>
@@ -313,7 +313,7 @@
         </exclusion>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-annotations</artifactId>
+          <artifactId>hadoop-annotations_1.8</artifactId>
         </exclusion>
         <exclusion>
           <groupId>com.google.inject.extensions</groupId>
@@ -328,7 +328,7 @@
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations</artifactId>
+      <artifactId>hadoop-annotations_1.8</artifactId>
       <scope>compile</scope>
       <exclusions>
         <exclusion>

@@ -17,13 +17,13 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                       http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <parent>
-    <artifactId>hadoop-yarn</artifactId>
+    <artifactId>hadoop-yarn_1.8</artifactId>
     <groupId>org.apache.hadoop</groupId>
     <version>2.6.0-mdh3.7-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-yarn-api</artifactId>
+  <artifactId>hadoop-yarn-api_1.8</artifactId>
   <version>2.6.0-mdh3.7-SNAPSHOT</version>
   <name>hadoop-yarn-api</name>
 
@@ -49,7 +49,7 @@
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
+      <artifactId>hadoop-common_1.8</artifactId>
       <scope>provided</scope>
       <exclusions>
         <exclusion>
@@ -74,7 +74,7 @@
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations</artifactId>
+      <artifactId>hadoop-annotations_1.8</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
@@ -86,7 +86,7 @@
     <plugins>
       <plugin>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-maven-plugins</artifactId>
+        <artifactId>hadoop-maven-plugins_1.8</artifactId>
         <executions>
           <execution>
             <id>compile-protoc</id>

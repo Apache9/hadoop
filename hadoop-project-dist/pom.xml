@@ -19,12 +19,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project</artifactId>
+    <artifactId>hadoop-project_1.8</artifactId>
     <version>2.6.0-mdh3.7-SNAPSHOT</version>
     <relativePath>../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-project-dist</artifactId>
+  <artifactId>hadoop-project-dist_1.8</artifactId>
   <version>2.6.0-mdh3.7-SNAPSHOT</version>
   <description>Apache Hadoop Project Dist POM</description>
   <name>Apache Hadoop Project Dist POM</name>
@@ -48,7 +48,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations</artifactId>
+      <artifactId>hadoop-annotations_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
   </dependencies>
@@ -139,7 +139,7 @@
           <docletArtifacts>
             <docletArtifact>
               <groupId>org.apache.hadoop</groupId>
-              <artifactId>hadoop-annotations</artifactId>
+              <artifactId>hadoop-annotations_1.8</artifactId>
               <version>${project.version}</version>
             </docletArtifact>
           </docletArtifacts>
@@ -221,7 +221,7 @@
                     </artifactItem>
                     <artifactItem>
                       <groupId>org.apache.hadoop</groupId>
-                      <artifactId>hadoop-annotations</artifactId>
+                      <artifactId>hadoop-annotations_1.8</artifactId>
                       <version>${project.version}</version>
                       <overWrite>false</overWrite>
                       <outputDirectory>${project.build.directory}</outputDirectory>
@@ -411,7 +411,7 @@
             <dependencies>
               <dependency>
                 <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-assemblies</artifactId>
+                <artifactId>hadoop-assemblies_1.8</artifactId>
                 <version>${project.version}</version>
               </dependency>
             </dependencies>

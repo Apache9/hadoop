@@ -19,12 +19,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project</artifactId>
+    <artifactId>hadoop-project_1.8</artifactId>
     <version>2.6.0-mdh3.7-SNAPSHOT</version>
     <relativePath>../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-dist</artifactId>
+  <artifactId>hadoop-dist_1.8</artifactId>
   <version>2.6.0-mdh3.7-SNAPSHOT</version>
   <description>Apache Hadoop Distribution</description>
   <name>Apache Hadoop Distribution</name>
@@ -34,27 +34,27 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-security</artifactId>
+      <artifactId>hadoop-security_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
+      <artifactId>hadoop-common_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
+      <artifactId>hadoop-hdfs_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-app</artifactId>
+      <artifactId>hadoop-mapreduce-client-app_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-api</artifactId>
+      <artifactId>hadoop-yarn-api_1.8</artifactId>
       <scope>provided</scope>
     </dependency>
   </dependencies>
@@ -128,7 +128,7 @@
                       cp_hdfs_raid() {
                         echo run cp_hdfs_raid
                         if [ ${hdfs.raid} = true ]; then
-                          run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs/src/contrib/raid/target/hadoop-hdfs-raid-${project.version}/* .
+                        run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs/src/contrib/raid/target/hadoop-hdfs-raid${java.suffix}-${project.version}/* .
                         fi
                       }
 
@@ -136,25 +136,25 @@
                       echo
                       echo "Current directory `pwd`"
                       echo
-                      run rm -rf hadoop-${project.version}
-                      run mkdir hadoop-${project.version}
-                      run cd hadoop-${project.version}
+                      run rm -rf hadoop-${project.version}${java.tar.suffix}
+                      run mkdir hadoop-${project.version}${java.tar.suffix}
+                      run cd hadoop-${project.version}${java.tar.suffix}
                       run cp $ROOT/LICENSE.txt .
                       run cp $ROOT/NOTICE.txt .
                       run cp $ROOT/README.txt .
-                      run cp -r $ROOT/hadoop-common-project/hadoop-common/target/hadoop-common-${project.version}/* .
-                      run cp -r $ROOT/hadoop-common-project/hadoop-nfs/target/hadoop-nfs-${project.version}/* .
-                      run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs/target/hadoop-hdfs-${project.version}/* .
-                      run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs-httpfs/target/hadoop-hdfs-httpfs-${project.version}/* .
-                      run cp -r $ROOT/hadoop-common-project/hadoop-kms/target/hadoop-kms-${project.version}/* .
-                      run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs-nfs/target/hadoop-hdfs-nfs-${project.version}/* .
-                      run cp -r $ROOT/hadoop-yarn-project/target/hadoop-yarn-project-${project.version}/* .
-                      run cp -r $ROOT/hadoop-mapreduce-project/target/hadoop-mapreduce-${project.version}/* .
-                      run cp -r $ROOT/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist-${project.version}/* .
-                      run cp $ROOT/hadoop-common-project/hadoop-security/target/hadoop-security-${project.version}.jar ./share/hadoop/common/lib/
+                      run cp -r $ROOT/hadoop-common-project/hadoop-common/target/hadoop-common${java.suffix}-${project.version}/* .
+                      run cp -r $ROOT/hadoop-common-project/hadoop-nfs/target/hadoop-nfs${java.suffix}-${project.version}/* .
+                      run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs/target/hadoop-hdfs${java.suffix}-${project.version}/* .
+                      run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs-httpfs/target/hadoop-hdfs-httpfs${java.suffix}-${project.version}/* .
+                      run cp -r $ROOT/hadoop-common-project/hadoop-kms/target/hadoop-kms${java.suffix}-${project.version}/* .
+                      run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs-nfs/target/hadoop-hdfs-nfs${java.suffix}-${project.version}/* .
+                      run cp -r $ROOT/hadoop-yarn-project/target/hadoop-yarn-project${java.suffix}-${project.version}/* .
+                      run cp -r $ROOT/hadoop-mapreduce-project/target/hadoop-mapreduce${java.suffix}-${project.version}/* .
+                      run cp -r $ROOT/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist${java.suffix}-${project.version}/* .
+                      run cp $ROOT/hadoop-common-project/hadoop-security/target/hadoop-security${java.suffix}-${project.version}.jar ./share/hadoop/common/lib/
                       run cp_hdfs_raid
                       echo
-                      echo "Hadoop dist layout available at: ${project.build.directory}/hadoop-${project.version}"
+                      echo "Hadoop dist layout available at: ${project.build.directory}/hadoop-${project.version}${java.tar.suffix}"
                       echo
                     </echo>
                     <exec executable="sh" dir="${project.build.directory}" failonerror="true">
@@ -184,10 +184,10 @@
                         fi
                       }
 
-                      run tar cf hadoop-${project.version}.tar hadoop-${project.version}
-                      run gzip -f hadoop-${project.version}.tar
+                      run tar cf hadoop-${project.version}${java.tar.suffix}.tar hadoop-${project.version}${java.tar.suffix}
+                      run gzip -f hadoop-${project.version}${java.tar.suffix}.tar
                       echo
-                      echo "Hadoop dist tar available at: ${project.build.directory}/hadoop-${project.version}.tar.gz"
+                      echo "Hadoop dist tar available at: ${project.build.directory}/hadoop-${project.version}${java.tar.suffix}.tar.gz"
                       echo
                     </echo>
                     <exec executable="sh" dir="${project.build.directory}" failonerror="true">
