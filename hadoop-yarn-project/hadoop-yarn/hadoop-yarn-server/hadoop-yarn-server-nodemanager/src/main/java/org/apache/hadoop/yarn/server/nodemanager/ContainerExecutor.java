@@ -226,11 +226,10 @@ public abstract class ContainerExecutor implements Configurable {
         + "container.watcher.enable", false)) {
       String watcherScript = conf.get(YarnConfiguration.NM_PREFIX
           + "container.watcher.script", "watcher.sh");
-      sb.watcher(watcherScript);
+      sb.watcherWithCommand(watcherScript, command);
+    } else {
+      sb.command(command);
     }
-
-    sb.command(command);
-
     PrintStream pout = null;
     try {
       pout = new PrintStream(out);

@@ -512,7 +512,7 @@ public class ContainerLaunch implements Callable<Integer> {
         System.getProperty("line.separator");
     private final StringBuilder sb = new StringBuilder();
 
-    public void watcher(String watcherScript) throws IOException {}
+    public void watcherWithCommand(String watcherScript, List<String> command) throws IOException {}
 
     public abstract void command(List<String> command) throws IOException;
 
@@ -567,13 +567,15 @@ public class ContainerLaunch implements Callable<Integer> {
       line();
     }
 
-    @Override public void watcher(String watcherScript) throws IOException {
+    @Override public void watcherWithCommand(String watcherScript, List<String> command) throws IOException {
       line("./" + watcherScript + " $$ &");
+      line("exec ", StringUtils.join(" ", command));
+      errorCheck();
     }
 
     @Override
     public void command(List<String> command) {
-      line("exec ", StringUtils.join(" ", command));
+      line("exec /bin/bash -c \"", StringUtils.join(" ", command), "\"");
       errorCheck();
     }
 
