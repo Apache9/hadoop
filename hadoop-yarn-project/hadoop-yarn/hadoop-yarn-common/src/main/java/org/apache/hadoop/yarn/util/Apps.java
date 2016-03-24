@@ -73,27 +73,51 @@ public class Apps {
   public static void setEnvFromInputString(Map<String, String> env,
       String envString,  String classPathSeparator) {
     if (envString != null && envString.length() > 0) {
-      String childEnvs[] = envString.split(",");
       Pattern p = Pattern.compile(Shell.getEnvironmentVariableRegex());
-      for (String cEnv : childEnvs) {
-        String[] parts = cEnv.split("="); // split on '='
-        Matcher m = p.matcher(parts[1]);
-        StringBuffer sb = new StringBuffer();
-        while (m.find()) {
-          String var = m.group(1);
-          // replace $env with the child's env constructed by tt's
-          String replace = env.get(var);
-          // if this key is not configured by the tt for the child .. get it
-          // from the tt's env
-          if (replace == null)
-            replace = System.getenv(var);
-          // the env key is note present anywhere .. simply set it
-          if (replace == null)
-            replace = "";
-          m.appendReplacement(sb, Matcher.quoteReplacement(replace));
+      int pos = 0, length = envString.length();
+      while (pos < length) {
+        int equalSign = envString.indexOf('=', pos);
+        String key = envString.substring(pos, equalSign).trim();
+        // if the value is surrounded by double-quote, do not replace it.
+        if (envString.charAt(equalSign + 1) == '"') {
+          //find the second double-quote
+          int doubleQuoteBegin = equalSign + 1;
+          int doubleQuoteEnd = envString.indexOf('"', doubleQuoteBegin + 1);
+          if (doubleQuoteEnd != -1) {
+            String value = envString.substring(doubleQuoteBegin + 1, doubleQuoteEnd);
+            addToEnvironment(env, key, value, classPathSeparator);
+            pos = doubleQuoteEnd + 1;
+          } else {
+            throw new YarnRuntimeException("Failed to parse environment variable with single double quotes");
+          }
+        } else {
+          int comma = envString.indexOf(',', pos);
+          String value;
+          if (comma != -1) {
+            value = envString.substring(equalSign + 1, comma);
+            pos = comma + 1;
+          } else {
+            value = envString.substring(equalSign + 1);
+            pos = length;
+          }
+          Matcher m = p.matcher(value);
+          StringBuffer sb = new StringBuffer();
+          while (m.find()) {
+            String var = m.group(1);
+            // replace $env with the child's env constructed by tt's
+            String replace = env.get(var);
+            // if this key is not configured by the tt for the child .. get it
+            // from the tt's env
+            if (replace == null)
+              replace = System.getenv(var);
+            // the env key is note present anywhere .. simply set it
+            if (replace == null)
+              replace = "";
+            m.appendReplacement(sb, Matcher.quoteReplacement(replace));
+          }
+          m.appendTail(sb);
+          addToEnvironment(env, key, sb.toString(), classPathSeparator);
         }
-        m.appendTail(sb);
-        addToEnvironment(env, parts[0], sb.toString(), classPathSeparator);
       }
     }
   }
