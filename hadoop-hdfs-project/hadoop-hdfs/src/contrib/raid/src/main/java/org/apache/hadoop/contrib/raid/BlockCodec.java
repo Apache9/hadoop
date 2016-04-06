@@ -126,6 +126,17 @@ public class BlockCodec {
 
     // Create temporary coding file output stream
     Path codingFile = getCodingFile(file);
+    if (fs.exists(codingFile)) {
+      if (fileStatus.getReplication() == replicaAfterEncode) {
+        // The file has already been encoded by earlier incarnation
+        fs.setReplication(codingFile, (short) 1);
+        return;
+      } else {
+        // The earlier incarnation is in undefined state. Start coding from
+        // scratch.
+        fs.delete(codingFile, false);
+      }
+    }
 
     FSDataOutputStream[] codingOuts = new FSDataOutputStream[codingBlocksNum];
     Path[] tmpCodingFiles = new Path[codingBlocksNum];
