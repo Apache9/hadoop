@@ -759,10 +759,14 @@ public class DFSUtil {
       Map<String, Map<String, InetSocketAddress>> addresses = DFSUtil
           .getHaNnWebHdfsAddresses(conf, scheme);
 
-      for (Map<String, InetSocketAddress> addrs : addresses.values()) {
-        for (InetSocketAddress addr : addrs.values()) {
-          ret.add(addr);
-        }
+      String cluster_name = uri.getHost();
+      Map<String, InetSocketAddress> addrs = addresses.get(cluster_name);
+      if (addrs == null) {
+        throw new RuntimeException("No nameservices is configured for " + cluster_name
+                + " with scheme " + scheme);
+      }
+      for (InetSocketAddress addr : addrs.values()) {
+        ret.add(addr);
       }
     }
 
