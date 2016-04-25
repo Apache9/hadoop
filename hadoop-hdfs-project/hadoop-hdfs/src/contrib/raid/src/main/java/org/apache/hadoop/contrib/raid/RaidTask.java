@@ -815,6 +815,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
               result.add(new Path(path.toUri().getPath()));
             }
             stack.pop();
+            childrenInfos.remove(path);
           }
         } catch (IOException e) {
           stack.pop();
