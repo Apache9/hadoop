@@ -299,9 +299,9 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     private TaskPurpose purpose;
 
     public CollectRaidInfoTask(RaidNode raidNode, Policy policy, TaskPurpose purpose,
-        Configuration conf) throws IOException {
+ Configuration inConf) throws IOException {
       super(raidNode);
-      this.conf = new Configuration(conf);
+      this.conf = new Configuration(inConf);
       this.isTaskKicked = false;
       this.purpose = purpose;
       try {
@@ -330,6 +330,10 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
       } else if (purpose == TaskPurpose.BlockMover) {
         rootDirs = new LinkedList<Path>();
         rootDirs.add(BlockCodec.getRaidRoot());
+        String queue = conf.get(HdfsRaidConfigKeys.HDFS_RAID_MOVER_JOB_QUEUE);
+        if (queue != null) {
+          conf.set("mapreduce.job.queuename", queue);
+        }
       }
 
       // Eliminate empty dirs

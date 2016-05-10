@@ -67,10 +67,14 @@ public class Fixer {
     FixedBlocks, FixFail
   }
   
-  public Fixer(Path outputPath, Configuration conf) {
-    Preconditions.checkNotNull(conf);
-    this.conf = conf;
+  public Fixer(Path outputPath, Configuration inConf) {
+    Preconditions.checkNotNull(inConf);
+    this.conf = new Configuration(inConf);
     this.outputPath = outputPath;
+    String queue = conf.get(HdfsRaidConfigKeys.HDFS_RAID_FIXER_JOB_QUEUE);
+    if (queue != null) {
+      conf.set("mapreduce.job.queuename", queue);
+    }
   }
 
   public void run() throws IOException, ClassNotFoundException, InterruptedException {

@@ -164,4 +164,9 @@ public class HdfsRaidConfigKeys {
 
   public static final String HDFS_RAID_INPLACE_DECODE_THRESHOLD = "hdfs.raid.inplace-decode.threshold";
   public static final int HDFS_RAID_INPLACE_DECODE_THRESHOLD_DEFAULT = 4;
+
+  public static final String HDFS_RAID_FIXER_JOB_QUEUE =
+      "hdfs.raid.fixer.job.queue";
+  public static final String HDFS_RAID_MOVER_JOB_QUEUE =
+      "hdfs.raid.mover.job.queue";
 }

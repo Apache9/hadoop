@@ -95,14 +95,19 @@ public class Mover {
     MovedBlocks, FailedBuildingMovingMap, FailedMoving
   }
 
-  public Mover(Path collectorResultFile, int mapTaskNum, Path outputPath, Configuration conf) {
+  public Mover(Path collectorResultFile, int mapTaskNum, Path outputPath,
+      Configuration inConf) {
     Preconditions.checkNotNull(collectorResultFile);
     Preconditions.checkArgument(mapTaskNum > 0);
-    Preconditions.checkNotNull(conf);
+    Preconditions.checkNotNull(inConf);
     this.collectorResultFile = collectorResultFile;
     this.mapTaskNum = mapTaskNum;
     this.outputPath = outputPath;
-    this.conf = conf;
+    this.conf = inConf;
+    String queue = conf.get(HdfsRaidConfigKeys.HDFS_RAID_MOVER_JOB_QUEUE);
+    if (queue != null) {
+      conf.set("mapreduce.job.queuename", queue);
+    }
   }
   
   public Counter getCounter(CounterName name) throws IOException {
