@@ -568,7 +568,7 @@ public class ContainerLaunch implements Callable<Integer> {
     }
 
     @Override public void watcherWithCommand(String watcherScript, List<String> command) throws IOException {
-      line("./" + watcherScript + " $$ &");
+      line("./" + watcherScript + " $$ >/dev/null 2>&1 &");
       line("exec ", StringUtils.join(" ", command));
       errorCheck();
     }
