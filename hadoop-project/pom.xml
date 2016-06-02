@@ -305,6 +305,11 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
+        <groupId>com.xiaomi.infra</groupId>
+        <artifactId>scribe-merger_1.8</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-datajoin_1.8</artifactId>
         <version>${project.version}</version>

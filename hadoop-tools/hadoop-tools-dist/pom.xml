@@ -51,6 +51,11 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
+      <groupId>com.xiaomi.infra</groupId>
+      <artifactId>scribe-merger_1.8</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-rumen_1.8</artifactId>
       <scope>compile</scope>

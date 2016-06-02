@@ -5,19 +5,21 @@
     <parent>
         <artifactId>hadoop-tools_1.8</artifactId>
         <groupId>org.apache.hadoop</groupId>
-        <version>2.6.0-mdh3.7-SNAPSHOT</version>
+        <version>2.6.0-mdh3.8-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.xiaomi.infra</groupId>
-    <artifactId>scribe-merger</artifactId>
+    <artifactId>scribe-merger_1.8</artifactId>
     <packaging>jar</packaging>
+    <description>Scribe Files Merge Tool</description>
+    <name>Scribe Files Merge Tool</name>
 
     <dependencies>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client_1.8</artifactId>
-            <version>2.6.0-mdh3.7-SNAPSHOT</version>
+            <version>2.6.0-mdh3.8-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.apache.mrunit</groupId>
