@@ -338,7 +338,7 @@ public class FileSystemRMStateStore extends RMStateStore {
       } else if (childNodeName.startsWith(DELEGATION_TOKEN_PREFIX)) {
         RMDelegationTokenIdentifier identifier = new RMDelegationTokenIdentifier();
         identifier.readFields(fsIn);
-        long renewDate = identifier.getRenewDate();
+        long renewDate = fsIn.readLong();
         rmState.rmSecretManagerState.delegationTokenState.put(identifier,
           renewDate);
       } else {
@@ -469,8 +469,8 @@ public class FileSystemRMStateStore extends RMStateStore {
           DELEGATION_TOKEN_PREFIX + identifier.getSequenceNumber());
     ByteArrayOutputStream os = new ByteArrayOutputStream();
     DataOutputStream fsOut = new DataOutputStream(os);
-    identifier.setRenewDate(renewDate);
     identifier.write(fsOut);
+    fsOut.writeLong(renewDate);
     if (isUpdate) {
       LOG.info("Updating RMDelegationToken_" + identifier.getSequenceNumber());
       updateFile(nodeCreatePath, os.toByteArray());
