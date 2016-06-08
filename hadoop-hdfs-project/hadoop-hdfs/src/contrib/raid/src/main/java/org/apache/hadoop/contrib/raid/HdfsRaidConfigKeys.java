@@ -52,6 +52,10 @@ public class HdfsRaidConfigKeys {
   /** Comma separated directories that need to do raid or scan for block moving */
   public static final String HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY = "hdfs.raidnode.scan.root.dirs";
 
+  public static final String HDFS_RAIDNODE_SCAN_ROOT_DIRS_SPLIT_DEPTH = "hdfs.raidnode.scan.root.dirs.split.depth";
+
+  public static final int HDFS_RAIDNODE_SCAN_ROOT_DIRS_SPLIT_DEPTH_DEFAULT = 0;
+
   // This is used to pass task type information to Map/Reduce.
   public static final String HDFS_RAIDNODE_RAID_TASK_TYPE = "hdfs.raidnode.raid.task.type";
 
