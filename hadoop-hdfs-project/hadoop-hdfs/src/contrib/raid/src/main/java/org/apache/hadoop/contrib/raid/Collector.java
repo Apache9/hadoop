@@ -13,14 +13,9 @@ package org.apache.hadoop.contrib.raid;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.*;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -114,7 +109,7 @@ public class Collector {
     return job.getJobID().toString();
   }
 
-  public Counter getCounter(CounterName name) throws IOException {
+  public Counter getCounter(Enum<?> name) throws IOException {
     Preconditions.checkNotNull(job);
     return job.getCounters().findCounter(name);
   }
@@ -336,11 +331,18 @@ public class Collector {
         throw new IOException(HdfsRaidConfigKeys.HDFS_RAIDNODE_SCAN_ROOT_DIRS_KEY
             + " isn't configured");
       }
+      int depth = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_SCAN_ROOT_DIRS_SPLIT_DEPTH,
+              HdfsRaidConfigKeys.HDFS_RAIDNODE_SCAN_ROOT_DIRS_SPLIT_DEPTH_DEFAULT);
 
       String[] dirs = rootDirs.split(",");
-      List<InputSplit> splits = new ArrayList<InputSplit>(dirs.length);
-      for (int i = 0; i < dirs.length; ++i) {
-        splits.add(new RaidDirInfoSplit(new Path(dirs[i].trim())));
+      List<Path> moreDirs = new LinkedList<Path>();
+      FileSystem fs = FileSystem.get(conf);
+      for (String dir : dirs) {
+        moreDirs.addAll(RaidTaskUtils.getSubDirectoriesAndFiles(fs, new Path(dir.trim()), depth));
+      }
+      List<InputSplit> splits = new ArrayList<InputSplit>(moreDirs.size());
+      for (Path dir : moreDirs) {
+        splits.add(new RaidDirInfoSplit(dir));
       }
       return splits;
     }

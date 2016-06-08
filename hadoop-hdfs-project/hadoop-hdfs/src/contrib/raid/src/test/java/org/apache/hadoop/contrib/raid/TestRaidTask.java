@@ -11,10 +11,7 @@
 package org.apache.hadoop.contrib.raid;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.contrib.raid.RaidTask.CollectRaidInfoTask;
@@ -34,6 +31,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.mapred.MiniMRClientCluster;
 import org.apache.hadoop.mapred.MiniMRClientClusterFactory;
+import org.apache.hadoop.mapreduce.JobCounter;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -493,5 +491,134 @@ public class TestRaidTask {
      * fsck.run(new String[] { "-list-corruptfileblocks", "-blocks", "-locations" });
      */
     Assert.assertTrue(fixerInfo.entrySet().size() != 0);
+  }
+
+  @Test
+  public void testCollectorSplitRootDirs() throws  Exception {
+    Configuration conf = new Configuration();
+    MiniDFSCluster dfsCluster = new MiniDFSCluster.Builder(conf).build();
+    dfsCluster.waitActive();
+
+    FileSystem dfs = dfsCluster.getFileSystem();
+    dfs.mkdirs(new Path("/user/test1"));
+    dfs.mkdirs(new Path("/user/test2"));
+    dfs.mkdirs(new Path("/user/test3"));
+    dfs.mkdirs(new Path("/user/test1/foo_a"));
+    dfs.mkdirs(new Path("/user/test1/foo_b"));
+    dfs.mkdirs(new Path("/user/test1/foo_c"));
+    dfs.mkdirs(new Path("/user/test2/bar_a"));
+    dfs.mkdirs(new Path("/user/test2/bar_b"));
+    dfs.create(new Path("/user/test3/a.txt")).close();
+    dfs.create(new Path("/user/test1/foo_c/a.txt")).close();
+
+    FileSystem fs = FileSystem.get(conf);
+    Queue<Path> res = RaidTask.RaidTaskUtils.getSubDirectoriesAndFiles(fs, new Path("/user/"), 2);
+    for (Path p : res) {
+      System.out.println(p.toString());
+    }
+    Assert.assertEquals(res.size(), 6);
+  }
+
+  private void createFile(Path p) throws IOException {
+    byte[] buf = new byte[dataBlocksNum * (int) blockSize];
+    Arrays.fill(buf, (byte) 0xff);
+    FSDataOutputStream out = dfs.create(p);
+    out.write(buf);
+    out.close();
+  }
+
+  private void resetFsEnv() throws Exception {
+    int numDNs = dfsCluster.getDataNodes().size();
+    for (int i = 0; i < numDNs - 1; i++) {
+      dfsCluster.restartDataNode(i);
+    }
+    for (int i = 0; i < 3; i++) {
+      dfs.delete(new Path("/" + i), true);
+    }
+    dfs.delete(new Path("/raid"), true);
+  }
+
+  private void setupFsEnv2() throws IOException {
+    for (int i = 0; i < 2; i++) {
+      for (int j = 0; j < 2; j++) {
+        for (int k = 0; k < 2; k++) {
+          Path dir = new Path("/" + i + "/" + j + "/" + k);
+          dfs.mkdirs(dir);
+          Path f1 = new Path("/" + i + "/" + j + "/" + k + "/f1");
+          Path f2 = new Path("/" + i + "/" + j + "/" + k + "/f2");
+          createFile(f1);
+          createFile(f2);
+        }
+      }
+    }
+    createFile(new Path("/0/foo"));
+    createFile(new Path("/1/bar"));
+    createFile(new Path("/0/1/foo"));
+    createFile(new Path("/1/0/bar"));
+
+    dfs.mkdirs(new Path(collectResult));
+    dfs.mkdirs(new Path(coderResult));
+    dfs.mkdirs(new Path(fixerResult));
+    dfs.mkdirs(new Path(moverResult));
+  }
+
+  @Test
+  public void testRaidTaskWithRootDirSplits() throws Exception {
+    resetFsEnv();
+    setupFsEnv2();
+    List<Path> paths = new LinkedList<Path>();
+    paths.add(new Path("/0"));
+    paths.add(new Path("/1"));
+
+    // Get configuration
+    Configuration jobConf = new Configuration(mrCluster.getConfig());
+    jobConf.setLong(HdfsRaidConfigKeys.HDFS_RAIDNODE_RAID_FILE_TIME_WINDOW_MS, 2000);
+    Thread.sleep(3000);
+    // In case that MapReduce task out of memory during encoding
+    jobConf.setInt(HdfsRaidConfigKeys.HDFS_RAID_CODEC_CODE_BUF_SIZE, 16 * 1024 * 1024);
+    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_COLLECTOR_RESULT_DIR_KEY, collectResult);
+    jobConf.setStrings(HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_RESULT_DIR_KEY, coderResult);
+    jobConf.setInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_SCAN_ROOT_DIRS_SPLIT_DEPTH, 2);
+
+    Collector collector = new Collector(paths,
+        new Path(collectResult + "/" + System.currentTimeMillis()),
+        TaskPurpose.Encode, jobConf);
+    collector.run();
+
+    Assert.assertEquals(
+        collector.getCounter(Collector.CounterName.FilesScannedForCoder)
+            .getValue(), 8 * 2 + 4);
+    Assert.assertEquals(
+        collector.getCounter(JobCounter.TOTAL_LAUNCHED_MAPS).getValue(), 8 + 4);
+  }
+
+  @Test public void testTraverseDirectoryTree() throws Exception {
+    resetFsEnv();
+    List<Path> paths = new LinkedList<Path>();
+    paths.add(new Path("/test/a"));
+    paths.add(new Path("/test/b/a/a"));
+    paths.add(new Path("/test/b/a/b"));
+    paths.add(new Path("/test/b/b"));
+    paths.add(new Path("/test/b/c/a/a"));
+    paths.add(new Path("/test/b/d"));
+    paths.add(new Path("/test/c"));
+    paths.add(new Path("/test/d/a"));
+
+    for (Path p : paths) {
+      createFile(p);
+    }
+
+    Queue<Path> files = RaidTaskUtils
+        .traverseDirectoryTree(dfs, new Path("/test/"), new RaidTaskUtils.Filter() {
+          public boolean check(Path file, RaidMetrics metrics)
+              throws IOException {
+            return dfs.isFile(file);
+          }
+        });
+
+    int i = 0;
+    for (Path p : files) {
+      Assert.assertEquals(p, paths.get(i++));
+    }
   }
 }

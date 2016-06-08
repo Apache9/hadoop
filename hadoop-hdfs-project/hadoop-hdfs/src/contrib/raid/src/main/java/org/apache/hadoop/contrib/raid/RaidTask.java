@@ -784,17 +784,35 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
     }
 
     /**
+     * Depth first traverse the specified directory tree, return all files or sub-directories at given depth
+     */
+    public static Queue<Path> getSubDirectoriesAndFiles(FileSystem fs, Path rootDir, int depth) {
+      Queue<Path> result = new LinkedList<Path>();
+      try {
+        if (!fs.isDirectory(rootDir) || depth == 0) {
+          result.add(rootDir);
+          return result;
+        }
+        FileStatus[] children = fs.listStatus(rootDir);
+        for (FileStatus f : children) {
+          result.addAll(getSubDirectoriesAndFiles(fs, f.getPath(), depth-1));
+        }
+      } catch (IOException e) {
+        LOG.warn("Error occured while processing path " + rootDir, e);
+      }
+      return result;
+    }
+
+    /**
      * Depth first traverses the specified directory tree to get all appropriate files.
      */
     public static Queue<Path> traverseDirectoryTree(FileSystem fs, Path rootDir, Filter filter) {
       Preconditions.checkArgument(rootDir != null);
       Stack<Path> stack = new Stack<Path>();
-      Set<Path> visited = new HashSet<Path>();
       Map<Path, ChildrenInfo> childrenInfos = new HashMap<Path, ChildrenInfo>();
       Queue<Path> result = new LinkedList<Path>();
 
       stack.add(rootDir);
-      visited.add(rootDir);
       while (!stack.isEmpty()) {
         Path path = null;
         try {
@@ -810,10 +828,7 @@ public abstract class RaidTask<R> implements Callable<R>, FutureCallback<R> {
 
           if (isDirectory && childrenInfo.hasNextChild()) {
             FileStatus nextChild = childrenInfo.nextChild();
-            if (!visited.contains(nextChild.getPath())) {
-              visited.add(nextChild.getPath());
-              stack.add(nextChild.getPath());
-            }
+            stack.add(nextChild.getPath());
           } else {
             if (filter.check(path, metrics)) {
               result.add(new Path(path.toUri().getPath()));
