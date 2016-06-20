@@ -245,6 +245,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String  DFS_NAMENODE_EDITS_NOEDITLOGCHANNELFLUSH = "dfs.namenode.edits.noeditlogchannelflush";
   public static final boolean DFS_NAMENODE_EDITS_NOEDITLOGCHANNELFLUSH_DEFAULT = false;
   
+  public static final String DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT = "dfs.namenode.max.concurrent.blockreport";
+  public static final int DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT = 10;
+  
   public static final String  DFS_LIST_LIMIT = "dfs.ls.limit";
   public static final int     DFS_LIST_LIMIT_DEFAULT = 1000;
   public static final String  DFS_CONTENT_SUMMARY_LIMIT_KEY = "dfs.content-summary.limit";
@@ -442,6 +445,10 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final int     DFS_DF_INTERVAL_DEFAULT = 60000;
   public static final String  DFS_BLOCKREPORT_INTERVAL_MSEC_KEY = "dfs.blockreport.intervalMsec";
   public static final long    DFS_BLOCKREPORT_INTERVAL_MSEC_DEFAULT = 6 * 60 * 60 * 1000;
+  public static final String DFS_DATANODE_FIRST_BLOCKREPORT_FAILURE_GRACEPERIOD = "dfs.datanode.first.blockreport.failure.graceperiod";
+  public static final long DFS_DATANODE_FIRST_BLOCKREPORT_FAILURE_GRACEPERIOD_DEFAULT = 2 * 1000;
+  public static final String DFS_DATANODE_BLOCKREPORT_FAILURE_GRACEPERIOD = "dfs.datanode.blockreport.failure.graceperiod";
+  public static final long DFS_DATANODE_BLOCKREPORT_FAILURE_GRACEPERIOD_DEFAULT = 1200 * 1000;
   public static final String  DFS_BLOCKREPORT_INITIAL_DELAY_KEY = "dfs.blockreport.initialDelay";
   public static final int     DFS_BLOCKREPORT_INITIAL_DELAY_DEFAULT = 0;
   public static final String  DFS_BLOCKREPORT_SPLIT_THRESHOLD_KEY = "dfs.blockreport.split.threshold";

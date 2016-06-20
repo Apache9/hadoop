@@ -24,6 +24,7 @@ import java.io.FilterInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.IllegalStateException;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
@@ -392,7 +393,11 @@ public class FSEditLogLoader {
       // Update the salient file attributes.
       newFile.setAccessTime(addCloseOp.atime, Snapshot.CURRENT_STATE_ID);
       newFile.setModificationTime(addCloseOp.mtime, Snapshot.CURRENT_STATE_ID);
-      updateBlocks(fsDir, addCloseOp, newFile);
+      try {
+        updateBlocks(fsDir, addCloseOp, newFile);
+      } catch (IOException ioe) {
+        LOG.warn("OP_ADD throws IOException for file " + path);
+      }
       break;
     }
     case OP_CLOSE: {
@@ -412,7 +417,12 @@ public class FSEditLogLoader {
       // Update the salient file attributes.
       file.setAccessTime(addCloseOp.atime, Snapshot.CURRENT_STATE_ID);
       file.setModificationTime(addCloseOp.mtime, Snapshot.CURRENT_STATE_ID);
-      updateBlocks(fsDir, addCloseOp, file);
+      try {
+        updateBlocks(fsDir, addCloseOp, file);
+      } catch (IOException ioe) {
+        LOG.warn("OP_CLOSE throws IOException for file " + path);
+        break;
+      }
 
       // Now close the file
       if (!file.isUnderConstruction() &&
@@ -442,8 +452,12 @@ public class FSEditLogLoader {
       INodeFile oldFile = INodeFile.valueOf(fsDir.getINode(path),
           path);
       // Update in-memory data structures
-      updateBlocks(fsDir, updateOp, oldFile);
-      
+      try {
+        updateBlocks(fsDir, updateOp, oldFile);
+      } catch (IOException ioe) {
+        LOG.warn("OP_UPDATEBLOCKS throws IOException for file " + path);
+        break;
+      }
       if (toAddRetryCache) {
         fsNamesys.addCacheEntry(updateOp.rpcClientId, updateOp.rpcCallId);
       }
@@ -469,7 +483,11 @@ public class FSEditLogLoader {
         break;
       }
       // add the new block to the INodeFile
-      addNewBlock(fsDir, addBlockOp, oldFile);
+      try {
+        addNewBlock(fsDir, addBlockOp, oldFile);
+      } catch (IllegalStateException e) {
+        LOG.warn("OP_ADD_BLOCK throws illegalstate exception for file " + path);
+      }
       break;
     }
     case OP_SET_REPLICATION: {

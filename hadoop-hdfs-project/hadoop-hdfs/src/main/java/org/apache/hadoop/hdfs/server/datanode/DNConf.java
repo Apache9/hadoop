@@ -76,6 +76,8 @@ public class DNConf {
   final long readaheadLength;
   final long heartBeatInterval;
   final long blockReportInterval;
+  final long firstBlockReportFailureGracePeiord;
+  final long blockReportFailureGracePeiord;
   final long blockReportSplitThreshold;
   final long deleteReportInterval;
   final long initialBlockReportDelay;
@@ -129,6 +131,10 @@ public class DNConf {
         DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT);
     this.blockReportInterval = conf.getLong(DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,
         DFS_BLOCKREPORT_INTERVAL_MSEC_DEFAULT);
+    this.firstBlockReportFailureGracePeiord = conf.getLong(DFSConfigKeys.DFS_DATANODE_FIRST_BLOCKREPORT_FAILURE_GRACEPERIOD,
+        DFSConfigKeys.DFS_DATANODE_FIRST_BLOCKREPORT_FAILURE_GRACEPERIOD_DEFAULT);
+    this.blockReportFailureGracePeiord = conf.getLong(DFSConfigKeys.DFS_DATANODE_BLOCKREPORT_FAILURE_GRACEPERIOD,
+        DFSConfigKeys.DFS_DATANODE_BLOCKREPORT_FAILURE_GRACEPERIOD_DEFAULT); 
     this.blockReportSplitThreshold = conf.getLong(DFS_BLOCKREPORT_SPLIT_THRESHOLD_KEY,
                                             DFS_BLOCKREPORT_SPLIT_THRESHOLD_DEFAULT);
     this.cacheReportInterval = conf.getLong(DFS_CACHEREPORT_INTERVAL_MSEC_KEY,

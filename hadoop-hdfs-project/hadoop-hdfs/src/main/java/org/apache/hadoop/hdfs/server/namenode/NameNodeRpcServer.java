@@ -19,6 +19,8 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT; 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_DEPTH;
@@ -29,6 +31,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -183,6 +186,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
   protected final InetSocketAddress clientRpcAddress;
   
   private final String minimumDataNodeVersion;
+  private AtomicInteger concurrentBlockReport = new AtomicInteger(0);
+  private int maxConcurrentBlockReport;
 
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
@@ -193,6 +198,10 @@ class NameNodeRpcServer implements NamenodeProtocols {
     int handlerCount = 
       conf.getInt(DFS_NAMENODE_HANDLER_COUNT_KEY, 
                   DFS_NAMENODE_HANDLER_COUNT_DEFAULT);
+    
+    this.maxConcurrentBlockReport = 
+        conf.getInt(DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT, 
+                  DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT);
 
     RPC.setProtocolEngine(conf, ClientNamenodeProtocolPB.class,
         ProtobufRpcEngine.class);
@@ -1026,17 +1035,27 @@ class NameNodeRpcServer implements NamenodeProtocols {
       blockStateChangeLog.debug("*BLOCK* NameNode.blockReport: "
            + "from " + nodeReg + ", reports.length=" + reports.length);
     }
-    final BlockManager bm = namesystem.getBlockManager(); 
-    boolean noStaleStorages = false;
-    for(StorageBlockReport r : reports) {
-      final BlockListAsLongs blocks = new BlockListAsLongs(r.getBlocks());
-      noStaleStorages = bm.processReport(nodeReg, r.getStorage(), poolId, blocks);
-    }
+    int inFlightReports = concurrentBlockReport.incrementAndGet();
+    try {
+      if (inFlightReports > maxConcurrentBlockReport) {
+        throw new IOException(inFlightReports + " block reports happen at the same time, "
+            + "which exceeds the max alloable value" + maxConcurrentBlockReport);
+      }
+      final BlockManager bm = namesystem.getBlockManager(); 
+      boolean noStaleStorages = false;
+      for(StorageBlockReport r : reports) {
+        final BlockListAsLongs blocks = new BlockListAsLongs(r.getBlocks());
+        noStaleStorages = bm.processReport(nodeReg, r.getStorage(), poolId, blocks);
+      }
 
-    if (nn.getFSImage().isUpgradeFinalized() &&
-        !nn.isStandbyState() &&
-        noStaleStorages) {
-      return new FinalizeCommand(poolId);
+      if (nn.getFSImage().isUpgradeFinalized() &&
+          !nn.isStandbyState() &&
+          noStaleStorages) {
+        return new FinalizeCommand(poolId);
+      }
+    } finally {
+      int stillInFlightReports = concurrentBlockReport.decrementAndGet();
+      assert (stillInFlightReports >= 0);
     }
 
     return null;

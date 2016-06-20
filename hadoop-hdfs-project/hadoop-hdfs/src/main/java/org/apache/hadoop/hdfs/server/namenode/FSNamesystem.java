@@ -3541,16 +3541,20 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     int numRemovedComplete = 0, numRemovedSafe = 0;
 
     for (Block b : blocks.getToDeleteList()) {
-      if (trackBlockCounts) {
-        BlockInfo bi = getStoredBlock(b);
-        if (bi.isComplete()) {
-          numRemovedComplete++;
-          if (bi.numNodes() >= blockManager.minReplication) {
-            numRemovedSafe++;
+      BlockInfo bi = getStoredBlock(b);
+      if (bi != null) {
+        if (trackBlockCounts) {
+          if (bi.isComplete()) {
+            numRemovedComplete++;
+            if (bi.numNodes() >= blockManager.minReplication) {
+              numRemovedSafe++;
+            }
           }
         }
+        blockManager.removeBlock(b);
+      } else {
+        LOG.warn("Asking delete null block " + b);
       }
-      blockManager.removeBlock(b);
     }
     if (trackBlockCounts) {
       if (LOG.isDebugEnabled()) {

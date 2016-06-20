@@ -82,6 +82,7 @@ class BPServiceActor implements Runnable {
   // to make sure the "happens-before" consistency.
   volatile long lastBlockReport = 0;
   volatile long lastDeletedReport = 0;
+  volatile long lastReportFailure = 0;
 
   boolean resetBlockReportTime = true;
 
@@ -443,6 +444,20 @@ class BPServiceActor implements Runnable {
     final long startTime = now();
     if (startTime - lastBlockReport <= dnConf.blockReportInterval) {
       return null;
+    } else {
+      Random r = new Random();
+      long gracePeriod = 0;
+      if (resetBlockReportTime) {
+        // Grace period for first report is at least 30 seconds
+        gracePeriod = r.nextInt((int) dnConf.firstBlockReportFailureGracePeiord) + 30 * 1000;
+      } else {
+        // Grace period is at least 5 minutes
+        gracePeriod =
+            r.nextInt((int) dnConf.blockReportFailureGracePeiord) + 300 * 1000;
+      }
+      if (startTime - lastReportFailure < gracePeriod) {
+        return null;
+      }
     }
 
     ArrayList<DatanodeCommand> cmds = new ArrayList<DatanodeCommand>();
@@ -472,29 +487,35 @@ class BPServiceActor implements Runnable {
     }
 
     // Send the reports to the NN.
-    int numReportsSent;
+    int numReportsSent = 0;
     long brSendStartTime = now();
-    if (totalBlockCount < dnConf.blockReportSplitThreshold) {
-      // Below split threshold, send all reports in a single message.
-      numReportsSent = 1;
-      DatanodeCommand cmd =
-          bpNamenode.blockReport(bpRegistration, bpos.getBlockPoolId(), reports);
-      if (cmd != null) {
-        cmds.add(cmd);
-      }
-    } else {
-      // Send one block report per message.
-      numReportsSent = i;
-      for (StorageBlockReport report : reports) {
-        StorageBlockReport singleReport[] = { report };
-        DatanodeCommand cmd = bpNamenode.blockReport(
-            bpRegistration, bpos.getBlockPoolId(), singleReport);
+    try {
+      if (totalBlockCount < dnConf.blockReportSplitThreshold) {
+        // Below split threshold, send all reports in a single message.
+        numReportsSent = 1;
+        DatanodeCommand cmd =
+            bpNamenode.blockReport(bpRegistration, bpos.getBlockPoolId(), reports);
         if (cmd != null) {
           cmds.add(cmd);
         }
+      } else {
+        // Send one block report per message.
+        numReportsSent = i;
+        for (StorageBlockReport report : reports) {
+          StorageBlockReport singleReport[] = { report };
+          DatanodeCommand cmd = bpNamenode.blockReport(
+              bpRegistration, bpos.getBlockPoolId(), singleReport);
+          if (cmd != null) {
+            cmds.add(cmd);
+          }
+        }
       }
+    } catch (RemoteException re) {
+      LOG.warn("Block report failed, will grace a random duration which is at least 5 minutes");
+      lastReportFailure = now();
+      throw re;
     }
-
+    
     // Log the block report processing stats from Datanode perspective
     long brSendCost = now() - brSendStartTime;
     long brCreateCost = brSendStartTime - brCreateStartTime;
