@@ -219,6 +219,180 @@ public class TestAbstractYarnScheduler extends ParameterizedSchedulerTestBase {
   }
 
   @Test
+  public void testAMMaximimumAllocationMemory() throws Exception {
+    final int node1MaxMemory = 15 * 1024;
+    final int node2MaxMemory = 5 * 1024;
+    final int node3MaxMemory = 6 * 1024;
+    final int configuredMaxMemory = 9 * 1024;
+    configureScheduler();
+    YarnConfiguration conf = getConf();
+    conf.setInt(YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_MB,
+        configuredMaxMemory);
+    conf.setLong(
+        YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS,
+        1000 * 1000);
+    MockRM rm = new MockRM(conf);
+    try {
+      rm.start();
+      testAMMaximumAllocationMemoryHelper(
+          (AbstractYarnScheduler) rm.getResourceScheduler(),
+          node1MaxMemory, node2MaxMemory, node3MaxMemory,
+          configuredMaxMemory, configuredMaxMemory, configuredMaxMemory,
+          configuredMaxMemory, configuredMaxMemory, configuredMaxMemory);
+    } finally {
+      rm.stop();
+    }
+
+    conf.setLong(
+        YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS,
+        0);
+    rm = new MockRM(conf);
+    try {
+      rm.start();
+      testAMMaximumAllocationMemoryHelper(
+          (AbstractYarnScheduler) rm.getResourceScheduler(),
+          node1MaxMemory, node2MaxMemory, node3MaxMemory,
+          configuredMaxMemory, configuredMaxMemory, configuredMaxMemory,
+          node2MaxMemory, node3MaxMemory, node2MaxMemory);
+    } finally {
+      rm.stop();
+    }
+  }
+
+  private void testAMMaximumAllocationMemoryHelper(
+      AbstractYarnScheduler scheduler,
+      final int node1MaxMemory, final int node2MaxMemory,
+      final int node3MaxMemory, final int... expectedMaxMemory)
+      throws Exception {
+    Assert.assertEquals(6, expectedMaxMemory.length);
+
+    Assert.assertEquals(0, scheduler.getNumClusterNodes());
+    int maxMemory = scheduler.getAMMaximumResourceCapability().getMemory();
+    Assert.assertEquals(expectedMaxMemory[0], maxMemory);
+
+    RMNode node1 = MockNodes.newNodeInfo(
+        0, Resources.createResource(node1MaxMemory), 1, "127.0.0.2");
+    scheduler.handle(new NodeAddedSchedulerEvent(node1));
+    Assert.assertEquals(1, scheduler.getNumClusterNodes());
+    maxMemory = scheduler.getAMMaximumResourceCapability().getMemory();
+    Assert.assertEquals(expectedMaxMemory[1], maxMemory);
+
+    scheduler.handle(new NodeRemovedSchedulerEvent(node1));
+    Assert.assertEquals(0, scheduler.getNumClusterNodes());
+    maxMemory = scheduler.getAMMaximumResourceCapability().getMemory();
+    Assert.assertEquals(expectedMaxMemory[2], maxMemory);
+
+    RMNode node2 = MockNodes.newNodeInfo(
+        0, Resources.createResource(node2MaxMemory), 2, "127.0.0.3");
+    scheduler.handle(new NodeAddedSchedulerEvent(node2));
+    Assert.assertEquals(1, scheduler.getNumClusterNodes());
+    maxMemory = scheduler.getAMMaximumResourceCapability().getMemory();
+    Assert.assertEquals(expectedMaxMemory[3], maxMemory);
+
+    RMNode node3 = MockNodes.newNodeInfo(
+        0, Resources.createResource(node3MaxMemory), 3, "127.0.0.4");
+    scheduler.handle(new NodeAddedSchedulerEvent(node3));
+    Assert.assertEquals(2, scheduler.getNumClusterNodes());
+    maxMemory = scheduler.getAMMaximumResourceCapability().getMemory();
+    Assert.assertEquals(expectedMaxMemory[4], maxMemory);
+
+    scheduler.handle(new NodeRemovedSchedulerEvent(node3));
+    Assert.assertEquals(1, scheduler.getNumClusterNodes());
+    maxMemory = scheduler.getAMMaximumResourceCapability().getMemory();
+    Assert.assertEquals(expectedMaxMemory[5], maxMemory);
+
+    scheduler.handle(new NodeRemovedSchedulerEvent(node2));
+    Assert.assertEquals(0, scheduler.getNumClusterNodes());
+  }
+
+  @Test
+  public void testAMMaximimumAllocationVCores() throws Exception {
+    final int node1MaxVCores = 15;
+    final int node2MaxVCores = 5;
+    final int node3MaxVCores = 6;
+    final int configuredMaxVCores = 9;
+    configureScheduler();
+    YarnConfiguration conf = getConf();
+    conf.setInt(YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_VCORES,
+        configuredMaxVCores);
+    conf.setLong(
+        YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS,
+        1000 * 1000);
+    MockRM rm = new MockRM(conf);
+    try {
+      rm.start();
+      testAMMaximumAllocationVCoresHelper(
+          (AbstractYarnScheduler) rm.getResourceScheduler(),
+          node1MaxVCores, node2MaxVCores, node3MaxVCores,
+          configuredMaxVCores, configuredMaxVCores, configuredMaxVCores,
+          configuredMaxVCores, configuredMaxVCores, configuredMaxVCores);
+    } finally {
+      rm.stop();
+    }
+
+    conf.setLong(
+        YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS,
+        0);
+    rm = new MockRM(conf);
+    try {
+      rm.start();
+      testAMMaximumAllocationVCoresHelper(
+          (AbstractYarnScheduler) rm.getResourceScheduler(),
+          node1MaxVCores, node2MaxVCores, node3MaxVCores,
+          configuredMaxVCores, configuredMaxVCores, configuredMaxVCores,
+          node2MaxVCores, node3MaxVCores, node2MaxVCores);
+    } finally {
+      rm.stop();
+    }
+  }
+
+  private void testAMMaximumAllocationVCoresHelper(
+      AbstractYarnScheduler scheduler,
+      final int node1MaxVCores, final int node2MaxVCores,
+      final int node3MaxVCores, final int... expectedMaxVCores)
+      throws Exception {
+    Assert.assertEquals(6, expectedMaxVCores.length);
+
+    Assert.assertEquals(0, scheduler.getNumClusterNodes());
+    int maxVCores = scheduler.getAMMaximumResourceCapability().getVirtualCores();
+    Assert.assertEquals(expectedMaxVCores[0], maxVCores);
+
+    RMNode node1 = MockNodes.newNodeInfo(
+        0, Resources.createResource(1024, node1MaxVCores), 1, "127.0.0.2");
+    scheduler.handle(new NodeAddedSchedulerEvent(node1));
+    Assert.assertEquals(1, scheduler.getNumClusterNodes());
+    maxVCores = scheduler.getAMMaximumResourceCapability().getVirtualCores();
+    Assert.assertEquals(expectedMaxVCores[1], maxVCores);
+
+    scheduler.handle(new NodeRemovedSchedulerEvent(node1));
+    Assert.assertEquals(0, scheduler.getNumClusterNodes());
+    maxVCores = scheduler.getAMMaximumResourceCapability().getVirtualCores();
+    Assert.assertEquals(expectedMaxVCores[2], maxVCores);
+
+    RMNode node2 = MockNodes.newNodeInfo(
+        0, Resources.createResource(1024, node2MaxVCores), 2, "127.0.0.3");
+    scheduler.handle(new NodeAddedSchedulerEvent(node2));
+    Assert.assertEquals(1, scheduler.getNumClusterNodes());
+    maxVCores = scheduler.getAMMaximumResourceCapability().getVirtualCores();
+    Assert.assertEquals(expectedMaxVCores[3], maxVCores);
+
+    RMNode node3 = MockNodes.newNodeInfo(
+        0, Resources.createResource(1024, node3MaxVCores), 3, "127.0.0.4");
+    scheduler.handle(new NodeAddedSchedulerEvent(node3));
+    Assert.assertEquals(2, scheduler.getNumClusterNodes());
+    maxVCores = scheduler.getAMMaximumResourceCapability().getVirtualCores();
+    Assert.assertEquals(expectedMaxVCores[4], maxVCores);
+
+    scheduler.handle(new NodeRemovedSchedulerEvent(node3));
+    Assert.assertEquals(1, scheduler.getNumClusterNodes());
+    maxVCores = scheduler.getAMMaximumResourceCapability().getVirtualCores();
+    Assert.assertEquals(expectedMaxVCores[5], maxVCores);
+
+    scheduler.handle(new NodeRemovedSchedulerEvent(node2));
+    Assert.assertEquals(0, scheduler.getNumClusterNodes());
+  }
+
+  @Test
   public void testUpdateMaxAllocationUsesTotal() throws IOException {
     final int configuredMaxVCores = 20;
     final int configuredMaxMemory = 10 * 1024;
@@ -288,5 +462,77 @@ public class TestAbstractYarnScheduler extends ParameterizedSchedulerTestBase {
         schedulerMaximumResourceCapability.getMemory());
     Assert.assertEquals(expectedMaximumResource.getVirtualCores(),
         schedulerMaximumResourceCapability.getVirtualCores());
+  }
+
+  @Test
+  public void testUpdateAMMaxAllocationUsesTotal() throws IOException {
+    final int configuredMaxVCores = 20;
+    final int configuredMaxMemory = 10 * 1024;
+    Resource configuredMaximumResource = Resource.newInstance
+        (configuredMaxMemory, configuredMaxVCores);
+
+    configureScheduler();
+    YarnConfiguration conf = getConf();
+    conf.setInt(YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_VCORES,
+        configuredMaxVCores);
+    conf.setInt(YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_MB,
+        configuredMaxMemory);
+    conf.setLong(
+        YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS,
+        0);
+
+    MockRM rm = new MockRM(conf);
+    try {
+      rm.start();
+      AbstractYarnScheduler scheduler = (AbstractYarnScheduler) rm
+          .getResourceScheduler();
+
+      Resource emptyResource = Resource.newInstance(0, 0);
+      Resource fullResource1 = Resource.newInstance(1024, 5);
+      Resource fullResource2 = Resource.newInstance(2048, 10);
+
+      SchedulerNode mockNode1 = mock(SchedulerNode.class);
+      when(mockNode1.getNodeID()).thenReturn(NodeId.newInstance("foo", 8080));
+      when(mockNode1.getAvailableResource()).thenReturn(emptyResource);
+      when(mockNode1.getTotalResource()).thenReturn(fullResource1);
+
+      SchedulerNode mockNode2 = mock(SchedulerNode.class);
+      when(mockNode1.getNodeID()).thenReturn(NodeId.newInstance("bar", 8081));
+      when(mockNode2.getAvailableResource()).thenReturn(emptyResource);
+      when(mockNode2.getTotalResource()).thenReturn(fullResource2);
+
+      verifyAMMaximumResourceCapability(configuredMaximumResource, scheduler);
+
+      scheduler.nodes = new HashMap<NodeId, SchedulerNode>();
+
+      scheduler.nodes.put(mockNode1.getNodeID(), mockNode1);
+      scheduler.updateMaximumAllocation(mockNode1, true);
+      verifyAMMaximumResourceCapability(fullResource1, scheduler);
+
+      scheduler.nodes.put(mockNode2.getNodeID(), mockNode2);
+      scheduler.updateMaximumAllocation(mockNode2, true);
+      verifyAMMaximumResourceCapability(fullResource2, scheduler);
+
+      scheduler.nodes.remove(mockNode2.getNodeID());
+      scheduler.updateMaximumAllocation(mockNode2, false);
+      verifyAMMaximumResourceCapability(fullResource1, scheduler);
+
+      scheduler.nodes.remove(mockNode1.getNodeID());
+      scheduler.updateMaximumAllocation(mockNode1, false);
+      verifyAMMaximumResourceCapability(configuredMaximumResource, scheduler);
+    } finally {
+      rm.stop();
+    }
+  }
+
+  private void verifyAMMaximumResourceCapability(
+      Resource expectedMaximumResource, AbstractYarnScheduler scheduler) {
+
+    final Resource schedulerAMMaximumResourceCapability = scheduler
+        .getAMMaximumResourceCapability();
+    Assert.assertEquals(expectedMaximumResource.getMemory(),
+        schedulerAMMaximumResourceCapability.getMemory());
+    Assert.assertEquals(expectedMaximumResource.getVirtualCores(),
+        schedulerAMMaximumResourceCapability.getVirtualCores());
   }
 }

@@ -171,6 +171,11 @@ public class YarnConfiguration extends Configuration {
       YARN_PREFIX + "scheduler.maximum-allocation-vcores";
   public static final int DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES = 4;
 
+  public static final String RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_MB =
+      YARN_PREFIX + "scheduler.am.maximum-allocation-mb";
+  public static final String RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_VCORES =
+      YARN_PREFIX + "scheduler.am.maximum-allocation-vcores";
+
   /** Number of threads to handle scheduler interface.*/
   public static final String RM_SCHEDULER_CLIENT_THREAD_COUNT =
     RM_PREFIX + "scheduler.client.thread-count";

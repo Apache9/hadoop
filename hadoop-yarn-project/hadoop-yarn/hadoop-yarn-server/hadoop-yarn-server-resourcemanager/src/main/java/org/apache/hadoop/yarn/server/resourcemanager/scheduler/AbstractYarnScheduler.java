@@ -79,7 +79,9 @@ public abstract class AbstractYarnScheduler
 
   protected Resource minimumAllocation;
   private Resource maximumAllocation;
+  protected Resource amMaximumAllocation;
   private Resource configuredMaximumAllocation;
+  private Resource configuredAMMaximumAllocation;
   private int maxNodeMemory = -1;
   private int maxNodeVCores = -1;
   private ReentrantReadWriteLock maximumAllocationLock =
@@ -175,6 +177,27 @@ public abstract class AbstractYarnScheduler
     return maxResource;
   }
 
+  @Override
+  public Resource getAMMaximumResourceCapability() {
+    Resource maxResource;
+    ReentrantReadWriteLock.ReadLock readLock = maximumAllocationLock.readLock();
+    readLock.lock();
+    try {
+      if (useConfiguredMaximumAllocationOnly) {
+        if (System.currentTimeMillis() - ResourceManager.getClusterTimeStamp()
+            > configuredMaximumAllocationWaitTime) {
+          useConfiguredMaximumAllocationOnly = false;
+        }
+        maxResource = Resources.clone(configuredAMMaximumAllocation);
+      } else {
+        maxResource = Resources.clone(amMaximumAllocation);
+      }
+    } finally {
+      readLock.unlock();
+    }
+    return maxResource;
+  }
+
   protected void initMaximumResourceCapability(Resource maximumAllocation) {
     ReentrantReadWriteLock.WriteLock writeLock =
         maximumAllocationLock.writeLock();
@@ -183,6 +206,20 @@ public abstract class AbstractYarnScheduler
       if (this.configuredMaximumAllocation == null) {
         this.configuredMaximumAllocation = Resources.clone(maximumAllocation);
         this.maximumAllocation = Resources.clone(maximumAllocation);
+      }
+    } finally {
+      writeLock.unlock();
+    }
+  }
+
+  protected void initAMMaximumResourceCapability(Resource maximumAllocation) {
+    ReentrantReadWriteLock.WriteLock writeLock =
+        maximumAllocationLock.writeLock();
+    writeLock.lock();
+    try {
+      if (this.configuredAMMaximumAllocation == null) {
+        this.configuredAMMaximumAllocation = Resources.clone(maximumAllocation);
+        this.amMaximumAllocation = Resources.clone(maximumAllocation);
       }
     } finally {
       writeLock.unlock();
@@ -581,12 +618,16 @@ public abstract class AbstractYarnScheduler
           maxNodeMemory = nodeMemory;
           maximumAllocation.setMemory(Math.min(
               configuredMaximumAllocation.getMemory(), maxNodeMemory));
+          amMaximumAllocation.setMemory(Math.min(
+              configuredAMMaximumAllocation.getMemory(), maxNodeMemory));
         }
         int nodeVCores = node.getTotalResource().getVirtualCores();
         if (nodeVCores > maxNodeVCores) {
           maxNodeVCores = nodeVCores;
           maximumAllocation.setVirtualCores(Math.min(
               configuredMaximumAllocation.getVirtualCores(), maxNodeVCores));
+          amMaximumAllocation.setVirtualCores(Math.min(
+              configuredAMMaximumAllocation.getVirtualCores(), maxNodeVCores));
         }
       } else {  // removed node
         if (maxNodeMemory == node.getTotalResource().getMemory()) {
@@ -612,15 +653,21 @@ public abstract class AbstractYarnScheduler
           }
           if (maxNodeMemory == -1) {  // no nodes
             maximumAllocation.setMemory(configuredMaximumAllocation.getMemory());
+            amMaximumAllocation.setMemory(configuredAMMaximumAllocation.getMemory());
           } else {
             maximumAllocation.setMemory(
                 Math.min(configuredMaximumAllocation.getMemory(), maxNodeMemory));
+            amMaximumAllocation.setMemory(
+                Math.min(configuredAMMaximumAllocation.getMemory(), maxNodeMemory));
           }
           if (maxNodeVCores == -1) {  // no nodes
             maximumAllocation.setVirtualCores(configuredMaximumAllocation.getVirtualCores());
+            amMaximumAllocation.setVirtualCores(configuredAMMaximumAllocation.getVirtualCores());
           } else {
             maximumAllocation.setVirtualCores(
                 Math.min(configuredMaximumAllocation.getVirtualCores(), maxNodeVCores));
+            amMaximumAllocation.setVirtualCores(
+                Math.min(configuredAMMaximumAllocation.getVirtualCores(), maxNodeVCores));
           }
         }
       }

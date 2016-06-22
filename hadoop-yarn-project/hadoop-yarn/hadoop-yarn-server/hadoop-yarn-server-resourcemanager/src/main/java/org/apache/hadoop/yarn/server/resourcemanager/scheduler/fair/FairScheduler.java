@@ -207,14 +207,19 @@ public class FairScheduler extends
     int maxMem = conf.getInt(
       YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_MB,
       YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_MB);
+    int amMaxMem = conf.getInt(
+        YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_MB,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_MB);
 
-    if (minMem < 0 || minMem > maxMem) {
+    if (minMem < 0 || minMem > maxMem || minMem > amMaxMem) {
       throw new YarnRuntimeException("Invalid resource scheduler memory"
         + " allocation configuration"
         + ", " + YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB
         + "=" + minMem
-        + ", " + YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_MB
-        + "=" + maxMem + ", min should equal greater than 0"
+        + ", " + YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB
+        + "=" + maxMem
+        + ", " + YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_MB
+        + "=" + amMaxMem + ", min should equal greater than 0"
         + ", max should be no smaller than min.");
     }
 
@@ -225,14 +230,19 @@ public class FairScheduler extends
     int maxVcores = conf.getInt(
       YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES,
       YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES);
+    int amMaxVcores = conf.getInt(
+        YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_VCORES,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES);
 
-    if (minVcores < 0 || minVcores > maxVcores) {
+    if (minVcores < 0 || minVcores > maxVcores || minVcores > amMaxVcores) {
       throw new YarnRuntimeException("Invalid resource scheduler vcores"
         + " allocation configuration"
         + ", " + YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES
         + "=" + minVcores
         + ", " + YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES
-        + "=" + maxVcores + ", min should equal greater than 0"
+        + "=" + maxVcores
+        + ", " + YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_VCORES
+        + "=" + amMaxVcores + ", min should equal greater than 0"
         + ", max should be no smaller than min.");
     }
   }
@@ -1295,6 +1305,7 @@ public class FairScheduler extends
       LOG.info("Using resource calculator: " + resourceCalculator.getClass().getName());
       minimumAllocation = this.conf.getMinimumAllocation();
       initMaximumResourceCapability(this.conf.getMaximumAllocation());
+      initAMMaximumResourceCapability(this.conf.getAMMaximumAllocation());
       incrAllocation = this.conf.getIncrementAllocation();
       continuousSchedulingEnabled = this.conf.isContinuousSchedulingEnabled();
       continuousSchedulingSleepMs =
