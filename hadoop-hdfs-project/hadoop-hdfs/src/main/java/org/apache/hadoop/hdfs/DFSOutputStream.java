@@ -19,6 +19,13 @@ package org.apache.hadoop.hdfs;
 
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.SUCCESS;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
+
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -35,8 +42,10 @@ import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -88,13 +97,6 @@ import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.cache.RemovalListener;
-import com.google.common.cache.RemovalNotification;
-
 
 /****************************************************************
  * DFSOutputStream creates files from a stream of bytes.
@@ -133,6 +135,7 @@ public class DFSOutputStream extends FSOutputSummer
   private final DataChecksum checksum;
   // both dataQueue and ackQueue are protected by dataQueue lock
   private final LinkedList<Packet> dataQueue = new LinkedList<Packet>();
+  private final Map<Long, Long> packetSendTime = new HashMap<Long, Long>();
   private final LinkedList<Packet> ackQueue = new LinkedList<Packet>();
   private Packet currentPacket = null;
   private DataStreamer streamer;
@@ -570,6 +573,7 @@ public class DFSOutputStream extends FSOutputSummer
             if (!one.isHeartbeatPacket()) {
               dataQueue.removeFirst();
               ackQueue.addLast(one);
+              packetSendTime.put(one.seqno, Time.monotonicNow());
               dataQueue.notifyAll();
             }
           }
@@ -798,15 +802,21 @@ public class DFSOutputStream extends FSOutputSummer
           // process responses from datanodes.
           try {
             // read an ack from the pipeline
-            long t1 = Time.monotonicNow();
             ack.readFields(blockReplyStream);
-            long t2 = Time.monotonicNow();
-            if (t2 - t1 > dfsClient.getConf().slowLogThresholdMs
-                && ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
-              DFSClient.LOG.info("ResponseProcessorReadAckCost:" + (t2 - t1) + "ms,ack:" + ack
-                  + ",targets:" + Arrays.asList(targets)
-                  + "(CAUTION: this is expected once small write request/size occured)");
-            } else if (DFSClient.LOG.isDebugEnabled()) {
+            if (ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
+              Long begin = packetSendTime.get(ack.getSeqno());
+              if (begin != null) {
+                long duration = Time.monotonicNow() - begin;
+                if (duration > dfsClient.getConf().slowLogThresholdMs) {
+                  DFSClient.LOG.info("Slow ReadProcessor read fields for block " + block
+                      + " took " + duration + "ms (threshold="
+                      + dfsClient.getConf().slowLogThresholdMs + "ms); ack: " + ack
+                      + ", targets: " + Arrays.asList(targets));
+                }
+              }
+            }
+
+            if (DFSClient.LOG.isDebugEnabled()) {
               DFSClient.LOG.debug("DFSClient " + ack);
             }
 
@@ -868,6 +878,7 @@ public class DFSOutputStream extends FSOutputSummer
             synchronized (dataQueue) {
               lastAckedSeqno = seqno;
               ackQueue.removeFirst();
+              packetSendTime.remove(seqno);
               dataQueue.notifyAll();
             }
           } catch (Exception e) {
@@ -914,6 +925,7 @@ public class DFSOutputStream extends FSOutputSummer
       synchronized (dataQueue) {
         dataQueue.addAll(0, ackQueue);
         ackQueue.clear();
+        packetSendTime.clear();
       }
 
       // Record the new pipeline failure recovery.
