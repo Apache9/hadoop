@@ -178,7 +178,9 @@ public class TestCanary {
   public void testFalconSink() throws Exception {
     dfsCluster.stopDataNode(0);
     dfsCluster.stopDataNode(7);
-    ToolRunner.run(conf, new Canary(new FalconSink()), new String[]{"-interval", "0"});
+    FalconSink sink = new FalconSink();
+    sink.setConf(conf);
+    ToolRunner.run(conf, new Canary(sink), new String[]{"-interval", "0"});
   }
 
   @Test
@@ -210,6 +212,13 @@ public class TestCanary {
 
     //MockSink sink = new MockSink();
     //ToolRunner.run(conf, new Canary(sink), new String[]{"-interval", "0"});
+  }
+
+  @Test
+  public void testGetCapacityRemaining() throws IOException {
+    Canary canary = new Canary(new Canary.StdOutSink());
+    canary.setConf(conf);
+    canary.checkClusterCapacityRemaining();
   }
 
   @Test

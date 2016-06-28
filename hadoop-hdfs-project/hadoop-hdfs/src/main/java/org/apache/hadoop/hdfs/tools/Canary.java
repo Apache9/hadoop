@@ -1,5 +1,6 @@
 package org.apache.hadoop.hdfs.tools;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.Charsets;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -22,8 +23,11 @@ import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 
 import java.io.*;
+import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class Canary implements Tool {
@@ -45,6 +49,7 @@ public class Canary implements Tool {
     void publishTiming(OpType type, long msTime);
     void publishAvailableStatus(boolean isAvailable);
     void publishCorruptBlocks(Path corruptFilePath);
+    void publishCapacityRemaining(double percent);
 
     void reportSummary();
   }
@@ -93,6 +98,11 @@ public class Canary implements Tool {
     }
 
     @Override
+    public void publishCapacityRemaining(double percent) {
+      LOG.info("Cluster capacity remaining :" + percent + " in percent");
+    }
+
+    @Override
     public void reportSummary() {
       long curTime = System.currentTimeMillis();
       if (!clusterAvailableStatus) {
@@ -128,7 +138,8 @@ public class Canary implements Tool {
   private static final String DEFAULT_PATH_FOR_AVAILABILITY_TEST = "hdfs_canary/.file_for_availability_test";
   private static final int DEFAULT_TEST_DATA_SIZE = 4194304; // 4MB
   private static final int DEFAULT_AVAIL_TEST_DATA_SIZE = 1024; // 1k
-  private static final String JMX_SUFFIX = "/jmx?qry=Hadoop:service=JournalNode,name=Journal-";
+  private static final String NN_JMX_SUFFIX = "/jmx?qry=Hadoop:service=NameNode,name=NameNodeInfo";
+  private static final String JN_JMX_SUFFIX = "/jmx?qry=Hadoop:service=JournalNode,name=Journal-";
 
   private Configuration conf = null;
   private DistributedFileSystem dfs = null;
@@ -186,6 +197,7 @@ public class Canary implements Tool {
       if (!clusterIsAvailable) {
         checkAvailability(startTime + interval);
       } else {
+        checkClusterCapacityRemaining();
         checkNNAndDNHealth();
         checkJNHealth();
         listCorruptBlocks();
@@ -383,9 +395,43 @@ public class Canary implements Tool {
     for (String jnURL : parts[2].split(";")) {
       String[] items = jnURL.split(":");
       String host = items[0];
-      jnList.add(new URL("http://" + host + ":" + httpPort + JMX_SUFFIX + nsId));
+      jnList.add(new URL("http://" + host + ":" + httpPort + JN_JMX_SUFFIX + nsId));
     }
     return jnList;
+  }
+
+  @VisibleForTesting
+  void checkClusterCapacityRemaining() {
+    try {
+      List<DFSUtil.ConfiguredNNAddress> nns =
+          DFSUtil.flattenAddressMap(DFSUtil.getNNServiceRpcAddresses(conf));
+
+      for (DFSUtil.ConfiguredNNAddress cnn : nns) {
+        InetSocketAddress isa = cnn.getAddress();
+        URL nnJmxUrl = new URL(DFSUtil.getInfoServer(isa, conf,
+            DFSUtil.getHttpClientScheme(conf)).toURL(), NN_JMX_SUFFIX);
+        LOG.info("will access jmx url: " + nnJmxUrl);
+        String jmxJson = null;
+        try {
+          jmxJson = readOutput(nnJmxUrl);
+          JSONObject jsonObj = new JSONObject(jmxJson);
+          double percentRemaining = jsonObj.getJSONArray("beans").getJSONObject(0).
+              getDouble("PercentRemaining");
+          LOG.info("cluster capacity ramaining in percent" + percentRemaining);
+          sink.publishCapacityRemaining(percentRemaining);
+          // Access one NN is enough
+          break;
+        } catch (IOException ioe) {
+          LOG.error("Get JMX from NameNode faild, jmx url:" + nnJmxUrl, ioe);
+          //sink.publishNodeHealth(Sink.NodeType.NMAE_NODE, NNHost, Sink.NodeState.FAILED);
+        } catch (JSONException je) {
+          if (jmxJson != null)
+            LOG.error("Can't parse the jmx content as JSON\n" + jmxJson);
+        }
+      }
+    } catch (IOException e) {
+      LOG.error("check cluster remaining capacity failed", e);
+    }
   }
 
   private String readOutput(URL url) throws IOException {
