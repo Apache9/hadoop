@@ -9,6 +9,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.tools.Canary;
 import org.codehaus.jettison.json.JSONArray;
+import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 
 import java.io.IOException;
@@ -29,6 +30,7 @@ public class FalconSink implements Canary.Sink, Configurable {
   private Map<String, AtomicInteger> recentFailedTimes = new HashMap<String, AtomicInteger>();
   private long readLatency = -1;
   private long writeLatency = -1;
+  private double capacityRemaining;
 
   // For availability calculating
   private boolean clusterAvailableStatus = true;
@@ -78,6 +80,11 @@ public class FalconSink implements Canary.Sink, Configurable {
     }
   }
 
+  @Override
+  public void publishCapacityRemaining(double percent) {
+    capacityRemaining = percent;
+  }
+
   private void updateRecentFailedTimes() {
     Map<String, AtomicInteger> newMap = new HashMap<String, AtomicInteger>();
     for (NodeType type : failedNodes.keySet()) {
@@ -101,30 +108,28 @@ public class FalconSink implements Canary.Sink, Configurable {
     unavailableTime = 0;
   }
 
-  private JSONObject buildFalconMetric(String clusterName, String key, double value) throws Exception {
+  private JSONObject buildFalconMetric(String clusterName, String key, double value){
     JSONObject metric = new JSONObject();
-    metric.put("endpoint", "hdfs-canary");
-    metric.put("metric", key);
-    metric.put("timestamp", System.currentTimeMillis() / 1000);
-    metric.put("value", value);
-    metric.put("step", 60);
-    metric.put("counterType", "GAUGE");
-    String type = conf.get("dfs.canary.cluster.type", "tst");
-    metric.put("tags", "srv=hdfs,type=" + type.toLowerCase() + ",cluster=" + clusterName);
+    try {
+      metric.put("endpoint", "hdfs-canary");
+      metric.put("metric", key);
+      metric.put("timestamp", System.currentTimeMillis() / 1000);
+      metric.put("value", value);
+      metric.put("step", 60);
+      metric.put("counterType", "GAUGE");
+      String type = conf.get("dfs.canary.cluster.type", "tst");
+      metric.put("tags", "srv=hdfs,type=" + type.toLowerCase() + ",cluster=" + clusterName);
+    } catch (JSONException je) {
+      LOG.warn("build json object error: ", je);
+    }
     return metric;
   }
 
-  private void pushAvailabilityToFalcon(String clusterName, double avail) {
+  private void PushToFalcon(JSONArray payload) {
     String uri = conf.get("dfs.canary.sink.falcon.uri", DEFAULT_FALCON_URI);
     PostMethod post = new PostMethod(uri);
-    JSONArray data = new JSONArray();
-    try {
-      data.put(buildFalconMetric(clusterName, "cluster-availability", avail));
-    } catch (Exception e) {
-      LOG.warn("Create json error.", e);
-    }
-    LOG.info(data.toString());
-    post.setRequestBody(data.toString());
+    LOG.info(payload.toString());
+    post.setRequestBody(payload.toString());
     try {
       client.executeMethod(post);
     } catch (IOException e) {
@@ -134,6 +139,7 @@ public class FalconSink implements Canary.Sink, Configurable {
 
   @Override
   public void reportSummary() {
+    JSONArray payload = new JSONArray();
     String clusterName = conf.get("dfs.nameservices", "unknown");
     // Report availability
     long curTime = System.currentTimeMillis();
@@ -141,9 +147,12 @@ public class FalconSink implements Canary.Sink, Configurable {
       unavailableTime += curTime - lastStatusChangeTime;
     }
     double availableRate = (1.0 - unavailableTime/(double)(curTime - lastSummaryTime)) * 100;
-    pushAvailabilityToFalcon(clusterName, availableRate);
     lastStatusChangeTime = curTime;
     lastSummaryTime = curTime;
+    payload.put(buildFalconMetric(clusterName, "cluster-availability", availableRate));
+
+    // Report cluster remaining capacity
+    payload.put(buildFalconMetric(clusterName, "cluster-capacity-remaining", capacityRemaining));
 
     // if cluster is available and sniff succeed
     if (!nodeCount.isEmpty()) {
@@ -173,8 +182,10 @@ public class FalconSink implements Canary.Sink, Configurable {
       }
     }
 
+    PushToFalcon(payload);
     clearDataSets();
   }
+
   @Override
   public void setConf(Configuration conf) {
     this.conf = conf;
