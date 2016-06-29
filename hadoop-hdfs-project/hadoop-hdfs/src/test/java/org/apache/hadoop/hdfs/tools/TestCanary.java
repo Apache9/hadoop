@@ -112,8 +112,9 @@ public class TestCanary {
   }
 
   private void startDataNodes(int numDataNodes) throws IOException{
-    dfsCluster.startDataNodes(conf, numDataNodes, StorageType.DEFAULT, true,
-            null, null, null, null, false, false, false, null);
+    StorageType[][] storageTypes = new StorageType[][] {{StorageType.DEFAULT}};
+    dfsCluster.startDataNodes(conf, numDataNodes, storageTypes, true,
+            null, null, null, null, null, false, false, false, null);
     dfsCluster.waitClusterUp();
     ProxyUsers.refreshSuperUserGroupsConfiguration(conf);
   }
