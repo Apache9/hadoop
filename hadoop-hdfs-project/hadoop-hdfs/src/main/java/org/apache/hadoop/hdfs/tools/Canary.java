@@ -189,6 +189,11 @@ public class Canary implements Tool {
       try {
         checkIOLatency();
       } catch (IOException e) {
+        // if got socketTimeoutException when renew lease, dfsClient will fail in the following operation
+        // since canary is stateless, exit directly. supervisor will start Canary again in clean state
+        if (isFSclosed(e.getMessage())) {
+          System.exit(-1);
+        }
         clusterIsAvailable = false;
         LOG.warn("Test IO latency failed, will start availability detect");
       }
@@ -215,6 +220,10 @@ public class Canary implements Tool {
     } while (interval > 0);
 
     return 0;
+  }
+
+  private boolean isFSclosed(String message) {
+    return message.contains("Filesystem closed");
   }
 
   private void checkIOLatency() throws IOException {
