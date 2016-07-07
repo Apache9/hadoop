@@ -1141,6 +1141,8 @@ public class UserGroupInformation {
         start = Time.now();
         login.login();
         metrics.loginSuccess.add(Time.now() - start);
+        LOG.info("Successfully re-login, principals are " + subject.getPrincipals()
+            + ", credentials are " + subject.getPrivateCredentials());
         setLogin(login);
       }
     } catch (LoginException le) {
