@@ -580,7 +580,7 @@ public class MRAppMaster extends CompositeService {
 
       try {
         MRAppMaster.this.stop();
-      } catch (YarnRuntimeException e) {
+      } catch (Exception e) {
         Thread.sleep(60000);
       }
 
