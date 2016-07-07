@@ -20,13 +20,13 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project-dist</artifactId>
-    <version>2.4.0-mdh2.2.2-krbforcerelogin</version>
+    <version>2.4.0-mdh2.2.2-krbforcerelogin-ignorelookupkrbhost</version>
     <relativePath>../../../../../hadoop-project-dist</relativePath>
   </parent>
 
   <groupId>org.apache.hadoop.contrib</groupId>
   <artifactId>hadoop-hdfs-raid</artifactId>
-  <version>2.4.0-mdh2.2.2-krbforcerelogin</version>
+  <version>2.4.0-mdh2.2.2-krbforcerelogin-ignorelookupkrbhost</version>
   <description>Apache Hadoop HDFS RAID</description>
   <name>Apache Hadoop HDFS RAID</name>
   <packaging>jar</packaging>
