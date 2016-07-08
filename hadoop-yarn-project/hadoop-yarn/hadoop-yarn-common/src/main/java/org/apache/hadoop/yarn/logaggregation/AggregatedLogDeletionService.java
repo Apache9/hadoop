@@ -79,15 +79,17 @@ public class AggregatedLogDeletionService extends AbstractService {
       LOG.info("aggregated log deletion started.");
       try {
         FileSystem fs = remoteRootLogDir.getFileSystem(conf);
-        for(FileStatus userDir : fs.listStatus(remoteRootLogDir)) {
-          if(userDir.isDirectory()) {
+        for (FileStatus userDir : fs.listStatus(remoteRootLogDir)) {
+          if (userDir.isDirectory()) {
             Path userDirPath = new Path(userDir.getPath(), suffix);
             deleteOldLogDirsFrom(userDirPath, cutoffMillis, fs, rmClient);
           }
         }
       } catch (IOException e) {
         logIOException("Error reading root log dir this deletion " +
-        		"attempt is being aborted", e);
+            "attempt is being aborted", e);
+      } catch (RuntimeException e) {
+        LOG.error("aggregated log deletion finished with exception ", e);
       }
       LOG.info("aggregated log deletion finished.");
     }
