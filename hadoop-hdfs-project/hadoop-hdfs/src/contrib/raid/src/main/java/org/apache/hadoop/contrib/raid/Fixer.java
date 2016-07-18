@@ -304,7 +304,7 @@ public class Fixer {
         // Something wrong
         LOG.warn("Fixer failed to decode block " + sb.toString() + " of " + file.toString(), e);
         fixFail.increment(blocks.length);
-        throw new IOException("Fail to decode ", e);
+        //throw new IOException("Fail to decode ", e);
       }
     }
   }
