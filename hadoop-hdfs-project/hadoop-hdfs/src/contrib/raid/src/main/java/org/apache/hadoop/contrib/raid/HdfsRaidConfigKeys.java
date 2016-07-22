@@ -97,6 +97,9 @@ public class HdfsRaidConfigKeys {
   public static final String HDFS_RAIDNODE_FIXER_INTERVAL = "hdfs.raidnode.fixer.interval";
   public static final long HDFS_RAIDNODE_FIXER_INTERVAL_DEFAULT = 3600 * 1000l; // subject to change
 
+  public static final String HDFS_RAIDNODE_FIXER_FILES_PER_JOB = "hdfs.raidnode.fixer.files.per.job";
+  public static final int HDFS_RAIDNODE_FIXER_FILES_PER_JOB_DEFAULT = 5000; // subject to change
+
   public static final String HDFS_RAIDNODE_MOVER_INTERVAL = "hdfs.raidnode.mover.interval";
   public static final long HDFS_RAIDNODE_MOVER_INTERVAL_DEFAULT = 2 * 3600 * 1000l; // Temporary -
                                                                                     // subject to

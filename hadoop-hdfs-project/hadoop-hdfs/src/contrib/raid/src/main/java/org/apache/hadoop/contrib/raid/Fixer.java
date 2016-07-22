@@ -134,6 +134,8 @@ public class Fixer {
         (short) conf.getInt(
             HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA,
             HdfsRaidConfigKeys.HDFS_RAIDNODE_CODER_FILE_REPLICA_DEFAULT);
+    int filesPerJob = conf.getInt(HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_FILES_PER_JOB,
+        HdfsRaidConfigKeys.HDFS_RAIDNODE_FIXER_FILES_PER_JOB_DEFAULT);
 
     while (true) {
       try {
@@ -226,6 +228,8 @@ public class Fixer {
             }
           }
         }
+        if (info.size() >= filesPerJob)
+          break;
       } catch (IOException ioe) {
         // Ignore
         LOG.warn("Something wrong when collecting fixer task info", ioe);
