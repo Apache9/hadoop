@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.security.auth.DestroyFailedException;
 import javax.security.auth.Subject;
 import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.kerberos.KerberosKey;
@@ -1065,7 +1066,7 @@ public class UserGroupInformation {
       throws IOException {
     reloginFromKerberosKey();
   }
-  
+
   /**
    * Re-Login a user in from a keytab file. Loads a user identity from a keytab
    * file and logs them in. They become the currently logged-in user. This
@@ -1093,7 +1094,35 @@ public class UserGroupInformation {
       throw new IOException("loginUserFromKeyTab or loginUserFromPassword must be done first");
     }
   }
-  
+
+  // if the first kerberos ticket is not TGT, then remove and destroy it since the kerberos library
+  // of jdk always use the first kerberos ticket as TGT.
+  // See HADOOP-13433 for more details.
+  private void fixKerberosTicketOrder() {
+    Set<Object> creds = getSubject().getPrivateCredentials();
+    synchronized (creds) {
+      for (Iterator<Object> iter = creds.iterator(); iter.hasNext();) {
+        Object cred = iter.next();
+        if (cred instanceof KerberosTicket) {
+          KerberosTicket ticket = (KerberosTicket) cred;
+          if (!ticket.getServer().getName().startsWith("krbtgt")) {
+            LOG.warn("The first kerberos ticket is not TGT(the server principal is "
+                + ticket.getServer() + "), remove and destroy it.");
+            iter.remove();
+            try {
+              ticket.destroy();
+            } catch (DestroyFailedException e) {
+              LOG.warn("destroy ticket failed", e);
+            }
+          } else {
+            return;
+          }
+        }
+      }
+    }
+    LOG.warn("No kerberos ticket found, is this possible?");
+  }
+
   private void reloginFromKerberosKey(String appName, CallbackHandler callbackHandler)
   throws IOException {
     if (!isSecurityEnabled() ||
@@ -1133,6 +1162,7 @@ public class UserGroupInformation {
         LOG.info("Initiating re-login for " + krbPrincipal);
         start = Time.now();
         login.login();
+        fixKerberosTicketOrder();
         metrics.loginSuccess.add(Time.now() - start);
         setLogin(login);
       }
