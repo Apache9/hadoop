@@ -319,6 +319,25 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
 
   <profiles>
     <profile>
+      <id>java8</id>
+      <activation>
+        <jdk>1.8</jdk>
+      </activation>
+      <properties>
+        <hadoop-security.version>1.0.0-jdk8</hadoop-security.version>
+        <additionalparam>-Xdoclint:none</additionalparam>
+      </properties>
+    </profile>
+    <profile>
+      <id>java7-</id>
+      <activation>
+        <jdk>(,1.8)</jdk>
+      </activation>
+      <properties>
+        <hadoop-security.version>1.0.0</hadoop-security.version>
+      </properties>
+    </profile>
+    <profile>
       <id>src</id>
       <activation>
         <activeByDefault>false</activeByDefault>
@@ -383,6 +402,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-javadoc-plugin</artifactId>
+            <version>2.8.1</version>
             <inherited>false</inherited>
             <executions>
               <execution>

@@ -9,3 +9,5 @@
 target
 hadoop-hdfs-project/hadoop-hdfs/downloads
 hadoop-hdfs-project/hadoop-hdfs-httpfs/downloads
+hadoop-hdfs-project/hadoop-hdfs/src/test/resources/common-version-info.properties
+hadoop-hdfs-project/hadoop-hdfs/src/test/resources/webapps
