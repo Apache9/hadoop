@@ -80,10 +80,11 @@ public interface INodeAttributes {
     SnapshotCopy(INode inode) {
       this.name = inode.getLocalNameBytes();
       this.permission = inode.getPermissionLong();
-      if (inode.getAclFeature() != null) {
-        aclFeature = AclStorage.addAclFeature(inode.getAclFeature());
+      AclFeature aclFeature = inode.getAclFeature();
+      if (aclFeature != null) {
+        this.aclFeature = AclStorage.addAclFeature(aclFeature);
       } else {
-        aclFeature = null;
+        this.aclFeature = null;
       }
       this.modificationTime = inode.getModificationTime();
       this.accessTime = inode.getAccessTime();

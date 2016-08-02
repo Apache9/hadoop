@@ -314,12 +314,10 @@ public abstract class INodeWithAdditionalFields extends INode
     features = arr;
   }
 
-  protected <T extends Feature> T getFeature(Class<? extends Feature> clazz) {
+  protected <T extends Feature> T getFeature(Class<T> clazz) {
     for (Feature f : features) {
       if (f.getClass() == clazz) {
-        @SuppressWarnings("unchecked")
-        T ret = (T) f;
-        return ret;
+        return clazz.cast(f);
       }
     }
     return null;

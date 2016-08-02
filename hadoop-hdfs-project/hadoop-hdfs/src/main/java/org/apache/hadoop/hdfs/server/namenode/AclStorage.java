@@ -73,14 +73,16 @@ public final class AclStorage {
    */
   public static void copyINodeDefaultAcl(INode child) {
     INodeDirectory parent = child.getParent();
+    if (!child.isFile() && !child.isDirectory()) {
+      return;
+    }
     AclFeature parentAclFeature = parent.getAclFeature();
-    if (parentAclFeature == null || !(child.isFile() || child.isDirectory())) {
+    if (parentAclFeature == null) {
       return;
     }
 
     // Split parent's entries into access vs. default.
-    List<AclEntry> featureEntries = getEntriesFromAclFeature(parent
-        .getAclFeature());
+    List<AclEntry> featureEntries = getEntriesFromAclFeature(parentAclFeature);
     ScopedAclEntries scopedEntries = new ScopedAclEntries(featureEntries);
     List<AclEntry> parentDefaultEntries = scopedEntries.getDefaultEntries();
 
