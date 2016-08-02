@@ -602,7 +602,7 @@ public class UserGroupInformation {
     }
   }
 
-  private LoginContext getLogin() {
+  LoginContext getLogin() {
     return user.getLogin();
   }
   
@@ -1098,7 +1098,8 @@ public class UserGroupInformation {
   // if the first kerberos ticket is not TGT, then remove and destroy it since the kerberos library
   // of jdk always use the first kerberos ticket as TGT.
   // See HADOOP-13433 for more details.
-  private void fixKerberosTicketOrder() {
+  @VisibleForTesting
+  void fixKerberosTicketOrder() {
     Set<Object> creds = getSubject().getPrivateCredentials();
     synchronized (creds) {
       for (Iterator<Object> iter = creds.iterator(); iter.hasNext();) {
@@ -1136,7 +1137,7 @@ public class UserGroupInformation {
     }
 
     KerberosTicket tgt = getTGT();
-    //Return if TGT is valid and is not going to expire soon.
+    // Return if TGT is valid and is not going to expire soon.
     if (tgt != null && now < getRefreshTime(tgt)) {
       return;
     }
