@@ -53,17 +53,4 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
       </plugin>
     </plugins>
   </build>
-
-  <profiles>
-    <profile>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <id>raid</id>
-      <modules>
-       <module>hadoop-hdfs/src/contrib/raid</module>
-      </modules>
-   </profile>
-  </profiles>
-
 </project>

@@ -54,10 +54,6 @@
     </dependency>
   </dependencies>
 
-  <properties>
-    <hdfs.raid>false</hdfs.raid>
-  </properties>
-
   <build>
     <plugins>
       <plugin>
@@ -103,15 +99,6 @@
 
   <profiles>
     <profile>
-      <id>raid</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <properties>
-        <hdfs.raid>true</hdfs.raid>
-      </properties>
-    </profile>
-    <profile>
       <id>dist</id>
       <activation>
         <activeByDefault>false</activeByDefault>
@@ -146,13 +133,6 @@
                         fi
                       }
                       
-                      cp_hdfs_raid() {
-                        echo run cp_hdfs_raid
-                        if [ ${hdfs.raid} = true ]; then
-                          run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs/src/contrib/raid/target/hadoop-hdfs-raid-${project.version}/* .
-                        fi
-                      }
-
                       ROOT=`cd ../..;pwd`
                       echo
                       echo "Current directory `pwd`"
@@ -169,7 +149,6 @@
                       run cp -r $ROOT/hadoop-mapreduce-project/target/hadoop-mapreduce-${project.version}/* .
                       run cp -r $ROOT/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist-${project.version}/* .
                       run cp $ROOT/hadoop-dist/target/hadoop-security-*.jar ./share/hadoop/common/lib/
-                      run cp_hdfs_raid
                       echo
                       echo "Hadoop dist layout available at: ${project.build.directory}/hadoop-${project.version}"
                       echo
