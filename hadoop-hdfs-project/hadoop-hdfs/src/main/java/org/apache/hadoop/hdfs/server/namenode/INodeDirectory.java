@@ -784,8 +784,9 @@ public class INodeDirectory extends INodeWithAdditionalFields
     for (INode child : getChildrenList(Snapshot.CURRENT_STATE_ID)) {
       child.destroyAndCollectBlocks(collectedBlocks, removedINodes);
     }
-    if (getAclFeature() != null) {
-      AclStorage.removeAclFeature(getAclFeature());
+    AclFeature aclFeature = getAclFeature();
+    if (aclFeature != null) {
+      AclStorage.removeAclFeature(aclFeature);
     }
     clear();
     removedINodes.add(this);
