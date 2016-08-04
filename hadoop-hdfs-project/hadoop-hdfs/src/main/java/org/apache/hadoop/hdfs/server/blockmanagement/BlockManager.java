@@ -2905,6 +2905,15 @@ public class BlockManager {
       node.updateStorage(srdb.getStorage());
     }
 
+    DatanodeStorageInfo storageInfo =
+        node.getStorageInfo(srdb.getStorage().getStorageID());
+    if (storageInfo.numBlocks() == 0
+        && storageInfo.getBlockReportCount() == 0) {
+      LOG.info("it's a new DN registration, ignore incremental block report "
+          + nodeID + " storageID:" + storageInfo.getStorageID());
+      return;
+    }
+
     for (ReceivedDeletedBlockInfo rdbi : srdb.getBlocks()) {
       switch (rdbi.getStatus()) {
       case DELETED_BLOCK:
@@ -2935,7 +2944,7 @@ public class BlockManager {
             + " is received from " + nodeID);
       }
     }
-    blockLog.debug("*BLOCK* NameNode.processIncrementalBlockReport: " + "from "
+    blockLog.info("*BLOCK* NameNode.processIncrementalBlockReport: " + "from "
         + nodeID + " receiving: " + receiving + ", " + " received: " + received
         + ", " + " deleted: " + deleted);
   }
