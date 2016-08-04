@@ -324,7 +324,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
         <jdk>1.8</jdk>
       </activation>
       <properties>
-        <hadoop-security.version>1.0.0-jdk8</hadoop-security.version>
+        <hadoop-security.version>1.0.1-jdk8</hadoop-security.version>
         <additionalparam>-Xdoclint:none</additionalparam>
       </properties>
     </profile>
