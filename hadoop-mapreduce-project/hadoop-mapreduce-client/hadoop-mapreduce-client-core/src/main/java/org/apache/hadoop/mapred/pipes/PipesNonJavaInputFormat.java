@@ -51,7 +51,7 @@ implements InputFormat<FloatWritable, NullWritable> {
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
     // Delegate the generation of input splits to the 'original' InputFormat
     return ReflectionUtils.newInstance(
-        job.getClass(Submitter.INPUT_FORMAT, 
+        job.<InputFormat>getClass(Submitter.INPUT_FORMAT, 
                      TextInputFormat.class, 
                      InputFormat.class), job).getSplits(job, numSplits);
   }

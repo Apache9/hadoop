@@ -95,8 +95,9 @@ public class Client implements AutoCloseable {
   private static final ThreadLocal<Integer> retryCount = new ThreadLocal<Integer>();
   private static final ThreadLocal<Object> EXTERNAL_CALL_HANDLER
       = new ThreadLocal<>();
-  private static final ThreadLocal<AsyncGet<? extends Writable, IOException>>
+  private static final ThreadLocal<CompletableFuture<? extends Writable>>
       ASYNC_RPC_RESPONSE = new ThreadLocal<>();
+
   private static final ThreadLocal<Boolean> asynchronousMode =
       new ThreadLocal<Boolean>() {
         @Override
@@ -107,9 +108,8 @@ public class Client implements AutoCloseable {
 
   @SuppressWarnings("unchecked")
   @Unstable
-  public static <T extends Writable> AsyncGet<T, IOException>
-      getAsyncRpcResponse() {
-    return (AsyncGet<T, IOException>) ASYNC_RPC_RESPONSE.get();
+  public static <T extends Writable> CompletableFuture<T> getAsyncRpcResponse() {
+    return (CompletableFuture<T>) ASYNC_RPC_RESPONSE.get();
   }
 
   /** Set call id and retry count for the next call. */
@@ -323,7 +323,11 @@ public class Client implements AutoCloseable {
   }
 
   Call createCall(RPC.RpcKind rpcKind, Writable rpcRequest) {
-    return new Call(rpcKind, rpcRequest);
+    Call call = new Call(rpcKind, rpcRequest);
+    if (isAsynchronousMode()) {
+      call.future = new CompletableFuture<>();
+    }
+    return call;
   }
 
   /** 
@@ -338,6 +342,7 @@ public class Client implements AutoCloseable {
     final RPC.RpcKind rpcKind;      // Rpc EngineKind
     boolean done;               // true when call is done
     private final Object externalHandler;
+    private CompletableFuture<Void> future;
 
     private Call(RPC.RpcKind rpcKind, Writable param) {
       this.rpcKind = rpcKind;
@@ -376,6 +381,9 @@ public class Client implements AutoCloseable {
         synchronized (externalHandler) {
           externalHandler.notify();
         }
+      }
+      if (this.future != null) {
+        this.future.complete(null);
       }
     }
 
@@ -1387,55 +1395,22 @@ public class Client implements AutoCloseable {
     final Connection connection = getConnection(remoteId, call, serviceClass,
         fallbackToSimpleAuth);
 
+    checkAsyncCall();
     try {
-      checkAsyncCall();
-      try {
-        connection.sendRpcRequest(call);                 // send the rpc request
-      } catch (RejectedExecutionException e) {
-        throw new IOException("connection has been closed", e);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        LOG.warn("interrupted waiting to send rpc request to server", e);
-        throw new IOException(e);
-      }
-    } catch(Exception e) {
-      if (isAsynchronousMode()) {
-        releaseAsyncCall();
-      }
-      throw e;
+      connection.sendRpcRequest(call); // send the rpc request
+    } catch (RejectedExecutionException e) {
+      throw new IOException("connection has been closed", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      LOG.warn("interrupted waiting to send rpc request to server", e);
+      throw new IOException(e);
     }
 
     if (isAsynchronousMode()) {
-      final AsyncGet<Writable, IOException> asyncGet
-          = new AsyncGet<Writable, IOException>() {
-        @Override
-        public Writable get(long timeout, TimeUnit unit)
-            throws IOException, TimeoutException{
-          boolean done = true;
-          try {
-            final Writable w = getRpcResponse(call, connection, timeout, unit);
-            if (w == null) {
-              done = false;
-              throw new TimeoutException(call + " timed out "
-                  + timeout + " " + unit);
-            }
-            return w;
-          } finally {
-            if (done) {
-              releaseAsyncCall();
-            }
-          }
-        }
-
-        @Override
-        public boolean isDone() {
-          synchronized (call) {
-            return call.done;
-          }
-        }
-      };
-
-      ASYNC_RPC_RESPONSE.set(asyncGet);
+      CompletableFuture<Writable> future = new CompletableFuture<>();
+      call.future.thenRun(this::releaseAsyncCall)
+          .thenRun(() -> completeCall(future, call, connection));
+      ASYNC_RPC_RESPONSE.set(future);
       return null;
     } else {
       return getRpcResponse(call, connection, -1, null);
@@ -1474,6 +1449,25 @@ public class Client implements AutoCloseable {
     return asyncCallCounter.get();
   }
 
+  private IOException getError(IOException e, Connection conn) {
+    if (e instanceof RemoteException) {
+      e.fillInStackTrace();
+      return e;
+    } else { // local exception
+      InetSocketAddress address = conn.getRemoteAddress();
+      return NetUtils.wrapException(address.getHostName(), address.getPort(),
+        NetUtils.getHostname(), 0, e);
+    }
+  }
+
+  private void completeCall(CompletableFuture<Writable> future, Call call, Connection conn) {
+    if (call.error != null) {
+      future.completeExceptionally(getError(call.error, conn));
+    } else {
+      future.complete(call.getRpcResponse());
+    }
+  }
+
   /** @return the rpc response or, in case of timeout, null. */
   private Writable getRpcResponse(final Call call, final Connection connection,
       final long timeout, final TimeUnit unit) throws IOException {
@@ -1491,17 +1485,7 @@ public class Client implements AutoCloseable {
       }
 
       if (call.error != null) {
-        if (call.error instanceof RemoteException) {
-          call.error.fillInStackTrace();
-          throw call.error;
-        } else { // local exception
-          InetSocketAddress address = connection.getRemoteAddress();
-          throw NetUtils.wrapException(address.getHostName(),
-                  address.getPort(),
-                  NetUtils.getHostname(),
-                  0,
-                  call.error);
-        }
+        throw getError(call.error, connection);
       } else {
         return call.getRpcResponse();
       }

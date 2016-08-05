@@ -19,8 +19,28 @@
 package org.apache.hadoop.ipc;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.*;
+import com.google.protobuf.BlockingService;
+import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.Descriptors.MethodDescriptor;
+import com.google.protobuf.GeneratedMessage;
+import com.google.protobuf.Message;
+import com.google.protobuf.ServiceException;
+import com.google.protobuf.TextFormat;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.net.InetSocketAddress;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.net.SocketFactory;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -32,7 +52,6 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.ipc.Client.ConnectionId;
 import org.apache.hadoop.ipc.RPC.RpcInvoker;
-import org.apache.hadoop.ipc.RpcWritable;
 import org.apache.hadoop.ipc.protobuf.ProtobufRpcEngineProtos.RequestHeaderProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcRequestHeaderProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto;
@@ -41,22 +60,8 @@ import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.Time;
-import org.apache.hadoop.util.concurrent.AsyncGet;
 import org.apache.htrace.core.TraceScope;
 import org.apache.htrace.core.Tracer;
-
-import javax.net.SocketFactory;
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.net.InetSocketAddress;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * RPC Engine for for protobuf based RPCs.
@@ -64,7 +69,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @InterfaceStability.Evolving
 public class ProtobufRpcEngine implements RpcEngine {
   public static final Log LOG = LogFactory.getLog(ProtobufRpcEngine.class);
-  private static final ThreadLocal<AsyncGet<Message, Exception>>
+  private static final ThreadLocal<CompletableFuture<Message>>
       ASYNC_RETURN_MESSAGE = new ThreadLocal<>();
 
   static { // Register the rpcRequest deserializer for WritableRpcEngine 
@@ -76,7 +81,7 @@ public class ProtobufRpcEngine implements RpcEngine {
   private static final ClientCache CLIENTS = new ClientCache();
 
   @Unstable
-  public static AsyncGet<Message, Exception> getAsyncReturnMessage() {
+  public static CompletableFuture<Message> getAsyncReturnMessage() {
     return ASYNC_RETURN_MESSAGE.get();
   }
 
@@ -256,21 +261,20 @@ public class ProtobufRpcEngine implements RpcEngine {
       }
       
       if (Client.isAsynchronousMode()) {
-        final AsyncGet<RpcResponseWrapper, IOException> arr
-            = Client.getAsyncRpcResponse();
-        final AsyncGet<Message, Exception> asyncGet
-            = new AsyncGet<Message, Exception>() {
-          @Override
-          public Message get(long timeout, TimeUnit unit) throws Exception {
-            return getReturnMessage(method, arr.get(timeout, unit));
+        CompletableFuture<Message> future = new CompletableFuture<>();
+        Client.getAsyncRpcResponse().handle((r, e) -> {
+          if (e != null) {
+            future.completeExceptionally(e);
+          } else {
+            try {
+              future.complete(getReturnMessage(method, (RpcResponseWrapper) r));
+            } catch (ServiceException e1) {
+              future.completeExceptionally(e1);
+            }
           }
-
-          @Override
-          public boolean isDone() {
-            return arr.isDone();
-          }
-        };
-        ASYNC_RETURN_MESSAGE.set(asyncGet);
+          return null;
+        });
+        ASYNC_RETURN_MESSAGE.set(future);
         return null;
       } else {
         return getReturnMessage(method, val);
