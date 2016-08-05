@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.mapred;
 
+import java.io.EOFException;
 import java.io.IOException;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -63,13 +64,17 @@ public class SequenceFileAsBinaryInputFormat
         throws IOException {
       Path path = split.getPath();
       FileSystem fs = path.getFileSystem(conf);
-      this.in = new SequenceFile.Reader(fs, path, conf);
-      this.end = split.getStart() + split.getLength();
-      if (split.getStart() > in.getPosition())
-        in.sync(split.getStart());                  // sync to start
-      this.start = in.getPosition();
-      vbytes = in.createValueBytes();
-      done = start >= end;
+      try {
+        this.in = new SequenceFile.Reader(fs, path, conf);
+        this.end = split.getStart() + split.getLength();
+        if (split.getStart() > in.getPosition())
+          in.sync(split.getStart());                  // sync to start
+        this.start = in.getPosition();
+        vbytes = in.createValueBytes();
+        done = start >= end;
+      } catch (EOFException e) {
+        done = true;
+      }
     }
 
     public BytesWritable createKey() {
@@ -102,17 +107,23 @@ public class SequenceFileAsBinaryInputFormat
     public synchronized boolean next(BytesWritable key, BytesWritable val)
         throws IOException {
       if (done) return false;
-      long pos = in.getPosition();
-      boolean eof = -1 == in.nextRawKey(buffer);
-      if (!eof) {
-        key.set(buffer.getData(), 0, buffer.getLength());
-        buffer.reset();
-        in.nextRawValue(vbytes);
-        vbytes.writeUncompressedBytes(buffer);
-        val.set(buffer.getData(), 0, buffer.getLength());
-        buffer.reset();
+      try {
+        long pos = in.getPosition();
+        boolean eof = -1 == in.nextRawKey(buffer);
+        if (!eof) {
+          key.set(buffer.getData(), 0, buffer.getLength());
+          buffer.reset();
+          in.nextRawValue(vbytes);
+          vbytes.writeUncompressedBytes(buffer);
+          val.set(buffer.getData(), 0, buffer.getLength());
+          buffer.reset();
+        }
+        done = (eof || (pos >= end && in.syncSeen()));
+      } catch (EOFException e) {
+        done = true;
       }
-      return !(done = (eof || (pos >= end && in.syncSeen())));
+
+      return !done;
     }
 
     public long getPos() throws IOException {
@@ -120,7 +131,9 @@ public class SequenceFileAsBinaryInputFormat
     }
 
     public void close() throws IOException {
-      in.close();
+      if (in != null) {
+        in.close();
+      }
     }
 
     /**

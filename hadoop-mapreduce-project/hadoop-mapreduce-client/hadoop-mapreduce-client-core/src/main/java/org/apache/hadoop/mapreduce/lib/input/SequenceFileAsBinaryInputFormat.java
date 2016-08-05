@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.mapreduce.lib.input;
 
+import java.io.EOFException;
 import java.io.IOException;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -69,14 +70,18 @@ public class SequenceFileAsBinaryInputFormat
       Path path = ((FileSplit)split).getPath();
       Configuration conf = context.getConfiguration();
       FileSystem fs = path.getFileSystem(conf);
-      this.in = new SequenceFile.Reader(fs, path, conf);
-      this.end = ((FileSplit)split).getStart() + split.getLength();
-      if (((FileSplit)split).getStart() > in.getPosition()) {
-        in.sync(((FileSplit)split).getStart());    // sync to start
+      try {
+        this.in = new SequenceFile.Reader(fs, path, conf);
+        this.end = ((FileSplit) split).getStart() + split.getLength();
+        if (((FileSplit) split).getStart() > in.getPosition()) {
+          in.sync(((FileSplit) split).getStart());    // sync to start
+        }
+        this.start = in.getPosition();
+        vbytes = in.createValueBytes();
+        done = start >= end;
+      } catch (EOFException e) {
+        done = true;
       }
-      this.start = in.getPosition();
-      vbytes = in.createValueBytes();
-      done = start >= end;
     }
     
     @Override
@@ -115,27 +120,35 @@ public class SequenceFileAsBinaryInputFormat
       if (done) {
         return false;
       }
-      long pos = in.getPosition();
-      boolean eof = -1 == in.nextRawKey(buffer);
-      if (!eof) {
-        if (key == null) {
-          key = new BytesWritable();
+      try {
+        long pos = in.getPosition();
+        boolean eof = -1 == in.nextRawKey(buffer);
+        if (!eof) {
+          if (key == null) {
+            key = new BytesWritable();
+          }
+          if (value == null) {
+            value = new BytesWritable();
+          }
+          key.set(buffer.getData(), 0, buffer.getLength());
+          buffer.reset();
+          in.nextRawValue(vbytes);
+          vbytes.writeUncompressedBytes(buffer);
+          value.set(buffer.getData(), 0, buffer.getLength());
+          buffer.reset();
         }
-        if (value == null) {
-          value = new BytesWritable();
-        }
-        key.set(buffer.getData(), 0, buffer.getLength());
-        buffer.reset();
-        in.nextRawValue(vbytes);
-        vbytes.writeUncompressedBytes(buffer);
-        value.set(buffer.getData(), 0, buffer.getLength());
-        buffer.reset();
+        done = (eof || (pos >= end && in.syncSeen()));
+      } catch (EOFException e) {
+        done = true;
       }
-      return !(done = (eof || (pos >= end && in.syncSeen())));
+
+      return !done;
     }
 
     public void close() throws IOException {
-      in.close();
+      if (in != null) {
+        in.close();
+      }
     }
 
     /**
