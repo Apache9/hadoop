@@ -1156,7 +1156,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
         progress, buffersize, checksumOpt, null);
   }
 
-  private FsPermission applyUMask(FsPermission permission) {
+  FsPermission applyUMask(FsPermission permission) {
     if (permission == null) {
       permission = FsPermission.getFileDefault();
     }

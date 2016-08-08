@@ -17,15 +17,16 @@
  */
 package org.apache.hadoop.hdfs.protocolPB;
 
+import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.ServiceException;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
-
-import com.google.common.collect.Lists;
-
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -79,6 +80,7 @@ import org.apache.hadoop.hdfs.protocol.proto.AclProtos.RemoveDefaultAclRequestPr
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos.SetAclRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AbandonBlockRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AddBlockRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AddBlockResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AddCacheDirectiveRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AddCachePoolRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AllowSnapshotRequestProto;
@@ -87,6 +89,7 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.Append
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CachePoolEntryProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CheckAccessRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CompleteRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CompleteResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ConcatRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateResponseProto;
@@ -163,7 +166,7 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.Trunca
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UnsetStoragePolicyRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UpdateBlockForPipelineRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UpdatePipelineRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.*;
+import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos;
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.CreateEncryptionZoneRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.EncryptionZoneProto;
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.GetEZForPathRequestProto;
@@ -196,11 +199,6 @@ import org.apache.hadoop.security.proto.SecurityProtos.GetDelegationTokenRequest
 import org.apache.hadoop.security.proto.SecurityProtos.GetDelegationTokenResponseProto;
 import org.apache.hadoop.security.proto.SecurityProtos.RenewDelegationTokenRequestProto;
 import org.apache.hadoop.security.token.Token;
-
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Message;
-import com.google.protobuf.ServiceException;
-import org.apache.hadoop.util.concurrent.AsyncGet;
 
 /**
  * This class forwards NN's ClientProtocol calls as RPC calls to the NN server
@@ -280,6 +278,10 @@ public class ClientNamenodeProtocolTranslatorPB implements
     }
   }
 
+  private HdfsFileStatus convertCreateResp(CreateResponseProto proto) {
+    return proto.hasFs() ? PBHelperClient.convert(proto.getFs()) : null;
+  }
+
   @Override
   public HdfsFileStatus create(String src, FsPermission masked,
       String clientName, EnumSetWritable<CreateFlag> flag,
@@ -298,8 +300,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
         PBHelperClient.convert(supportedVersions));
     CreateRequestProto req = builder.build();
     try {
-      CreateResponseProto res = rpcProxy.create(null, req);
-      return res.hasFs() ? PBHelperClient.convert(res.getFs()) : null;
+      if (Client.isAsynchronousMode()) {
+        rpcProxy.create(null, req);
+        setAsyncReturnValue(ProtobufRpcEngine.getAsyncReturnMessage()
+            .thenApply(r -> convertCreateResp((CreateResponseProto) r)));
+        return null;
+      } else {
+        CreateResponseProto res = rpcProxy.create(null, req);
+        return convertCreateResp(res);
+      }
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }
@@ -372,24 +381,13 @@ public class ClientNamenodeProtocolTranslatorPB implements
       throw ProtobufHelper.getRemoteException(e);
     }
   }
-
+  
   private void setAsyncReturnValue() {
-    final AsyncGet<Message, Exception> asyncReturnMessage
-        = ProtobufRpcEngine.getAsyncReturnMessage();
-    final AsyncGet<Void, Exception> asyncGet
-        = new AsyncGet<Void, Exception>() {
-      @Override
-      public Void get(long timeout, TimeUnit unit) throws Exception {
-        asyncReturnMessage.get(timeout, unit);
-        return null;
-      }
+    setAsyncReturnValue(ProtobufRpcEngine.getAsyncReturnMessage());
+  }
 
-      @Override
-      public boolean isDone() {
-        return asyncReturnMessage.isDone();
-      }
-    };
-    AsyncCallHandler.setLowerLayerAsyncReturn(asyncGet);
+  private void setAsyncReturnValue(CompletableFuture<?> future) {
+    AsyncCallHandler.setLowerLayerAsyncReturn(future);
   }
 
   @Override
@@ -445,8 +443,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
           addBlockFlags));
     }
     try {
-      return PBHelperClient.convertLocatedBlockProto(
-          rpcProxy.addBlock(null, req.build()).getBlock());
+      if (Client.isAsynchronousMode()) {
+        rpcProxy.addBlock(null, req.build());
+        setAsyncReturnValue(ProtobufRpcEngine.getAsyncReturnMessage().thenApply(
+          r -> PBHelperClient.convertLocatedBlockProto(((AddBlockResponseProto) r).getBlock())));
+        return null;
+      } else {
+        return PBHelperClient
+            .convertLocatedBlockProto(rpcProxy.addBlock(null, req.build()).getBlock());
+      }
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }
@@ -486,7 +491,14 @@ public class ClientNamenodeProtocolTranslatorPB implements
     if (last != null)
       req.setLast(PBHelperClient.convert(last));
     try {
-      return rpcProxy.complete(null, req.build()).getResult();
+      if (Client.isAsynchronousMode()) {
+        rpcProxy.complete(null, req.build());
+        setAsyncReturnValue(ProtobufRpcEngine.getAsyncReturnMessage()
+            .thenApply(r -> ((CompleteResponseProto) r).getResult()));
+        return false;
+      } else {
+        return rpcProxy.complete(null, req.build()).getResult();
+      }
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }
@@ -1362,22 +1374,8 @@ public class ClientNamenodeProtocolTranslatorPB implements
     try {
       if (Client.isAsynchronousMode()) {
         rpcProxy.getAclStatus(null, req);
-        final AsyncGet<Message, Exception> asyncReturnMessage
-            = ProtobufRpcEngine.getAsyncReturnMessage();
-        final AsyncGet<AclStatus, Exception> asyncGet
-            = new AsyncGet<AclStatus, Exception>() {
-          @Override
-          public AclStatus get(long timeout, TimeUnit unit) throws Exception {
-            return PBHelperClient.convert((GetAclStatusResponseProto)
-                asyncReturnMessage.get(timeout, unit));
-          }
-
-          @Override
-          public boolean isDone() {
-            return asyncReturnMessage.isDone();
-          }
-        };
-        AsyncCallHandler.setLowerLayerAsyncReturn(asyncGet);
+        setAsyncReturnValue(ProtobufRpcEngine.getAsyncReturnMessage()
+            .thenApply(r -> PBHelperClient.convert((GetAclStatusResponseProto) r)));
         return null;
       } else {
         return PBHelperClient.convert(rpcProxy.getAclStatus(null, req));

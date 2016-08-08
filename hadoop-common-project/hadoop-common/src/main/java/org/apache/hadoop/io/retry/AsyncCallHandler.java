@@ -19,24 +19,22 @@ package org.apache.hadoop.io.retry;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+
+import java.lang.reflect.Method;
+import java.util.Iterator;
+import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.Time;
-import org.apache.hadoop.util.concurrent.AsyncGet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.InterruptedIOException;
-import java.lang.reflect.Method;
-import java.util.Iterator;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /** Handle async calls. */
 @InterfaceAudience.Private
@@ -44,36 +42,31 @@ public class AsyncCallHandler {
   public static final Logger LOG = LoggerFactory.getLogger(
       AsyncCallHandler.class);
 
-  private static final ThreadLocal<AsyncGet<?, Exception>>
+  private static final ThreadLocal<CompletableFuture<?>>
       LOWER_LAYER_ASYNC_RETURN = new ThreadLocal<>();
-  private static final ThreadLocal<AsyncGet<Object, Throwable>>
+  private static final ThreadLocal<CompletableFuture<?>>
       ASYNC_RETURN = new ThreadLocal<>();
 
   /** @return the async return value from {@link AsyncCallHandler}. */
   @InterfaceStability.Unstable
   @SuppressWarnings("unchecked")
-  public static <R, T extends  Throwable> AsyncGet<R, T> getAsyncReturn() {
-    final AsyncGet<R, T> asyncGet = (AsyncGet<R, T>)ASYNC_RETURN.get();
-    if (asyncGet != null) {
-      ASYNC_RETURN.set(null);
-      return asyncGet;
-    } else {
-      return (AsyncGet<R, T>) getLowerLayerAsyncReturn();
-    }
+  public static <R> CompletableFuture<R> getAsyncReturn() {
+    final CompletableFuture<R> ret = (CompletableFuture<R>) ASYNC_RETURN.get();
+    ASYNC_RETURN.set(null);
+    return ret;
   }
 
   /** For the lower rpc layers to set the async return value. */
   @InterfaceStability.Unstable
-  public static void setLowerLayerAsyncReturn(
-      AsyncGet<?, Exception> asyncReturn) {
+  public static void setLowerLayerAsyncReturn(CompletableFuture<?> asyncReturn) {
     LOWER_LAYER_ASYNC_RETURN.set(asyncReturn);
   }
 
-  private static AsyncGet<?, Exception> getLowerLayerAsyncReturn() {
-    final AsyncGet<?, Exception> asyncGet = LOWER_LAYER_ASYNC_RETURN.get();
-    Preconditions.checkNotNull(asyncGet);
+  private static CompletableFuture<?> getLowerLayerAsyncReturn() {
+    final CompletableFuture<?> ret = LOWER_LAYER_ASYNC_RETURN.get();
+    Preconditions.checkNotNull(ret);
     LOWER_LAYER_ASYNC_RETURN.set(null);
-    return asyncGet;
+    return ret;
   }
 
   /** A simple concurrent queue which keeping track the empty start time. */
@@ -193,40 +186,10 @@ public class AsyncCallHandler {
     }
   }
 
-  static class AsyncValue<V> {
-    private V value;
-
-    synchronized V waitAsyncValue(long timeout, TimeUnit unit)
-        throws InterruptedException, TimeoutException {
-      if (value != null) {
-        return value;
-      }
-      AsyncGet.Util.wait(this, timeout, unit);
-      if (value != null) {
-        return value;
-      }
-
-      throw new TimeoutException("waitCallReturn timed out "
-          + timeout + " " + unit);
-    }
-
-    synchronized void set(V v) {
-      Preconditions.checkNotNull(v);
-      Preconditions.checkState(value == null);
-      value = v;
-      notify();
-    }
-
-    synchronized boolean isDone() {
-      return value != null;
-    }
-  }
-
   static class AsyncCall extends RetryInvocationHandler.Call {
     private final AsyncCallHandler asyncCallHandler;
-
-    private final AsyncValue<CallReturn> asyncCallReturn = new AsyncValue<>();
-    private AsyncGet<?, Exception> lowerLayerAsyncGet;
+    
+    private CompletableFuture<?> lowerLayerAsyncReturn;
 
     AsyncCall(Method method, Object[] args, boolean isRpc, int callId,
               RetryInvocationHandler<?> retryInvocationHandler,
@@ -243,7 +206,6 @@ public class AsyncCallHandler {
       switch (r.getState()) {
         case RETURNED:
         case EXCEPTION:
-          asyncCallReturn.set(r); // the async call is done
           return true;
         case RETRY:
           invokeOnce();
@@ -254,7 +216,7 @@ public class AsyncCallHandler {
           // nothing to do
           break;
         default:
-          Preconditions.checkState(false);
+          throw new IllegalStateException("Unknown state: " + r.getState());
       }
       return false;
     }
@@ -273,18 +235,18 @@ public class AsyncCallHandler {
     @Override
     CallReturn invoke() throws Throwable {
       LOG.debug("{}.invoke {}", getClass().getSimpleName(), this);
-      if (lowerLayerAsyncGet != null) {
+      if (lowerLayerAsyncReturn != null) {
         // async call was submitted early, check the lower level async call
-        final boolean isDone = lowerLayerAsyncGet.isDone();
+        final boolean isDone = lowerLayerAsyncReturn.isDone();
         LOG.trace("#{} invoke: lowerLayerAsyncGet.isDone()? {}",
             getCallId(), isDone);
         if (!isDone) {
           return CallReturn.ASYNC_CALL_IN_PROGRESS;
         }
         try {
-          return new CallReturn(lowerLayerAsyncGet.get(0, TimeUnit.SECONDS));
+          return new CallReturn(lowerLayerAsyncReturn.getNow(null));
         } finally {
-          lowerLayerAsyncGet = null;
+          lowerLayerAsyncReturn = null;
         }
       }
 
@@ -296,12 +258,12 @@ public class AsyncCallHandler {
         final Object r = invokeMethod();
         // invokeMethod should set LOWER_LAYER_ASYNC_RETURN and return null.
         Preconditions.checkState(r == null);
-        lowerLayerAsyncGet = getLowerLayerAsyncReturn();
+        lowerLayerAsyncReturn = getLowerLayerAsyncReturn();
 
         if (getCounters().isZeros()) {
           // first async attempt, initialize
           LOG.trace("#{} invoke: initAsyncCall", getCallId());
-          asyncCallHandler.initAsyncCall(this, asyncCallReturn);
+          asyncCallHandler.initAsyncCall(this, lowerLayerAsyncReturn);
         }
         return CallReturn.ASYNC_INVOKED;
       } finally {
@@ -325,25 +287,10 @@ public class AsyncCallHandler {
   }
 
   private void initAsyncCall(final AsyncCall asyncCall,
-                             final AsyncValue<CallReturn> asyncCallReturn) {
+      CompletableFuture<?> lowerLayerAsyncReturn) {
     asyncCalls.addCall(asyncCall);
-
-    final AsyncGet<Object, Throwable> asyncGet
-        = new AsyncGet<Object, Throwable>() {
-      @Override
-      public Object get(long timeout, TimeUnit unit) throws Throwable {
-        final CallReturn c = asyncCallReturn.waitAsyncValue(timeout, unit);
-        final Object r = c.getReturnValue();
-        hasSuccessfulCall = true;
-        return r;
-      }
-
-      @Override
-      public boolean isDone() {
-        return asyncCallReturn.isDone();
-      }
-    };
-    ASYNC_RETURN.set(asyncGet);
+    lowerLayerAsyncReturn.thenRun(() -> hasSuccessfulCall = true);
+    ASYNC_RETURN.set(lowerLayerAsyncReturn);
   }
 
   @VisibleForTesting
