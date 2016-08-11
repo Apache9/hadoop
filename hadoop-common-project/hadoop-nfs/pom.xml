@@ -20,12 +20,12 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>2.4.0-mdh2.3.9</version>
+    <version>2.4.0-mdh2.3.9-hotfix-ignore-increport</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-nfs</artifactId>
-  <version>2.4.0-mdh2.3.9</version>
+  <version>2.4.0-mdh2.3.9-hotfix-ignore-increport</version>
   <packaging>jar</packaging>
 
   <name>Apache Hadoop NFS</name>
