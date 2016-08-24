@@ -99,14 +99,6 @@ public interface YarnScheduler extends EventHandler<SchedulerEvent> {
   public Resource getMaximumResourceCapability();
 
   /**
-   * Get am maximum allocatable {@link Resource}.
-   * @return am maximum allocatable resource
-   */
-  @Public
-  @Stable
-  public Resource getAMMaximumResourceCapability();
-
-  /**
    * Get the number of nodes available in the cluster.
    * @return the number of available nodes.
    */

@@ -375,7 +375,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
 
       try {
         SchedulerUtils.validateResourceRequest(amReq,
-            scheduler.getAMMaximumResourceCapability(),
+            scheduler.getMaximumResourceCapability(),
             submissionContext.getQueue(), scheduler);
       } catch (InvalidResourceRequestException e) {
         LOG.warn("RM app submission failed in validating AM resource request"

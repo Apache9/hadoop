@@ -167,16 +167,6 @@ public class FairSchedulerConfiguration extends Configuration {
     return Resources.createResource(mem, cpu);
   }
 
-  public Resource getAMMaximumAllocation() {
-    int mem = getInt(
-        YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_MB,
-        YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_MB);
-    int cpu = getInt(
-        YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_VCORES,
-        YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES);
-    return Resources.createResource(mem, cpu);
-  }
-
   public Resource getIncrementAllocation() {
     int incrementMemory = getInt(
       RM_SCHEDULER_INCREMENT_ALLOCATION_MB,

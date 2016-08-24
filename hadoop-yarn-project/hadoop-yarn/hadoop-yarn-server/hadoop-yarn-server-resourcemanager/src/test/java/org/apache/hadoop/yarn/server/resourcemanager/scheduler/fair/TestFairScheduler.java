@@ -180,38 +180,6 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     }
   }
 
-  @Test (timeout = 30000)
-  public void testAMMaximumResourceValidation() throws Exception {
-    scheduler = new FairScheduler();
-    Configuration conf = new YarnConfiguration();
-    conf.setInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB, 2048);
-    conf.setInt(YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_MB, 1024);
-    try {
-      scheduler.serviceInit(conf);
-      fail("Exception is expected because the min memory allocation is" +
-          " larger than the am max memory allocation.");
-    } catch (YarnRuntimeException e) {
-      // Exception is expected.
-      assertTrue("The thrown exception is not the expected one.",
-          e.getMessage().startsWith(
-              "Invalid resource scheduler memory"));
-    }
-
-    conf = new YarnConfiguration();
-    conf.setInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES, 2);
-    conf.setInt(YarnConfiguration.RM_SCHEDULER_AM_MAXIMUM_ALLOCATION_VCORES, 1);
-    try {
-      scheduler.serviceInit(conf);
-      fail("Exception is expected because the min vcores allocation is" +
-          " larger than the am max vcores allocation.");
-    } catch (YarnRuntimeException e) {
-      // Exception is expected.
-      assertTrue("The thrown exception is not the expected one.",
-          e.getMessage().startsWith(
-              "Invalid resource scheduler vcores"));
-    }
-  }
-
   // TESTS
 
   @Test(timeout=2000)
