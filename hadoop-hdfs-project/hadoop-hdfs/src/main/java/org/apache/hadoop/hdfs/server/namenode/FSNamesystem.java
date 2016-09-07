@@ -59,6 +59,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EDIT_LOG_AUTOROL
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EDIT_LOG_AUTOROLL_MULTIPLIER_THRESHOLD;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EDIT_LOG_AUTOROLL_MULTIPLIER_THRESHOLD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LAZY_PERSIST_FILE_SCRUB_INTERVAL_SEC;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LAZY_PERSIST_FILE_SCRUB_INTERVAL_SEC_DEFAULT;
@@ -563,6 +565,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   
   private final RetryCache retryCache;
 
+  private volatile boolean enableRetryCache;
+
   private final NNConf nnConf;
 
   private KeyProviderCryptoExtension provider = null;
@@ -628,6 +632,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       }
     }
   }
+
 
   /**
    * Set the last allocated inode id when fsimage or editlog is loaded. 
@@ -931,6 +936,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       this.logLockMinInterval =
           conf.getLong(DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC,
               DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC_DEFAULT);
+      this.enableRetryCache =
+          conf.getBoolean(DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_KEY,
+              DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_DEFAULT);
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -961,7 +969,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
   /** Whether or not retry cache is enabled */
   boolean hasRetryCache() {
-    return retryCache != null;
+    return (retryCache != null) && enableRetryCache;
   }
   
   void addCacheEntryWithPayload(byte[] clientId, int callId, Object payload) {
@@ -5768,6 +5776,11 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     private boolean shouldIncrementallyTrackBlocks = false;
     /** counter for tracking startup progress of reported blocks */
     private Counter awaitingReportedBlocksCounter;
+    /**
+     * Grace period for retry cache, only used when following conditions are
+     * met: retry cache is enabled; retry cache is disabled during startup
+     */
+    private long retryCacheGracePeriod;
     
     /**
      * Creates SafeModeInfo when the name node enters
@@ -5798,6 +5811,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
                       (float) threshold);
       this.blockTotal = 0; 
       this.blockSafe = 0;
+      this.retryCacheGracePeriod =
+          conf.getLong(DFS_NAMENODE_RETRY_CACHE_EXPIRYTIME_MILLIS_KEY,
+              DFS_NAMENODE_RETRY_CACHE_EXPIRYTIME_MILLIS_DEFAULT);
     }
 
     /**
@@ -5909,6 +5925,20 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         return false;
       }
 
+      if (isInStartupSafeMode()) {
+        if (retryCache != null && enableRetryCache == false) {
+          extension =
+              (extension > retryCacheGracePeriod) ? extension
+                  : (int) retryCacheGracePeriod;
+        }
+      }
+      
+      if (reached > 0) {
+        // We have get to the block threshold, enable retry cache even if 
+        // it is disabled during startup.
+        enableRetryCache = true;
+      }
+
       if (now() - reached < extension) {
         reportStatus("STATE* Safe mode ON, in safe mode extension.", false);
         return false;
@@ -5957,6 +5987,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       // the threshold is reached or was reached before
       if (!isOn() ||                           // safe mode is off
           extension <= 0 || threshold <= 0) {  // don't need to wait
+        enableRetryCache = true;
         this.leave(); // leave safe mode
         return;
       }
