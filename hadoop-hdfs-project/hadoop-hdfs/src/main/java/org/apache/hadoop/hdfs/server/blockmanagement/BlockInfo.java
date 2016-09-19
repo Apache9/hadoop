@@ -280,6 +280,10 @@ public class BlockInfo extends Block implements LightWeightGSet.LinkedElement {
     return -1;
   }
 
+  public boolean isUnderRecovery() {
+    return getBlockUCState().equals(BlockUCState.UNDER_RECOVERY);
+  }
+
   /**
    * Insert this block into the head of the list of blocks 
    * related to the specified DatanodeStorageInfo.

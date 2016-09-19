@@ -595,6 +595,10 @@ public class BlockManager {
       return false; // no blocks in file yet
     if(lastBlock.isComplete())
       return false; // already completed (e.g. by syncBlock)
+    if(lastBlock.isUnderRecovery()) {
+      throw new IOException("Commit or complete block " + commitBlock +
+          ", whereas it is under recovery.");
+    }
     
     final boolean b = commitBlock((BlockInfoUnderConstruction)lastBlock, commitBlock);
     if(countNodes(lastBlock).liveReplicas() >= minReplication)
