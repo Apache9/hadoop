@@ -35,6 +35,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
@@ -105,7 +106,7 @@ public class TestStandbyCheckpoints {
 
         cluster = new MiniDFSCluster.Builder(conf)
             .nnTopology(topology)
-            .numDataNodes(0)
+            .numDataNodes(1)
             .build();
         cluster.waitActive();
 
@@ -318,6 +319,13 @@ public class TestStandbyCheckpoints {
     } catch (StandbyException se) {
       GenericTestUtils.assertExceptionContains("is not supported", se);
     }
+
+    // Make sure new incremental block reports are processed during
+    // checkpointing on the SBN.
+    assertEquals(0, cluster.getNamesystem(1).getPendingDataNodeMessageCount());
+    doCreate();
+    Thread.sleep(1000);
+    assertTrue(cluster.getNamesystem(1).getPendingDataNodeMessageCount() > 0);
     
     // Make sure that the checkpoint is still going on, implying that the client
     // RPC to the SBN happened during the checkpoint.
@@ -369,7 +377,7 @@ public class TestStandbyCheckpoints {
     
     assertFalse(nn1.getNamesystem().getFsLockForTests().hasQueuedThreads());
     assertFalse(nn1.getNamesystem().getFsLockForTests().isWriteLocked());
-    assertTrue(nn1.getNamesystem().getLongReadLockForTests().hasQueuedThreads());
+    assertTrue(nn1.getNamesystem().getCpLockForTests().hasQueuedThreads());
     
     // Get /jmx of the standby NN web UI, which will cause the FSNS read lock to
     // be taken.
@@ -396,6 +404,15 @@ public class TestStandbyCheckpoints {
       fs.mkdirs(p);
     }
   }
+
+  private void doCreate() throws IOException {
+    Path p = new Path("/testFile");
+    fs.delete(p, false);
+    FSDataOutputStream out = fs.create(p, (short)1);
+    out.write(42);
+    out.close();
+  }
+  
   
   /**
    * A codec which just slows down the saving of the image significantly
