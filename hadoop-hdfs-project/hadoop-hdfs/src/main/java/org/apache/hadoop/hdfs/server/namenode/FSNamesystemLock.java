@@ -24,6 +24,10 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.commons.logging.Log;
+import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.Time;
+
 import com.google.common.annotations.VisibleForTesting;
 
 /**
@@ -52,6 +56,10 @@ class FSNamesystemLock implements ReadWriteLock {
   @VisibleForTesting
   protected final ReentrantLock longReadLock = new ReentrantLock(true);
   
+  private long longReadLockStart;
+  private volatile long readLockStart;
+  private long writeLockStart;
+
   FSNamesystemLock(boolean fair) {
     this.coarseLock = new ReentrantReadWriteLock(fair);
   }
@@ -80,5 +88,76 @@ class FSNamesystemLock implements ReadWriteLock {
   
   public boolean isWriteLockedByCurrentThread() {
     return coarseLock.isWriteLockedByCurrentThread();
+  }
+
+  public void markLongReadLockStartTime() {
+    if (longReadLock.getHoldCount() == 1) {
+      longReadLockStart = Time.now();
+    }
+  }
+  
+  public void checkAndLogLongReadLockDuration(long logThreshold, Log log) {
+    if (longReadLock.getHoldCount() == 1) {
+      long duration = Time.now() - longReadLockStart;
+      if (duration > logThreshold) {
+        StringBuilder msgBuilder = new StringBuilder();
+        msgBuilder.append("Long read lock is held at ")
+                  .append(longReadLockStart)
+                  .append(". And released after ")
+                  .append(duration)
+                  .append(" milliseconds.")
+                  .append("Call stack is:\n")
+                  .append(StringUtils.getStackTrace(Thread.currentThread()));
+        log.info(msgBuilder.toString());
+      }
+    }
+  }
+  
+  /*
+   * Without a lock, it is hard to get exactly beginning and ending time of the
+   * read lock. Here we use volatile variable to get a value just for reference,
+   * it might not be correct.
+   */
+  public void markReadLockStartTime() {
+    if (getReadHoldCount() == 1) {
+      readLockStart = Time.now();
+    }
+  }
+
+  public void checkAndLogReadLockDuration(long logThreshold, Log log) {
+    if (getReadHoldCount() == 1) {
+      long duration = Time.now() - readLockStart;
+      if (duration > logThreshold) {
+        StringBuilder msgBuilder = new StringBuilder();
+        msgBuilder.append("Read lock is held at ")
+                  .append(readLockStart)
+                  .append(". And released after ")
+                  .append(duration)
+                  .append(" milliseconds.");
+        log.info(msgBuilder.toString());
+      }
+    }
+  }
+
+  public void markWriteLockStartTime() {
+    if (getWriteHoldCount() == 1) {
+      writeLockStart = Time.now();
+    }
+  }
+
+  public void checkAndLogWriteLockDuration(long logThreshold, Log log) {
+    if (getWriteHoldCount() == 1) {
+      long duration = Time.now() - writeLockStart;
+      if (duration > logThreshold) {
+        StringBuilder msgBuilder = new StringBuilder();
+        msgBuilder.append("Write lock is held at ")
+                  .append(writeLockStart)
+                  .append(". And released after ")
+                  .append(duration)
+                  .append(" milliseconds.").append("Call stack is:\n")
+                  .append(StringUtils.getStackTrace(Thread.currentThread()));
+        log.info(msgBuilder.toString());
+      }
+    }
   }
 }

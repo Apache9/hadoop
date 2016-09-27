@@ -704,4 +704,22 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_DATANODE_ENABLE_RAID_SERVICE =
       "dfs.datanode.enable.raid.service";
   public static final boolean DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT = false;
+
+
+  public static final String DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_MS =
+      "dfs.namenode.log.lock.duration.threshold";
+  public static final long DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_DEFAULT =
+      500;
+
+  public static final String DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC =
+      "dfs.namenode.log.lock.mininterval";
+  public static final long DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC_DEFAULT = 1;
+
+  public static final String DFS_CLIENT_RECOVERLEASE_FOR_LAST_BLOCK_LENGTH =
+      "dfs.client.recoverlease.for.last-block-length";
+  public static final boolean DFS_CLIENT_RECOVERLEASE_FOR_LAST_BLOCK_LENGTH_DEFAULT =
+      true;
+
+  public static final String DFS_CLIENT_READBLOCKLENGTH_EXCEPTION =
+      "dfs.client.read-block-length.exception";
 }

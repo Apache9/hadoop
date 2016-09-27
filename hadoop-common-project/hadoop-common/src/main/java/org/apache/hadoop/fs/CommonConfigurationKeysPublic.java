@@ -296,5 +296,15 @@ public class CommonConfigurationKeysPublic {
   /** Class to override Sasl Properties for a connection */
   public static final String  HADOOP_SECURITY_SASL_PROPS_RESOLVER_CLASS =
     "hadoop.security.saslproperties.resolver.class";
+
+  public static final String HADOOP_RPC_QUEUE_TIME_LOG_THRESHOLD_MS =
+      "hadoop.rpc.queuetime.log.threshold";
+  public static final long HADOOP_RPC_QUEUE_TIME_LOG_THRESHOLD_MS_DEFAULT =
+      2000;
+
+  public static final String HADOOP_RPC_PROCESSING_TIME_LOG_THRESHOLD_MS =
+      "hadoop.rpc.processingtime.log.threshold";
+  public static final long HADOOP_RPC_PROCESSING_TIME_LOG_THRESHOLD_MS_DEFAULT =
+      2000;
 }
 

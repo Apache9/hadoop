@@ -21,14 +21,12 @@ package org.apache.hadoop.ipc;
 import java.lang.reflect.Proxy;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
-
 import java.net.InetSocketAddress;
 import java.io.*;
 
 import javax.net.SocketFactory;
 
 import org.apache.commons.logging.*;
-
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.ipc.Client.ConnectionId;
@@ -491,6 +489,17 @@ public class WritableRpcEngine implements RpcEngine {
           server.rpcMetrics.addRpcProcessingTime(processingTime);
           server.rpcDetailedMetrics.addProcessingTime(call.getMethodName(),
                                                processingTime);
+          if (qTime >= queueTimeThreshold
+              || processingTime >= processingTimeThreshold) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Slow rpc ").append(call.getMethodName())
+                .append(" : received at ").append(receivedTime)
+                .append(", queued time is ").append(qTime)
+                .append("ms, processing time is ").append(processingTime)
+                .append("ms.");
+            LOG.info(sb.toString());
+          }
+
           if (server.verbose) log("Return: "+value);
 
           return new ObjectWritable(method.getReturnType(), value);

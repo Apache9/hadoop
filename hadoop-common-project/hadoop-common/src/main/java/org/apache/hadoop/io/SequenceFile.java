@@ -1260,20 +1260,35 @@ public class SequenceFile {
     /** Returns the configuration of this file. */
     Configuration getConf() { return conf; }
     
+    /** Emulate failure for testing */
+    public boolean shouldFailInClose() {
+      return conf.getBoolean("hadoop.sequencefile.close.emulate.exception",
+          false);
+    }
+
     /** Close the file. */
     @Override
     public synchronized void close() throws IOException {
-      keySerializer.close();
-      uncompressedValSerializer.close();
-      if (compressedValSerializer != null) {
-        compressedValSerializer.close();
-      }
+      Exception lastExp = null;
+      try {
+        if (shouldFailInClose()) {
+          throw new IOException("Emulate close failure");
+        }
+        keySerializer.close();
+        uncompressedValSerializer.close();
+        if (compressedValSerializer != null) {
+          compressedValSerializer.close();
+        }
 
-      CodecPool.returnCompressor(compressor);
-      compressor = null;
+        CodecPool.returnCompressor(compressor);
+        compressor = null;
+      } catch (Exception e) {
+        // Ignore the exception and go ahead to close the underlying output
+        // stream in case un-closed files are left
+        lastExp = e;
+      }
       
       if (out != null) {
-        
         // Close the underlying stream iff we own it...
         if (ownOutputStream) {
           out.close();
@@ -1281,6 +1296,9 @@ public class SequenceFile {
           out.flush();
         }
         out = null;
+      }
+      if (lastExp != null) {
+        throw new IOException("Exception when closing sequence file", lastExp);
       }
     }
 
@@ -1499,10 +1517,20 @@ public class SequenceFile {
     /** Close the file. */
     @Override
     public synchronized void close() throws IOException {
-      if (out != null) {
-        sync();
+      Exception lastExp = null;
+      try {
+        if (out != null) {
+          sync();
+        }
+      } catch (Exception e) {
+        // Ignore the exception and go ahead to close the underlying output
+        // stream in case un-closed files are left
+        lastExp = e;
       }
       super.close();
+      if (lastExp != null) {
+        throw new IOException("Exception when closing sequence file", lastExp);
+      }
     }
 
     /** Append a key/value pair. */

@@ -376,6 +376,11 @@ public abstract class Server {
   private Responder responder = null;
   private Handler[] handlers = null;
 
+  // if rpc queue time or processing time is larger than following threshold,
+  // logging the time for debugging
+  protected static long queueTimeThreshold;
+  protected static long processingTimeThreshold;
+
   /**
    * A convenience method to bind to a given address and report 
    * better exceptions if the address is not a valid host.
@@ -2172,6 +2177,15 @@ public abstract class Server {
     this.tcpNoDelay = conf.getBoolean(
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_KEY,
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_DEFAULT);
+
+    this.queueTimeThreshold =
+        conf.getLong(
+            CommonConfigurationKeysPublic.HADOOP_RPC_QUEUE_TIME_LOG_THRESHOLD_MS,
+            CommonConfigurationKeysPublic.HADOOP_RPC_QUEUE_TIME_LOG_THRESHOLD_MS_DEFAULT);
+    this.processingTimeThreshold =
+        conf.getLong(
+            CommonConfigurationKeysPublic.HADOOP_RPC_PROCESSING_TIME_LOG_THRESHOLD_MS,
+            CommonConfigurationKeysPublic.HADOOP_RPC_PROCESSING_TIME_LOG_THRESHOLD_MS_DEFAULT);
 
     // Create the responder here
     responder = new Responder();
