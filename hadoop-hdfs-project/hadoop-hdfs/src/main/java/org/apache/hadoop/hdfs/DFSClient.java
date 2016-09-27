@@ -309,6 +309,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     final int getFileBlockStorageLocationsTimeoutMs;
     final int retryTimesForGetLastBlockLength;
     final int retryIntervalForGetLastBlockLength;
+    final boolean recoverLeaseForLastBlockLength;
     final long datanodeRestartTimeout;
     final long dfsclientSlowIoWarningThresholdMs;
 
@@ -426,6 +427,10 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       retryIntervalForGetLastBlockLength = conf.getInt(
         DFSConfigKeys.DFS_CLIENT_RETRY_INTERVAL_GET_LAST_BLOCK_LENGTH,
         DFSConfigKeys.DFS_CLIENT_RETRY_INTERVAL_GET_LAST_BLOCK_LENGTH_DEFAULT);
+      recoverLeaseForLastBlockLength =
+          conf.getBoolean(
+              DFSConfigKeys.DFS_CLIENT_RECOVERLEASE_FOR_LAST_BLOCK_LENGTH,
+              DFSConfigKeys.DFS_CLIENT_RECOVERLEASE_FOR_LAST_BLOCK_LENGTH_DEFAULT);
 
       useLegacyBlockReader = conf.getBoolean(
           DFSConfigKeys.DFS_CLIENT_USE_LEGACY_BLOCKREADER,

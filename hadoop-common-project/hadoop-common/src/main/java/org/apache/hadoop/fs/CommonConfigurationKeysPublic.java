@@ -364,5 +364,15 @@ public class CommonConfigurationKeysPublic {
     "hadoop.security.random.device.file.path";
   public static final String HADOOP_SECURITY_SECURE_RANDOM_DEVICE_FILE_PATH_DEFAULT = 
     "/dev/urandom";
+
+  public static final String HADOOP_RPC_QUEUE_TIME_LOG_THRESHOLD_MS =
+      "hadoop.rpc.queuetime.log.threshold";
+  public static final long HADOOP_RPC_QUEUE_TIME_LOG_THRESHOLD_MS_DEFAULT =
+      2000;
+
+  public static final String HADOOP_RPC_PROCESSING_TIME_LOG_THRESHOLD_MS =
+      "hadoop.rpc.processingtime.log.threshold";
+  public static final long HADOOP_RPC_PROCESSING_TIME_LOG_THRESHOLD_MS_DEFAULT =
+      2000;
 }
 

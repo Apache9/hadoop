@@ -640,6 +640,15 @@ public class ProtobufRpcEngine implements RpcEngine {
           server.rpcMetrics.addRpcProcessingTime(processingTime);
           server.rpcDetailedMetrics.addProcessingTime(detailedMetricsName,
               processingTime);
+          if (qTime >= queueTimeThreshold
+              || processingTime >= processingTimeThreshold) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Slow rpc ").append(methodName).append(" : received at ")
+                .append(receiveTime).append(", queued time is ").append(qTime)
+                .append("ms, processing time is ").append(processingTime)
+                .append("ms.");
+            LOG.info(sb.toString());
+          }
         }
         return new RpcResponseWrapper(result);
       }

@@ -62,6 +62,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CAC
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LAZY_PERSIST_FILE_SCRUB_INTERVAL_SEC;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LAZY_PERSIST_FILE_SCRUB_INTERVAL_SEC_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_MS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_OBJECTS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_OBJECTS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY;
@@ -562,6 +566,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
   private final FSImage fsImage;
 
+  private long logLockDurationThreshold;
+  private long logLockMinInterval;
+
   /**
    * Notify that loading of this FSDirectory is complete, and
    * it is imageLoaded for use
@@ -907,6 +914,12 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         auditLoggers.get(0) instanceof DefaultAuditLogger;
       this.retryCache = ignoreRetryCache ? null : initRetryCache(conf);
       this.nnConf = new NNConf(conf);
+      this.logLockDurationThreshold =
+          conf.getLong(DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_MS,
+              DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_DEFAULT);
+      this.logLockMinInterval =
+          conf.getLong(DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC,
+              DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC_DEFAULT);
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -1515,48 +1528,64 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   @Override
   public void readLock() {
     this.fsLock.readLock().lock();
+    this.fsLock.markReadLockStartTime();
   }
   @Override
   public void longReadLockInterruptibly() throws InterruptedException {
     this.fsLock.longReadLock().lockInterruptibly();
+    this.fsLock.markLongReadLockStartTime();
     try {
       this.fsLock.readLock().lockInterruptibly();
+      this.fsLock.markReadLockStartTime();
     } catch (InterruptedException ie) {
       // In the event we're interrupted while getting the normal FSNS read lock,
       // release the long read lock.
+      this.fsLock
+          .checkAndLogLongReadLockDuration(logLockDurationThreshold, LOG);
       this.fsLock.longReadLock().unlock();
       throw ie;
     }
   }
   @Override
   public void longReadUnlock() {
+    this.fsLock.checkAndLogReadLockDuration(logLockDurationThreshold, LOG);
     this.fsLock.readLock().unlock();
+    this.fsLock.checkAndLogLongReadLockDuration(logLockDurationThreshold, LOG);
     this.fsLock.longReadLock().unlock();
   }
   @Override
   public void readUnlock() {
+    this.fsLock.checkAndLogReadLockDuration(logLockDurationThreshold, LOG);
     this.fsLock.readLock().unlock();
   }
   @Override
   public void writeLock() {
     this.fsLock.longReadLock().lock();
+    this.fsLock.markLongReadLockStartTime();
     this.fsLock.writeLock().lock();
+    this.fsLock.markWriteLockStartTime();
   }
   @Override
   public void writeLockInterruptibly() throws InterruptedException {
     this.fsLock.longReadLock().lockInterruptibly();
+    this.fsLock.markLongReadLockStartTime();
     try {
       this.fsLock.writeLock().lockInterruptibly();
+      this.fsLock.markWriteLockStartTime();
     } catch (InterruptedException ie) {
       // In the event we're interrupted while getting the normal FSNS write
       // lock, release the long read lock.
+      this.fsLock
+          .checkAndLogLongReadLockDuration(logLockDurationThreshold, LOG);
       this.fsLock.longReadLock().unlock();
       throw ie;
     }
   }
   @Override
   public void writeUnlock() {
+    this.fsLock.checkAndLogWriteLockDuration(logLockDurationThreshold, LOG);
     this.fsLock.writeLock().unlock();
+    this.fsLock.checkAndLogLongReadLockDuration(logLockDurationThreshold, LOG);
     this.fsLock.longReadLock().unlock();
   }
   @Override

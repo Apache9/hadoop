@@ -320,47 +320,90 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   /** Read the block length from one of the datanodes. */
   private long readBlockLength(LocatedBlock locatedblock) throws IOException {
     assert locatedblock != null : "LocatedBlock cannot be null";
-    int replicaNotFoundCount = locatedblock.getLocations().length;
-    
-    for(DatanodeInfo datanode : locatedblock.getLocations()) {
-      ClientDatanodeProtocol cdp = null;
-      
-      try {
-        cdp = DFSUtil.createClientDatanodeProtocolProxy(datanode,
-            dfsClient.getConfiguration(), dfsClient.getConf().socketTimeout,
-            dfsClient.getConf().connectToDnViaHostname, locatedblock);
-        
-        final long n = cdp.getReplicaVisibleLength(locatedblock.getBlock());
-        
-        if (n >= 0) {
-          return n;
-        }
-      }
-      catch(IOException ioe) {
-        if (ioe instanceof RemoteException &&
-          (((RemoteException) ioe).unwrapRemoteException() instanceof
-            ReplicaNotFoundException)) {
-          // special case : replica might not be on the DN, treat as 0 length
-          replicaNotFoundCount--;
-        }
-        
-        if (DFSClient.LOG.isDebugEnabled()) {
-          DFSClient.LOG.debug("Failed to getReplicaVisibleLength from datanode "
-              + datanode + " for block " + locatedblock.getBlock(), ioe);
-        }
-      } finally {
-        if (cdp != null) {
-          RPC.stopProxy(cdp);
-        }
+    int retriesForLastBlockLength =
+        dfsClient.getConf().retryTimesForGetLastBlockLength;
+    boolean recoverLeaseForLastBlock =
+        dfsClient.getConf().recoverLeaseForLastBlockLength;
+
+    if (retriesForLastBlockLength <= 1) {
+      if (recoverLeaseForLastBlock) {
+        retriesForLastBlockLength = 2;
+      } else {
+        retriesForLastBlockLength = 1;
       }
     }
+    
+    while (retriesForLastBlockLength > 0) {
+      int replicaNotFoundCount = locatedblock.getLocations().length;
+      for (DatanodeInfo datanode : locatedblock.getLocations()) {
+        ClientDatanodeProtocol cdp = null;
+        try {
+          cdp =
+              DFSUtil.createClientDatanodeProtocolProxy(datanode,
+                  dfsClient.getConfiguration(),
+                  dfsClient.getConf().socketTimeout,
+                  dfsClient.getConf().connectToDnViaHostname, locatedblock);
+        
+          if (dfsClient.getConfiguration().getBoolean(
+              DFSConfigKeys.DFS_CLIENT_READBLOCKLENGTH_EXCEPTION, false)) {
+            throw new IOException("Emulated IOException for testing");
+          }
 
-    // Namenode told us about these locations, but none know about the replica
-    // means that we hit the race between pipeline creation start and end.
-    // we require all 3 because some other exception could have happened
-    // on a DN that has it.  we want to report that error
-    if (replicaNotFoundCount == 0) {
-      return 0;
+          final long n = cdp.getReplicaVisibleLength(locatedblock.getBlock());
+        
+          if (n >= 0) {
+            return n;
+          }
+        } catch (IOException ioe) {
+          if (ioe instanceof RemoteException
+              && (((RemoteException) ioe).unwrapRemoteException() instanceof ReplicaNotFoundException)) {
+            // special case : replica might not be on the DN, treat as 0 length
+            replicaNotFoundCount--;
+          }
+        
+          if (DFSClient.LOG.isDebugEnabled()) {
+            DFSClient.LOG.debug(
+                "Failed to getReplicaVisibleLength from datanode " + datanode
+                    + " for block " + locatedblock.getBlock(), ioe);
+          }
+        } finally {
+          if (cdp != null) {
+            RPC.stopProxy(cdp);
+          }
+        }
+      }
+
+      // Namenode told us about these locations, but none know about the replica
+      // means that we hit the race between pipeline creation start and end.
+      // we require all 3 because some other exception could have happened
+      // on a DN that has it. we want to report that error
+      if (replicaNotFoundCount == 0) {
+        return 0;
+      }
+
+      --retriesForLastBlockLength;
+      if (retriesForLastBlockLength == 1 && recoverLeaseForLastBlock
+          && !dfsClient.isFileClosed(src)) {
+        // To make it simple, we just retry retryTimesForGetLastBlockLength
+        // times to recover the file. Between each retry, we will wait some
+        // time. The waiting time will be decreased for later retry since it is
+        // more likely the later retry would not success if earlier retries
+        // failed.
+        int retries = dfsClient.getConf().retryTimesForGetLastBlockLength;
+        for (int i = 0; i < retries; i++) {
+          boolean recovered = dfsClient.recoverLease(src);
+          if (recovered) {
+            break;
+          }
+          waitFor((retries - i)
+              * dfsClient.getConf().retryIntervalForGetLastBlockLength);
+          if (dfsClient.isFileClosed(src)) {
+            break;
+          }
+        }
+      } else {
+        waitFor(dfsClient.getConf().retryIntervalForGetLastBlockLength);
+      }
     }
 
     throw new IOException("Cannot obtain block length for " + locatedblock);
