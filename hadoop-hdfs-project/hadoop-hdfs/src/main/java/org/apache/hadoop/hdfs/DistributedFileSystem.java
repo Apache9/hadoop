@@ -52,6 +52,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.fs.VolumeId;
@@ -605,23 +606,63 @@ public class DistributedFileSystem extends FileSystem {
       }.resolve(this, absDst);
     }
   }
+
+  private boolean isInTrash(String src) {
+    return src.contains(".Trash");
+  }
   
   @Override
   public boolean delete(Path f, final boolean recursive) throws IOException {
     statistics.incrementWriteOps(1);
     Path absF = fixRelativePart(f);
+    final DistributedFileSystem distFs = this;
     return new FileSystemLinkResolver<Boolean>() {
       @Override
-      public Boolean doCall(final Path p)
+      public Boolean doCall(final Path p) 
           throws IOException, UnresolvedLinkException {
-        return dfs.delete(getPathName(p), recursive);
-      }
+            if (dfs.getConf().forceDeleteToTrash && !isInTrash(p.toString())) {
+              return Trash.moveToAppropriateTrash(distFs, p, getConf());
+            } else {
+              return dfs.delete(getPathName(p), recursive);
+            }
+          }
+
       @Override
-      public Boolean next(final FileSystem fs, final Path p)
+      public Boolean next(final FileSystem fs, final Path p) 
           throws IOException {
-        return fs.delete(p, recursive);
-      }
+            if (dfs.getConf().forceDeleteToTrash && !isInTrash(p.toString())) {
+              return Trash.moveToAppropriateTrash(fs, p, getConf());
+            } else {
+              return dfs.delete(getPathName(p), recursive);
+            }
+          }
+
     }.resolve(this, absF);
+  }
+
+  @Override
+  public boolean delete(Path f, final boolean recursive, final boolean skipTrash) throws IOException {
+    if (skipTrash) {
+      statistics.incrementWriteOps(1);
+      Path absF = fixRelativePart(f);
+
+      return new FileSystemLinkResolver<Boolean>() {
+        @Override
+        public Boolean doCall(final Path p) 
+            throws IOException, UnresolvedLinkException {
+              return dfs.delete(getPathName(p), recursive);
+            }
+
+        @Override
+        public Boolean next(final FileSystem fs, final Path p) 
+            throws IOException {
+              return dfs.delete(getPathName(p), recursive);
+            }
+
+      }.resolve(this, absF);
+    } else {
+      return delete(f, recursive);
+    }
   }
   
   @Override

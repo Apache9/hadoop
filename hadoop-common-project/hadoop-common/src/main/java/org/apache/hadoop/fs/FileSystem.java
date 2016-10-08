@@ -1344,6 +1344,10 @@ public abstract class FileSystem extends Configured implements Closeable {
   public boolean delete(Path f) throws IOException {
     return delete(f, true);
   }
+
+  public boolean delete(Path f, boolean recursive, boolean skipTrash) throws IOException {
+    throw new IOException("Operation is not supported");
+  }
   
   /** Delete a file.
    *

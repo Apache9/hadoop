@@ -722,4 +722,8 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
 
   public static final String DFS_CLIENT_READBLOCKLENGTH_EXCEPTION =
       "dfs.client.read-block-length.exception";
+
+  // Force delete to use trash
+  public static final String DFS_FORCE_DELETE_TO_TRASH = "dfs.force.delete-to-trash";
+  public static final boolean DFS_FORCE_DELETE_TO_TRASH_DEFAULT = false;
 }

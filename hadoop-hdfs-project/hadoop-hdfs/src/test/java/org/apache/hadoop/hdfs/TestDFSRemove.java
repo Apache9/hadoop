@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.junit.Test;
@@ -87,6 +88,52 @@ public class TestDFSRemove {
       fs.delete(dir, true);
     } finally {
       if (cluster != null) {cluster.shutdown();}
+    }
+  }
+
+  @Test
+  public void testRemoveToTrash() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    conf.setBoolean(DFSConfigKeys.DFS_FORCE_DELETE_TO_TRASH, true);
+    conf.setLong(CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY, 1);
+    conf.setLong(CommonConfigurationKeysPublic.FS_TRASH_CHECKPOINT_INTERVAL_KEY, 1);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+    try {
+      FileSystem fs = cluster.getFileSystem();
+      assertTrue(fs.mkdirs(dir));
+
+      long dfsUsedStart = getTotalDfsUsed(cluster);
+      {
+        // Create 100 files
+        final int fileCount = 100;
+        for (int i = 0; i < fileCount; i++) {
+          Path a = new Path(dir, "a" + i);
+          createFile(fs, a);
+        }
+        long dfsUsedMax = getTotalDfsUsed(cluster);
+        // Remove 100 files
+        for (int i = 0; i < fileCount; i++) {
+          Path a = new Path(dir, "a" + i);
+          fs.delete(a, false);
+        }
+        // wait 3 heartbeat intervals, so that all blocks are deleted.
+        Thread.sleep(3 * DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT * 1000);
+        // all blocks should not be gone now.
+        long dfsUsedFinal = getTotalDfsUsed(cluster);
+        assertEquals("All blocks should not be gone. start=" + dfsUsedStart + " max=" + dfsUsedMax
+            + " final=" + dfsUsedFinal, dfsUsedMax, dfsUsedFinal);
+        Thread.sleep(120*1000); // 2 minutes so that trash cleaner is scheduled
+        dfsUsedFinal = getTotalDfsUsed(cluster);
+        assertEquals("All blocks should be gone. start=" + dfsUsedStart
+            + " max=" + dfsUsedMax + " final=" + dfsUsedFinal, dfsUsedStart, dfsUsedFinal);
+
+      }
+
+      fs.delete(dir, true);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
     }
   }
 }
