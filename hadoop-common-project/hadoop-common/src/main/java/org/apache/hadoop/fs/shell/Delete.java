@@ -104,7 +104,7 @@ class Delete {
       if (moveToTrash(item)) {
         return;
       }
-      if (!item.fs.delete(item.path, deleteDirs)) {
+      if (!item.fs.delete(item.path, deleteDirs, true)) {
         throw new PathIOException(item.toString());
       }
       out.println("Deleted " + item);

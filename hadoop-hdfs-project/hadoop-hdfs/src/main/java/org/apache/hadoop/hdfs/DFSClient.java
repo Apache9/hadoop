@@ -61,6 +61,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_CONTEXT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_CONTEXT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_FORCE_DELETE_TO_TRASH;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_FORCE_DELETE_TO_TRASH_DEFAULT;
 
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -128,6 +132,7 @@ import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.VolumeId;
 import org.apache.hadoop.fs.XAttr;
@@ -332,6 +337,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     final int failedDatanodeTimeout;
     final int failedDatanodeMaxRetry;
     final int slowConnWarningMs;
+    final boolean forceDeleteToTrash;
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
@@ -510,6 +516,9 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       slowConnWarningMs = conf.getInt(
           DFSConfigKeys.DFS_CLIENT_SLOW_CONN_WARNING_MS_KEY,
           DFSConfigKeys.DFS_CLIENT_SLOW_CONN_WARNING_MS_DEFAULT);
+
+      forceDeleteToTrash = conf.getBoolean(DFS_FORCE_DELETE_TO_TRASH,
+        DFS_FORCE_DELETE_TO_TRASH_DEFAULT);
     }
 
     public boolean isUseLegacyBlockReaderLocal() {
