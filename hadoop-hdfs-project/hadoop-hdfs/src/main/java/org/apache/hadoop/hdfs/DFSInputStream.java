@@ -45,6 +45,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.ByteBufferReadable;
@@ -799,6 +800,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         long startTS = Time.monotonicNow();
         int nread = reader.doRead(blockReader, off, len, readStatistics);
         long cost = Time.monotonicNow() - startTS;
+        HdfsPerfCounter.count("readBuffer", 1, cost);
         if (cost > dfsclientSlowLogThresholdMs) {
           DFSClient.LOG.info("Slow readBuffer. Cost: " + cost + " ms from "
               + currentNode);
@@ -815,6 +817,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             corruptedBlockMap);
       } catch ( IOException e ) {
         if (!retryCurrentNode) {
+          HdfsPerfCounter.countFail("readBuffer", 1);
           DFSClient.LOG.warn("Exception while reading from "
               + getCurrentBlock() + " of " + src + " from "
               + currentNode, e);
@@ -1140,6 +1143,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         }
         DFSClientFaultInjector.get().readFromDatanodeDelay();
         long cost = Time.monotonicNow() - startTS;
+        HdfsPerfCounter.count("readAll", 1, cost);
         if (cost > dfsclientSlowLogThresholdMs) {
           DFSClient.LOG.info("Slow readAll. Cost: " + cost + " ms from "
               + chosenNode);
@@ -1172,6 +1176,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           }
           continue;
         } else {
+          HdfsPerfCounter.countFail("readAll", 1);
           String msg = "Failed to connect to " + targetAddr + " for file "
               + src + " for block " + block.getBlock() + ":" + e;
           DFSClient.LOG.warn("Connection failure: " + msg, e);

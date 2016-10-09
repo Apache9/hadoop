@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
@@ -870,6 +871,7 @@ public class DFSOutputStream extends FSOutputSummer
             long begin = Time.monotonicNow();
             ack.readFields(blockReplyStream);
             long duration = Time.monotonicNow() - begin;
+            HdfsPerfCounter.count("sendPacket", 1, duration);
             if (duration > dfsclientSlowLogThresholdMs
                 && ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
               DFSClient.LOG
@@ -948,6 +950,7 @@ public class DFSOutputStream extends FSOutputSummer
                 setLastException((IOException)e);
               }
               hasError = true;
+              HdfsPerfCounter.countFail("sendPacket", 1);
               // If no explicit error report was received, mark the primary
               // node as failed.
               tryMarkPrimaryDatanodeFailed();
