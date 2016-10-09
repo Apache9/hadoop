@@ -17,144 +17,30 @@
  */
 package org.apache.hadoop.hdfs.protocolPB;
 
-import java.io.Closeable;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.List;
-
+import com.google.protobuf.ByteString;
+import com.google.protobuf.ServiceException;
+import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.BatchedRemoteIterator.BatchedEntries;
-import org.apache.hadoop.fs.CacheFlag;
-import org.apache.hadoop.fs.ContentSummary;
-import org.apache.hadoop.fs.CreateFlag;
-import org.apache.hadoop.fs.FileAlreadyExistsException;
-import org.apache.hadoop.fs.FsServerDefaults;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.Options.Rename;
-import org.apache.hadoop.fs.QuotaSummary;
-import org.apache.hadoop.fs.ParentNotDirectoryException;
-import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.protocol.AlreadyBeingCreatedException;
-import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
-import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
-import org.apache.hadoop.hdfs.protocol.CachePoolEntry;
-import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
-import org.apache.hadoop.hdfs.protocol.ClientProtocol;
-import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
-import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
-import org.apache.hadoop.hdfs.protocol.DatanodeID;
-import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
-import org.apache.hadoop.hdfs.protocol.DirectoryListing;
-import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.*;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
-import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
-import org.apache.hadoop.hdfs.protocol.LocatedBlock;
-import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
-import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
-import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
-import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
-import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
-import org.apache.hadoop.hdfs.protocol.proto.AclProtos.GetAclStatusRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.AclProtos.ModifyAclEntriesRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.AclProtos.RemoveAclEntriesRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.AclProtos.RemoveAclRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.AclProtos.RemoveDefaultAclRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.AclProtos.SetAclRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AbandonBlockRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AddBlockRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AddCacheDirectiveRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AddCachePoolRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AllowSnapshotRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AppendRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AppendResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CachePoolEntryProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CompleteRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ConcatRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateSnapshotRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateSymlinkRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.DeleteRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.DeleteSnapshotRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.DisallowSnapshotRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.FinalizeUpgradeRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.FsyncRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetAdditionalDatanodeRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetBlockLocationsRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetBlockLocationsResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetContentSummaryRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetDataEncryptionKeyRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetDataEncryptionKeyResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetDatanodeReportRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetFileInfoRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetFileInfoResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetFileLinkInfoRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetFileLinkInfoResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetFsStatusRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetLinkTargetRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetLinkTargetResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetListingRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetListingResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetPreferredBlockSizeRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetQuotaSummaryRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetServerDefaultsRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshotDiffReportRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshotDiffReportResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshottableDirListingRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshottableDirListingResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.IsFileClosedRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ListCacheDirectivesRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ListCacheDirectivesResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ListCachePoolsRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ListCachePoolsResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ListCorruptFileBlocksRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.MetaSaveRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.MkdirsRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ModifyCacheDirectiveRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ModifyCachePoolRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RecoverLeaseRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RefreshNodesRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RefreshTopologyRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RemoveCacheDirectiveRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RemoveCachePoolRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.Rename2RequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RenameRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RenameSnapshotRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RenewLeaseRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ReportBadBlocksRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RestoreFailedStorageRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RollEditsRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RollEditsResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RollingUpgradeRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.RollingUpgradeResponseProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SaveNamespaceRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetBalancerBandwidthRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetOwnerRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetPermissionRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetQuotaRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetReplicationRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetSafeModeRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetTimesRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UpdateBlockForPipelineRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UpdatePipelineRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.AclProtos.*;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.*;
 import org.apache.hadoop.hdfs.security.token.block.DataEncryptionKey;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.server.namenode.NotReplicatedYetException;
 import org.apache.hadoop.hdfs.server.namenode.SafeModeException;
 import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.ipc.ProtobufHelper;
-import org.apache.hadoop.ipc.ProtocolMetaInterface;
-import org.apache.hadoop.ipc.ProtocolTranslator;
-import org.apache.hadoop.ipc.RPC;
-import org.apache.hadoop.ipc.RpcClientUtil;
+import org.apache.hadoop.ipc.*;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.proto.SecurityProtos.CancelDelegationTokenRequestProto;
 import org.apache.hadoop.security.proto.SecurityProtos.GetDelegationTokenRequestProto;
@@ -162,8 +48,12 @@ import org.apache.hadoop.security.proto.SecurityProtos.GetDelegationTokenRespons
 import org.apache.hadoop.security.proto.SecurityProtos.RenewDelegationTokenRequestProto;
 import org.apache.hadoop.security.token.Token;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.ServiceException;
+import java.io.Closeable;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.List;
 
 /**
  * This class forwards NN's ClientProtocol calls as RPC calls to the NN server
@@ -218,13 +108,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setOffset(offset)
         .setLength(length)
         .build();
+    long startTime = System.currentTimeMillis();
     try {
-      GetBlockLocationsResponseProto resp = rpcProxy.getBlockLocations(null,
-          req);
-      return resp.hasLocations() ? 
-        PBHelper.convert(resp.getLocations()) : null;
+      GetBlockLocationsResponseProto resp =
+          rpcProxy.getBlockLocations(null, req);
+      return resp.hasLocations() ? PBHelper.convert(resp.getLocations()) : null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("open", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter.count("open", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -257,11 +150,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setReplication(replication)
         .setBlockSize(blockSize)
         .build();
+    long startTime = System.currentTimeMillis();
     try {
       CreateResponseProto res = rpcProxy.create(null, req);
       return res.hasFs() ? PBHelper.convert(res.getFs()) : null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("create", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("create", 1, System.currentTimeMillis() - startTime);
     }
 
   }
@@ -275,11 +173,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setSrc(src)
         .setClientName(clientName)
         .build();
+    long startTime = System.currentTimeMillis();
     try {
       AppendResponseProto res = rpcProxy.append(null, req);
       return res.hasBlock() ? PBHelper.convert(res.getBlock()) : null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("append", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("append", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -405,10 +308,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setFileId(fileId);
     if (last != null)
       req.setLast(PBHelper.convert(last));
+    long startTime = System.currentTimeMillis();
     try {
       return rpcProxy.complete(null, req.build()).getResult();
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("complete", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("complete", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -430,10 +338,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
     RenameRequestProto req = RenameRequestProto.newBuilder()
         .setSrc(src)
         .setDst(dst).build();
+    long startTime = System.currentTimeMillis();
     try {
       return rpcProxy.rename(null, req).getResult();
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("rename", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("rename", 1, System.currentTimeMillis() - startTime);
     }
   }
   
@@ -456,12 +369,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
         setSrc(src).
         setDst(dst).setOverwriteDest(overwrite).
         build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.rename2(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("rename2", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("rename2", 1, System.currentTimeMillis() - startTime);
     }
-
   }
 
   @Override
@@ -483,10 +400,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
       throws AccessControlException, FileNotFoundException, SafeModeException,
       UnresolvedLinkException, IOException {
     DeleteRequestProto req = DeleteRequestProto.newBuilder().setSrc(src).setRecursive(recursive).build();
+
+    long startTime = System.currentTimeMillis();
     try {
       return rpcProxy.delete(null, req).getResult();
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("delete", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("delete", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -501,10 +424,14 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setMasked(PBHelper.convert(masked))
         .setCreateParent(createParent).build();
 
+    long startTime = System.currentTimeMillis();
     try {
       return rpcProxy.mkdirs(null, req).getResult();
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("mkdirs", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter.count("mkdirs", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -516,6 +443,7 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setSrc(src)
         .setStartAfter(ByteString.copyFrom(startAfter))
         .setNeedLocation(needLocation).build();
+    long startTime = System.currentTimeMillis();
     try {
       GetListingResponseProto result = rpcProxy.getListing(null, req);
       
@@ -524,7 +452,11 @@ public class ClientNamenodeProtocolTranslatorPB implements
       }
       return null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("getListing", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("getListing", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -710,11 +642,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
       FileNotFoundException, UnresolvedLinkException, IOException {
     GetFileInfoRequestProto req = GetFileInfoRequestProto.newBuilder()
         .setSrc(src).build();
+    long startTime = System.currentTimeMillis();
     try {
       GetFileInfoResponseProto res = rpcProxy.getFileInfo(null, req);
       return res.hasFs() ? PBHelper.convert(res.getFs()) : null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("getFileInfo", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("getFileInfo", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -788,10 +725,14 @@ public class ClientNamenodeProtocolTranslatorPB implements
     FsyncRequestProto req = FsyncRequestProto.newBuilder().setSrc(src)
         .setClient(client).setLastBlockLength(lastBlockLength)
             .setFileId(fileId).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.fsync(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("fsync", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter.count("fsync", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1232,10 +1173,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
     ModifyAclEntriesRequestProto req = ModifyAclEntriesRequestProto
         .newBuilder().setSrc(src)
         .addAllAclSpec(PBHelper.convertAclEntryProto(aclSpec)).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.modifyAclEntries(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("modifyAclEntries", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("modifyAclEntries", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1245,10 +1191,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
     RemoveAclEntriesRequestProto req = RemoveAclEntriesRequestProto
         .newBuilder().setSrc(src)
         .addAllAclSpec(PBHelper.convertAclEntryProto(aclSpec)).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.removeAclEntries(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("removeAclEntries", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("removeAclEntries", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1256,10 +1207,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
   public void removeDefaultAcl(String src) throws IOException {
     RemoveDefaultAclRequestProto req = RemoveDefaultAclRequestProto
         .newBuilder().setSrc(src).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.removeDefaultAcl(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("removeDefaultAcl", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("removeDefaultAcl", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1267,10 +1223,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
   public void removeAcl(String src) throws IOException {
     RemoveAclRequestProto req = RemoveAclRequestProto.newBuilder()
         .setSrc(src).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.removeAcl(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("removeAcl", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("removeAcl", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1280,10 +1241,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setSrc(src)
         .addAllAclSpec(PBHelper.convertAclEntryProto(aclSpec))
         .build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.setAcl(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("setAcl", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("setAcl", 1, System.currentTimeMillis() - startTime);
     }
   }
 

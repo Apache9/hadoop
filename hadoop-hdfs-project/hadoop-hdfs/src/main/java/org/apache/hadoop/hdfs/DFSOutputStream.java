@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.CanSetDropBehind;
 import org.apache.hadoop.fs.CreateFlag;
@@ -807,6 +808,7 @@ public class DFSOutputStream extends FSOutputSummer
               Long begin = packetSendTime.get(ack.getSeqno());
               if (begin != null) {
                 long duration = Time.monotonicNow() - begin;
+                HdfsPerfCounter.count("sendPacket", 1, duration);
                 if (duration > dfsClient.getConf().slowLogThresholdMs) {
                   DFSClient.LOG.info("Slow ReadProcessor read fields for block " + block
                       + " took " + duration + "ms (threshold="
@@ -887,6 +889,7 @@ public class DFSOutputStream extends FSOutputSummer
                 setLastException((IOException)e);
               }
               hasError = true;
+              HdfsPerfCounter.countFail("sendPacket", 1);
               // If no explicit error report was received, mark the primary
               // node as failed.
               tryMarkPrimaryDatanodeFailed();

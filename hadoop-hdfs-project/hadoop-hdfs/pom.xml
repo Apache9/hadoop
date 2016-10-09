@@ -186,6 +186,11 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
       <artifactId>netty</artifactId>
       <scope>test</scope>
     </dependency>
+	<dependency>
+	  <groupId>com.xiaomi.common.perfcounter</groupId>
+	  <artifactId>xiaomi-common-perfcounter</artifactId>
+	  <version>2.6.4</version>
+	</dependency>
   </dependencies>
 
   <build>
