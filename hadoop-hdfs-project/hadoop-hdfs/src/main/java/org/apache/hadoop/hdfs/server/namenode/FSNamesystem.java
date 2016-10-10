@@ -129,7 +129,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.logging.impl.Log4JLogger;
@@ -280,6 +279,7 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+
 
 /***************************************************
  * FSNamesystem does the actual bookkeeping work for the
@@ -1676,25 +1676,73 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     logAuditEvent(true, "setOwner", src, null, resultingStat);
   }
 
+  static class GetBlockLocationsResult {
+    final INodesInPath iip;
+    final LocatedBlocks blocks;
+    boolean updateAccessTime() {
+      return iip != null;
+    }
+    private GetBlockLocationsResult(INodesInPath iip, LocatedBlocks blocks) {
+      this.iip = iip;
+      this.blocks = blocks;
+    }
+  }
+
   /**
    * Get block locations within the specified range.
    * @see ClientProtocol#getBlockLocations(String, long, long)
    */
   LocatedBlocks getBlockLocations(String clientMachine, String src,
-      long offset, long length) throws AccessControlException,
-      FileNotFoundException, UnresolvedLinkException, IOException {
-    LocatedBlocks blocks = getBlockLocations(src, offset, length, true, true,
-        true);
+      long offset, long length) throws IOException {
+    checkOperation(OperationCategory.READ);
+    GetBlockLocationsResult res = null;
+    readLock();
+    try {
+      checkOperation(OperationCategory.READ);
+      res = getBlockLocations(src, offset, length, true, true);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, "open", src);
+      throw e;
+    } finally {
+      readUnlock();
+    }
+
+    logAuditEvent(true, "open", src);
+
+    if (res == null) {
+      return null;
+    }
+
+    if (res.updateAccessTime()) {
+      writeLock();
+      final long now = now();
+      try {
+        checkOperation(OperationCategory.WRITE);
+        INode inode = res.iip.getLastINode();
+        boolean updateAccessTime = now > inode.getAccessTime() +
+            getAccessTimePrecision();
+        if (!isInSafeMode() && updateAccessTime) {
+          dir.setTimes(src, inode, -1, now, false,
+              res.iip.getLatestSnapshotId());
+        }
+      } catch (Throwable e) {
+        LOG.warn("Failed to update the access time of " + src, e);
+      } finally {
+        writeUnlock();
+      }
+    }
+
+    LocatedBlocks blocks = res.blocks;
     if (blocks != null) {
       blockManager.getDatanodeManager().sortLocatedBlocks(
           clientMachine, blocks.getLocatedBlocks());
       
+      // lastBlock is not part of getLocatedBlocks(), might need to sort it too
       LocatedBlock lastBlock = blocks.getLastLocatedBlock();
       if (lastBlock != null) {
-        ArrayList<LocatedBlock> lastBlockList = new ArrayList<LocatedBlock>();
-        lastBlockList.add(lastBlock);
+        ArrayList<LocatedBlock> lastBlockList = Lists.newArrayList(lastBlock);
         blockManager.getDatanodeManager().sortLocatedBlocks(
-                              clientMachine, lastBlockList);
+            clientMachine, lastBlockList);
       }
     }
     return blocks;
@@ -1703,24 +1751,11 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   /**
    * Get block locations within the specified range.
    * @see ClientProtocol#getBlockLocations(String, long, long)
-   * @throws FileNotFoundException, UnresolvedLinkException, IOException
+   * @throws IOException
    */
-  LocatedBlocks getBlockLocations(String src, long offset, long length,
-      boolean doAccessTime, boolean needBlockToken, boolean checkSafeMode)
-      throws FileNotFoundException, UnresolvedLinkException, IOException {
-    try {
-      return getBlockLocationsInt(src, offset, length, doAccessTime,
-                                  needBlockToken, checkSafeMode);
-    } catch (AccessControlException e) {
-      logAuditEvent(false, "open", src);
-      throw e;
-    }
-  }
-
-  private LocatedBlocks getBlockLocationsInt(String src, long offset,
-      long length, boolean doAccessTime, boolean needBlockToken,
-      boolean checkSafeMode)
-      throws FileNotFoundException, UnresolvedLinkException, IOException {
+  GetBlockLocationsResult getBlockLocations(
+      String src, long offset, long length, boolean needBlockToken,
+      boolean checkSafeMode) throws IOException {
     if (offset < 0) {
       throw new HadoopIllegalArgumentException(
           "Negative offset is not supported. File: " + src);
@@ -1729,16 +1764,16 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       throw new HadoopIllegalArgumentException(
           "Negative length is not supported. File: " + src);
     }
-    final LocatedBlocks ret = getBlockLocationsUpdateTimes(src,
-        offset, length, doAccessTime, needBlockToken);  
-    logAuditEvent(true, "open", src);
+    final GetBlockLocationsResult ret = getBlockLocationsInt(
+        src, offset, length, needBlockToken);
+
     if (checkSafeMode && isInSafeMode()) {
-      for (LocatedBlock b : ret.getLocatedBlocks()) {
+      for (LocatedBlock b : ret.blocks.getLocatedBlocks()) {
         // if safemode & no block locations yet then throw safemodeException
         if ((b.getLocations() == null) || (b.getLocations().length == 0)) {
           SafeModeException se = new SafeModeException(
               "Zero blocklocations for " + src, safeMode);
-          if (haEnabled && haContext != null && 
+          if (haEnabled && haContext != null &&
               haContext.getState().getServiceState() == HAServiceState.ACTIVE) {
             throw new RetriableException(se);
           } else {
@@ -1754,90 +1789,55 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    * Get block locations within the specified range, updating the
    * access times if necessary. 
    */
-  private LocatedBlocks getBlockLocationsUpdateTimes(String src, long offset,
-      long length, boolean doAccessTime, boolean needBlockToken)
-      throws FileNotFoundException,
-      UnresolvedLinkException, IOException {
+  private GetBlockLocationsResult getBlockLocationsInt(String src, long offset,
+      long length, boolean needBlockToken)
+      throws FileNotFoundException, UnresolvedLinkException, IOException {
     FSPermissionChecker pc = getPermissionChecker();
     byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
-    for (int attempt = 0; attempt < 2; attempt++) {
-      boolean isReadOp = (attempt == 0);
-      if (isReadOp) { // first attempt is with readlock
-        checkOperation(OperationCategory.READ);
-        readLock();
-      }  else { // second attempt is with  write lock
-        checkOperation(OperationCategory.WRITE);
-        writeLock(); // writelock is needed to set accesstime
-      }
-      src = FSDirectory.resolvePath(src, pathComponents, dir);
-      try {
-        if (isReadOp) {
-          checkOperation(OperationCategory.READ);
-        } else {
-          checkOperation(OperationCategory.WRITE);
-        }
-        if (isPermissionEnabled) {
-          checkPathAccess(pc, src, FsAction.READ);
-        }
 
-        // if the namenode is in safemode, then do not update access time
-        if (isInSafeMode()) {
-          doAccessTime = false;
-        }
+    src = FSDirectory.resolvePath(src, pathComponents, dir);
 
-        final INodesInPath iip = dir.getLastINodeInPath(src);
-        final INodeFile inode = INodeFile.valueOf(iip.getLastINode(), src);
-        if (!iip.isSnapshot() //snapshots are readonly, so don't update atime.
-            && doAccessTime && isAccessTimeSupported()) {
-          final long now = now();
-          if (now > inode.getAccessTime() + getAccessTimePrecision()) {
-            // if we have to set access time but we only have the readlock, then
-            // restart this entire operation with the writeLock.
-            if (isReadOp) {
-              continue;
-            }
-            dir.setTimes(src, inode, -1, now, false, iip.getLatestSnapshotId());
-          }
-        }
-        final long fileSize = iip.isSnapshot() ?
-            inode.computeFileSize(iip.getPathSnapshotId())
-            : inode.computeFileSizeNotIncludingLastUcBlock();
-        boolean isUc = inode.isUnderConstruction();
-        if (iip.isSnapshot()) {
-          // if src indicates a snapshot file, we need to make sure the returned
-          // blocks do not exceed the size of the snapshot file.
-          length = Math.min(length, fileSize - offset);
-          isUc = false;
-        }
-        LocatedBlocks blocks =
-          blockManager.createLocatedBlocks(inode.getBlocks(), fileSize,
-            isUc, offset, length, needBlockToken, iip.isSnapshot());
-        // Set caching information for the located blocks.
-        for (LocatedBlock lb: blocks.getLocatedBlocks()) {
-          cacheManager.setCachedLocations(lb);
-        }
-        return blocks;
-      } finally {
-        if (isReadOp) {
-          readUnlock();
-        } else {
-          writeUnlock();
-        }
-      }
+    if (isPermissionEnabled) {
+      checkPathAccess(pc, src, FsAction.READ);
     }
-    return null; // can never reach here
+
+    final INodesInPath iip = dir.getLastINodeInPath(src);
+    final INodeFile inode = INodeFile.valueOf(iip.getLastINode(), src);
+    final long fileSize = iip.isSnapshot() ?
+        inode.computeFileSize(iip.getPathSnapshotId())
+        : inode.computeFileSizeNotIncludingLastUcBlock();
+    boolean isUc = inode.isUnderConstruction();
+    if (iip.isSnapshot()) {
+      // if src indicates a snapshot file, we need to make sure the returned
+      // blocks do not exceed the size of the snapshot file.
+      length = Math.min(length, fileSize - offset);
+      isUc = false;
+    }
+    LocatedBlocks blocks =
+        blockManager.createLocatedBlocks(inode.getBlocks(), fileSize,
+            isUc, offset, length, needBlockToken, iip.isSnapshot());
+    // Set caching information for the located blocks.
+    for (LocatedBlock lb: blocks.getLocatedBlocks()) {
+      cacheManager.setCachedLocations(lb);
+    }
+    final long now = now();
+    boolean updateAccessTime = isAccessTimeSupported() && !isInSafeMode()
+        && !iip.isSnapshot()
+        && now > inode.getAccessTime() + getAccessTimePrecision();
+    return new GetBlockLocationsResult(updateAccessTime ? iip : null, blocks);
   }
 
-  /**
-   * Moves all the blocks from srcs and appends them to trg
-   * To avoid rollbacks we will verify validitity of ALL of the args
-   * before we start actual move.
-   * 
-   * This does not support ".inodes" relative path
-   * @param target
-   * @param srcs
-   * @throws IOException
-   */
+
+    /**
+     * Moves all the blocks from srcs and appends them to trg
+     * To avoid rollbacks we will verify validitity of ALL of the args
+     * before we start actual move.
+     *
+     * This does not support ".inodes" relative path
+     * @param target
+     * @param srcs
+     * @throws IOException
+     */
   void concat(String target, String [] srcs) 
       throws IOException, UnresolvedLinkException {
     CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);

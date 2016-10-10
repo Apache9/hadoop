@@ -983,7 +983,7 @@ public class TestFsck {
     FSNamesystem fsName = mock(FSNamesystem.class);
     when(namenode.getNamesystem()).thenReturn(fsName);
     when(fsName.getBlockLocations(anyString(), anyLong(), anyLong(),
-        anyBoolean(), anyBoolean(), anyBoolean())).
+        anyBoolean(), anyBoolean())).
         thenThrow(new FileNotFoundException()) ;
 
     NamenodeFsck fsck = new NamenodeFsck(conf, namenode, nettop, pmap, out,
