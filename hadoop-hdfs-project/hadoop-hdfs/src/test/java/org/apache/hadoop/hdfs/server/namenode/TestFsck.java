@@ -991,7 +991,7 @@ public class TestFsck {
     
     when(namenode.getNamesystem()).thenReturn(fsName);
     when(fsName.getBlockLocations(anyString(), anyLong(), anyLong(),
-        anyBoolean(), anyBoolean(), anyBoolean())).
+        anyBoolean(), anyBoolean())).
         thenThrow(new FileNotFoundException()) ;
     when(fsName.getBlockManager()).thenReturn(blockManager);
     when(blockManager.getDatanodeManager()).thenReturn(dnManager);
