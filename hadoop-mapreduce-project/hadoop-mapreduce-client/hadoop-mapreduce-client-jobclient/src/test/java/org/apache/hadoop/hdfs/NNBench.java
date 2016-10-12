@@ -26,6 +26,8 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.io.File;
 import java.io.BufferedReader;
+import java.util.List;
+import java.util.Random;
 import java.util.StringTokenizer;
 import java.net.InetAddress;
 import java.text.SimpleDateFormat;
@@ -33,20 +35,17 @@ import java.util.Iterator;
 
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.logging.Log;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
-
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
-
+import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.SequenceFile.CompressionType;
 import org.apache.hadoop.io.SequenceFile;
-
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.Mapper;
@@ -100,6 +99,10 @@ public class NNBench {
   public static String baseDir = "/benchmarks/NNBench";  // default
   public static boolean readFileAfterOpen = false; // default is to not read
   
+  public static int aclUsers = 3; // default is 3
+  public static int aclGrps = 3; // default is 3
+  public static boolean setacl = false; // default is to not set acl
+
   // Supported operations
   private static final String OP_CREATE_WRITE = "create_write";
   private static final String OP_OPEN_READ = "open_read";
@@ -199,6 +202,11 @@ public class NNBench {
       "\t-readFileAfterOpen <true or false. if true, it reads the file and " +
       "reports the average time to read. This is valid with the open_read " +
       "operation. default is false. This is not mandatory>\n" +
+      "\t-setacl <true of false. if true, it set acl for newly created files>. \n" +
+      "\t-aclUsers <number of user acls would be set if setacl is true>. " + 
+      "default is 3. \n" +
+      "\t-aclGrps <number of group acls would be set if setacl is true>. " +
+      "default is 3. \n" +
       "\t-help: Display the help statement\n";
       
     
@@ -264,6 +272,15 @@ public class NNBench {
       } else if (args[i].equals("-readFileAfterOpen")) {
         checkArgs(i + 1, args.length);
         readFileAfterOpen = Boolean.parseBoolean(args[++i]);
+      } else if (args[i].equals("-aclUsers")) {
+        checkArgs(i + 1, args.length);
+        aclUsers = Integer.parseInt(args[++i]);
+      } else if (args[i].equals("-aclGrps")) {
+        checkArgs(i + 1, args.length);
+        aclGrps = Integer.parseInt(args[++i]);
+      } else if (args[i].equals("-setacl")) {
+        checkArgs(i + 1, args.length);
+        setacl = Boolean.parseBoolean(args[++i]);
       } else if (args[i].equals("-help")) {
         displayUsage();
         System.exit(-1);
@@ -282,6 +299,11 @@ public class NNBench {
     LOG.info("       Replication factor: " + replicationFactorPerFile);
     LOG.info("                 Base dir: " + baseDir);
     LOG.info("     Read file after open: " + readFileAfterOpen);
+    LOG.info("      setacl: " + setacl);
+    if (setacl) {
+      LOG.info("      aclUsers: " + aclUsers);
+      LOG.info("      aclGrps: " + aclGrps);
+    }
     
     // Set user-defined parameters, so the map method can access the values
     config.set("test.nnbench.operation", operation);
@@ -300,6 +322,10 @@ public class NNBench {
     config.set("test.nnbench.datadir.name", DATA_DIR_NAME);
     config.set("test.nnbench.outputdir.name", OUTPUT_DIR_NAME);
     config.set("test.nnbench.controldir.name", CONTROL_DIR_NAME);
+
+    config.setInt("test.nnbench.acl.users", aclUsers);
+    config.setInt("test.nnbench.acl.groups", aclGrps);
+    config.setBoolean("test.nnbench.setacl", setacl);
   }
   
   /**
@@ -610,6 +636,13 @@ public class NNBench {
     long totalTimeAL2 = 0l;
     long successfulFileOps = 0l;
     
+    int aclUsers;
+    int aclGrps;
+    String acls[] = { "r--", "rw-", "r-x", "rwx" };
+    boolean setacl;
+
+    Random rd = new Random();
+
     /**
      * Constructor
      */
@@ -687,6 +720,9 @@ public class NNBench {
       dataDirName = conf.get("test.nnbench.datadir.name");
       op = conf.get("test.nnbench.operation");
       readFile = conf.getBoolean("test.nnbench.readFileAfterOpen", false);
+      aclUsers = conf.getInt("test.nnbench.acl.users", 3);
+      aclGrps = conf.getInt("test.nnbench.acl.groups", 3);
+      setacl = conf.getBoolean("test.nnbench.setacl", false);
       
       long totalTimeTPmS = 0l;
       long startTimeTPmS = 0l;
@@ -736,6 +772,30 @@ public class NNBench {
           new Text(String.valueOf(endTimeTPms)));
     }
     
+    private String generateACL() {
+      StringBuilder aclBuilder = new StringBuilder();
+
+      for (int i = 0; i < aclUsers; i++) {
+        if (i != 0) {
+          aclBuilder.append(",");
+        }
+        String user = "user:user" + i;
+        aclBuilder.append(user).append(":")
+            .append(acls[rd.nextInt(acls.length)]);
+      }
+
+      for (int i = 0; i < aclGrps; i++) {
+        if (aclUsers > 0 || i != 0) {
+          aclBuilder.append(",");
+        }
+        String grp = "group:grp" + i;
+        aclBuilder.append(grp).append(":")
+            .append(acls[rd.nextInt(acls.length)]);
+      }
+
+      return aclBuilder.toString();
+    }
+
     /**
      * Create and Write operation.
      * @param name of the prefix of the putput file to be created
@@ -775,10 +835,16 @@ public class NNBench {
             successfulOp = true;
             successfulFileOps ++;
 
+            if (setacl) {
+              String aclstr = generateACL();
+              List<AclEntry> aclEntries = AclEntry.parseAclSpec(aclstr, true);
+              filesystem.modifyAclEntries(filePath, aclEntries);
+            }
+
             reporter.setStatus("Finish "+ l + " files");
           } catch (IOException e) {
             LOG.info("Exception recorded in op: " +
-                    "Create/Write/Close");
+                    "Create/Write/Close" + " for file " + filePath, e);
  
             numOfExceptions++;
           }
