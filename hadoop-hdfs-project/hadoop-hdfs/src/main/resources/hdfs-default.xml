@@ -1386,6 +1386,15 @@
 </property>
 
 <property>
+  <name>dfs.namenode.lease-recheck-interval-ms</name>
+  <value>2000</value>
+  <description>During the release of lease a lock is hold that make any
+    operations on the namenode stuck. In order to not block them during
+    a too long duration we stop releasing lease after this max lock limit.
+  </description>
+</property>
+
+<property>
   <name>nfs.mountd.port</name>
   <value>4242</value>
   <description>
@@ -1421,6 +1430,15 @@
     supported by the NFS gateway. If you change this, make sure you
     also update the nfs mount's wsize(add wsize= # of bytes to the 
     mount directive).
+  </description>
+</property>
+
+<property>
+  <name>dfs.namenode.max-lock-hold-to-release-lease-ms</name>
+  <value>25</value>
+  <description>During the release of lease a lock is hold that make any
+    operations on the namenode stuck. In order to not block them during
+    a too long duration we stop releasing lease after this max lock limit.
   </description>
 </property>
 
