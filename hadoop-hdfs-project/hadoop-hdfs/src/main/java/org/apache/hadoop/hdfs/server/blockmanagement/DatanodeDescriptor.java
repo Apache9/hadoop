@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -228,6 +229,9 @@ public class DatanodeDescriptor extends DatanodeInfo {
 
   // The number of replication work pending before targets are determined
   private int PendingReplicationWithoutTargets = 0;
+
+  // Block report lock
+  private final ReentrantLock reportLock = new ReentrantLock(true);
 
   /**
    * DatanodeDescriptor constructor
@@ -788,5 +792,13 @@ public class DatanodeDescriptor extends DatanodeInfo {
     }
     return true;
  }
+
+  public void reportLock() {
+    reportLock.lock();
+  }
+
+  public void reportUnlock() {
+    reportLock.unlock();
+  }
 }
 
