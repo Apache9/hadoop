@@ -48,4 +48,5 @@ public interface RwLock {
 
   /** Check if the current thread holds write lock. */
   public boolean hasWriteLock();
+
 }

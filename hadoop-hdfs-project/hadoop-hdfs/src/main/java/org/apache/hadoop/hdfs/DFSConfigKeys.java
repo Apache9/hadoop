@@ -248,6 +248,11 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT = "dfs.namenode.max.concurrent.blockreport";
   public static final int DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT = 10;
   
+  public static final String DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT =
+      "dfs.namenode.max.concurrent.incremental.blockreport";
+  public static final int DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT_DEFAULT =
+      64;
+
   public static final String  DFS_LIST_LIMIT = "dfs.ls.limit";
   public static final int     DFS_LIST_LIMIT_DEFAULT = 1000;
   public static final String  DFS_CONTENT_SUMMARY_LIMIT_KEY = "dfs.content-summary.limit";
@@ -736,4 +741,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   // Force delete to use trash
   public static final String DFS_FORCE_DELETE_TO_TRASH = "dfs.force.delete-to-trash";
   public static final boolean DFS_FORCE_DELETE_TO_TRASH_DEFAULT = false;
+
+  public static final String DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION =
+      "dfs.namenode.block.report.processing.per.iteration";
+  public static final int DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION_DEFAULT =
+      5000;
 }

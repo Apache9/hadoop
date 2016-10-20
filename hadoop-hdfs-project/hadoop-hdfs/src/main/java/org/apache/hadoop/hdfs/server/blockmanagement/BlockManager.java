@@ -246,6 +246,13 @@ public class BlockManager {
    */
   private int numBlocksPerIteration;
   /**
+   * Number of blocks to process per iteration for full reported blocks. After
+   * processing numReportBlocksPerIteration blocks, the namesystem lock would be
+   * released and acquired again. It is to prevent other rpcs are blocked and
+   * piled by long-duration block report.
+   */
+  private int numReportBlocksPerIteration;
+  /**
    * Progress of the Replication queues initialisation.
    */
   private double replicationQueuesInitProgress = 0.0;
@@ -329,6 +336,10 @@ public class BlockManager {
     this.numBlocksPerIteration = conf.getInt(
         DFSConfigKeys.DFS_BLOCK_MISREPLICATION_PROCESSING_LIMIT,
         DFSConfigKeys.DFS_BLOCK_MISREPLICATION_PROCESSING_LIMIT_DEFAULT);
+    this.numReportBlocksPerIteration =
+        conf.getInt(
+            DFSConfigKeys.DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION,
+            DFSConfigKeys.DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION_DEFAULT);
     
     LOG.info("defaultReplication         = " + defaultReplication);
     LOG.info("maxReplication             = " + maxReplication);
@@ -1676,17 +1687,23 @@ public class BlockManager {
     namesystem.writeLock();
     final long startTime = Time.now(); //after acquiring write lock
     final long endTime;
-    DatanodeDescriptor node;
+    boolean reportLocked = false;
+    DatanodeDescriptor node = null;
     try {
       node = datanodeManager.getDatanode(nodeID);
       if (node == null || !node.isAlive) {
         throw new IOException(
             "ProcessReport from dead or unregistered node: " + nodeID);
       }
-
-      // To minimize startup time, we discard any second (or later) block reports
+      namesystem.writeUnlock();
+      node.reportLock();
+      reportLocked = true;
+      namesystem.writeLock();
+      // To minimize startup time, we discard any second (or later) block
+      // reports
       // that we receive while still in startup phase.
-      DatanodeStorageInfo storageInfo = node.getStorageInfo(storage.getStorageID());
+      DatanodeStorageInfo storageInfo =
+          node.getStorageInfo(storage.getStorageID());
 
       if (storageInfo == null) {
         // We handle this for backwards compatibility.
@@ -1702,12 +1719,11 @@ public class BlockManager {
 
       if (storageInfo.getBlockReportCount() == 0) {
         // The first block report can be processed a lot more efficiently than
-        // ordinary block reports.  This shortens restart times.
+        // ordinary block reports. This shortens restart times.
         processFirstBlockReport(node, storage.getStorageID(), newReport);
       } else {
         processReport(node, storage, newReport);
       }
-      
       // Now that we have an up-to-date block report, we know that any
       // deletions from a previous NN iteration have been accounted for.
       boolean staleBefore = storageInfo.areBlockContentsStale();
@@ -1718,10 +1734,13 @@ public class BlockManager {
             + "contents are no longer considered stale");
         rescanPostponedMisreplicatedBlocks();
       }
-      
     } finally {
       endTime = Time.now();
       namesystem.writeUnlock();
+      if (reportLocked) {
+        assert (node != null);
+        node.reportUnlock();
+      }
     }
 
     // Log the block report processing stats from Namenode perspective
@@ -1902,6 +1921,8 @@ public class BlockManager {
     }
     // scan the report and process newly reported blocks
     BlockReportIterator itBR = newReport.getBlockReportIterator();
+    int processed = 0;
+    long iterationStart = Time.now();
     while(itBR.hasNext()) {
       Block iblk = itBR.next();
       ReplicaState iState = itBR.getCurrentReplicaState();
@@ -1912,6 +1933,20 @@ public class BlockManager {
       if (storedBlock != null &&
           (curIndex = storedBlock.findStorageInfo(storageInfo)) >= 0) {
         headIndex = storageInfo.moveBlockToHead(storedBlock, curIndex, headIndex);
+      }
+      ++processed;
+      if (processed == numReportBlocksPerIteration) {
+        // Release lock in case other RPCs are blocked and piled up.
+        namesystem.writeUnlock();
+        processed = 0; // reset
+        long duration = Time.now() - iterationStart;
+        final NameNodeMetrics metrics = NameNode.getNameNodeMetrics();
+        if (metrics != null) {
+          metrics.addReportIteration((int) (duration));
+        }
+        namesystem.writeLock();
+        iterationStart = Time.now();
+        headIndex = storageInfo.getHeadIndex(storageInfo);
       }
     }
 
@@ -2886,59 +2921,70 @@ public class BlockManager {
    */
   public void processIncrementalBlockReport(final DatanodeID nodeID,
       final StorageReceivedDeletedBlocks srdb) throws IOException {
-    assert namesystem.hasWriteLock();
+    DatanodeDescriptor node = null;
+    boolean reportLocked = false;
     int received = 0;
     int deleted = 0;
     int receiving = 0;
-    final DatanodeDescriptor node = datanodeManager.getDatanode(nodeID);
-    if (node == null || !node.isAlive) {
-      blockLog
+    namesystem.writeLock();
+    try {
+      node = datanodeManager.getDatanode(nodeID);
+      if (node == null || !node.isAlive) {
+        blockLog
           .warn("BLOCK* processIncrementalBlockReport"
               + " is received from dead or unregistered node "
               + nodeID);
-      throw new IOException(
-          "Got incremental block report from unregistered or dead node");
-    }
-
-    if (node.getStorageInfo(srdb.getStorage().getStorageID()) == null) {
-      // The DataNode is reporting an unknown storage. Usually the NN learns
-      // about new storages from heartbeats but during NN restart we may
-      // receive a block report or incremental report before the heartbeat.
-      // We must handle this for protocol compatibility. This issue was
-      // uncovered by HDFS-6094.
-      node.updateStorage(srdb.getStorage());
-    }
-
-    for (ReceivedDeletedBlockInfo rdbi : srdb.getBlocks()) {
-      switch (rdbi.getStatus()) {
-      case DELETED_BLOCK:
-        removeStoredBlock(rdbi.getBlock(), node);
-        deleted++;
-        break;
-      case RECEIVED_BLOCK:
-        addBlock(node, srdb.getStorage().getStorageID(),
-            rdbi.getBlock(), rdbi.getDelHints());
-        received++;
-        break;
-      case RECEIVING_BLOCK:
-        receiving++;
-        processAndHandleReportedBlock(node, srdb.getStorage().getStorageID(),
-            rdbi.getBlock(), ReplicaState.RBW, null);
-        break;
-      default:
-        String msg = 
-          "Unknown block status code reported by " + nodeID +
-          ": " + rdbi;
-        blockLog.warn(msg);
-        assert false : msg; // if assertions are enabled, throw.
-        break;
+        throw new IOException(
+            "Got incremental block report from unregistered or dead node");
       }
-      if (blockLog.isDebugEnabled()) {
-        blockLog.debug("BLOCK* block "
-            + (rdbi.getStatus()) + ": " + rdbi.getBlock()
-            + " is received from " + nodeID);
+      namesystem.writeUnlock();
+      node.reportLock();
+      reportLocked = true;
+      namesystem.writeLock();
+      if (node.getStorageInfo(srdb.getStorage().getStorageID()) == null) {
+        // The DataNode is reporting an unknown storage. Usually the NN learns
+        // about new storages from heartbeats but during NN restart we may
+        // receive a block report or incremental report before the heartbeat.
+        // We must handle this for protocol compatibility. This issue was
+        // uncovered by HDFS-6094.
+        node.updateStorage(srdb.getStorage());
       }
-    }
+
+      for (ReceivedDeletedBlockInfo rdbi : srdb.getBlocks()) {
+        switch (rdbi.getStatus()) {
+        case DELETED_BLOCK:
+          removeStoredBlock(rdbi.getBlock(), node);
+          deleted++;
+          break;
+        case RECEIVED_BLOCK:
+          addBlock(node, srdb.getStorage().getStorageID(), rdbi.getBlock(),
+              rdbi.getDelHints());
+          received++;
+          break;
+        case RECEIVING_BLOCK:
+          receiving++;
+          processAndHandleReportedBlock(node, srdb.getStorage().getStorageID(),
+              rdbi.getBlock(), ReplicaState.RBW, null);
+          break;
+        default:
+          String msg =
+              "Unknown block status code reported by " + nodeID + ": " + rdbi;
+          blockLog.warn(msg);
+          assert false : msg; // if assertions are enabled, throw.
+          break;
+        }
+        if (blockLog.isDebugEnabled()) {
+          blockLog.debug("BLOCK* block " + (rdbi.getStatus()) + ": "
+              + rdbi.getBlock() + " is received from " + nodeID);
+        }
+      }
+    } finally {
+      namesystem.writeUnlock();
+      if (reportLocked) {
+        assert (node != null);
+        node.reportUnlock();
+        }
+      }
     blockLog.debug("*BLOCK* NameNode.processIncrementalBlockReport: " + "from "
         + nodeID + " receiving: " + receiving + ", " + " received: " + received
         + ", " + " deleted: " + deleted);

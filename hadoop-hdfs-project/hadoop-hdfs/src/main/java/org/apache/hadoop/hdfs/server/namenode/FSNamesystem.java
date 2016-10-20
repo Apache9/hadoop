@@ -5674,12 +5674,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   public void processIncrementalBlockReport(final DatanodeID nodeID,
       final String poolId, final StorageReceivedDeletedBlocks srdb)
       throws IOException {
-    writeLock();
-    try {
       blockManager.processIncrementalBlockReport(nodeID, srdb);
-    } finally {
-      writeUnlock();
-    }
   }
   
   void endCheckpoint(NamenodeRegistration registration,

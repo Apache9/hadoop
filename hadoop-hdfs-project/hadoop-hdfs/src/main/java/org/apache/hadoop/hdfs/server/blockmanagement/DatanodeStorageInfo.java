@@ -267,6 +267,13 @@ public class DatanodeStorageInfo {
     return curIndex;
   }
 
+  int getHeadIndex(DatanodeStorageInfo storageInfo) {
+    if (blockList == null) {
+      return -1;
+    }
+    return blockList.findStorageInfo(storageInfo);
+  }
+
   /**
    * Used for testing only
    * @return the head of the blockList

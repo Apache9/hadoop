@@ -21,6 +21,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT; 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_DEPTH;
@@ -188,6 +190,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
   private final String minimumDataNodeVersion;
   private AtomicInteger concurrentBlockReport = new AtomicInteger(0);
   private int maxConcurrentBlockReport;
+  private AtomicInteger concurrentIncrementalBlockReport = new AtomicInteger(0);
+  private int maxConcurrentIncrementalBlockReport;
 
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
@@ -202,6 +206,10 @@ class NameNodeRpcServer implements NamenodeProtocols {
     this.maxConcurrentBlockReport = 
         conf.getInt(DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT, 
                   DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT);
+
+    this.maxConcurrentIncrementalBlockReport =
+        conf.getInt(DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT,
+            DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT_DEFAULT);
 
     RPC.setProtocolEngine(conf, ClientNamenodeProtocolPB.class,
         ProtobufRpcEngine.class);
@@ -1030,7 +1038,6 @@ class NameNodeRpcServer implements NamenodeProtocols {
   @Override // DatanodeProtocol
   public DatanodeCommand blockReport(DatanodeRegistration nodeReg,
       String poolId, StorageBlockReport[] reports) throws IOException {
-    verifyRequest(nodeReg);
     if(blockStateChangeLog.isDebugEnabled()) {
       blockStateChangeLog.debug("*BLOCK* NameNode.blockReport: "
            + "from " + nodeReg + ", reports.length=" + reports.length);
@@ -1039,8 +1046,10 @@ class NameNodeRpcServer implements NamenodeProtocols {
     try {
       if (inFlightReports > maxConcurrentBlockReport) {
         throw new IOException(inFlightReports + " block reports happen at the same time, "
-            + "which exceeds the max alloable value" + maxConcurrentBlockReport);
+            + "which exceeds the max allowable value "
+            + maxConcurrentBlockReport);
       }
+      verifyRequest(nodeReg);
       final BlockManager bm = namesystem.getBlockManager(); 
       boolean noStaleStorages = false;
       for(StorageBlockReport r : reports) {
@@ -1076,15 +1085,28 @@ class NameNodeRpcServer implements NamenodeProtocols {
   @Override // DatanodeProtocol
   public void blockReceivedAndDeleted(DatanodeRegistration nodeReg, String poolId,
       StorageReceivedDeletedBlocks[] receivedAndDeletedBlocks) throws IOException {
-    verifyRequest(nodeReg);
-    metrics.incrBlockReceivedAndDeletedOps();
-    if(blockStateChangeLog.isDebugEnabled()) {
-      blockStateChangeLog.debug("*BLOCK* NameNode.blockReceivedAndDeleted: "
-          +"from "+nodeReg+" "+receivedAndDeletedBlocks.length
-          +" blocks.");
-    }
-    for(StorageReceivedDeletedBlocks r : receivedAndDeletedBlocks) {
-      namesystem.processIncrementalBlockReport(nodeReg, poolId, r);
+    int inFlightReports = concurrentIncrementalBlockReport.incrementAndGet();
+    try {
+      if (inFlightReports > maxConcurrentIncrementalBlockReport) {
+        throw new IOException(inFlightReports
+            + " incremental block reports happen at the same time, "
+            + "which exceeds the max allowable value "
+            + maxConcurrentIncrementalBlockReport);
+      }
+      verifyRequest(nodeReg);
+      metrics.incrBlockReceivedAndDeletedOps();
+      if (blockStateChangeLog.isDebugEnabled()) {
+        blockStateChangeLog.debug("*BLOCK* NameNode.blockReceivedAndDeleted: "
+            + "from " + nodeReg + " " + receivedAndDeletedBlocks.length
+            + " blocks.");
+      }
+      for (StorageReceivedDeletedBlocks r : receivedAndDeletedBlocks) {
+        namesystem.processIncrementalBlockReport(nodeReg, poolId, r);
+      }
+    } finally {
+      int stillInFlightReports =
+          concurrentIncrementalBlockReport.decrementAndGet();
+      assert (stillInFlightReports >= 0);
     }
   }
   
