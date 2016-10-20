@@ -301,6 +301,11 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT = "dfs.namenode.max.concurrent.blockreport";
   public static final int DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT = 10;
   
+  public static final String DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT =
+      "dfs.namenode.max.concurrent.incremental.blockreport";
+  public static final int DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT_DEFAULT =
+      64;
+
   public static final String  DFS_LIST_LIMIT = "dfs.ls.limit";
   public static final int     DFS_LIST_LIMIT_DEFAULT = 1000;
   public static final String  DFS_CONTENT_SUMMARY_LIMIT_KEY = "dfs.content-summary.limit";
@@ -865,9 +870,13 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_CLIENT_PERFCOUNTER_ENABLED_KEY =
     "dfs.client.perfcounter.enabled";
   public static final boolean DFS_CLIENT_PERFCOUNTER_ENABLED_DEFAULT = false;
-
   public static final String  DFS_NAMENODE_FORCE_TO_TRASH_KEY = "dfs.namenode.forceToTrash";
   public static final boolean DFS_NAMENODE_FORCE_TO_TRASH_DEFAULT = false;
   public static final String  DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_KEY = "dfs.namenode.trashPathConfRefreshInterval";
   public static final long DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_DEFAULT = 600000; //ms
+
+  public static final String DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION =
+      "dfs.namenode.block.report.processing.per.iteration";
+  public static final int DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION_DEFAULT =
+      5000;
 }
