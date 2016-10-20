@@ -3703,7 +3703,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     } finally {
       readUnlock();
     }
-    logAuditEvent(true, "getfileinfo", src);
+    // It would pop too many audit log with little (if any) useful audit 
+    // information. So simply disable this audit log entry.
+    // logAuditEvent(true, "getfileinfo", src);
     return stat;
   }
   

@@ -2325,7 +2325,7 @@ public class BlockManager {
       corruptReplicas.removeFromCorruptReplicasMap(block, node,
           Reason.GENSTAMP_MISMATCH);
       curReplicaDelta = 0;
-      blockLog.warn("BLOCK* addStoredBlock: "
+      blockLog.debug("BLOCK* addStoredBlock: "
           + "Redundant addStoredBlock request received for " + storedBlock
           + " on " + node + " size " + storedBlock.getNumBytes());
     }
@@ -2655,11 +2655,13 @@ public class BlockManager {
     for(DatanodeStorageInfo storage : blocksMap.getStorages(block, State.NORMAL)) {
       final DatanodeDescriptor cur = storage.getDatanodeDescriptor();
       if (storage.areBlockContentsStale()) {
-        LOG.info("BLOCK* processOverReplicatedBlock: " +
-            "Postponing processing of over-replicated " +
-            block + " since storage + " + storage
-            + "datanode " + cur + " does not yet have up-to-date " +
-            "block information.");
+        if (LOG.isTraceEnabled()) {
+          LOG.trace("BLOCK* processOverReplicatedBlock: " +
+              "Postponing processing of over-replicated " +
+              block + " since storage + " + storage
+              + "datanode " + cur + " does not yet have up-to-date " +
+              "block information.");
+        }
         postponeBlock(block);
         return;
       }
