@@ -3166,8 +3166,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     }
     getEditLog().logSync();
     if (success) {
-      NameNode.stateChangeLog.info("DIR* completeFile: " + src
-          + " is closed by " + holder);
+      NameNode.stateChangeLog.info("DIR* completeFile: " + src);
     }
     return success;
   }
@@ -3895,7 +3894,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    */
   void fsync(String src, long fileId, String clientName, long lastBlockLength)
       throws IOException, UnresolvedLinkException {
-    NameNode.stateChangeLog.info("BLOCK* fsync: " + src + " for " + clientName);
+    // NameNode.stateChangeLog.info("BLOCK* fsync: " + src + " for " + clientName);
     checkOperation(OperationCategory.WRITE);
     byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
     writeLock();
@@ -4422,7 +4421,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
           checkTraverse(pc, src);
         }
       }
-      logAuditEvent(true, "listStatus", src);
+      // This actully cannot provide much useful audit information, simply remote it.
+      // logAuditEvent(true, "listStatus", src);
       dl = dir.getListing(src, startAfter, needLocation);
     } finally {
       readUnlock();
@@ -8045,10 +8045,10 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         sb.append("ip=").append(addr).append("\t");
         sb.append("cmd=").append(cmd).append("\t");
         sb.append("src=").append(src).append("\t");
-        sb.append("dst=").append(dst).append("\t");
-        if (null == status) {
-          sb.append("perm=null");
-        } else {
+        if (dst != null) {
+	  sb.append("dst=").append(dst).append("\t");
+        }
+        if (null != status) {
           sb.append("perm=");
           sb.append(status.getOwner()).append(":");
           sb.append(status.getGroup()).append(":");

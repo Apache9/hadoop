@@ -141,11 +141,9 @@ public class BlockInfoUnderConstruction extends BlockInfo {
     
     @Override
     public void appendStringTo(StringBuilder sb) {
-      sb.append("ReplicaUnderConstruction[")
-        .append(expectedLocation)
-        .append("|")
-        .append(state)
-        .append("]");
+      // The replica state can be gotten by fsck. The storage infomation
+      // is actually useless
+      sb.append("ReplicaUnderConstruction");
     }
   }
 

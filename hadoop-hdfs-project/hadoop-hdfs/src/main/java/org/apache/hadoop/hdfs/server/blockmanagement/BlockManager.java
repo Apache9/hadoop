@@ -1080,7 +1080,9 @@ public class BlockManager {
       datanodes.append(node).append(" ");
     }
     if (datanodes.length() != 0) {
-      blockLog.info("BLOCK* addToInvalidates: " + b + " "
+      // When the block is send as command to datanode, it will be logged again.
+      // So just change the log level to debug.
+      blockLog.debug("BLOCK* addToInvalidates: " + b + " "
           + datanodes);
     }
   }
