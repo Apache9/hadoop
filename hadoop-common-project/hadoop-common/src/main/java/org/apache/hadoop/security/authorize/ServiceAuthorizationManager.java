@@ -116,8 +116,10 @@ public class ServiceAuthorizationManager {
           " is not authorized for protocol " + protocol + 
           ", expected client Kerberos principal is " + clientPrincipal);
     }
-    AUDITLOG.info(AUTHZ_SUCCESSFUL_FOR + user + " for protocol="+protocol +
-        " and addr=" + addr);
+    // There are too many this logs in audit log whereas it does not actually
+    // provide any useful audit information. Simply remove it.
+    // AUDITLOG.info(AUTHZ_SUCCESSFUL_FOR + user + " for protocol="+protocol +
+    //    " and addr=" + addr);
   }
 
   public void refresh(Configuration conf,
