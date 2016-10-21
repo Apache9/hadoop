@@ -3092,45 +3092,6 @@ public class BlockManager {
           .warn("BLOCK* processIncrementalBlockReport"
               + " is received from dead or unregistered node "
               + nodeID);
-<<<<<<< HEAD
-      throw new IOException(
-          "Got incremental block report from unregistered or dead node");
-    }
-
-    DatanodeStorageInfo storageInfo =
-        node.getStorageInfo(srdb.getStorage().getStorageID());
-    if (storageInfo == null) {
-      // The DataNode is reporting an unknown storage. Usually the NN learns
-      // about new storages from heartbeats but during NN restart we may
-      // receive a block report or incremental report before the heartbeat.
-      // We must handle this for protocol compatibility. This issue was
-      // uncovered by HDFS-6094.
-      storageInfo = node.updateStorage(srdb.getStorage());
-    }
-
-    for (ReceivedDeletedBlockInfo rdbi : srdb.getBlocks()) {
-      switch (rdbi.getStatus()) {
-      case DELETED_BLOCK:
-        removeStoredBlock(rdbi.getBlock(), node);
-        deleted++;
-        break;
-      case RECEIVED_BLOCK:
-        addBlock(storageInfo, rdbi.getBlock(), rdbi.getDelHints());
-        received++;
-        break;
-      case RECEIVING_BLOCK:
-        receiving++;
-        processAndHandleReportedBlock(storageInfo, rdbi.getBlock(),
-                                      ReplicaState.RBW, null);
-        break;
-      default:
-        String msg = 
-          "Unknown block status code reported by " + nodeID +
-          ": " + rdbi;
-        blockLog.warn(msg);
-        assert false : msg; // if assertions are enabled, throw.
-        break;
-=======
         throw new IOException(
             "Got incremental block report from unregistered or dead node");
       }
@@ -3138,15 +3099,17 @@ public class BlockManager {
       node.reportLock();
       reportLocked = true;
       namesystem.writeLock();
-      if (node.getStorageInfo(srdb.getStorage().getStorageID()) == null) {
+      DatanodeStorageInfo storageInfo =
+          node.getStorageInfo(srdb.getStorage().getStorageID());
+      if (storageInfo == null) {
         // The DataNode is reporting an unknown storage. Usually the NN learns
         // about new storages from heartbeats but during NN restart we may
         // receive a block report or incremental report before the heartbeat.
         // We must handle this for protocol compatibility. This issue was
         // uncovered by HDFS-6094.
-        node.updateStorage(srdb.getStorage());
+        storageInfo = node.updateStorage(srdb.getStorage());
       }
-
+ 
       for (ReceivedDeletedBlockInfo rdbi : srdb.getBlocks()) {
         switch (rdbi.getStatus()) {
         case DELETED_BLOCK:
@@ -3154,18 +3117,18 @@ public class BlockManager {
           deleted++;
           break;
         case RECEIVED_BLOCK:
-          addBlock(node, srdb.getStorage().getStorageID(), rdbi.getBlock(),
-              rdbi.getDelHints());
+          addBlock(storageInfo, rdbi.getBlock(), rdbi.getDelHints());
           received++;
           break;
         case RECEIVING_BLOCK:
           receiving++;
-          processAndHandleReportedBlock(node, srdb.getStorage().getStorageID(),
-              rdbi.getBlock(), ReplicaState.RBW, null);
+          processAndHandleReportedBlock(storageInfo, rdbi.getBlock(),
+                                      ReplicaState.RBW, null);
           break;
         default:
-          String msg =
-              "Unknown block status code reported by " + nodeID + ": " + rdbi;
+          String msg = 
+            "Unknown block status code reported by " + nodeID +
+            ": " + rdbi;
           blockLog.warn(msg);
           assert false : msg; // if assertions are enabled, throw.
           break;
@@ -3180,8 +3143,8 @@ public class BlockManager {
       if (reportLocked) {
         assert (node != null);
         node.reportUnlock();
-        }
       }
+    }
     blockLog.debug("*BLOCK* NameNode.processIncrementalBlockReport: " + "from "
         + nodeID + " receiving: " + receiving + ", " + " received: " + received
         + ", " + " deleted: " + deleted);
