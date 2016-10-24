@@ -746,4 +746,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.namenode.block.report.processing.per.iteration";
   public static final int DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION_DEFAULT =
       5000;
+
+  public static final String DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY =
+      "dfs.namenode.max.concurrent.getcontentsummary";
+  public static final int DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY_DEFAULT =
+      64;
 }
