@@ -2062,7 +2062,10 @@ public abstract class Server {
               // result.
               LOG.warn(logMsg, e);
             } else {
-              LOG.info(logMsg, e);
+              // The client will get the exception.
+              // It is not necessary to print the stack especially when there are 
+              // throttles for some RPCs.
+              LOG.info(logMsg + e);
             }
             if (e instanceof RpcServerException) {
               RpcServerException rse = ((RpcServerException)e); 
