@@ -553,6 +553,10 @@ public class WritableRpcEngine implements RpcEngine {
          server.rpcMetrics.addRpcProcessingTime(processingTime);
          server.rpcDetailedMetrics.addProcessingTime(detailedMetricsName,
              processingTime);
+         if (server.ipcServerPerfCounter != null) {
+           server.ipcServerPerfCounter.addMetric(call.getMethodName(), 1,
+               qTime, processingTime);
+         }
        }
       }
     }

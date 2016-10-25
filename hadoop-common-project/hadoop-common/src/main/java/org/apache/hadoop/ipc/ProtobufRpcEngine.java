@@ -640,6 +640,10 @@ public class ProtobufRpcEngine implements RpcEngine {
           server.rpcMetrics.addRpcProcessingTime(processingTime);
           server.rpcDetailedMetrics.addProcessingTime(detailedMetricsName,
               processingTime);
+          if (server.ipcServerPerfCounter != null) {
+            server.ipcServerPerfCounter.addMetric(methodName, 1, qTime,
+                processingTime);
+          }
         }
         return new RpcResponseWrapper(result);
       }
