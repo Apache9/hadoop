@@ -903,4 +903,14 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final int DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY_DEFAULT =
       64;
   public static final String  DFS_DATANODE_RESERVED_SPACE_BLOCK_NUM_KEY = "dfs.datanode.reserved.space.block.number";
+  
+  public static final String DFS_NAMENODE_ENABLE_RPC_PERFCOUNTER =
+      "dfs.namenode.enable.rpc.perfcounter";
+  public static final boolean DFS_NAMENODE_ENABLE_RPC_PERFCOUNTER_DEFAULT =
+      false;
+
+  public static final String DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS =
+      "dfs.namenode.perfcounter.intervalMS";
+  public static final long DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS_DEFAULT =
+      300000; // 5min
 }
