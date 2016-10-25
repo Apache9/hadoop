@@ -36,6 +36,7 @@ import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
@@ -355,6 +356,29 @@ class NameNodeRpcServer implements NamenodeProtocols {
     minimumDataNodeVersion = conf.get(
         DFSConfigKeys.DFS_NAMENODE_MIN_SUPPORTED_DATANODE_VERSION_KEY,
         DFSConfigKeys.DFS_NAMENODE_MIN_SUPPORTED_DATANODE_VERSION_DEFAULT);
+
+    List<Class<?>> protocols = new LinkedList<Class<?>>();
+    protocols.add(org.apache.hadoop.hdfs.protocol.ClientProtocol.class);
+    protocols.add(org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol.class);
+    protocols.add(org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol.class);
+    protocols.add(org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol.class);
+    protocols.add(org.apache.hadoop.security.RefreshUserMappingsProtocol.class);
+    protocols.add(org.apache.hadoop.ipc.RefreshCallQueueProtocol.class);
+    protocols.add(org.apache.hadoop.tools.GetUserMappingsProtocol.class);
+    protocols.add(org.apache.hadoop.ha.HAServiceProtocol.class);
+    
+    if (conf.getBoolean(DFSConfigKeys.DFS_NAMENODE_ENABLE_RPC_PERFCOUNTER,
+        DFSConfigKeys.DFS_NAMENODE_ENABLE_RPC_PERFCOUNTER_DEFAULT)) {
+      long reportIntervalMs =
+          conf.getLong(DFSConfigKeys.DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS,
+              DFSConfigKeys.DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS_DEFAULT);
+      this.clientRpcServer.initIPCServerPerfCounter(reportIntervalMs,
+          protocols, "HDFS-NameNode-");
+      if (this.serviceRpcServer != null) {
+        this.serviceRpcServer.initIPCServerPerfCounter(reportIntervalMs,
+            protocols, "HDFS-NameNode-");
+      }
+    }
 
     // Set terse exception whose stack trace won't be logged
     this.clientRpcServer.addTerseExceptions(SafeModeException.class,
@@ -1045,9 +1069,7 @@ class NameNodeRpcServer implements NamenodeProtocols {
     int inFlightReports = concurrentBlockReport.incrementAndGet();
     try {
       if (inFlightReports > maxConcurrentBlockReport) {
-        throw new IOException(inFlightReports + " block reports happen at the same time, "
-            + "which exceeds the max allowable value "
-            + maxConcurrentBlockReport);
+        throw new IOException("Too many block reports happen at the same time");
       }
       verifyRequest(nodeReg);
       final BlockManager bm = namesystem.getBlockManager(); 
@@ -1088,10 +1110,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
     int inFlightReports = concurrentIncrementalBlockReport.incrementAndGet();
     try {
       if (inFlightReports > maxConcurrentIncrementalBlockReport) {
-        throw new IOException(inFlightReports
-            + " incremental block reports happen at the same time, "
-            + "which exceeds the max allowable value "
-            + maxConcurrentIncrementalBlockReport);
+        throw new IOException(
+            "Too many incremental reports happen at the same time");
       }
       verifyRequest(nodeReg);
       metrics.incrBlockReceivedAndDeletedOps();

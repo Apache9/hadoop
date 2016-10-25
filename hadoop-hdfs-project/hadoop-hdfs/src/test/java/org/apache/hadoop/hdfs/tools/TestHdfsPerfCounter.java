@@ -27,6 +27,8 @@ public class TestHdfsPerfCounter {
     conf = new Configuration();
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_PERFCOUNTER_ENABLED_KEY, true);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024*1024); // set blocksize to 1M
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ENABLE_RPC_PERFCOUNTER, true);
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS, 3000);
     cluster = new MiniDFSCluster.Builder(conf).build();
     cluster.waitActive();
     fs = (DistributedFileSystem)cluster.getFileSystem();
@@ -37,7 +39,8 @@ public class TestHdfsPerfCounter {
     return HdfsPerfCounter.HDFS_PERFCOUNTER_PREFIX + method;
   }
 
-  @Test public void testMkdir() throws IOException {
+  @Test
+  public void testPerfCounter() throws IOException {
     DFSClient client = fs.getClient();
     client.mkdirs("/tmp/foo", null, true);
     client.mkdirs("/tmp/bar", null, true);
@@ -60,5 +63,15 @@ public class TestHdfsPerfCounter {
     in.close();
     assertEquals(PerfCounter.getCounterValue(CounterName("open")), 1);
     assertEquals(PerfCounter.getCounterValue(CounterName("readBuffer")), 1);
+
+    try {
+      Thread.sleep(3000);
+    } catch (InterruptedException ie) {
+      throw new IOException("Test interrupted");
+    }
+
+    assertEquals(PerfCounter.getLongGaugeValue("HDFS-NameNode-mkdirs-Ops"), 2);
+    assertEquals(PerfCounter.getLongGaugeValue("HDFS-NameNode-delete-Ops"), 1);
+    assertEquals(PerfCounter.getLongGaugeValue("HDFS-NameNode-complete-Ops"), 1);
   }
 }

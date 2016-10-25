@@ -746,4 +746,14 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.namenode.block.report.processing.per.iteration";
   public static final int DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION_DEFAULT =
       5000;
+  
+  public static final String DFS_NAMENODE_ENABLE_RPC_PERFCOUNTER =
+      "dfs.namenode.enable.rpc.perfcounter";
+  public static final boolean DFS_NAMENODE_ENABLE_RPC_PERFCOUNTER_DEFAULT =
+      false;
+
+  public static final String DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS =
+      "dfs.namenode.perfcounter.intervalMS";
+  public static final long DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS_DEFAULT =
+      300000; // 5min
 }

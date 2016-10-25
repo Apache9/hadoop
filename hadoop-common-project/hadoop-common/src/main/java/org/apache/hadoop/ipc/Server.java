@@ -120,6 +120,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.Message;
 import com.google.protobuf.Message.Builder;
+import com.xiaomi.infra.hadoop.IPCServerPerfCounter;
 
 /** An abstract IPC service.  IPC calls take a single {@link Writable} as a
  * parameter, and return a {@link Writable} as their value.  A service runs on
@@ -354,6 +355,8 @@ public abstract class Server {
   private Class<? extends Writable> rpcRequestClass;   // class used for deserializing the rpc request
   protected RpcMetrics rpcMetrics;
   protected RpcDetailedMetrics rpcDetailedMetrics;
+  
+  protected IPCServerPerfCounter ipcServerPerfCounter;
   
   private Configuration conf;
   private String portRangeConfig = null;
@@ -2196,6 +2199,7 @@ public abstract class Server {
     }
     
     this.exceptionsHandler.addTerseExceptions(StandbyException.class);
+    this.ipcServerPerfCounter = null;
   }
   
   private RpcSaslProto buildNegotiateResponse(List<AuthMethod> authMethods)
@@ -2406,6 +2410,10 @@ public abstract class Server {
       handlers[i] = new Handler(i);
       handlers[i].start();
     }
+    
+    if (this.ipcServerPerfCounter != null) {
+    	this.ipcServerPerfCounter.startIPCServerPerfCounter();
+    }
   }
 
   /** Stops the service.  No new calls will be handled after this is called. */
@@ -2428,6 +2436,9 @@ public abstract class Server {
     }
     if (this.rpcDetailedMetrics != null) {
       this.rpcDetailedMetrics.shutdown();
+    }
+    if (this.ipcServerPerfCounter != null) {
+    	this.ipcServerPerfCounter.shutdownIPCServerPerfCounter();
     }
   }
 
@@ -2612,6 +2623,13 @@ public abstract class Server {
 
     int nBytes = initialRemaining - buf.remaining(); 
     return (nBytes > 0) ? nBytes : ret;
+  }
+  
+  public void initIPCServerPerfCounter(final long reportIntervalMs,
+                                       final List<Class<?>> protocols, 
+                                       final String servicePrefix) {
+    this.ipcServerPerfCounter = new IPCServerPerfCounter();
+    this.ipcServerPerfCounter.initIPCServerPerfCounter(reportIntervalMs, protocols, servicePrefix);
   }
   
   private class ConnectionManager {

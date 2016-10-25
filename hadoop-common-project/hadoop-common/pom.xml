@@ -272,6 +272,11 @@
       <artifactId>hadoop-minikdc</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+    	<groupId>com.xiaomi.common.perfcounter</groupId>
+    	<artifactId>xiaomi-common-perfcounter</artifactId>
+    	<version>2.6.4</version>
+    </dependency>
   </dependencies>
 
   <build>
