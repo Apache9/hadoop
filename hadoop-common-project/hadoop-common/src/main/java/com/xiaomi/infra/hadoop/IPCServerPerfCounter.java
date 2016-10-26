@@ -67,28 +67,32 @@ public class IPCServerPerfCounter {
               break;
             }
           }
+          long totalOps = 0;
           for (String metricName : metrics.keySet()) {
             IPCServerMetric ipcMetric = metrics.get(metricName);
             // Get metrics value
             int numOps = ipcMetric.numOps;
             long queueTime = ipcMetric.queueTime;
             long processingTime = ipcMetric.processingTime;
+            totalOps += numOps;
             // Reset metrics
             ipcMetric.numOps = 0;
             ipcMetric.queueTime = 0;
             ipcMetric.processingTime = 0;
             // Calculate avg queuetime and processing time
+            long opQps = numOps * 1000 / reportIntervalMs;
             long avgQueueTime = queueTime / ((numOps == 0) ? 1 : numOps);
             long avgProcessingTime =
                 processingTime / ((numOps == 0) ? 1 : numOps);
             // Push to perfcounter
-            PerfCounter.setGaugeValue(prefix + metricName + "-Ops",
-                (long) numOps);
+            PerfCounter.setGaugeValue(prefix + metricName + "-Qps", opQps);
             PerfCounter.setGaugeValue(prefix + metricName + "-AvgQueueTime",
                 avgQueueTime);
             PerfCounter.setGaugeValue(prefix + metricName + "-AvgProcessTime",
                 avgProcessingTime);
           }
+          long totalQps = totalOps * 1000 / reportIntervalMs;
+          PerfCounter.setGaugeValue(prefix + "-Qps", totalQps);
         }
       }
     };
