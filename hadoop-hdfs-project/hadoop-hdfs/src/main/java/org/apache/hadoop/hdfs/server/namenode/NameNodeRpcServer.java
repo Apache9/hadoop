@@ -23,6 +23,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_B
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_DEPTH;
@@ -193,6 +195,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
   private int maxConcurrentBlockReport;
   private AtomicInteger concurrentIncrementalBlockReport = new AtomicInteger(0);
   private int maxConcurrentIncrementalBlockReport;
+  private AtomicInteger concurrentGetContentSummary = new AtomicInteger(0);
+  private int maxConcurrentGetContentSummary;
 
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
@@ -207,6 +211,10 @@ class NameNodeRpcServer implements NamenodeProtocols {
     this.maxConcurrentBlockReport = 
         conf.getInt(DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT, 
                   DFS_NAMENODE_MAX_CONCURRENT_BLOCKREPORT_DEFAULT);
+    
+    this.maxConcurrentGetContentSummary =
+        conf.getInt(DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY,
+            DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY_DEFAULT);
 
     this.maxConcurrentIncrementalBlockReport =
         conf.getInt(DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT,
@@ -972,7 +980,21 @@ class NameNodeRpcServer implements NamenodeProtocols {
   
   @Override // ClientProtocol
   public ContentSummary getContentSummary(String path) throws IOException {
-    return namesystem.getContentSummary(path);
+    int inFlightGetContentSummary =
+        concurrentGetContentSummary.incrementAndGet();
+    try {
+      if (inFlightGetContentSummary > maxConcurrentGetContentSummary) {
+        throw new IOException(inFlightGetContentSummary
+            + " getContentSummary happen at the same time, "
+            + "which exceeds the max alloable value"
+            + concurrentGetContentSummary);
+      }
+      return namesystem.getContentSummary(path);
+    } finally {
+      int stillInFlightGetContentSummary =
+          concurrentGetContentSummary.decrementAndGet();
+      assert (stillInFlightGetContentSummary >= 0);
+    }
   }
 
   @Override // ClientProtocol

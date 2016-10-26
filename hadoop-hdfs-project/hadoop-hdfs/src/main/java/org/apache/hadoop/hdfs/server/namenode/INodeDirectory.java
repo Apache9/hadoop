@@ -639,7 +639,7 @@ public class INodeDirectory extends INodeWithAdditionalFields
         continue;
       }
       // The locks were released and reacquired. Check parent first.
-      if (getParent() == null) {
+      if (getParent() == null && !isRoot()) {
         // Stop further counting and return whatever we have so far.
         break;
       }
