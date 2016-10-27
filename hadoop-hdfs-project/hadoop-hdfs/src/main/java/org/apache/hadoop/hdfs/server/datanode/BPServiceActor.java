@@ -715,8 +715,10 @@ class BPServiceActor implements Runnable {
             }
           }
         }
-        if (sendImmediateIBR ||
-            (startTime - lastDeletedReport > dnConf.deleteReportInterval)) {
+
+        if (sendImmediateIBR && (!dnConf.sendIBRInBatch
+            || startTime - lastDeletedReport > dnConf.sendIBRBatchInterval) || (
+            startTime - lastDeletedReport > dnConf.deleteReportInterval)) {
           reportReceivedDeletedBlocks();
           lastDeletedReport = startTime;
         }

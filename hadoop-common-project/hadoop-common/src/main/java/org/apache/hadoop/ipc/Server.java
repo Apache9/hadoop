@@ -22,6 +22,7 @@ import static org.apache.hadoop.ipc.RpcConstants.AUTHORIZATION_FAILED_CALL_ID;
 import static org.apache.hadoop.ipc.RpcConstants.CONNECTION_CONTEXT_CALL_ID;
 import static org.apache.hadoop.ipc.RpcConstants.CURRENT_VERSION;
 import static org.apache.hadoop.ipc.RpcConstants.PING_CALL_ID;
+import static org.apache.hadoop.util.Time.now;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -369,6 +370,8 @@ public abstract class Server {
   private int socketSendBufferSize;
   private final int maxDataLength;
   private final boolean tcpNoDelay; // if T then disable Nagle's Algorithm
+  volatile private long lastReadAndProcessExceptionCountTime = 0;
+  volatile private long readAndProcessExceptionCount = 0;
 
   volatile private boolean running = true;         // true while server runs
   private CallQueueManager<Call> callQueue;
@@ -761,13 +764,27 @@ public abstract class Server {
         LOG.info(Thread.currentThread().getName() + ": readAndProcess caught InterruptedException", ieo);
         throw ieo;
       } catch (Exception e) {
-        // a WrappedRpcServerException is an exception that has been sent
-        // to the client, so the stacktrace is unnecessary; any other
-        // exceptions are unexpected internal server errors and thus the
-        // stacktrace should be logged
-        LOG.info(Thread.currentThread().getName() + ": readAndProcess from client " +
-            c.getHostAddress() + " threw exception [" + e + "]",
-            (e instanceof WrappedRpcServerException) ? null : e);
+        //TODO: this is a temp throttle, will remove it after we found the root cause
+        readAndProcessExceptionCount++;
+        if (now() - lastReadAndProcessExceptionCountTime > 1000) {
+          lastReadAndProcessExceptionCountTime = now();
+          readAndProcessExceptionCount = 1;
+        }
+
+        if (readAndProcessExceptionCount <= 5) {
+          // a WrappedRpcServerException is an exception that has been sent
+          // to the client, so the stacktrace is unnecessary; any other
+          // exceptions are unexpected internal server errors and thus the
+          // stacktrace should be logged
+          LOG.info(
+              Thread.currentThread().getName() + ": readAndProcess from client "
+                  + c.getHostAddress() + " threw exception [" + e + "]",
+              (e instanceof WrappedRpcServerException) ? null : e);
+          if (readAndProcessExceptionCount == 5) {
+            LOG.warn("Too frequent readAndProcess exception, "
+                + "will not print this kind of log any more in 1s");
+          }
+        }
         count = -1; //so that the (count < 0) block is executed
       }
       if (count < 0) {

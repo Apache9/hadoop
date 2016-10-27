@@ -72,6 +72,7 @@ public class DNConf {
   final boolean syncOnClose;
   final boolean encryptDataTransfer;
   final boolean connectToDnViaHostname;
+  final boolean sendIBRInBatch;
 
   final long readaheadLength;
   final long heartBeatInterval;
@@ -83,6 +84,7 @@ public class DNConf {
   final long initialBlockReportDelay;
   final long cacheReportInterval;
   final int writePacketSize;
+  final long sendIBRBatchInterval;
   
   final String minimumNameNodeVersion;
   final String encryptionAlgorithm;
@@ -129,6 +131,14 @@ public class DNConf {
     connectToDnViaHostname = conf.getBoolean(
         DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME,
         DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT);
+    sendIBRInBatch = conf.getBoolean(
+        DFSConfigKeys.DFS_DATANODE_SEND_IBR_BATCH,
+        DFSConfigKeys.DFS_DATANODE_SEND_IBR_BATCH_DEFAULT
+    );
+    sendIBRBatchInterval = conf.getLong(
+        DFSConfigKeys.DFS_DATANODE_IBR_BATCH_INTERVAL,
+        DFSConfigKeys.DFS_DATANODE_IBR_BATCH_INTERVAL_DEFAULT
+    );
     this.blockReportInterval = conf.getLong(DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,
         DFS_BLOCKREPORT_INTERVAL_MSEC_DEFAULT);
     this.firstBlockReportFailureGracePeiord = conf.getLong(DFSConfigKeys.DFS_DATANODE_FIRST_BLOCKREPORT_FAILURE_GRACEPERIOD,
