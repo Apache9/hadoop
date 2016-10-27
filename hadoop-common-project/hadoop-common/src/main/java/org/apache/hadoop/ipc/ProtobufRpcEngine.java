@@ -644,14 +644,26 @@ public class ProtobufRpcEngine implements RpcEngine {
             server.ipcServerPerfCounter.addMetric(methodName, 1, qTime,
                 processingTime);
           }
-          if (qTime >= queueTimeThreshold
-              || processingTime >= processingTimeThreshold) {
+          if (processingTime >= processingTimeThreshold) { 
             StringBuilder sb = new StringBuilder();
             sb.append("Slow rpc ").append(methodName).append(" : received at ")
                 .append(receiveTime).append(", queued time is ").append(qTime)
                 .append("ms, processing time is ").append(processingTime)
                 .append("ms.");
             LOG.info(sb.toString());
+          } else if (qTime >= queueTimeThreshold) {
+            // Simeply throttle: print 1/30 of all logs
+            long currentTime = Time.now();
+            // Simply hard coded to 10s per log. TBD: make it as configurable.
+            if (currentTime - lastLogged > 10000) {
+              lastLogged = currentTime;
+              StringBuilder sb = new StringBuilder();
+              sb.append("Slow rpc ").append(methodName).append(" : received at ")
+                .append(receiveTime).append(", queued time is ").append(qTime)
+                .append("ms, processing time is ").append(processingTime)
+                .append("ms.");
+              LOG.info(sb.toString());
+            }
           }
         }
         return new RpcResponseWrapper(result);

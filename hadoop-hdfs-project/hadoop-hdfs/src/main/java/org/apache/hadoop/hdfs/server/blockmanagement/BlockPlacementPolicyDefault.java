@@ -75,6 +75,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private boolean randomlyDelete;
   private Random rand;
   private int reservedBlockNumPerStorage;
+  private int maxScheduled;
 
   /**
    * A miss of that many heartbeats is tolerated for replica deletion policy.
@@ -115,6 +116,9 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     this.reservedBlockNumPerStorage = conf.getInt(
         DFSConfigKeys.DFS_DATANODE_RESERVED_SPACE_BLOCK_NUM_KEY,
         HdfsConstants.MIN_BLOCKS_FOR_WRITE);
+    this.maxScheduled =
+        conf.getInt(DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENT_MAX_SCHEDULED,
+            DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENT_MAX_SCHEDULED_DEFAULT);
   }
 
   @Override
@@ -842,7 +846,11 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     }
 
     final long requiredSize = blockSize * reservedBlockNumPerStorage;
-    final long scheduledSize = blockSize * node.getBlocksScheduled(storage.getStorageType());
+    int scheduledBlocks = node.getBlocksScheduled();
+    if (scheduledBlocks > maxScheduled) {
+      scheduledBlocks = maxScheduled;
+    }
+    final long scheduledSize = blockSize * scheduledBlocks;
     final long remaining = node.getRemaining(storage.getStorageType());
     if (requiredSize > remaining - scheduledSize) {
       logNodeIsNotChosen(storage, "the node does not have enough "

@@ -555,8 +555,7 @@ public class WritableRpcEngine implements RpcEngine {
            server.ipcServerPerfCounter.addMetric(call.getMethodName(), 1,
                qTime, processingTime);
          }
-          if (qTime >= queueTimeThreshold
-              || processingTime >= processingTimeThreshold) {
+         if (processingTime >= processingTimeThreshold) {
             StringBuilder sb = new StringBuilder();
             sb.append("Slow rpc ").append(call.getMethodName())
                 .append(" : received at ").append(receivedTime)
@@ -564,6 +563,20 @@ public class WritableRpcEngine implements RpcEngine {
                 .append("ms, processing time is ").append(processingTime)
                 .append("ms.");
             LOG.info(sb.toString());
+          } else if (qTime >= queueTimeThreshold) {
+            // Simeply throttle: print 1/30 of all logs
+            long currentTime = Time.now();
+            // Simply hard coded to 10s per log. TBD: make it as configurable.
+            if (currentTime - lastLogged > 10000) {
+              lastLogged = currentTime;
+              StringBuilder sb = new StringBuilder();
+              sb.append("Slow rpc ").append(call.getMethodName())
+                .append(" : received at ").append(receivedTime)
+                .append(", queued time is ").append(qTime)
+                .append("ms, processing time is ").append(processingTime)
+                .append("ms.");
+              LOG.info(sb.toString());
+            }
           }
        }
       }
