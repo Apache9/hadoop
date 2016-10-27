@@ -383,6 +383,7 @@ public abstract class Server {
   // logging the time for debugging
   protected static long queueTimeThreshold;
   protected static long processingTimeThreshold;
+  protected static volatile long lastLogged = 0;
 
   /**
    * A convenience method to bind to a given address and report 

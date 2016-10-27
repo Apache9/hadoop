@@ -79,6 +79,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private long overUsedFreespaceThreshold;
   private boolean randomlyDelete;
   private Random rand;
+  private int maxScheduled;
 
   /**
    * A miss of that many heartbeats is tolerated for replica deletion policy.
@@ -122,6 +123,9 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
         conf.getBoolean(DFSConfigKeys.DFS_NAMENODE_REPLICA_DELETE_RANDOMLY,
             DFSConfigKeys.DFS_NAMENODE_REPLICA_DELETE_RANDOMLY_DEFAULT);
     this.rand = new Random();
+    this.maxScheduled =
+        conf.getInt(DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENT_MAX_SCHEDULED,
+            DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENT_MAX_SCHEDULED_DEFAULT);
   }
 
   @Override
@@ -698,7 +702,11 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     }
 
     final long requiredSize = blockSize * reservedBlockNumPerStorage;
-    final long scheduledSize = blockSize * node.getBlocksScheduled();
+    int scheduledBlocks = node.getBlocksScheduled();
+    if (scheduledBlocks > maxScheduled) {
+      scheduledBlocks = maxScheduled;
+    }
+    final long scheduledSize = blockSize * scheduledBlocks;
     if (requiredSize > storage.getRemaining() - scheduledSize) {
       logNodeIsNotChosen(storage, "the node does not have enough space ");
       return false;
