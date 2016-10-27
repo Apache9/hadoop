@@ -914,6 +914,13 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final long DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS_DEFAULT =
       300000; // 5min
 
+  public static final String DFS_DATANODE_SEND_IBR_BATCH=
+      "dfs.datanode.send.ibr.batch";
+  public static final boolean DFS_DATANODE_SEND_IBR_BATCH_DEFAULT= false;
+  public static final String DFS_DATANODE_IBR_BATCH_INTERVAL=
+      "dfs.datanode.ibr.batch.interval";
+  public static final long DFS_DATANODE_IBR_BATCH_INTERVAL_DEFAULT = 1000;
+
   // The datanode defaullt has 4096 xceivers and usually 12 volumes. The
   // sheduled blocks for a volume is unlikly to get above 1024.
   public static final String DFS_NAMENODE_BLOCKPLACEMENT_MAX_SCHEDULED =
