@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
-import static org.apache.hadoop.util.Time.monotonicNow;
+import static org.apache.hadoop.util.Time.now;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -38,7 +38,6 @@ import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.util.Daemon;
-import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -222,17 +221,17 @@ public class LeaseManager {
     }
     /** Only LeaseManager object can renew a lease */
     private void renew() {
-      this.lastUpdate = monotonicNow();
+      this.lastUpdate = now();
     }
 
     /** @return true if the Hard Limit Timer has expired */
     public boolean expiredHardLimit() {
-      return monotonicNow() - lastUpdate > hardLimit;
+      return now() - lastUpdate > hardLimit;
     }
 
     /** @return true if the Soft Limit Timer has expired */
     public boolean expiredSoftLimit() {
-      return monotonicNow() - lastUpdate > softLimit;
+      return now() - lastUpdate > softLimit;
     }
 
     /** Does this lease contain any path? */
@@ -390,7 +389,7 @@ public class LeaseManager {
             }
           }
   
-          Thread.sleep(fsnamesystem.getLeaseRecheckIntervalMs());
+          Thread.sleep(HdfsServerConstants.NAMENODE_LEASE_RECHECK_INTERVAL);
         } catch(InterruptedException ie) {
           if (LOG.isDebugEnabled()) {
             LOG.debug(name + " is interrupted", ie);
@@ -423,32 +422,33 @@ public class LeaseManager {
   /** Check the leases beginning from the oldest.
    *  @return true is sync is needed.
    */
-  synchronized boolean checkLeases() {
+  private synchronized boolean checkLeases() {
     boolean needSync = false;
     assert fsnamesystem.hasWriteLock();
-    long start = monotonicNow();
+    for(; sortedLeases.size() > 0; ) {
+      final Lease oldest = sortedLeases.first();
+      if (!oldest.expiredHardLimit()) {
+        return needSync;
+      }
 
-    Lease leaseToCheck;
-    while(!sortedLeases.isEmpty() && (leaseToCheck = sortedLeases.first()).expiredHardLimit()
-      && !isMaxLockHoldToReleaseLease(start)) {
-      LOG.info(leaseToCheck + " has expired hard limit");
+      LOG.info(oldest + " has expired hard limit");
 
       final List<String> removing = new ArrayList<String>();
       // need to create a copy of the oldest lease paths, becuase 
       // internalReleaseLease() removes paths corresponding to empty files,
       // i.e. it needs to modify the collection being iterated over
       // causing ConcurrentModificationException
-      String[] leasePaths = new String[leaseToCheck.getPaths().size()];
-      leaseToCheck.getPaths().toArray(leasePaths);
+      String[] leasePaths = new String[oldest.getPaths().size()];
+      oldest.getPaths().toArray(leasePaths);
       for(String p : leasePaths) {
         try {
-          boolean completed = fsnamesystem.internalReleaseLease(leaseToCheck, p,
+          boolean completed = fsnamesystem.internalReleaseLease(oldest, p,
               HdfsServerConstants.NAMENODE_LEASE_HOLDER);
           if (LOG.isDebugEnabled()) {
             if (completed) {
               LOG.debug("Lease recovery for " + p + " is complete. File closed.");
             } else {
-              LOG.debug("Started block recovery " + p + " lease " + leaseToCheck);
+              LOG.debug("Started block recovery " + p + " lease " + oldest);
             }
           }
           // If a lease recovery happened, we need to sync later.
@@ -457,28 +457,16 @@ public class LeaseManager {
           }
         } catch (IOException e) {
           LOG.error("Cannot release the path " + p + " in the lease "
-              + leaseToCheck, e);
+              + oldest, e);
           removing.add(p);
-        }
-        if (isMaxLockHoldToReleaseLease(start)) {
-          LOG.debug("Breaking out of checkLeases after " +
-              fsnamesystem.getMaxLockHoldToReleaseLeaseMs() + "ms.");
-          break;
         }
       }
 
       for(String p : removing) {
-        removeLease(leaseToCheck, p);
+        removeLease(oldest, p);
       }
     }
     return needSync;
-  }
-
-
-  /** @return true if max lock hold is reached */
-  private boolean isMaxLockHoldToReleaseLease(long start) {
-    return monotonicNow() - start >
-        fsnamesystem.getMaxLockHoldToReleaseLeaseMs();
   }
 
   @Override
