@@ -850,11 +850,6 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.datanode.enable.raid.service";
   public static final boolean DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT = false;
 
-  public static final String DFS_NAMENODE_MULTI_DC_BLOCKPLACEMENT_CONFIG_CLASS =
-      "dfs.namenode.multi.dc.blockplacement.config.class";
-  public static final Class<BalancedMultiDCBlockPlacementConfiguration> DFS_NAMENODE_MULTI_DC_BLOCKPLACEMENT_CONFIG_CLASS_DEFAULT =
-      org.apache.hadoop.hdfs.server.blockmanagement.BalancedMultiDCBlockPlacementConfiguration.class;
-
   public static final String DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_MS =
       "dfs.namenode.log.lock.duration.threshold";
   public static final long DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_DEFAULT =
