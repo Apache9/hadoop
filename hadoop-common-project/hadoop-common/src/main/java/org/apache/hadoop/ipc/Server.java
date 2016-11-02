@@ -2647,12 +2647,17 @@ public abstract class Server {
   }
   
   public void initIPCServerPerfCounter(final long reportIntervalMs,
-                                       final List<Class<?>> protocols, 
-                                       final String servicePrefix) {
+      final List<Class<?>> protocols, final String servicePrefix,
+      int topExpireNum, IPCServerPerfCounter.UserInformationCallBack uiCB) {
     this.ipcServerPerfCounter = new IPCServerPerfCounter();
-    this.ipcServerPerfCounter.initIPCServerPerfCounter(reportIntervalMs, protocols, servicePrefix);
+    this.ipcServerPerfCounter.initIPCServerPerfCounter(reportIntervalMs,
+        protocols, servicePrefix, topExpireNum, uiCB);
   }
-  
+
+  public IPCServerPerfCounter getIPCServerPerfCounter() {
+    return ipcServerPerfCounter;
+  }
+
   private class ConnectionManager {
     final private AtomicInteger count = new AtomicInteger();    
     final private Set<Connection> connections;

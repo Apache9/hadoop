@@ -769,4 +769,13 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.namenode.blockplacement.max.scheduled";
   public static final int DFS_NAMENODE_BLOCKPLACEMENT_MAX_SCHEDULED_DEFAULT =
       1024;
+
+  public static final String DFS_NAMENODE_USER_TOP_METRICS_ENABLED =
+      "dfs.namenode.user.top.metrics.enabled";
+  public static final boolean DFS_NAMENODE_USER_TOP_METRICS_ENABLED_DEFAULT =
+      false;
+
+  public static final String DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM =
+      "dfs.namenode.top.metric.expire.num";
+  public static final int DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM_DEFAULT = 30;
 }
