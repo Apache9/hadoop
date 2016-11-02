@@ -900,4 +900,13 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_POSTPONED_RESCAN_RANDOM_RATIO =
       "dfs.namenode.postponed.rescan.random.ratio";
   public static final int DFS_NAMENODE_POSTPONED_RESCAN_RANDOM_RATIO_DEFAULT = 6;
+
+  public static final String DFS_NAMENODE_USER_TOP_METRICS_ENABLED =
+      "dfs.namenode.user.top.metrics.enabled";
+  public static final boolean DFS_NAMENODE_USER_TOP_METRICS_ENABLED_DEFAULT =
+      false;
+
+  public static final String DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM =
+      "dfs.namenode.top.metric.expire.num";
+  public static final int DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM_DEFAULT = 30;
 }
