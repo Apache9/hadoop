@@ -184,6 +184,7 @@ import org.apache.hadoop.util.VersionUtil;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.BlockingService;
+import com.xiaomi.infra.hadoop.IPCServerPerfCounter;
 
 /**
  * This class is responsible for handling all of the RPC calls to the NameNode.
@@ -217,6 +218,29 @@ class NameNodeRpcServer implements NamenodeProtocols {
   private int maxConcurrentIncrementalBlockReport;
   private AtomicInteger concurrentGetContentSummary = new AtomicInteger(0);
   private int maxConcurrentGetContentSummary;
+
+  class NameNodeUserInfoCallBack implements
+      IPCServerPerfCounter.UserInformationCallBack {
+    private String trimUserName(String userName) {
+      // The user name format is in form of h_micloud_job@XIAOMI.HADOOP
+      // (auth:TOKEN)
+      int idx = userName.indexOf('@');
+      if (idx >= 0) {
+        userName = userName.substring(0, idx);
+      }
+      return userName;
+    }
+
+    public String getUserName() {
+      String user = "n/a";
+      try {
+        user = trimUserName(NameNode.getRemoteUser().toString());
+      } catch (IOException ioe) {
+        // Ignore
+      }
+      return user;
+    }
+  }
 
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
@@ -418,11 +442,21 @@ class NameNodeRpcServer implements NamenodeProtocols {
       long reportIntervalMs =
           conf.getLong(DFSConfigKeys.DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS,
               DFSConfigKeys.DFS_NAMENODE_PERFCOUNTER_INTERVAL_MS_DEFAULT);
+      int topExpireNum =
+          conf.getInt(DFSConfigKeys.DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM,
+              DFSConfigKeys.DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM_DEFAULT);
+      boolean topMetircsEnabled =
+          conf.getBoolean(DFSConfigKeys.DFS_NAMENODE_USER_TOP_METRICS_ENABLED,
+              DFSConfigKeys.DFS_NAMENODE_USER_TOP_METRICS_ENABLED_DEFAULT);
+      NameNodeUserInfoCallBack nnui = null;
+      if (topMetircsEnabled) {
+        nnui = new NameNodeUserInfoCallBack();
+      }
       this.clientRpcServer.initIPCServerPerfCounter(reportIntervalMs,
-          protocols, "HDFS-NameNode-");
+          protocols, "HDFS-NameNode-", topExpireNum, nnui);
       if (this.serviceRpcServer != null) {
         this.serviceRpcServer.initIPCServerPerfCounter(reportIntervalMs,
-            protocols, "HDFS-NameNode-");
+            protocols, "HDFS-NameNode-", topExpireNum, nnui);
       }
     }
 
