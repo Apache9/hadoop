@@ -19,13 +19,13 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project-dist_1.8</artifactId>
-    <version>2.6.0-mdh3.10-SNAPSHOT</version>
+    <artifactId>hadoop-project-dist</artifactId>
+    <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
     <relativePath>../../hadoop-project-dist</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-hdfs_1.8</artifactId>
-  <version>2.6.0-mdh3.10-SNAPSHOT</version>
+  <artifactId>hadoop-hdfs</artifactId>
+  <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
   <description>Apache Hadoop HDFS</description>
   <name>Apache Hadoop HDFS</name>
   <packaging>jar</packaging>
@@ -40,22 +40,22 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations_1.8</artifactId>
+      <artifactId>hadoop-annotations</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-auth_1.8</artifactId>
+      <artifactId>hadoop-auth</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
@@ -151,7 +151,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-minikdc_1.8</artifactId>
+      <artifactId>hadoop-minikdc</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -200,14 +200,14 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-kms_1.8</artifactId>
+      <artifactId>hadoop-kms</artifactId>
       <classifier>classes</classifier>
       <type>jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-kms_1.8</artifactId>
+      <artifactId>hadoop-kms</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
@@ -467,7 +467,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
       </plugin>
       <plugin>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-maven-plugins_1.8</artifactId>
+        <artifactId>hadoop-maven-plugins</artifactId>
         <executions>
           <execution>
             <id>compile-protoc</id>

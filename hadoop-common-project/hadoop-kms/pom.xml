@@ -21,13 +21,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project_1.8</artifactId>
-    <version>2.6.0-mdh3.10-SNAPSHOT</version>
+    <artifactId>hadoop-project</artifactId>
+    <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-kms_1.8</artifactId>
-  <version>2.6.0-mdh3.10-SNAPSHOT</version>
+  <artifactId>hadoop-kms</artifactId>
+  <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
   <packaging>war</packaging>
 
   <name>Apache Hadoop KMS</name>
@@ -45,7 +45,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-minikdc_1.8</artifactId>
+      <artifactId>hadoop-minikdc</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -60,7 +60,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-auth_1.8</artifactId>
+      <artifactId>hadoop-auth</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -90,7 +90,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <scope>compile</scope>
       <exclusions>
         <exclusion>
@@ -153,7 +153,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
@@ -328,7 +328,7 @@
             <dependencies>
               <dependency>
                 <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-assemblies_1.8</artifactId>
+                <artifactId>hadoop-assemblies</artifactId>
                 <version>${project.version}</version>
               </dependency>
             </dependencies>

@@ -19,13 +19,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project-dist_1.8</artifactId>
-    <version>2.6.0-mdh3.10-SNAPSHOT</version>
+    <artifactId>hadoop-project-dist</artifactId>
+    <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
     <relativePath>../../hadoop-project-dist</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-common_1.8</artifactId>
-  <version>2.6.0-mdh3.10-SNAPSHOT</version>
+  <artifactId>hadoop-common</artifactId>
+  <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
   <description>Apache Hadoop Common</description>
   <name>Apache Hadoop Common</name>
   <packaging>jar</packaging>
@@ -40,7 +40,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations_1.8</artifactId>
+      <artifactId>hadoop-annotations</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -221,18 +221,18 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-auth_1.8</artifactId>
+      <artifactId>hadoop-auth</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-auth_1.8</artifactId>
+      <artifactId>hadoop-auth</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-minikdc_1.8</artifactId>
+      <artifactId>hadoop-minikdc</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -328,7 +328,7 @@
     <plugins>
       <plugin>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-maven-plugins_1.8</artifactId>
+        <artifactId>hadoop-maven-plugins</artifactId>
         <executions>
           <execution>
             <id>version-info</id>

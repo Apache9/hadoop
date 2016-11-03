@@ -19,13 +19,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project-dist_1.8</artifactId>
-    <version>2.6.0-mdh3.10-SNAPSHOT</version>
+    <artifactId>hadoop-project-dist</artifactId>
+    <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
     <relativePath>../../hadoop-project-dist</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-tools-dist_1.8</artifactId>
-  <version>2.6.0-mdh3.10-SNAPSHOT</version>
+  <artifactId>hadoop-tools-dist</artifactId>
+  <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
   <description>Apache Hadoop Tools Dist</description>
   <name>Apache Hadoop Tools Dist</name>
   <packaging>jar</packaging>
@@ -37,17 +37,17 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-streaming_1.8</artifactId>
+      <artifactId>hadoop-streaming</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-distcp_1.8</artifactId>
+      <artifactId>hadoop-distcp</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-archives_1.8</artifactId>
+      <artifactId>hadoop-archives</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -57,51 +57,51 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-rumen_1.8</artifactId>
+      <artifactId>hadoop-rumen</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-datajoin_1.8</artifactId>
+      <artifactId>hadoop-datajoin</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-extras_1.8</artifactId>
+      <artifactId>hadoop-extras</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-gridmix_1.8</artifactId>
+      <artifactId>hadoop-gridmix</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-pipes_1.8</artifactId>
+      <artifactId>hadoop-pipes</artifactId>
       <scope>compile</scope>
       <type>pom</type>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-openstack_1.8</artifactId>
+      <artifactId>hadoop-openstack</artifactId>
       <scope>compile</scope>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-aws_1.8</artifactId>
+      <artifactId>hadoop-aws</artifactId>
       <scope>compile</scope>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-sls_1.8</artifactId>
+      <artifactId>hadoop-sls</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-ant_1.8</artifactId>
+      <artifactId>hadoop-ant</artifactId>
       <version>${project.version}</version>
       <scope>compile</scope>
     </dependency>
@@ -138,7 +138,7 @@
             <dependencies>
               <dependency>
                 <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-assemblies_1.8</artifactId>
+                <artifactId>hadoop-assemblies</artifactId>
                 <version>${project.version}</version>
               </dependency>
             </dependencies>

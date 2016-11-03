@@ -19,13 +19,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project_1.8</artifactId>
-    <version>2.6.0-mdh3.10-SNAPSHOT</version>
+    <artifactId>hadoop-project</artifactId>
+    <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-archives_1.8</artifactId>
-  <version>2.6.0-mdh3.10-SNAPSHOT</version>
+  <artifactId>hadoop-archives</artifactId>
+  <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
   <description>Apache Hadoop Archives</description>
   <name>Apache Hadoop Archives</name>
   <packaging>jar</packaging>
@@ -42,55 +42,55 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations_1.8</artifactId>
+      <artifactId>hadoop-annotations</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-hs_1.8</artifactId>
+      <artifactId>hadoop-mapreduce-client-hs</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-core_1.8</artifactId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-jobclient_1.8</artifactId>
+      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-jobclient_1.8</artifactId>
-      <scope>test</scope>
-      <type>test-jar</type>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs_1.8</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-server-tests_1.8</artifactId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-server-tests</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>

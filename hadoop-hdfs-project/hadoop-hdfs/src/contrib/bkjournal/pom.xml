@@ -19,14 +19,14 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project_1.8</artifactId>
-    <version>2.6.0-mdh3.10-SNAPSHOT</version>
+    <artifactId>hadoop-project</artifactId>
+    <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
     <relativePath>../../../../../hadoop-project</relativePath>
   </parent>
 
   <groupId>org.apache.hadoop.contrib</groupId>
-  <artifactId>hadoop-hdfs-bkjournal_1.8</artifactId>
-  <version>2.6.0-mdh3.10-SNAPSHOT</version>
+  <artifactId>hadoop-hdfs-bkjournal</artifactId>
+  <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
   <description>Apache Hadoop HDFS BookKeeper Journal</description>
   <name>Apache Hadoop HDFS BookKeeper Journal</name>
   <packaging>jar</packaging>
@@ -62,23 +62,23 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
     </dependency>
     <dependency> 
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency> 
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs_1.8</artifactId>
+      <artifactId>hadoop-hdfs</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency> 
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs_1.8</artifactId>
+      <artifactId>hadoop-hdfs</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
@@ -112,7 +112,7 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <plugins>
       <plugin>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-maven-plugins_1.8</artifactId>
+        <artifactId>hadoop-maven-plugins</artifactId>
         <executions>
           <execution>
             <id>compile-protoc</id>

@@ -15,13 +15,13 @@
 <project xmlns:pom="http://maven.apache.org/POM/4.0.0">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <artifactId>hadoop-yarn_1.8</artifactId>
+    <artifactId>hadoop-yarn</artifactId>
     <groupId>org.apache.hadoop</groupId>
-    <version>2.6.0-mdh3.10-SNAPSHOT</version>
+    <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
   </parent>
   <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-yarn-client_1.8</artifactId>
-  <version>2.6.0-mdh3.10-SNAPSHOT</version>
+  <artifactId>hadoop-yarn-client</artifactId>
+  <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
   <name>hadoop-yarn-client</name>
 
   <properties>
@@ -33,7 +33,7 @@
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <scope>provided</scope>
       <exclusions>
         <exclusion>
@@ -79,7 +79,7 @@
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations_1.8</artifactId>
+      <artifactId>hadoop-annotations</artifactId>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
@@ -89,7 +89,7 @@
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common_1.8</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
@@ -108,42 +108,42 @@
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
   		<groupId>org.apache.hadoop</groupId>
-  		<artifactId>hadoop-yarn-api_1.8</artifactId>
+  		<artifactId>hadoop-yarn-api</artifactId>
   	</dependency>
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
   		<groupId>org.apache.hadoop</groupId>
-  		<artifactId>hadoop-yarn-common_1.8</artifactId>
+  		<artifactId>hadoop-yarn-common</artifactId>
   	</dependency>
     <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-yarn-common_1.8</artifactId>
+        <artifactId>hadoop-yarn-common</artifactId>
         <type>test-jar</type>
         <scope>test</scope>
     </dependency>
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-server-common_1.8</artifactId>
+      <artifactId>hadoop-yarn-server-common</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
   		<groupId>org.apache.hadoop</groupId>
-  		<artifactId>hadoop-yarn-server-resourcemanager_1.8</artifactId>
+  		<artifactId>hadoop-yarn-server-resourcemanager</artifactId>
       <scope>test</scope>
   	</dependency>
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
   		<groupId>org.apache.hadoop</groupId>
-  		<artifactId>hadoop-yarn-server-tests_1.8</artifactId>
+  		<artifactId>hadoop-yarn-server-tests</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
   	</dependency>
     <!-- 'mvn dependency:analyze' fails to detect use of this dependency -->
     <dependency>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-yarn-server-resourcemanager_1.8</artifactId>
+    <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
@@ -154,7 +154,7 @@
     <plugins>
       <plugin>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-maven-plugins_1.8</artifactId>
+        <artifactId>hadoop-maven-plugins</artifactId>
         <executions>
           <execution>
             <id>compile-protoc</id>
