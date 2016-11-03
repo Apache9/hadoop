@@ -10,7 +10,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.xiaomi.infra</groupId>
-    <artifactId>scribe-merger_1.8</artifactId>
+    <artifactId>scribe-merger</artifactId>
     <packaging>jar</packaging>
     <description>Scribe Files Merge Tool</description>
     <name>Scribe Files Merge Tool</name>

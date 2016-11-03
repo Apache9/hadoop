@@ -52,7 +52,7 @@
     </dependency>
     <dependency>
       <groupId>com.xiaomi.infra</groupId>
-      <artifactId>scribe-merger_1.8</artifactId>
+      <artifactId>scribe-merger</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
