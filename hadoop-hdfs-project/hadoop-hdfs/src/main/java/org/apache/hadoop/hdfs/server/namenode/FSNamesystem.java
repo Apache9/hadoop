@@ -130,6 +130,7 @@ import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -2124,7 +2125,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     }
 
     // to make sure no two files are the same
-    Set<INode> si = new HashSet<INode>();
+    Set<INode> si = new LinkedHashSet<INode>();
 
     // we put the following prerequisite for the operation
     // replication and blocks sizes should be the same for ALL the blocks
