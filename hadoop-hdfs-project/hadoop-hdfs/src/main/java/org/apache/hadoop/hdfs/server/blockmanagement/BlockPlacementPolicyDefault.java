@@ -80,6 +80,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private boolean randomlyDelete;
   private Random rand;
   private int maxScheduled;
+  private double maxLoadRatio;
 
   /**
    * A miss of that many heartbeats is tolerated for replica deletion policy.
@@ -126,6 +127,9 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     this.maxScheduled =
         conf.getInt(DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENT_MAX_SCHEDULED,
             DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENT_MAX_SCHEDULED_DEFAULT);
+    this.maxLoadRatio =
+        conf.getInt(DFSConfigKeys.DFS_NAMENODE_AVOID_OVERLOAD_RATIO,
+            DFSConfigKeys.DFS_NAMENODE_AVOID_OVERLOAD_RATIO_DEFAULT) * 1.0;
   }
 
   @Override
@@ -714,7 +718,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
 
     // check the communication traffic of the target machine
     if (considerLoad) {
-      final double maxLoad = 2.0 * stats.getInServiceXceiverAverage();
+      final double maxLoad = maxLoadRatio * stats.getInServiceXceiverAverage();
       final int nodeLoad = node.getXceiverCount();
       if (nodeLoad > maxLoad) {
         logNodeIsNotChosen(storage,
