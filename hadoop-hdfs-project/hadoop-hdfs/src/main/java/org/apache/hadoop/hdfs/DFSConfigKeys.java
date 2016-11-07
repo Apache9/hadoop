@@ -936,4 +936,8 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM =
       "dfs.namenode.top.metric.expire.num";
   public static final int DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM_DEFAULT = 30;
+
+  public static final String DFS_NAMENODE_AVOID_OVERLOAD_RATIO =
+      "dfs.namenode.avoid.overload.ratio";
+  public static final int DFS_NAMENODE_AVOID_OVERLOAD_RATIO_DEFAULT = 2;
 }
