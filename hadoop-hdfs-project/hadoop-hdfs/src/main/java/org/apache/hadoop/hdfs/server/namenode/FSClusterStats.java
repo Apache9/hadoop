@@ -57,6 +57,25 @@ public interface FSClusterStats {
    *         writes that are currently occurring on the cluster.
    */
   public double getInServiceXceiverAverage();
+
+  // Allocation failure metrics
+  public void incrIncorrectStorType();
+
+  public void incrReadOnly();
+
+  public void incrFailed();
+
+  public void incrDecomm();
+
+  public void incrStaled();
+
+  public void incrOverUsed();
+
+  public void incrOverScheduled();
+
+  public void incrOverLoaded();
+
+  public void incrMissRacked();
 }
     
     

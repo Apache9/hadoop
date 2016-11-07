@@ -94,6 +94,25 @@ public class NameNodeMetrics {
   @Metric("Time loading FS Image at startup in msec")
   MutableGaugeInt fsImageLoadTime;
 
+  @Metric("Allocation fail due to incorrect st")
+  MutableCounterLong allocationFailedByIncorrectSt;
+  @Metric("Allocation fail due to read only stor")
+  MutableCounterLong allocationFailedByRd;
+  @Metric("Allocation fail du to fail storage")
+  MutableCounterLong allocationFailedByFailed;
+  @Metric("Allocation fail due to decomm")
+  MutableCounterLong allocationFailedByDecomm;
+  @Metric("Allocation fail due to stale node")
+  MutableCounterLong allocationFailedByStaled;
+  @Metric("Allocation fail due to over used")
+  MutableCounterLong allocationFailedByOverUsed;
+  @Metric("Allocation fail due to over scheduled")
+  MutableCounterLong allocationFailedByOverSched;
+  @Metric("Allocation fail due to over loaded")
+  MutableCounterLong allocationFailedByOverLoaded;
+  @Metric("Allocation fail due to miss racked")
+  MutableCounterLong allocationFailedByMissRacked;
+
   @Metric("GetImageServlet getEdit")
   MutableRate getEdit;
   @Metric("GetImageServlet getImage")
@@ -298,5 +317,41 @@ public class NameNodeMetrics {
 
   public void addPutImage(long latency) {
     putImage.add(latency);
+  }
+
+  public void incrIncorrectStorType() {
+    allocationFailedByIncorrectSt.incr();
+  }
+
+  public void incrReadOnly() {
+    allocationFailedByRd.incr();
+  }
+
+  public void incrFailed() {
+    allocationFailedByFailed.incr();
+  }
+
+  public void incrDecomm() {
+    allocationFailedByDecomm.incr();
+  }
+
+  public void incrStaled() {
+    allocationFailedByStaled.incr();
+  }
+
+  public void incrOverUsed() {
+    allocationFailedByOverUsed.incr();
+  }
+
+  public void incrOverScheduled() {
+    allocationFailedByOverSched.incr();
+  }
+
+  public void incrOverLoaded() {
+    allocationFailedByOverLoaded.incr();
+  }
+
+  public void incrMissRacked() {
+    allocationFailedByMissRacked.incr();
   }
 }

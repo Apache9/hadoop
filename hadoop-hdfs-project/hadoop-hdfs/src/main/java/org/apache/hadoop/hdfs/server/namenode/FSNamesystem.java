@@ -9540,5 +9540,50 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       logger.addAppender(asyncAppender);        
     }
   }
+
+  @Override
+  public void incrIncorrectStorType() {
+    NameNode.getNameNodeMetrics().incrIncorrectStorType();
+  }
+
+  @Override
+  public void incrReadOnly() {
+    NameNode.getNameNodeMetrics().incrReadOnly();
+  }
+
+  @Override
+  public void incrFailed() {
+    NameNode.getNameNodeMetrics().incrFailed();
+  }
+
+  @Override
+  public void incrDecomm() {
+    NameNode.getNameNodeMetrics().incrDecomm();
+  }
+
+  @Override
+  public void incrStaled() {
+    NameNode.getNameNodeMetrics().incrStaled();
+  }
+
+  @Override
+  public void incrOverUsed() {
+    NameNode.getNameNodeMetrics().incrOverUsed();
+  }
+
+  @Override
+  public void incrOverScheduled() {
+    NameNode.getNameNodeMetrics().incrOverScheduled();
+  }
+
+  @Override
+  public void incrOverLoaded() {
+    NameNode.getNameNodeMetrics().incrOverLoaded();
+  }
+
+  @Override
+  public void incrMissRacked() {
+    NameNode.getNameNodeMetrics().incrMissRacked();
+  }
 }
 

@@ -807,15 +807,18 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     if (storage.getStorageType() != requiredStorageType) {
       logNodeIsNotChosen(storage, "storage types do not match,"
           + " where the required storage type is " + requiredStorageType);
+      stats.incrIncorrectStorType();
       return false;
     }
     if (storage.getState() == State.READ_ONLY_SHARED) {
       logNodeIsNotChosen(storage, "storage is read-only");
+      stats.incrReadOnly();
       return false;
     }
 
     if (storage.getState() == State.FAILED) {
       logNodeIsNotChosen(storage, "storage has failed");
+      stats.incrFailed();
       return false;
     }
 
@@ -823,12 +826,14 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     // check if the node is (being) decommissioned
     if (node.isDecommissionInProgress() || node.isDecommissioned()) {
       logNodeIsNotChosen(storage, "the node is (being) decommissioned ");
+      stats.incrDecomm();
       return false;
     }
 
     if (avoidStaleNodes) {
       if (node.isStale(this.staleInterval)) {
         logNodeIsNotChosen(storage, "the node is stale ");
+        stats.incrStaled();
         return false;
       }
     }
@@ -844,6 +849,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
                 overUsedFreespaceThreshold);
         if (storage.getRemaining() < minSpaceToBeChosen) {
           logNodeIsNotChosen(storage, "the node is overused ");
+          stats.incrOverUsed();
           return false;
         }
       }
@@ -862,6 +868,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
           + " (required=" + requiredSize
           + ", scheduled=" + scheduledSize
           + ", remaining=" + remaining + ")");
+      stats.incrOverScheduled();
       return false;
     }
 
@@ -872,6 +879,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       if (nodeLoad > maxLoad) {
         logNodeIsNotChosen(storage, "the node is too busy (load: " + nodeLoad
             + " > " + maxLoad + ") ");
+        stats.incrOverLoaded();
         return false;
       }
     }
@@ -887,6 +895,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     }
     if (counter>maxTargetPerRack) {
       logNodeIsNotChosen(storage, "the rack has too many chosen nodes ");
+      stats.incrMissRacked();
       return false;
     }
     return true;
