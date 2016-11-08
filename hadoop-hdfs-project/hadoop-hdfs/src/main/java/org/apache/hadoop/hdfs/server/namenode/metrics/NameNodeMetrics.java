@@ -111,6 +111,11 @@ public class NameNodeMetrics {
   @Metric("Allocation fail due to miss racked")
   MutableCounterLong allocationFailedByMissRacked;
 
+  @Metric("Choose random call num in BP")
+  MutableCounterLong chooseRandomInBp;
+  @Metric("Choose random call num in NT")
+  MutableCounterLong chooseRandomInNT;
+
   @Metric("GetImageServlet getEdit")
   MutableRate getEdit;
   @Metric("GetImageServlet getImage")
@@ -338,5 +343,13 @@ public class NameNodeMetrics {
 
   public void incrMissRacked() {
     allocationFailedByMissRacked.incr();
+  }
+
+  public void incrChooseRandomInBp() {
+    chooseRandomInBp.incr();
+  }
+
+  public void incrChooseRandomInNT() {
+    chooseRandomInNT.incr();
   }
 }

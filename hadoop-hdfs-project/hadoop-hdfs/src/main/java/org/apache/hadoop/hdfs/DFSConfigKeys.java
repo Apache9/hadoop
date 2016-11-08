@@ -251,7 +251,7 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT =
       "dfs.namenode.max.concurrent.incremental.blockreport";
   public static final int DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT_DEFAULT =
-      64;
+      1024;
 
   public static final String  DFS_LIST_LIMIT = "dfs.ls.limit";
   public static final int     DFS_LIST_LIMIT_DEFAULT = 1000;
@@ -739,7 +739,7 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION =
       "dfs.namenode.block.report.processing.per.iteration";
   public static final int DFS_NAMENODE_BLOCK_REPORT_PROCESSING_PER_ITERATION_DEFAULT =
-      5000;
+      50000;
 
   public static final String DFS_NAMENODE_MAX_CONCURRENT_GETCONTENTSUMMARY =
       "dfs.namenode.max.concurrent.getcontentsummary";
