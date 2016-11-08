@@ -76,6 +76,12 @@ public interface FSClusterStats {
   public void incrOverLoaded();
 
   public void incrMissRacked();
+  
+  
+ // choose random metrics
+  public void incrChooseRandomInBP();
+
+  public void incrChooseRandomInNT();
 }
     
     

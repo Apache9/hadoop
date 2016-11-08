@@ -667,6 +667,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
                             EnumMap<StorageType, Integer> storageTypes)
                             throws NotEnoughReplicasException {
       
+    stats.incrChooseRandomInBP();
     int numOfAvailableNodes = clusterMap.countNumOfAvailableNodes(
         scope, excludedNodes);
     StringBuilder builder = null;
@@ -678,6 +679,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     boolean badTarget = false;
     DatanodeStorageInfo firstChosen = null;
     while(numOfReplicas > 0 && numOfAvailableNodes > 0) {
+      stats.incrChooseRandomInNT();
       DatanodeDescriptor chosenNode = chooseDataNode(scope);
       if (excludedNodes.add(chosenNode)) { //was not in the excluded list
         if (LOG.isDebugEnabled()) {

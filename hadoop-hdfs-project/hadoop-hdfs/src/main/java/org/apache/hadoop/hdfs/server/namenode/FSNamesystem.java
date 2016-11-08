@@ -9585,5 +9585,15 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   public void incrMissRacked() {
     NameNode.getNameNodeMetrics().incrMissRacked();
   }
+  
+  @Override
+  public void incrChooseRandomInBP() {
+    NameNode.getNameNodeMetrics().incrChooseRandomInBp();
+  }
+  
+  @Override
+  public void incrChooseRandomInNT() {
+    NameNode.getNameNodeMetrics().incrChooseRandomInNT();
+  }
 }
 
