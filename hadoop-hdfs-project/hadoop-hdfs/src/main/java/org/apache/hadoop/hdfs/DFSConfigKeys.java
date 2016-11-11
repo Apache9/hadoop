@@ -909,4 +909,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM =
       "dfs.namenode.top.metric.expire.num";
   public static final int DFS_NAMENODE_TOP_METRIC_EXPIRE_NUM_DEFAULT = 30;
+
+  public static final String DFS_BALANCER_KEYTAB_FILE =
+      "dfs.balancer.keytab.file";
+  public static final String DFS_BALANCER_KERBEROS_PRINCIPAL =
+      "dfs.balancer.kerberos.principal";
 }
