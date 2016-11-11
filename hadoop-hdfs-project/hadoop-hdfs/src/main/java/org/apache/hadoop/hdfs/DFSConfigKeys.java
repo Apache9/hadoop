@@ -782,4 +782,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_AVOID_OVERLOAD_RATIO =
       "dfs.namenode.avoid.overload.ratio";
   public static final int DFS_NAMENODE_AVOID_OVERLOAD_RATIO_DEFAULT = 2;
+
+  public static final String DFS_BALANCER_KEYTAB_FILE =
+      "dfs.balancer.keytab.file";
+  public static final String DFS_BALANCER_KERBEROS_PRINCIPAL =
+      "dfs.balancer.kerberos.principal";
 }
