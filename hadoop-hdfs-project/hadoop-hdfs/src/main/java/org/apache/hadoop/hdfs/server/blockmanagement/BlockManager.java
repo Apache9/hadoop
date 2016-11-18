@@ -1802,18 +1802,28 @@ public class BlockManager {
     reportDiff(node, storage, report,
         toAdd, toRemove, toInvalidate, toCorrupt, toUC);
 
+    long startTime = Time.now(); // TODO: just for debug, will remove later
     // Process the blocks on each queue
     for (StatefulBlockInfo b : toUC) { 
       addStoredBlockUnderConstruction(b, node, storage.getStorageID());
     }
+    long uctime = Time.now() - startTime;
+    startTime = Time.now();
+
     for (Block b : toRemove) {
       removeStoredBlock(b, node);
     }
+    long removeTime = Time.now() - startTime;
+    startTime = Time.now();
+
     int numBlocksLogged = 0;
     for (BlockInfo b : toAdd) {
       addStoredBlock(b, node, storage.getStorageID(), null, numBlocksLogged < maxNumBlocksToLog);
       numBlocksLogged++;
     }
+    long addTime = Time.now() - startTime;
+    startTime = Time.now();
+
     if (numBlocksLogged > maxNumBlocksToLog) {
       blockLog.info("BLOCK* processReport: logged info for " + maxNumBlocksToLog
           + " of " + numBlocksLogged + " reported.");
@@ -1824,9 +1834,17 @@ public class BlockManager {
           + " does not belong to any file");
       addToInvalidates(b, node);
     }
+    long invalidateTime = Time.now() - startTime;
+    startTime = Time.now();
     for (BlockToMarkCorrupt b : toCorrupt) {
       markBlockAsCorrupt(b, node, storage.getStorageID());
     }
+    long corruptTime = Time.now() - startTime;
+    LOG.info(String.format("[BlockReport] Size and time spent on each list: "
+            + " toUC[%d,%d], toRemove[%d,%d], toAdd[%d,%d], toInvalidate[%d,%d] "
+            + " toCorrupt[%d,%d]", toUC.size(), uctime, toRemove.size(), removeTime,
+        toAdd.size(), addTime, toInvalidate.size(), invalidateTime,
+        toCorrupt.size(), corruptTime));
   }
 
   /**
