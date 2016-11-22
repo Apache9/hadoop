@@ -154,13 +154,11 @@ public class TestCanary {
 
   @Test
   public void testAvailability() throws Exception {
-    dfsCluster.transitionToStandby(0);
-    Thread t1 = new Thread(new DfsController("to_active", "NN", 0, 5200));
-    Thread t2 = new Thread(new DfsController("to_standby", "NN", 0, 8000));
-    Thread t3 = new Thread(new DfsController("to_active", "NN", 0, 11200));
+    // dfsCluster.transitionToStandby(0);
+    Thread t1 = new Thread(new DfsController("to_standby", "NN", 0, 10000));
+    Thread t2 = new Thread(new DfsController("to_active", "NN", 0, 20000));
     t1.start();
     t2.start();
-    t3.start();
 
     /*
     Thread t1 = new Thread(new DfsController("stop", "NN", 0, 5200));
