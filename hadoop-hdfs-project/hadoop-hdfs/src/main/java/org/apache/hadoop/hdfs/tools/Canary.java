@@ -27,8 +27,10 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.*;
 
 public class Canary implements Tool {
   // Sink interface used by the canary to outputs information
@@ -50,6 +52,8 @@ public class Canary implements Tool {
     void publishAvailableStatus(boolean isAvailable);
     void publishCorruptBlocks(Path corruptFilePath);
     void publishCapacityRemaining(double percent);
+    void publishDataNodeLatency(String dataNode, OpType type, long msTime);
+    void publishDNReadLatencyPercentitle();
 
     void reportSummary();
   }
@@ -114,6 +118,17 @@ public class Canary implements Tool {
       lastSummaryTime = curTime;
       unavailableTime = 0;
     }
+
+    @Override
+    public void publishDataNodeLatency(String dataNode, OpType type, long msTime) {
+      LOG.info("Datanode: " + dataNode + " " + type.name() + " latency: " + msTime + " ms");
+    }
+
+    @Override
+    public void publishDNReadLatencyPercentitle() {
+       return;
+    }
+
   }
 
   // Generate random test data
@@ -129,6 +144,80 @@ public class Canary implements Tool {
       }
       return new String(text);
     }
+  }
+
+  // Manage the checking threads of datanodes
+  class ProbeManager {
+    private static final int maxThreads = 10;
+    private List<Probe> probeList = new ArrayList<Probe>();
+    private ArrayList<DatanodeInfo> taskList = new ArrayList<DatanodeInfo>();
+    private Canary canary = null;
+    private int currTask = 0;
+    private int taskNum = 0;
+    private boolean isTaskCompleted = true;
+
+    public ProbeManager (Canary canary) {
+      this.canary = canary;
+    }
+
+    public Canary getCanary () {return this.canary;}
+
+    public synchronized void completeNTasks(Probe probe, int taskNum) {
+      this.taskNum -= taskNum;
+      if (this.taskNum == 0) {
+        this.isTaskCompleted = true;
+        probe.CompleteCallBack();
+      }
+    }
+
+    public synchronized void initTasks () {
+      // we need ensure all the nodes is probed before refresh the task list
+      if (!isTaskCompleted) {
+        return;
+      }
+      try {
+        taskList = new ArrayList<DatanodeInfo> (Arrays.asList(dfs.getDataNodeStats()));
+          isTaskCompleted = false;
+          taskNum = taskList.size();
+          currTask = 0;
+      } catch (IOException e) {
+        LOG.error("Init prob tasks failed", e);
+      }
+
+    }
+
+    public void initProbs () {
+      if (probeList.isEmpty()) {
+        for (int i = 0; i < maxThreads; i ++) {
+          Probe tempProbe = ProbeFactory.getProbeByType(ProbeFactory.ProbeType.DN_IO_LATENCY, this);
+          probeList.add(tempProbe);
+        }
+      }
+    }
+
+    public synchronized List<DatanodeInfo> getTasks (int bacthedTaskNum) {
+      int tasksToDispatch = bacthedTaskNum;
+      List<DatanodeInfo> subTaskList = null;
+      if (isTaskCompleted) {
+        return null;
+      }
+
+      if (currTask + bacthedTaskNum >= taskList.size()) {
+        tasksToDispatch = taskList.size() - currTask;
+      }
+
+      subTaskList = taskList.subList(currTask, currTask + tasksToDispatch);
+      currTask += tasksToDispatch;
+
+      return subTaskList;
+    }
+
+    public void startProbs () {
+       for (int i = 0; i < probeList.size(); i ++) {
+           probeList.get(i).startProbe();
+       }
+    }
+
   }
 
   private static final long DEFAULT_INTERVAL = 6000;
@@ -155,6 +244,9 @@ public class Canary implements Tool {
   private int rpcTimeoutForChecks = 0;
   private Sink sink = null;
 
+  // datanodes prob
+  private ProbeManager  probManger = null;
+
   public Canary() {
     this(new StdOutSink());
   }
@@ -173,6 +265,14 @@ public class Canary implements Tool {
     this.conf = conf;
   }
 
+  public Sink getSink() {
+    return sink;
+  }
+
+  public DistributedFileSystem getDFS () {
+      return dfs;
+  }
+
   @Override
   public int run(String[] args) throws Exception {
     // Process command line args
@@ -188,6 +288,8 @@ public class Canary implements Tool {
 
       try {
         checkIOLatency();
+        // start Datanodes prob
+        startDataNodeLatencyProb();
       } catch (IOException e) {
         // if got socketTimeoutException when renew lease, dfsClient will fail in the following operation
         // since canary is stateless, exit directly. supervisor will start Canary again in clean state
@@ -565,4 +667,16 @@ public class Canary implements Tool {
     }
     System.exit(exitCode);
   }
+
+  private void startDataNodeLatencyProb() {
+    if (probManger == null) {
+      probManger = new ProbeManager(this);
+      probManger.initTasks();
+      probManger.initProbs();
+      probManger.startProbs();
+    }
+    
+     probManger.initTasks();
+  }
+
 }

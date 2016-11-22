@@ -28,9 +28,15 @@ public class FalconSink implements Canary.Sink, Configurable {
   final private Map<NodeType, List<String>> failedNodes = new HashMap<NodeType, List<String>>();
   final private List<Path> corruptPaths = new ArrayList<Path>();
   private Map<String, AtomicInteger> recentFailedTimes = new HashMap<String, AtomicInteger>();
+  final private Map<String, Long> dataNodeReadLatencyMap = new HashMap<String, Long>();
   private long readLatency = -1;
   private long writeLatency = -1;
   private double capacityRemaining;
+  private String tagString = null;
+  private static final String DEFAULT_CANARY_ENDPOINT = "hdfs-canary";
+  private long percentile99Latency = 0;
+  private long percentile95Latency = 0;
+  private long percentile75Latency = 0;
 
   // For availability calculating
   private boolean clusterAvailableStatus = true;
@@ -85,6 +91,28 @@ public class FalconSink implements Canary.Sink, Configurable {
     capacityRemaining = percent;
   }
 
+  @Override
+  public void publishDataNodeLatency(String dataNode, OpType type, long msTime) {
+    if (type == OpType.READ) {
+      dataNodeReadLatencyMap.put(dataNode, msTime);
+    }
+  }
+
+  @Override
+  public void publishDNReadLatencyPercentitle () {
+    List<Long> readLatencyList = new ArrayList<Long>(dataNodeReadLatencyMap.values());
+    Collections.sort(readLatencyList);
+
+    int percentile99 = readLatencyList.size() * 99 / 100;
+    int percentile95 = readLatencyList.size() * 95 / 100;
+    int percentile75 = readLatencyList.size() * 75 / 100;
+
+    percentile99Latency = readLatencyList.get(percentile99);
+    percentile95Latency = readLatencyList.get(percentile95);
+    percentile75Latency = readLatencyList.get(percentile75);
+    LOG.info(String.format("Datanode read latency percentile:99:%d 95:%d 75:%d", percentile99Latency, percentile95Latency, percentile75Latency));
+  }
+
   private void updateRecentFailedTimes() {
     Map<String, AtomicInteger> newMap = new HashMap<String, AtomicInteger>();
     for (NodeType type : failedNodes.keySet()) {
@@ -103,30 +131,67 @@ public class FalconSink implements Canary.Sink, Configurable {
     nodeCount.clear();
     failedNodes.clear();
     corruptPaths.clear();
+    dataNodeReadLatencyMap.clear();
     readLatency = -1;
     writeLatency = -1;
     unavailableTime = 0;
+    percentile99Latency = 0;
+    percentile95Latency = 0;
+    percentile75Latency = 0;
   }
 
-  private JSONObject buildFalconMetric(String clusterName, String key, double value){
+  private JSONObject buildFalconMetricCommon(String endpoint, String key, double value) {
     JSONObject metric = new JSONObject();
     try {
-      metric.put("endpoint", "hdfs-canary");
+      metric.put("endpoint", endpoint);
       metric.put("metric", key);
       metric.put("timestamp", System.currentTimeMillis() / 1000);
       metric.put("value", value);
       metric.put("step", 60);
       metric.put("counterType", "GAUGE");
-      String type = conf.get("dfs.canary.cluster.type", "tst");
-      metric.put("tags", "srv=hdfs,type=" + type.toLowerCase() + ",cluster=" + clusterName);
     } catch (JSONException je) {
       LOG.warn("build json object error: ", je);
     }
     return metric;
   }
 
+  private String buildFalconMetricTagsString() {
+    String tagString = new String();
+    Map<String, String> metricTagList = new LinkedHashMap();
+    metricTagList.put("srv", "hdfs");
+    metricTagList.put("type", conf.get("dfs.canary.cluster.type", "tst"));
+    metricTagList.put("cluster", conf.get("dfs.nameservices", "unknown"));
+
+    for (Map.Entry<String, String> tagEntry : metricTagList.entrySet()) {
+      tagString += tagEntry.getKey();
+      tagString += "=";
+      tagString += tagEntry.getValue();
+      tagString += ",";
+    }
+
+    tagString = tagString.substring(0,tagString.length()-1);
+
+    return tagString;
+
+  }
+
+  private JSONObject buildFalconMetric(String endpoint, String key, double value) {
+    JSONObject metric = buildFalconMetricCommon(endpoint, key, value);
+    if (tagString == null) {
+      tagString = buildFalconMetricTagsString();
+    }
+
+    try {
+      metric.put("tags", tagString);
+    } catch (JSONException je) {
+      LOG.warn("build json Metric error: ", je);
+    }
+    return metric;
+  }
+
   private void PushToFalcon(JSONArray payload) {
     String uri = conf.get("dfs.canary.sink.falcon.uri", DEFAULT_FALCON_URI);
+    long startTime = System.currentTimeMillis();
     PostMethod post = new PostMethod(uri);
     LOG.info(payload.toString());
     post.setRequestBody(payload.toString());
@@ -135,12 +200,14 @@ public class FalconSink implements Canary.Sink, Configurable {
     } catch (IOException e) {
       LOG.warn("Push metrics to falcon failed", e);
     }
+
+    LOG.info(String.format("Pushing the metrics to falcon takes : %d", System.currentTimeMillis() - startTime));
+
   }
 
   @Override
   public void reportSummary() {
     JSONArray payload = new JSONArray();
-    String clusterName = conf.get("dfs.nameservices", "unknown");
     // Report availability
     long curTime = System.currentTimeMillis();
     if (!clusterAvailableStatus) {
@@ -149,10 +216,10 @@ public class FalconSink implements Canary.Sink, Configurable {
     double availableRate = (1.0 - unavailableTime/(double)(curTime - lastSummaryTime)) * 100;
     lastStatusChangeTime = curTime;
     lastSummaryTime = curTime;
-    payload.put(buildFalconMetric(clusterName, "cluster-availability", availableRate));
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "cluster-availability", availableRate));
 
     // Report cluster remaining capacity
-    payload.put(buildFalconMetric(clusterName, "cluster-capacity-remaining", capacityRemaining));
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "cluster-capacity-remaining", capacityRemaining));
 
     // if cluster is available and sniff succeed
     if (!nodeCount.isEmpty()) {
@@ -180,6 +247,16 @@ public class FalconSink implements Canary.Sink, Configurable {
       for (Path path : corruptPaths) {
         LOG.info(path);
       }
+
+      // latency of the cluster
+      buildClusterReadLatencyMetrix(payload, DEFAULT_CANARY_ENDPOINT, readLatency);
+      buildClusterWriteLatencyMetrix(payload, DEFAULT_CANARY_ENDPOINT, writeLatency);
+
+      // latency of the datanodes
+      buildDNsReadLatencyMetrix(payload);
+
+      // latency percentile of datanodes
+      buildDNReadLatencyPercentitleMetrix(payload);
     }
 
     PushToFalcon(payload);
@@ -194,5 +271,35 @@ public class FalconSink implements Canary.Sink, Configurable {
   @Override
   public Configuration getConf() {
     return conf;
+  }
+
+  private void buildLatencyMetrix(JSONArray payload, String endpoint, OpType opType, long latency) {
+    if (opType == OpType.READ) {
+      payload.put(buildFalconMetric(endpoint, "read_latency", latency));
+    } else {
+      payload.put(buildFalconMetric(endpoint, "write_latency", latency));
+    }
+  }
+
+  private void buildDNsReadLatencyMetrix(JSONArray payload) {
+    for (Map.Entry<String, Long> entry : dataNodeReadLatencyMap.entrySet()) {
+      buildLatencyMetrix(payload, entry.getKey(), OpType.READ, entry.getValue().longValue());
+    }
+  }
+
+  private void buildClusterReadLatencyMetrix(JSONArray payload, String endpoint, long latency) {
+      buildLatencyMetrix(payload, endpoint, OpType.READ, latency);
+  }
+
+  private void buildClusterWriteLatencyMetrix(JSONArray payload, String endpoint, long latency) {
+      buildLatencyMetrix(payload, endpoint, OpType.WRITE, latency);
+  }
+
+  public void buildDNReadLatencyPercentitleMetrix(JSONArray payload)
+  {
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "percentile99_read_latency", percentile99Latency));
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "percentile95_read_latency", percentile95Latency));
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "percentile75_read_latency", percentile75Latency));
+
   }
 }
