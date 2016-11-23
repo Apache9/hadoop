@@ -75,6 +75,14 @@ int SequenceFileHSync(SequenceFileWriter writer, int update_length);
  */
 int SequenceFileClose(SequenceFileWriter writer);
 
+/**
+ * IsQuotaExceeded - Check if quota is exceeded when writing fails
+ * @param writer The handle of the sequence file writer.
+ * @return Returns 1 if quota is actually exceeded, -1 on error, 
+ *  otherwise returns 0.
+ */
+int IsQuotaExceeded(SequenceFileWriter writer);
+
 #ifdef __cplusplus
 }
 #endif
