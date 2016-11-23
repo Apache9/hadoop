@@ -238,3 +238,31 @@ int SequenceFileClose(SequenceFileWriter writer) {
   (*env)->DeleteGlobalRef(env, jWriter);
   return ret;
 }
+
+int IsQuotaExceeded(SequenceFileWriter writer) {
+  jvalue jVal;
+  JNIEnv* env = getJNIEnv();
+  if (env == NULL) {
+    errno = EINTERNAL;
+    return -1;
+  }
+
+  // Sanity check.
+  if (!writer) {
+    errno = EBADF;
+    return -1;
+  }
+
+  jobject jWriter = (jobject) writer;
+  jthrowable jThr;
+  int ret;
+
+  jThr = invokeMethod(env, &jVal, INSTANCE, jWriter,
+      WRITER_CLASS, "isQuotaExceeded", "()Z");
+  
+  if (jThr) {
+    return -1;
+  }
+  ret = jVal.z ? 1 : 0;
+  return ret; 
+}
