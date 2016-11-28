@@ -58,51 +58,55 @@ public class XmDFSInputStream extends DFSInputStream {
 
   private int readInternal(final ByteBuffer bBuf, long position,
       final byte buf[], int off, int len) throws IOException {
-    int readLen;
-    if (bBuf != null) {
-      readLen = super.read(bBuf);
-    } else {
-      if (position == -1) {
-        readLen = super.read(buf, off, len);
+    int readLen = 0;
+    try {
+      if (bBuf != null) {
+        readLen = super.read(bBuf);
       } else {
-        readLen = super.read(position, buf, off, len);
-      }
-    }
-    while (readLen == -1) {
-      boolean fileClosed = dfsClient.isFileClosed(srcFile);
-      long origLen = getFileLength();
-      updateFileLength();
-      long newLen = getFileLength();
-      if (origLen == newLen) {
-        if (fileClosed) {
-          // Nobody is writing the file then nothing to read
-          break;
+        if (position == -1) {
+          readLen = super.read(buf, off, len);
         } else {
-          if (sleepBeforeRetry != 0) {
-            try {
-              Thread.sleep(sleepBeforeRetry);
-            } catch (InterruptedException ie) {
-              break;
+          readLen = super.read(position, buf, off, len);
+        }
+      }
+      while (readLen == -1) {
+        boolean fileClosed = dfsClient.isFileClosed(srcFile);
+        long origLen = getFileLength();
+        updateFileLength();
+        long newLen = getFileLength();
+        if (origLen == newLen) {
+          if (fileClosed) {
+            // Nobody is writing the file then nothing to read
+            break;
+          } else {
+            if (sleepBeforeRetry != 0) {
+              try {
+                Thread.sleep(sleepBeforeRetry);
+              } catch (InterruptedException ie) {
+                break;
+              }
+            } else {
+              // Yield so that there is a higher possibility that some more data
+              // is written to the file when calling following updateFileLength().
+              Thread.yield();
             }
-          } else {
-            // Yield so that there is a higher possibility that some more data
-            // is written to the file when calling following updateFileLength().
-            Thread.yield();
+            continue;
           }
-          continue;
-        }
-      } else {
-        if (bBuf != null) {
-          readLen = super.read(bBuf);
         } else {
-          if (position == -1) {
-            readLen = super.read(buf, off, len);
+          if (bBuf != null) {
+            readLen = super.read(bBuf);
           } else {
-            readLen = super.read(position, buf, off, len);
+            if (position == -1) {
+              readLen = super.read(buf, off, len);
+            } else {
+              readLen = super.read(position, buf, off, len);
+            }
           }
+          break;
         }
-        break;
       }
+    } catch (Throwable e) {
+      throw new IOException("Error when read file", e);
     }
     return readLen;
   }
@@ -138,44 +142,48 @@ public class XmDFSInputStream extends DFSInputStream {
    */
   @Override
   public void seek(long targetPos) throws IOException {
-    while (true) {
-      IOException originalExp = null;
-      long origLen = getFileLength();
-      try {
-        seekToBlockSource(targetPos);
-        super.seek(targetPos);
-        break;
-      } catch (IOException ioe) {
-        if (isDFSStreamClosed()) {
-          throw ioe;
-        } else {
-          originalExp = ioe;
-        }
-      } catch (NullPointerException npe) {
-        originalExp = new IOException("Fail to seek to " + targetPos);
-      }
-
-      boolean fileClosed = dfsClient.isFileClosed(srcFile);
-      updateFileLength();
-      long newLen = getFileLength();
-      if (origLen == newLen) {
-        if (fileClosed) {
-          // Nobody is writing the file then nothing to read
-          throw originalExp;
-        } else {
-          if (sleepBeforeRetry != 0) {
-            try {
-              Thread.sleep(sleepBeforeRetry);
-            } catch (InterruptedException ie) {
-              break;
-            }
+    try {
+      while (true) {
+        IOException originalExp = null;
+        long origLen = getFileLength();
+        try {
+          seekToBlockSource(targetPos);
+          super.seek(targetPos);
+          break;
+        } catch (IOException ioe) {
+          if (isDFSStreamClosed()) {
+            throw ioe;
           } else {
-            // Yield so that there is a higher possibility that some more data
-            // is written to the file when calling following updateFileLength().
-            Thread.yield();
+            originalExp = ioe;
+          }
+        } catch (NullPointerException npe) {
+          originalExp = new IOException("Fail to seek to " + targetPos);
+        }
+
+        boolean fileClosed = dfsClient.isFileClosed(srcFile);
+        updateFileLength();
+        long newLen = getFileLength();
+        if (origLen == newLen) {
+          if (fileClosed) {
+            // Nobody is writing the file then nothing to read
+            throw originalExp;
+          } else {
+            if (sleepBeforeRetry != 0) {
+              try {
+                Thread.sleep(sleepBeforeRetry);
+              } catch (InterruptedException ie) {
+                break;
+              }
+            } else {
+              // Yield so that there is a higher possibility that some more data
+              // is written to the file when calling following updateFileLength().
+              Thread.yield();
+            }
           }
         }
       }
+    } catch(Throwable e) {
+      throw new IOException("Error when seek file", e);
     }
   }
 }
