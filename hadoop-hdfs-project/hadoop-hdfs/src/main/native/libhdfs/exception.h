@@ -64,6 +64,7 @@
 #define NOPRINT_EXC_UNRESOLVED_LINK             0x04
 #define NOPRINT_EXC_PARENT_NOT_DIRECTORY        0x08
 #define NOPRINT_EXC_ILLEGAL_ARGUMENT            0x10
+#define NOPRINT_EXC_DSQUOTA_EXCEEDED            0x20
 
 /**
  * Get information about an exception.

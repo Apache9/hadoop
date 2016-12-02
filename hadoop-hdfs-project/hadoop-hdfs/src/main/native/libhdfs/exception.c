@@ -75,9 +75,14 @@ static const struct ExceptionInfo gExceptionInfo[] = {
         EEXIST,
     },
     {
-        "org.apache.hadoop.hdfs.protocol.QuotaExceededException",
-        0,
-        EDQUOT,
+        .name = "org.apache.hadoop.hdfs.protocol.DSQuotaExceededException",
+        .noPrintFlag = NOPRINT_EXC_DSQUOTA_EXCEEDED,
+        .excErrno = EDQUOT,
+    },
+    {
+        .name = "org.apache.hadoop.hdfs.protocol.QuotaExceededException",
+        .noPrintFlag = 0,
+        .excErrno = EDQUOT,
     },
     {
         "org.apache.hadoop.hdfs.server.namenode.LeaseExpiredException",
