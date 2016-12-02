@@ -117,7 +117,7 @@ int SequenceFileAppend(
   jThr = invokeMethod(env, NULL, INSTANCE, jWriter,
       WRITER_CLASS, "append", "([B)V", jbValueArray);
   if (jThr) {
-    errno = printExceptionAndFree(env, jThr, PRINT_EXC_ALL,
+    errno = printExceptionAndFree(env, jThr, NOPRINT_EXC_DSQUOTA_EXCEEDED,
         "SequenceFileAppend(length = %d): append", value_length);
     goto done;
   }
