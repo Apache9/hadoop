@@ -534,7 +534,8 @@ public class DataNode extends Configured
       tcpPeerServer = new TcpPeerServer(secureResources);
     } else {
       tcpPeerServer = new TcpPeerServer(dnConf.socketWriteTimeout,
-          DataNode.getStreamingAddr(conf));
+          DataNode.getStreamingAddr(conf),
+          conf.getInt(DFS_DATANODE_SOCKET_BACKLOG_KEY, DFS_DATANODE_SOCKET_BACKLOG_DEFAULT));
     }
     tcpPeerServer.setReceiveBufferSize(HdfsConstants.DEFAULT_DATA_SOCKET_SIZE);
     streamingAddr = tcpPeerServer.getStreamingAddr();
