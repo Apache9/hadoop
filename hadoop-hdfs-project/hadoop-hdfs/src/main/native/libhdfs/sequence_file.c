@@ -147,7 +147,7 @@ int SequenceFileSync(SequenceFileWriter writer) {
   jThr = invokeMethod(env, NULL, INSTANCE, jWriter,
       WRITER_CLASS, "sync", "()V");
   if (jThr) {
-    errno = printExceptionAndFree(env, jThr, PRINT_EXC_ALL,
+    errno = printExceptionAndFree(env, jThr, NOPRINT_EXC_DSQUOTA_EXCEEDED,
         "SequenceFileSync: sync");
     return -1;
   }
