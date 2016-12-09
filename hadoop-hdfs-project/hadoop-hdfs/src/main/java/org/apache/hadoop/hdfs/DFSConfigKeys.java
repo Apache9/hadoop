@@ -956,4 +956,7 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_POSTPONED_RESCAN_RANDOM_RATIO =
       "dfs.namenode.postponed.rescan.random.ratio";
   public static final int DFS_NAMENODE_POSTPONED_RESCAN_RANDOM_RATIO_DEFAULT = 6;
+
+  public static final String DFS_DATANODE_SOCKET_BACKLOG_KEY = "dfs.datanode.socket.backlog";
+  public static final int DFS_DATANODE_SOCKET_BACKLOG_DEFAULT = 0;
 }

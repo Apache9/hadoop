@@ -858,7 +858,9 @@ public class DataNode extends ReconfigurableBase
       tcpPeerServer = new TcpPeerServer(secureResources);
     } else {
       tcpPeerServer = new TcpPeerServer(dnConf.socketWriteTimeout,
-          DataNode.getStreamingAddr(conf));
+          DataNode.getStreamingAddr(conf),
+          conf.getInt(DFSConfigKeys.DFS_DATANODE_SOCKET_BACKLOG_KEY, 
+                      DFSConfigKeys.DFS_DATANODE_SOCKET_BACKLOG_DEFAULT));
     }
     tcpPeerServer.setReceiveBufferSize(HdfsConstants.DEFAULT_DATA_SOCKET_SIZE);
     streamingAddr = tcpPeerServer.getStreamingAddr();
