@@ -800,4 +800,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_POSTPONED_RESCAN_RANDOM_RATIO =
       "dfs.namenode.postponed.rescan.random.ratio";
   public static final int DFS_NAMENODE_POSTPONED_RESCAN_RANDOM_RATIO_DEFAULT = 6;
+
+  public static final String DFS_NAMENODE_BLOCKPLACEMENT_CHOOSERANDOM_IN_CTX =
+      "dfs.namenode.blockplacement.chooserandom.in.ctx";
+  public static final boolean DFS_NAMENODE_BLOCKPLACEMENT_CHOOSERANDOM_IN_CTX_DEFAULT = 
+      false;
 }

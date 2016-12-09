@@ -39,6 +39,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.server.namenode.FSClusterStats;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage.State;
 import org.apache.hadoop.net.NetworkTopology;
+import org.apache.hadoop.net.NetworkTopology.ChooseRandomContext;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.net.NodeBase;
 
@@ -81,6 +82,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private Random rand;
   private int maxScheduled;
   private double maxLoadRatio;
+  private boolean chooseRandomInCtx;
 
   /**
    * A miss of that many heartbeats is tolerated for replica deletion policy.
@@ -130,6 +132,9 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     this.maxLoadRatio =
         conf.getInt(DFSConfigKeys.DFS_NAMENODE_AVOID_OVERLOAD_RATIO,
             DFSConfigKeys.DFS_NAMENODE_AVOID_OVERLOAD_RATIO_DEFAULT) * 1.0;
+    this.chooseRandomInCtx =
+        conf.getBoolean(DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENT_CHOOSERANDOM_IN_CTX,
+            DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENT_CHOOSERANDOM_IN_CTX_DEFAULT);
   }
 
   @Override
@@ -549,9 +554,22 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     }
     boolean badTarget = false;
     DatanodeStorageInfo firstChosen = null;
+    ChooseRandomContext crc = null;
+    if (chooseRandomInCtx) {
+      crc = clusterMap.new ChooseRandomContext(scope);
+    }
     while(numOfReplicas > 0 && numOfAvailableNodes > 0) {
       stats.incrChooseRandomInNT();
-      DatanodeDescriptor chosenNode = chooseDataNode(scope);
+      DatanodeDescriptor chosenNode = null;
+      if (crc == null) {
+        chosenNode = chooseDataNode(scope);
+      } else {
+        chosenNode = (DatanodeDescriptor) crc.next();
+        if (chosenNode == null) {
+          break;
+        }
+      }
+
       if (excludedNodes.add(chosenNode)) { //was not in the excluded list
         numOfAvailableNodes--;
 
@@ -571,7 +589,6 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
             break;
           }
         }
-
         // If no candidate storage was found on this DN then set badTarget.
         badTarget = (i == storages.length);
       }
