@@ -959,4 +959,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
 
   public static final String DFS_DATANODE_SOCKET_BACKLOG_KEY = "dfs.datanode.socket.backlog";
   public static final int DFS_DATANODE_SOCKET_BACKLOG_DEFAULT = 0;
+
+  public static final String DFS_NAMENODE_BLOCKPLACEMENT_CHOOSERANDOM_IN_CTX =
+      "dfs.namenode.blockplacement.chooserandom.in.ctx";
+  public static final boolean DFS_NAMENODE_BLOCKPLACEMENT_CHOOSERANDOM_IN_CTX_DEFAULT = 
+      false;
 }

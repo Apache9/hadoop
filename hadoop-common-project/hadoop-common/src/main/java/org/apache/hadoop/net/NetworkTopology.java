@@ -916,4 +916,114 @@ public class NetworkTopology {
     Preconditions.checkState(idx == activeLen,
         "Sorted the wrong number of nodes!");
   }
+ 
+  public class ChooseRandomContext {
+    String scope;
+    String excludedScope;
+    // 0 for forward scan; 1 for backward scan
+    int direction;
+    int num;
+    int current;
+    boolean alwayseNull;
+    int scanned;
+    private Node scopeNode;
+    private Node excludedNode;
+
+    public ChooseRandomContext(String inScope) {
+      if (inScope.startsWith("~")) {
+        excludedScope = inScope.substring(1);
+        scope = NodeBase.ROOT;
+      } else {
+        scope = inScope;
+        excludedScope = null;
+      }
+      direction = r.nextInt(2);
+      alwayseNull = false;
+      scanned = 0;
+      if (excludedScope != null) {
+        if (scope.startsWith(excludedScope)) {
+          alwayseNull = true;
+        }
+        if (!excludedScope.startsWith(scope)) {
+          excludedScope = null;
+      }
+    }
+      netlock.readLock().lock();
+      try {
+        int numOfDatanodes;
+        Node node = getNode(scope);
+        scopeNode = node;
+        excludedNode = null;
+        if (!(node instanceof InnerNode)) {
+          numOfDatanodes = 1;
+        } else {
+          InnerNode innerNode = (InnerNode) node;
+          numOfDatanodes = innerNode.getNumOfLeaves();
+          if (excludedScope == null) {
+            node = null;
+          } else {
+            node = getNode(excludedScope);
+            if (!(node instanceof InnerNode)) {
+              numOfDatanodes -= 1;
+            } else {
+              numOfDatanodes -= ((InnerNode) node).getNumOfLeaves();
+            }
+          }
+          excludedNode = node;
+          if (numOfDatanodes == 0) {
+            // Do not throw exception here just to make ut happy
+          }
+        }
+        num = numOfDatanodes;
+        if (num > 0) {
+          current = r.nextInt(num);
+        }
+      } finally {
+        netlock.readLock().unlock();
+      }
+    }
+
+    public Node next() {
+      if (alwayseNull || scanned > num) {
+        return null;
+      }
+      netlock.readLock().lock();
+      try {
+        if (!(scopeNode instanceof InnerNode)) {
+          return scopeNode;
+        }
+        if (num == 0) {
+          throw new InvalidTopologyException(
+              "Failed to find datanode (scope=\"" + String.valueOf(scope)
+                  + "\" excludedScope=\"" + String.valueOf(excludedScope)
+                  + "\").");
+        }
+        Node res = null;
+        // The do...while logic is to prevent topology changes
+        do {
+          res = ((InnerNode) scopeNode).getLeaf(current, excludedNode);
+          scanned++;
+          if (direction == 0) {
+            if (current == num - 1) {
+              current = 0;
+            } else {
+              current += 1;
+            }
+          } else {
+            if (current == 0) {
+              current = num - 1;
+            } else {
+              current -= 1;
+            }
+          }
+          if (scanned > num) {
+            break;
+          }
+        } while (res == null);
+        return res;
+      } finally {
+        netlock.readLock().unlock();
+      }
+    }
+  }
 }
