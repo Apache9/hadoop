@@ -29,12 +29,18 @@ public class SequenceFileWriter {
     CompressionCodecFactory codecFactory = new CompressionCodecFactory(conf);
     CompressionCodec codec = codecFactory.getCodecByName(codecName);
 
-    writer = SequenceFile.createWriter(conf,
-        SequenceFile.Writer.file(path),
-        SequenceFile.Writer.keyClass(BytesWritable.class),
-        SequenceFile.Writer.valueClass(BytesWritable.class),
-        SequenceFile.Writer.compression(
-            SequenceFile.CompressionType.valueOf(compressionType), codec));
+    try {
+      writer = SequenceFile.createWriter(conf,
+          SequenceFile.Writer.file(path),
+          SequenceFile.Writer.keyClass(BytesWritable.class),
+          SequenceFile.Writer.valueClass(BytesWritable.class),
+          SequenceFile.Writer.compression(
+              SequenceFile.CompressionType.valueOf(compressionType), codec));
+    } catch (QuotaExceededException qe) {
+      isQuotaExceeded = true;
+      throw qe;
+    }
+    isQuotaExceeded = false;
   }
 
   @VisibleForTesting
@@ -45,14 +51,19 @@ public class SequenceFileWriter {
     CompressionCodecFactory codecFactory = new CompressionCodecFactory(conf);
     CompressionCodec codec = codecFactory.getCodecByName(codecName);
 
-    writer =
-        SequenceFile.createWriter(
-            conf,
-            SequenceFile.Writer.file(path),
-            SequenceFile.Writer.keyClass(BytesWritable.class),
-            SequenceFile.Writer.valueClass(BytesWritable.class),
-            SequenceFile.Writer.compression(
-                SequenceFile.CompressionType.valueOf(compressionType), codec));
+    try {
+      writer =
+          SequenceFile.createWriter(conf,
+          SequenceFile.Writer.file(path),
+          SequenceFile.Writer.keyClass(BytesWritable.class),
+          SequenceFile.Writer.valueClass(BytesWritable.class),
+          SequenceFile.Writer.compression(
+              SequenceFile.CompressionType.valueOf(compressionType), codec));
+    } catch(QuotaExceededException qe) {
+      isQuotaExceeded = true;
+      throw qe;
+    }
+    isQuotaExceeded = false;
   }
 
   public void append(byte[] key, byte[] value) throws IOException {
@@ -62,6 +73,7 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
+    isQuotaExceeded = false;
   }
 
   public void append(byte[] value) throws IOException {
@@ -71,6 +83,7 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
+    isQuotaExceeded = false;
   }
 
   public void sync() throws IOException {
@@ -80,6 +93,7 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
+    isQuotaExceeded = false;
   }
 
   public void hflush(boolean updateLength) throws IOException {
@@ -97,6 +111,7 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
+    isQuotaExceeded = false;
   }
 
   public void hsync(boolean updateLength) throws IOException {
@@ -114,6 +129,7 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
+    isQuotaExceeded = false;
   }
 
   public void close() throws IOException {
@@ -123,6 +139,7 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
+    isQuotaExceeded = false;
   }
 
   public boolean isQuotaExceeded() {
