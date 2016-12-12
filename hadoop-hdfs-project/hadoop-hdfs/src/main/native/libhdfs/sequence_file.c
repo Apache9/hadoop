@@ -50,7 +50,7 @@ SequenceFileWriter SequenceFileCreateWriter(
       "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",  // Signature.
       jPath, jCompressionType, jCodecName); // Constructor arguments.
   if (jThr) {
-    ret = printExceptionAndFree(env, jThr, PRINT_EXC_ALL,
+    ret = printExceptionAndFree(env, jThr, NOPRINT_EXC_DSQUOTA_EXCEEDED,
         "SequenceFileCreateWriter(%s): constructNewObjectOfClass", path);
     goto done;
   }
@@ -174,7 +174,7 @@ int SequenceFileHFlush(SequenceFileWriter writer, int update_length) {
   jThr = invokeMethod(env, NULL, INSTANCE, jWriter,
       WRITER_CLASS, "hflush", "()V", jUpdateLength);
   if (jThr) {
-    errno = printExceptionAndFree(env, jThr, PRINT_EXC_ALL,
+    errno = printExceptionAndFree(env, jThr, NOPRINT_EXC_DSQUOTA_EXCEEDED,
         "SequenceFileHFlush: hflush");
     return -1;
   }
@@ -201,7 +201,7 @@ int SequenceFileHSync(SequenceFileWriter writer, int update_length) {
   jThr = invokeMethod(env, NULL, INSTANCE, jWriter,
       WRITER_CLASS, "hsync", "()V", jUpdateLength);
   if (jThr) {
-    errno = printExceptionAndFree(env, jThr, PRINT_EXC_ALL,
+    errno = printExceptionAndFree(env, jThr, NOPRINT_EXC_DSQUOTA_EXCEEDED,
         "SequenceFileHSync: hsync");
     return -1;
   }
@@ -228,7 +228,7 @@ int SequenceFileClose(SequenceFileWriter writer) {
   jThr = invokeMethod(env, NULL, INSTANCE, jWriter,
       WRITER_CLASS, "close", "()V");
   if (jThr) {
-    errno = printExceptionAndFree(env, jThr, PRINT_EXC_ALL,
+    errno = printExceptionAndFree(env, jThr, NOPRINT_EXC_DSQUOTA_EXCEEDED,
         "SequenceFileClose: close");
     ret = -1;
   } else {
