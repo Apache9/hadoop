@@ -19,6 +19,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 
@@ -54,6 +55,8 @@ public class Canary implements Tool {
     void publishCapacityRemaining(double percent);
     void publishDataNodeLatency(String dataNode, OpType type, long msTime);
     void publishDNReadLatencyPercentitle();
+    void publishMaxTxIdDelta(String ns, long maxTxDelta);
+    void publishMaxJournalDelay(String ns, long maxJournalDelay);
 
     void reportSummary();
   }
@@ -127,6 +130,16 @@ public class Canary implements Tool {
     @Override
     public void publishDNReadLatencyPercentitle() {
        return;
+    }
+
+    @Override
+    public void publishMaxTxIdDelta(String ns, long maxTxDelta) {
+      return;
+    }
+
+    @Override
+    public void publishMaxJournalDelay(String ns, long maxTxDelta) {
+      return;
     }
 
   }
@@ -222,6 +235,7 @@ public class Canary implements Tool {
 
   private static final long DEFAULT_INTERVAL = 6000;
   private static final long DEFAULT_AVAIL_DETECT_INTERAL = 100;
+  private static final long DEFAULT_TX_DETECT_INTERAL = 3600000; // 1 hour
   private static final Log LOG = LogFactory.getLog(Canary.class);
   private static final String DEFAULT_TEST_PATH_BASE = "/hdfs_canary/.health_monitoring_canary_";
   private static final String DEFAULT_PATH_FOR_AVAILABILITY_TEST = "hdfs_canary/.file_for_availability_test";
@@ -246,6 +260,8 @@ public class Canary implements Tool {
 
   // datanodes prob
   private ProbeManager  probManger = null;
+
+  private long lastTxCheckTime = 0;
 
   public Canary() {
     this(new StdOutSink());
@@ -307,6 +323,7 @@ public class Canary implements Tool {
         checkClusterCapacityRemaining();
         checkNNAndDNHealth();
         checkJNHealth();
+        checkJournalNodesAndTxId();
         listCorruptBlocks();
       }
 
@@ -543,6 +560,120 @@ public class Canary implements Tool {
     } catch (IOException e) {
       LOG.error("check cluster remaining capacity failed", e);
     }
+  }
+
+  private long getMaxTxDelta(JSONObject jsonObj) {
+    long maxTxDelta = 0;
+
+    try {
+      String journalStr = (String) jsonObj.getJSONArray("beans").getJSONObject(0).get("JournalTransactionInfo");
+      JSONObject jsonObj2 = new JSONObject(journalStr);
+      long lastAppliedOrWrittenTxId = jsonObj2.getLong("LastAppliedOrWrittenTxId");
+      long mostRecentCheckpointTxId = jsonObj2.getLong("MostRecentCheckpointTxId");
+      if (maxTxDelta < (lastAppliedOrWrittenTxId - mostRecentCheckpointTxId)) {
+        maxTxDelta = lastAppliedOrWrittenTxId - mostRecentCheckpointTxId;
+      }
+    } catch (JSONException je) {
+      if (jsonObj != null)
+        LOG.error("Can't parse the jmx content as JSON when check Tx delta\n" + jsonObj);
+    }
+
+    return maxTxDelta;
+  }
+
+  private long getMaxJournalDelay(JSONObject jsonObj) {
+    long minTxid = Long.MAX_VALUE;
+    long maxTxid = 0;
+    try {
+      String journalStr = (String) jsonObj.getJSONArray("beans").getJSONObject(0).get("NameJournalStatus");
+      JSONArray ja = new JSONArray(journalStr);
+      String stream = ja.getJSONObject(0).getString("stream");
+      if (!stream.contains("Writing segment")) {
+        return -1;
+      }
+
+      String[] tmplist = stream.split(" ");
+      for (int i = 2; i < tmplist.length; i ++) {
+        String txidStr = null;
+        if (tmplist[i-2].equals("(Written") && tmplist[i-1].equals("txid")) {
+          if (tmplist[i].indexOf(')') >= 0) {
+            txidStr = tmplist[i].substring(0, tmplist[i].indexOf(')'));
+          } else {
+            txidStr = tmplist[i];
+          }
+
+          long txid = Long.parseLong(txidStr);
+          if (txid > maxTxid) {
+            maxTxid = txid;
+          }
+
+          if (txid < minTxid) {
+            minTxid = txid;
+          }
+        }
+      }
+
+    } catch (JSONException je) {
+      if (jsonObj != null)
+        LOG.error("Can't parse the jmx content as JSON when check journal node delay\n" + jsonObj);
+    }
+
+    return maxTxid - minTxid;
+  }
+
+
+  void checkJournalNodesAndTxId() {
+    long currentTime = System.currentTimeMillis();
+    if (currentTime - lastTxCheckTime < DEFAULT_TX_DETECT_INTERAL) {
+      return;
+    }
+
+    long maxTxDelta = 0;
+    long maxJournalDelay = 0;
+    String ns = conf.get(DFSConfigKeys.DFS_NAMESERVICES);
+
+    try {
+
+      List<DFSUtil.ConfiguredNNAddress> nns =
+          DFSUtil.flattenAddressMap(DFSUtil.getNNServiceRpcAddresses(conf));
+
+      for (DFSUtil.ConfiguredNNAddress cnn : nns) {
+        InetSocketAddress isa = cnn.getAddress();
+        URL nnJmxUrl = new URL(DFSUtil.getInfoServer(isa, conf,
+            DFSUtil.getHttpClientScheme(conf)).toURL(), NN_JMX_SUFFIX);
+        LOG.info("will access jmx url: " + nnJmxUrl);
+        String jmxJson = null;
+        try {
+          jmxJson = readOutput(nnJmxUrl);
+          JSONObject jsonObj = new JSONObject(jmxJson);
+
+          //check TxId
+          maxTxDelta  = getMaxTxDelta(jsonObj);
+
+          //check journal nodes
+          maxJournalDelay = getMaxJournalDelay(jsonObj);
+
+
+        } catch (IOException ioe) {
+          LOG.error("Get JMX from NameNode faild, jmx url:" + nnJmxUrl, ioe);
+          //sink.publishNodeHealth(Sink.NodeType.NMAE_NODE, NNHost, Sink.NodeState.FAILED);
+        } catch (JSONException je) {
+          if (jmxJson != null)
+            LOG.error("Can't parse the jmx content as JSON\n" + jmxJson);
+        }
+      }
+
+      LOG.info("MaxTxDelta: " + maxTxDelta);
+      sink.publishMaxTxIdDelta(ns, maxTxDelta);
+
+      LOG.info("MaxJournalDelay: " + maxJournalDelay);
+      sink.publishMaxJournalDelay(ns, maxJournalDelay);
+
+    } catch (IOException e) {
+      LOG.error("check transaction ID failed", e);
+    }
+
+    lastTxCheckTime = System.currentTimeMillis();
   }
 
   private String readOutput(URL url) throws IOException {
