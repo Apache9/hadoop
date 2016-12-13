@@ -37,6 +37,9 @@ public class FalconSink implements Canary.Sink, Configurable {
   private long percentile99Latency = 0;
   private long percentile95Latency = 0;
   private long percentile75Latency = 0;
+  private String nameService = null;
+  private long maxTxDelta= 0;
+  private long maxJournalDelay= 0;
 
   // For availability calculating
   private boolean clusterAvailableStatus = true;
@@ -111,6 +114,22 @@ public class FalconSink implements Canary.Sink, Configurable {
     percentile95Latency = readLatencyList.get(percentile95);
     percentile75Latency = readLatencyList.get(percentile75);
     LOG.info(String.format("Datanode read latency percentile:99:%d 95:%d 75:%d", percentile99Latency, percentile95Latency, percentile75Latency));
+  }
+
+  @Override
+  public void publishMaxTxIdDelta(String ns, long maxTxDelta) {
+    if (nameService == null) {
+      nameService = ns;
+    }
+    this.maxTxDelta = maxTxDelta;
+  }
+
+  @Override
+  public void publishMaxJournalDelay(String ns, long maxJournalDelay) {
+    if (nameService == null) {
+      nameService = ns;
+    }
+    this.maxJournalDelay = maxJournalDelay;
   }
 
   private void updateRecentFailedTimes() {
@@ -257,6 +276,13 @@ public class FalconSink implements Canary.Sink, Configurable {
 
       // latency percentile of datanodes
       buildDNReadLatencyPercentitleMetrix(payload);
+
+      // TxIds
+      buildMaxTxIdDeltaMetrix(payload);
+
+      // journal delay
+      buildMaxJournalDelayMetrix(payload);
+
     }
 
     PushToFalcon(payload);
@@ -301,5 +327,15 @@ public class FalconSink implements Canary.Sink, Configurable {
     payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "percentile95_read_latency", percentile95Latency));
     payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "percentile75_read_latency", percentile75Latency));
 
+  }
+
+  public void buildMaxTxIdDeltaMetrix(JSONArray payload)
+  {
+    payload.put(buildFalconMetric(nameService, "MaxTxDelta", maxTxDelta));
+  }
+
+  public void buildMaxJournalDelayMetrix(JSONArray payload)
+  {
+    payload.put(buildFalconMetric(nameService, "MaxJournalDelay", maxJournalDelay));
   }
 }
