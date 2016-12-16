@@ -321,7 +321,6 @@ public class Canary implements Tool {
         checkAvailability(startTime + interval);
       } else {
         checkClusterCapacityRemaining();
-        checkNNAndDNHealth();
         checkJNHealth();
         checkJournalNodesAndTxId();
         listCorruptBlocks();
@@ -426,51 +425,6 @@ public class Canary implements Tool {
       throw e;
     } finally {
       IOUtils.closeStream(in);
-    }
-  }
-
-  private void checkNNAndDNHealth() {
-    try {
-      // Check datanode health
-      for (DatanodeInfo info : dfs.getDataNodeStats()) {
-        try {
-          ClientDatanodeProtocol proxy = DFSUtil.createClientDatanodeProtocolProxy(
-            NetUtils.createSocketAddr(info.getIpcAddr(false)),
-            UserGroupInformation.getCurrentUser(), conf,
-            NetUtils.getSocketFactory(conf, ClientDatanodeProtocol.class));
-          DatanodeLocalInfo localInfo = proxy.getDatanodeInfo();
-          LOG.info(String.format("DataNode report for node [%s] : %s",
-                  info.getXferAddr(), localInfo.getDatanodeLocalReport()));
-          sink.publishNodeHealth(Sink.NodeType.DATA_NODE, info.getXferAddr(), Sink.NodeState.LIVE);
-        } catch (IOException e) {
-          LOG.error("Get datanode info failed", e);
-          sink.publishNodeHealth(Sink.NodeType.DATA_NODE, info.getXferAddr(), Sink.NodeState.FAILED);
-        }
-      }
-
-      //check namenode health
-      String nsId = DFSUtil.getNamenodeNameServiceId(conf);
-      for (String nnId : DFSUtil.getNameNodeIds(conf, nsId)) {
-        String NNHost = DFSUtil.getNamenodeServiceAddr(conf, nsId, nnId);
-        try {
-          HAServiceProtocol proxy = new NNHAServiceTarget(conf, nsId, nnId).getProxy(conf,
-                  rpcTimeoutForChecks);
-          /*
-           * skip at first version
-           * due to some kerberos issues, this call will always fail
-           *
-          String state = proxy.getServiceStatus().getState().toString();
-          LOG.info(String.format("%s current state [%s]", NNHost, state));
-          */
-          sink.publishNodeHealth(Sink.NodeType.NMAE_NODE, NNHost, Sink.NodeState.LIVE);
-        } catch (IOException e) {
-          LOG.error("Get NameNode state faild ", e);
-          sink.publishNodeHealth(Sink.NodeType.NMAE_NODE, NNHost, Sink.NodeState.FAILED);
-        }
-      }
-    } catch (IOException e) {
-      // TODO: process the failure on sink
-      LOG.error("Get datanode stats failed ", e);
     }
   }
 
