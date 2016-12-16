@@ -648,11 +648,16 @@ public class Canary implements Tool {
           JSONObject jsonObj = new JSONObject(jmxJson);
 
           //check TxId
-          maxTxDelta  = getMaxTxDelta(jsonObj);
+          long tmpMaxTxDelta = getMaxTxDelta(jsonObj);
+          if (maxTxDelta < tmpMaxTxDelta) {
+            maxTxDelta = tmpMaxTxDelta;
+          }
 
           //check journal nodes
-          maxJournalDelay = getMaxJournalDelay(jsonObj);
-
+          long tmpMaxJournalDelay = getMaxJournalDelay(jsonObj);
+          if (maxJournalDelay < tmpMaxJournalDelay) {
+            maxJournalDelay = tmpMaxJournalDelay;
+          }
 
         } catch (IOException ioe) {
           LOG.error("Get JMX from NameNode faild, jmx url:" + nnJmxUrl, ioe);
