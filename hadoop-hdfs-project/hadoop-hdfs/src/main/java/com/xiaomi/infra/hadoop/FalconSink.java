@@ -331,11 +331,11 @@ public class FalconSink implements Canary.Sink, Configurable {
 
   public void buildMaxTxIdDeltaMetrix(JSONArray payload)
   {
-    payload.put(buildFalconMetric(nameService, "MaxTxDelta", maxTxDelta));
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "MaxTxDelta", maxTxDelta));
   }
 
   public void buildMaxJournalDelayMetrix(JSONArray payload)
   {
-    payload.put(buildFalconMetric(nameService, "MaxJournalDelay", maxJournalDelay));
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "MaxJournalDelay", maxJournalDelay));
   }
 }
