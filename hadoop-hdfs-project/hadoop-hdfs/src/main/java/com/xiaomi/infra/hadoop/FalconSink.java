@@ -95,14 +95,14 @@ public class FalconSink implements Canary.Sink, Configurable {
   }
 
   @Override
-  public void publishDataNodeLatency(String dataNode, OpType type, long msTime) {
+  public synchronized void publishDataNodeLatency(String dataNode, OpType type, long msTime) {
     if (type == OpType.READ) {
       dataNodeReadLatencyMap.put(dataNode, msTime);
     }
   }
 
   @Override
-  public void publishDNReadLatencyPercentitle () {
+  public synchronized void publishDNReadLatencyPercentitle () {
     List<Long> readLatencyList = new ArrayList<Long>(dataNodeReadLatencyMap.values());
     Collections.sort(readLatencyList);
 
@@ -150,13 +150,17 @@ public class FalconSink implements Canary.Sink, Configurable {
     nodeCount.clear();
     failedNodes.clear();
     corruptPaths.clear();
-    dataNodeReadLatencyMap.clear();
+    clearDataNodeReadLatencyMap();
     readLatency = -1;
     writeLatency = -1;
     unavailableTime = 0;
     percentile99Latency = 0;
     percentile95Latency = 0;
     percentile75Latency = 0;
+  }
+
+  private synchronized void clearDataNodeReadLatencyMap() {
+    dataNodeReadLatencyMap.clear();
   }
 
   private JSONObject buildFalconMetricCommon(String endpoint, String key, double value) {
@@ -307,7 +311,7 @@ public class FalconSink implements Canary.Sink, Configurable {
     }
   }
 
-  private void buildDNsReadLatencyMetrix(JSONArray payload) {
+  private synchronized void buildDNsReadLatencyMetrix(JSONArray payload) {
     for (Map.Entry<String, Long> entry : dataNodeReadLatencyMap.entrySet()) {
       buildLatencyMetrix(payload, entry.getKey(), OpType.READ, entry.getValue().longValue());
     }

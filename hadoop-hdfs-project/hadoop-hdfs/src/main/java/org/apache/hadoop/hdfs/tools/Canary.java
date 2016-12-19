@@ -243,6 +243,7 @@ public class Canary implements Tool {
   private static final int DEFAULT_AVAIL_TEST_DATA_SIZE = 1024; // 1k
   private static final String NN_JMX_SUFFIX = "/jmx?qry=Hadoop:service=NameNode,name=NameNodeInfo";
   private static final String JN_JMX_SUFFIX = "/jmx?qry=Hadoop:service=JournalNode,name=Journal-";
+  private static final boolean DEFAULT_DATANODE_LATENCY_ENABLE = true;
 
   private Configuration conf = null;
   private DistributedFileSystem dfs = null;
@@ -260,6 +261,7 @@ public class Canary implements Tool {
 
   // datanodes prob
   private ProbeManager  probManger = null;
+  private boolean enableDatanodeLatencyCheck = false;
 
   private long lastTxCheckTime = 0;
 
@@ -305,7 +307,9 @@ public class Canary implements Tool {
       try {
         checkIOLatency();
         // start Datanodes prob
-        startDataNodeLatencyProb();
+        if (enableDatanodeLatencyCheck) {
+          startDataNodeLatencyProb();
+        }
       } catch (IOException e) {
         // if got socketTimeoutException when renew lease, dfsClient will fail in the following operation
         // since canary is stateless, exit directly. supervisor will start Canary again in clean state
@@ -733,6 +737,7 @@ public class Canary implements Tool {
     availDetectInterval = conf.getLong("dfs.canary.availability.quick-detect.interval",
             DEFAULT_AVAIL_DETECT_INTERAL);
     rpcTimeoutForChecks = conf.getInt("dfs.canary.read.timeout", 500);
+    enableDatanodeLatencyCheck = conf.getBoolean("dfs.canary.datanode.check-latency", DEFAULT_DATANODE_LATENCY_ENABLE);
   }
 
   private void printUsageAndExit() {
