@@ -168,7 +168,7 @@ public class DistCp extends Configured implements Tool {
     }
 
     String jobID = job.getJobID().toString();
-    job.getConfiguration().set(DistCpConstants.CONF_LABEL_DISTCP_JOB_ID, jobID);
+    getConf().set(DistCpConstants.CONF_LABEL_DISTCP_JOB_ID, jobID);
     
     LOG.info("DistCp job-id: " + jobID);
     if (inputOptions.shouldBlock() && !job.waitForCompletion(true)) {

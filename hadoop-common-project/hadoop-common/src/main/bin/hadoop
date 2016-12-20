@@ -110,6 +110,9 @@ case $COMMAND in
       CLASSPATH=${CLASSPATH}:${TOOL_PATH}
     elif [ "$COMMAND" = "daemonlog" ] ; then
       CLASS=org.apache.hadoop.log.LogLevel
+    elif [ "$COMMAND" = "file-archiver" ] ; then
+      CLASS=org.apache.hadoop.tools.FileArchiver
+      CLASSPATH=${CLASSPATH}:${TOOL_PATH}
     elif [ "$COMMAND" = "archive" ] ; then
       CLASS=org.apache.hadoop.tools.HadoopArchives
       CLASSPATH=${CLASSPATH}:${TOOL_PATH}
