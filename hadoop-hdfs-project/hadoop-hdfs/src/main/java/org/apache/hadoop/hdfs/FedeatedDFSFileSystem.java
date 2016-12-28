@@ -776,4 +776,8 @@ public class FedeatedDFSFileSystem extends DistributedFileSystem {
   public short getDefaultReplication(Path f) {
     return viewFs.getDefaultReplication(f);
   }
+
+  public FileSystem getTargetFileSystem(Path path) throws IOException {
+      return viewFs.getTargetFileSystem(path);
+  }
 }
