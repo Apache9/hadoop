@@ -666,6 +666,12 @@ public class ViewFileSystem extends FileSystem {
     }
     return result;
   }
+
+  public FileSystem getTargetFileSystem(Path path) throws IOException {
+    InodeTree.ResolveResult<FileSystem> res =
+            fsState.resolve(getUriPath(path), true);
+    return res.targetFileSystem;
+  }
   
   /*
    * An instance of this class represents an internal dir of the viewFs 
