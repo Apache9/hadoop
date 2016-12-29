@@ -73,10 +73,10 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
-public class FedeatedDFSFileSystem extends DistributedFileSystem {
+public class FederatedDFSFileSystem extends DistributedFileSystem {
   private ViewFileSystem viewFs = null;
 
-  public FedeatedDFSFileSystem() {
+  public FederatedDFSFileSystem() {
   }
 
   @Override

@@ -10,7 +10,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
-import org.apache.hadoop.io.IOUtils;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -45,7 +44,7 @@ public class TestFederatedDFSFileSystem {
       cluster2 = setupNewDFSCluster();
       setupFederationConfig();
       conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs:///");
-      conf.set("fs.hdfs.impl", FedeatedDFSFileSystem.class.getName());
+      conf.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
     } catch (Exception e) {
       LOG.info("Setup test env failed " + e.getMessage());
     }
@@ -82,7 +81,7 @@ public class TestFederatedDFSFileSystem {
     String testText = "hello, federation";
     DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
     Assert.assertTrue(dfs instanceof DistributedFileSystem);
-    Assert.assertTrue(dfs instanceof FedeatedDFSFileSystem);
+    Assert.assertTrue(dfs instanceof FederatedDFSFileSystem);
 
     Path fooPath = new Path("/home/foo");
     Path barPath = new Path("/user/bar");
