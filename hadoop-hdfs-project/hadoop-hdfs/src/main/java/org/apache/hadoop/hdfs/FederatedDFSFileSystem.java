@@ -63,6 +63,7 @@ import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.util.ReflectionUtils;
 
 import javax.naming.OperationNotSupportedException;
 import java.io.FileNotFoundException;
@@ -92,7 +93,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
-    viewFs = new ViewFileSystem(conf);
+    viewFs = ReflectionUtils.newInstance(ViewFileSystem.class, conf);
     viewFs.initialize(uri, conf);
   }
 
