@@ -12,6 +12,7 @@ import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
+import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -19,6 +20,7 @@ public class SequenceFileWriter {
   private SequenceFile.Writer writer;
   private final BytesWritable nullKey = new BytesWritable(new byte[0]);
   private boolean isQuotaExceeded = false;
+  private DSQuotaExceededException qexception = new DSQuotaExceededException("Quota exceeded");
 
   public SequenceFileWriter(String filePath, String compressionType, String codecName)
       throws IOException {
@@ -40,7 +42,6 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
-    isQuotaExceeded = false;
   }
 
   @VisibleForTesting
@@ -63,40 +64,49 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
-    isQuotaExceeded = false;
   }
 
   public void append(byte[] key, byte[] value) throws IOException {
+    if (isQuotaExceeded) {
+      throw qexception;
+    }
     try {
       writer.append(new BytesWritable(key), new BytesWritable(value));
     } catch (QuotaExceededException qe) {
       isQuotaExceeded = true;
       throw qe;
     }
-    isQuotaExceeded = false;
   }
 
   public void append(byte[] value) throws IOException {
+    if (isQuotaExceeded) {
+      throw qexception;
+    }
+
     try {
       writer.append(nullKey, new BytesWritable(value));
     } catch (QuotaExceededException qe) {
       isQuotaExceeded = true;
       throw qe;
     }
-    isQuotaExceeded = false;
   }
 
   public void sync() throws IOException {
+    if (isQuotaExceeded) {
+      throw qexception;
+    }
     try {
       writer.sync();
     } catch (QuotaExceededException qe) {
       isQuotaExceeded = true;
       throw qe;
     }
-    isQuotaExceeded = false;
   }
 
   public void hflush(boolean updateLength) throws IOException {
+    if (isQuotaExceeded) {
+      throw qexception;
+    }
     try {
       if (updateLength) {
         FSDataOutputStream outputStream = writer.getStream();
@@ -111,10 +121,12 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
-    isQuotaExceeded = false;
   }
 
   public void hsync(boolean updateLength) throws IOException {
+    if (isQuotaExceeded) {
+      throw qexception;
+    }
     try {
       if (updateLength) {
         FSDataOutputStream outputStream = writer.getStream();
@@ -129,17 +141,18 @@ public class SequenceFileWriter {
       isQuotaExceeded = true;
       throw qe;
     }
-    isQuotaExceeded = false;
   }
 
   public void close() throws IOException {
+    if (isQuotaExceeded) {
+      throw qexception;
+    }
     try {
       writer.close();
     } catch (QuotaExceededException qe) {
       isQuotaExceeded = true;
       throw qe;
     }
-    isQuotaExceeded = false;
   }
 
   public boolean isQuotaExceeded() {
