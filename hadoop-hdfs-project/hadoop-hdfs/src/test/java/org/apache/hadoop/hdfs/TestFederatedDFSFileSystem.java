@@ -43,7 +43,7 @@ public class TestFederatedDFSFileSystem {
       cluster1 = setupNewDFSCluster();
       cluster2 = setupNewDFSCluster();
       setupFederationConfig();
-      conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs:///");
+      conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs://test-cluster/");
       conf.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
     } catch (Exception e) {
       LOG.info("Setup test env failed " + e.getMessage());
@@ -72,8 +72,8 @@ public class TestFederatedDFSFileSystem {
         "hdfs://" + cluster2.getNameNode().getHostAndPort();
     cluster1.getFileSystem().mkdir(new Path("/home"), null);
     cluster2.getFileSystem().mkdir(new Path("/user"), null);
-    ConfigUtil.addLink(conf, "/home", new URI(cluster1NNAddress + "/home"));
-    ConfigUtil.addLink(conf, "/user", new URI(cluster2NNAddress + "/user"));
+    ConfigUtil.addLink(conf, "test-cluster", "/home", new URI(cluster1NNAddress + "/home"));
+    ConfigUtil.addLink(conf, "test-cluster", "/user", new URI(cluster2NNAddress + "/user"));
   }
 
   @Test
