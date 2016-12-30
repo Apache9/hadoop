@@ -632,7 +632,9 @@ public class UserGroupInformation {
   UserGroupInformation(Subject subject) {
     this.subject = subject;
     this.user = subject.getPrincipals(User.class).iterator().next();
-    this.isKrbKey = !subject.getPrivateCredentials(KEY_TAB_CLASS).isEmpty();
+    this.isKrbKey =
+        !subject.getPrivateCredentials(KEY_TAB_CLASS).isEmpty() || conf.get(
+            CommonConfigurationKeys.HADOOP_CLIENT_KERBEROS_PASSWORD) != null;
     this.isKrbTkt = !subject.getPrivateCredentials(KerberosTicket.class).isEmpty();
   }
   

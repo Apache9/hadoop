@@ -17,7 +17,9 @@
  */
 package org.apache.hadoop.security;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.io.File;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
@@ -39,9 +41,6 @@ import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
 import org.junit.Before;
 import org.junit.Test;
 
-/**
- *
- */
 public class TestFixKerberosTicketOrder extends KerberosSecurityTestcase {
 
   private String clientPrincipal = "client";
