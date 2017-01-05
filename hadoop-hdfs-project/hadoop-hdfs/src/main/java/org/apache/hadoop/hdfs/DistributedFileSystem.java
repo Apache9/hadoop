@@ -24,6 +24,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -64,6 +66,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.hdfs.client.HdfsAdmin;
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
+import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
@@ -71,16 +74,21 @@ import org.apache.hadoop.hdfs.protocol.CachePoolEntry;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
+import org.apache.hadoop.hdfs.protocol.FederationClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
+import org.apache.hadoop.hdfs.protocolPB.FederationClientDatanodeProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
@@ -89,6 +97,7 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.crypto.key.KeyProviderDelegationTokenExtension;
 
@@ -2156,5 +2165,90 @@ public class DistributedFileSystem extends FileSystem {
   @Override
   public FileSystem getDistributedFileSystem() {
     return this;
+  }
+
+  public DirectorySubTree renameSrcPhase1(String src, String srcId,
+      final String dst, final String dstId) throws IOException {
+    statistics.incrementWriteOps(1);
+    // Try the rename without resolving first
+    try {
+      return dfs.renameSrcPhase1(src, srcId, dst, dstId);
+    } catch (UnresolvedLinkException e) {
+      // Fully resolve the source
+      final Path source = getFileLinkStatus(new Path(src)).getPath();
+      return dfs.renameSrcPhase1(getPathName(source), srcId, dst, dstId);
+    }
+  }
+
+  public boolean renameSrcPhase2(long renameId, boolean toCancel)
+      throws IOException {
+    return dfs.renameSrcPhase2(renameId, toCancel);
+  }
+
+  public String renameDestPhase1(final String src, final String srcId,
+      String dst, String dstId, final DirectorySubTree subTree)
+      throws IOException {
+    try {
+      return dfs.renameDestPhase1(src, srcId, dst, dstId, subTree);
+    } catch (UnresolvedLinkException e) {
+      // Fully resolve the dest
+      final Path dest = getFileLinkStatus(new Path(dst)).getPath();
+      return dfs
+          .renameDestPhase1(src, srcId, getPathName(dest), dstId, subTree);
+    }
+  }
+
+  public boolean renameDestPhase2(long renameId, String srcId)
+      throws IOException {
+    return dfs.renameDestPhase2(renameId, srcId);
+  }
+
+  @Override
+  public boolean federationRename(FileSystem srcFs, Path srcArg,
+      FileSystem dstFs,
+      Path dstArg) throws IOException {
+    if (!srcFs.isDistributedFileSystem() || !dstFs.isDistributedFileSystem()) {
+      throw new IOException("Operation is not supported");
+    }
+
+    final Path absSrc = fixRelativePart(srcArg);
+    final Path absDst = fixRelativePart(dstArg);
+    String src = getPathName(absSrc);
+    String dst = getPathName(absDst);
+    String srcPool = null;
+    String dstPool = null;
+
+    DistributedFileSystem dsrcFs =
+        (DistributedFileSystem) srcFs.getDistributedFileSystem();
+    DistributedFileSystem ddstFs =
+        (DistributedFileSystem) dstFs.getDistributedFileSystem();
+    DirectorySubTree subTree =
+        dsrcFs.renameSrcPhase1(src, dsrcFs.getUri().toString(), dst, ddstFs
+            .getUri().toString());
+    if (subTree != null && subTree.getSize() > 0) {
+      dstPool =
+          ddstFs.renameDestPhase1(src, dsrcFs.getUri().toString(), dst, ddstFs
+              .getUri().toString(), subTree);
+      FederationRenameBlockCollector frbc = null;
+      if (dstPool != null) {
+        frbc =
+            new FederationRenameBlockCollector(null, dstPool, subTree,
+                dfs.getConfiguration());
+        }
+        // ask DN to add new link
+      if (frbc != null) {
+        frbc.linkBlocksToNewPool();
+      }
+      if (dsrcFs.renameSrcPhase2(subTree.getRenameId(), false)) {
+        return ddstFs.renameDestPhase2(subTree.getRenameId(), dsrcFs.getUri()
+            .toString());
+      } else {
+          // It should not hadppen, let cleaner handle left things
+        }
+      } else {
+      // TBD: Cancel rename src phase1. Add param to src phase2 to indicating
+      // going ahead or cancel
+      }
+    return false;
   }
 }

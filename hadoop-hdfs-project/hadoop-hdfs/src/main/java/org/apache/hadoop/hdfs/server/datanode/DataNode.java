@@ -88,6 +88,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.management.ObjectName;
 
+import com.google.common.collect.Lists;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -114,6 +116,7 @@ import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DatanodeLocalInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.FederationClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsBlocksMetadata;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.RecoveryInProgressException;
@@ -127,11 +130,14 @@ import org.apache.hadoop.hdfs.protocol.datatransfer.sasl.SaslDataTransferServer;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.ClientDatanodeProtocolService;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.DNTransferAckProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
+import org.apache.hadoop.hdfs.protocol.proto.FederationClientDatanodeProtocolProtos.FederationClientDatanodeProtocolService;
 import org.apache.hadoop.hdfs.protocol.proto.InterDatanodeProtocolProtos.InterDatanodeProtocolService;
 import org.apache.hadoop.hdfs.protocol.proto.RaidDatanodeProtocolProtos.RaidDatanodeProtocolService;
 import org.apache.hadoop.hdfs.protocolPB.ClientDatanodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientDatanodeProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
+import org.apache.hadoop.hdfs.protocolPB.FederationClientDatanodeProtocolServerSideTranslatorPB;
+import org.apache.hadoop.hdfs.protocolPB.FederationClientDatanodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.InterDatanodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.InterDatanodeProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.InterDatanodeProtocolTranslatorPB;
@@ -232,7 +238,8 @@ import org.mortbay.util.ajax.JSON;
 @InterfaceAudience.Private
 public class DataNode extends ReconfigurableBase
     implements InterDatanodeProtocol, ClientDatanodeProtocol,
-        TraceAdminProtocol, DataNodeMXBean {
+ TraceAdminProtocol,
+    FederationClientDatanodeProtocol, DataNodeMXBean {
   public static final Log LOG = LogFactory.getLog(DataNode.class);
   
   static{
@@ -667,6 +674,14 @@ public class DataNode extends ReconfigurableBase
         .newReflectiveBlockingService(traceAdminXlator);
     DFSUtil.addPBProtocol(conf, TraceAdminProtocolPB.class, traceAdminService,
         ipcServer);
+
+    FederationClientDatanodeProtocolServerSideTranslatorPB fedClientDnXlator =
+        new FederationClientDatanodeProtocolServerSideTranslatorPB(this);
+    BlockingService fedDnService =
+        FederationClientDatanodeProtocolService
+            .newReflectiveBlockingService(fedClientDnXlator);
+    DFSUtil.addPBProtocol(conf, FederationClientDatanodeProtocolPB.class,
+        fedDnService, ipcServer);
 
     if (conf.getBoolean(DFS_DATANODE_ENABLE_RAID_SERVICE,
         DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT)) {
@@ -3049,5 +3064,13 @@ public class DataNode extends ReconfigurableBase
 
   public BlockPoolTokenSecretManager getBlockPoolTokenSecretManager() {
     return blockPoolTokenSecretManager;
+  }
+
+  @Override
+  // FederationClientDatanodeProtocol
+  public Block[] addBlocksToNewPool(String srcPool, String dstPool,
+      Block[] blocks)
+      throws IOException {
+    return data.addBlocksToNewPool(srcPool, dstPool, blocks);
   }
 }

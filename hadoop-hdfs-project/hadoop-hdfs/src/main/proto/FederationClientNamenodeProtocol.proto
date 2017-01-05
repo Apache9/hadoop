@@ -1,0 +1,126 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * These .proto interfaces are private and stable.
+ * Please see http://wiki.apache.org/hadoop/Compatibility
+ * for what changes are allowed for a *stable* .proto interface.
+ */
+
+option java_package = "org.apache.hadoop.hdfs.protocol.proto";
+option java_outer_classname = "FederationClientNamenodeProtocolProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+package hadoop.hdfs;
+
+import "hdfs.proto";
+
+/**
+ * The FederationClientNamenodeProtocol Service defines the interface between a 
+ * federation hdfs client and one of the federation Namenodes.
+ */
+
+/**
+ * Directory sub-tree
+ */
+message DirectorySubTreeProto {
+  required int64 renameId = 1;
+  repeated HdfsFileStatusProto dentry = 2;
+}
+
+message FederationRenameRequestProto {
+  required string src = 1;
+  required string dst = 2;
+  required string dstId = 3;
+}
+
+message FederationRenameResponseProto {
+  required bool result = 1;
+}
+
+message FederationRename2RequestProto {
+  required string src = 1;
+  required string dst = 2;
+  required string dstId = 3;
+  required bool overwriteDest = 4;
+}
+
+message FederationRename2ResponseProto {
+}
+
+message FederationRenameSrcPhase1RequestProto {
+  required string src = 1;
+  required string srcId = 2;
+  required string dst = 3;
+  required string dstId = 4;
+}
+
+message FederationRenameSrcPhase1ResponseProto {
+  required DirectorySubTreeProto subTree = 1;
+}
+
+message FederationRenameSrcPhase2RequestProto {
+  required int64 renameId = 1;
+  required bool  toCancel = 2;
+}
+
+message FederationRenameSrcPhase2ResponseProto {
+  required bool srcPhase2Res = 1;
+}
+
+message FederationRenameDestPhase1RequestProto {
+  required string src = 1;
+  required string srcId = 2;
+  required string dst = 3;
+  required string dstId = 4;
+  required DirectorySubTreeProto subTree = 5;
+}
+
+message FederationRenameDestPhase1ResponseProto {
+  required string destPhase1Res = 1;
+}
+
+message FederationRenameDestPhase2RequestProto {
+  required int64 renameId = 1;
+  required string srcId = 2;
+}
+
+message FederationRenameDestPhase2ResponseProto {
+  required bool destPhase2Res = 1;
+}
+
+message FederationRenameRecordExistRequestProto {
+  required int64 renameId = 1;
+  required string srcId = 2;
+  required string dstId = 3;
+  required bool   isSource = 4;
+}
+
+message FederationRenameRecordExistResponseProto {
+  required bool  exist = 1;
+}
+
+service FederationClientNamenodeProtocol {
+  rpc rename(FederationRenameRequestProto) returns(FederationRenameResponseProto);
+  rpc rename2(FederationRename2RequestProto) returns(FederationRename2ResponseProto);
+  rpc renameSrcPhase1(FederationRenameSrcPhase1RequestProto) returns(FederationRenameSrcPhase1ResponseProto);
+  rpc renameSrcPhase2(FederationRenameSrcPhase2RequestProto) returns(FederationRenameSrcPhase2ResponseProto);
+  rpc renameDestPhase1(FederationRenameDestPhase1RequestProto) returns(FederationRenameDestPhase1ResponseProto);
+  rpc renameDestPhase2(FederationRenameDestPhase2RequestProto) returns(FederationRenameDestPhase2ResponseProto);
+  rpc renameRecordExist(FederationRenameRecordExistRequestProto) returns(FederationRenameRecordExistResponseProto);
+}

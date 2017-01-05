@@ -245,6 +245,21 @@ public abstract class INodeReference extends INode {
   }
 
   @Override
+  final FederationRenameFeature getFederationRenameFeature(int snapshotId) {
+    return referred.getFederationRenameFeature(snapshotId);
+  }
+
+  @Override
+  final void addFederationRenameFeature(FederationRenameFeature frf) {
+    referred.addFederationRenameFeature(frf);
+  }
+
+  @Override
+  final void removeFederationRenameFeature() {
+    referred.removeFederationRenameFeature();
+  }
+
+  @Override
   public final short getFsPermissionShort() {
     return referred.getFsPermissionShort();
   }

@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
@@ -61,6 +62,10 @@ import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.CreateSnapshotOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.DeleteOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.DeleteSnapshotOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.DisallowSnapshotOp;
+import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.FederationRenameDestPhase1Op;
+import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.FederationRenameDestPhase2Op;
+import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.FederationRenameSrcPhase1Op;
+import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.FederationRenameSrcPhase2Op;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.GetDelegationTokenOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.LogSegmentOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.MkdirOp;
@@ -1108,6 +1113,55 @@ public class FSEditLog implements LogsPurgeable {
     final RemoveXAttrOp op = RemoveXAttrOp.getInstance();
     op.src = src;
     op.xAttrs = xAttrs;
+    logRpcIds(op, toLogRpcIds);
+    logEdit(op);
+  }
+
+  void logFederationRenameSrcPhase1(String src, String srcId, String dst,
+      String dstId, long renameId, long startTime, boolean toLogRpcIds) {
+    final FederationRenameSrcPhase1Op op =
+        FederationRenameSrcPhase1Op.getInstance(cache.get());
+    op.src = src;
+    op.dst = dst;
+    op.srcId = srcId;
+    op.dstId = dstId;
+    op.renameId = renameId;
+    op.startTime = startTime;
+    logRpcIds(op, toLogRpcIds);
+    logEdit(op);
+  }
+
+  void logFederationRenameSrcPhase2(long renameId, long mtime,
+      boolean toCancel, boolean toLogRpcIds) {
+    final FederationRenameSrcPhase2Op op =
+        FederationRenameSrcPhase2Op.getInstance(cache.get());
+    op.renameId = renameId;
+    op.mtime = mtime;
+    op.toCancel = toCancel;
+    logRpcIds(op, toLogRpcIds);
+    logEdit(op);
+  }
+
+  void logFederationRenameDestPhase1(String src, String srcId, String dst,
+      String dstId, long start, DirectorySubTree subTree, boolean toLogRpcIds) {
+    final FederationRenameDestPhase1Op op =
+        FederationRenameDestPhase1Op.getInstance(cache.get());
+    op.src = src;
+    op.dst = dst;
+    op.srcId = srcId;
+    op.dstId = dstId;
+    op.startTime = start;
+    op.subTree = subTree;
+    logRpcIds(op, toLogRpcIds);
+    logEdit(op);
+  }
+
+  void logFederationRenameDestPhase2(long renameId, String srcId,
+      boolean toLogRpcIds) {
+    final FederationRenameDestPhase2Op op =
+        FederationRenameDestPhase2Op.getInstance(cache.get());
+    op.renameId = renameId;
+    op.srcId = srcId;
     logRpcIds(op, toLogRpcIds);
     logEdit(op);
   }

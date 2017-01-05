@@ -3308,4 +3308,9 @@ public abstract class FileSystem extends Configured implements Closeable {
   public static void enableSymlinks() {
     symlinksEnabled = true;
   }
+
+  public boolean federationRename(FileSystem srcFs, Path src, FileSystem dstFs,
+      Path dst) throws IOException {
+    throw new IOException("Operation is not supported");
+  }
 }

@@ -995,4 +995,12 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
 
   public static final long DFS_CLIENT_HTTP2_MAX_BUFFERED_DATA_SIZE_DEFAULT =
       1024L * 1024;
+
+  public static final String DFS_FEDERATION_RENAME_FILES_LIMIT =
+      "dfs.federation.rename.files.limit";
+  public static final int DFS_FEDERATION_RENAME_FILES_LIMIT_DEFAULT = 256;
+
+  public static final String DFS_FEDERATION_RENAME_BLOCKS_LIMIT =
+      "dfs.federation.rename.blocks.limit";
+  public static final int DFS_FEDERATION_RENAME_BLOCKS_LIMIT_DEFAULT = 256;
 }

@@ -21,6 +21,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -32,7 +34,14 @@ import org.apache.hadoop.hdfs.DeprecatedUTF8;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
+import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LayoutVersion;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoUnderConstruction;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.BlockUCState;
@@ -727,5 +736,92 @@ public class FSImageSerialization {
     }
     return info;
   }
+  
+  public static DirectorySubTree readDirectorySubTree(DataInput in)
+      throws IOException {
+    long renameId = readLong(in);
+    int size = readInt(in);
+    DirectorySubTree subTree = new DirectorySubTree(size);
+    for (int i = 0; i < size; i++) {
+      byte[] path = readBytes(in);
+      byte[] symLink = readBytes(in);
+      long length = readLong(in);
+      boolean isDir = readBoolean(in);
+      short replication = readShort(in);
+      long blkSize = readLong(in);
+      long mtime = readLong(in);
+      long atime = readLong(in);
+      FsPermission permission = FsPermission.read(in);
+      String owner = readString(in);
+      String grp = readString(in);
+      int childrenNum = readInt(in);
+      byte storagePolicy = readByte(in);
+      if (!isDir) {
+        int numBlks = readInt(in);
+        List<LocatedBlock> blkList = new ArrayList<LocatedBlock>(numBlks);
+        for (int j = 0; j < numBlks; j++) {
+          long blkId = readLong(in);
+          long genStamp = readLong(in);
+          long numBytes = readLong(in);
+          blkList.add(new LocatedBlock(new ExtendedBlock(null, new Block(blkId,
+              numBytes, genStamp)), (DatanodeInfo[]) null));
+        }
+        LocatedBlocks lblks =
+            new LocatedBlocks(length, false, blkList, blkList.get(numBlks - 1),
+                true, null);
+        subTree.addItem(new HdfsLocatedFileStatus(length, isDir, replication,
+            blkSize, mtime, atime, permission, owner, grp, symLink, path, 0,
+            lblks, childrenNum, null, storagePolicy));
+      } else {
+        subTree.addItem(new HdfsFileStatus(length, isDir, replication, blkSize,
+            mtime, atime, permission, owner, grp, symLink, path, 0,
+            childrenNum, null, storagePolicy));
+      }
+    }
+    subTree.setRenameId(renameId);
+    return subTree;
+  }
 
+  public static void writeDirectorySubTree(DirectorySubTree subTree,
+      DataOutputStream out) throws IOException {
+    writeLong(subTree.getRenameId(), out);
+    writeInt(subTree.getSize(), out);
+    for (int i = 0; i < subTree.getSize(); i++) {
+      HdfsFileStatus status = subTree.get(i);
+      if (status.getLocalNameInBytes() != null) {
+        writeBytes(status.getLocalNameInBytes(), out);
+      } else {
+        writeShort((short) 0, out);
+      }
+      if (status.getSymlinkInBytes() != null) {
+        writeBytes(status.getSymlinkInBytes(), out);
+      } else {
+        writeShort((short) 0, out);
+      }
+      writeLong(status.getLen(), out);
+      writeBoolean(status.isDir(), out);
+      writeShort(status.getReplication(), out);
+      writeLong(status.getBlockSize(), out);
+      writeLong(status.getModificationTime(), out);
+      writeLong(status.getAccessTime(), out);
+      status.getPermission().write(out);
+      writeString(status.getOwner(), out);
+      writeString(status.getGroup(), out);
+      // TBD : Add file encryption info?
+      writeInt(status.getChildrenNum(), out);
+      writeByte(status.getStoragePolicy(), out);
+      if (!status.isDir()) {
+        // It is a file, write block information
+        LocatedBlocks lblks =
+            ((HdfsLocatedFileStatus) status).getBlockLocations();
+        writeInt(lblks.locatedBlockCount(), out);
+        for (int j = 0; i < lblks.getLocatedBlocks().size(); j++) {
+          LocatedBlock lblk = lblks.getLocatedBlocks().get(j);
+          writeLong(lblk.getBlock().getBlockId(), out);
+          writeLong(lblk.getBlock().getGenerationStamp(), out);
+          writeLong(lblk.getBlockSize(), out);
+        }
+      }
+    }
+  }
 }

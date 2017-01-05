@@ -368,4 +368,26 @@ public abstract class INodeWithAdditionalFields extends INode
   public final Feature[] getFeatures() {
     return features;
   }
+
+  @Override
+  FederationRenameFeature getFederationRenameFeature(int snapshotId) {
+    if (snapshotId != Snapshot.CURRENT_STATE_ID) {
+      return getSnapshotINode(snapshotId).getFederationRenameFeature();
+    }
+    return getFeature(FederationRenameFeature.class);
+  }
+
+  @Override
+  public void removeFederationRenameFeature() {
+    FederationRenameFeature frf = getFederationRenameFeature();
+    Preconditions.checkNotNull(frf);
+    removeFeature(frf);
+  }
+
+  @Override
+  public void addFederationRenameFeature(FederationRenameFeature frf) {
+    FederationRenameFeature frf1 = getFederationRenameFeature();
+    Preconditions.checkState(frf1 == null, "Duplicated XAttrFeature");
+    addFeature(frf);
+  }
 }

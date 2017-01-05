@@ -314,4 +314,8 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String ZK_AUTH_KEY = "ha.zookeeper.auth";
   public static final String SECURITY_RAID_DATANODE_PROTOCOL_ACL =
       "security.raid.datanode.protocol.acl";
+  public static final String SECURITY_FEDERATION_CLIENT_NN_PROTOCOL_ACL =
+      "security.federation.client-nn.protocol.acl";
+  public static final String SECURITY_FEDERATION_CLIENT_DN_PROTOCOL_ACL =
+      "security.federation.client-dn.protocol.acl";
 }

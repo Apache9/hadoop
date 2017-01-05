@@ -102,6 +102,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_KE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SUPPORT_APPEND_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SUPPORT_APPEND_KEY;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_DEPTH;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_LENGTH;
 import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.SECURITY_XATTR_UNREADABLE_BY_SUPERUSER;
 import static org.apache.hadoop.util.Time.now;
 
@@ -145,6 +147,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.logging.impl.Log4JLogger;
@@ -201,6 +204,7 @@ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -240,6 +244,8 @@ import org.apache.hadoop.hdfs.server.common.Storage;
 import org.apache.hadoop.hdfs.server.common.Storage.StorageDirType;
 import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
 import org.apache.hadoop.hdfs.server.common.Util;
+import org.apache.hadoop.hdfs.server.namenode.FederationInProgressRenameMap;
+import org.apache.hadoop.hdfs.server.namenode.FederationInProgressRenameMap.RenameRecord;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.SecretManagerSection;
 import org.apache.hadoop.hdfs.server.namenode.INode.BlocksMapUpdateInfo;
 import org.apache.hadoop.hdfs.server.namenode.JournalSet.JournalAndStream;
@@ -591,6 +597,10 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
   private long logLockDurationThreshold;
   private long logLockMinInterval;
+
+  private FederationInProgressRenameMap federationRenameMap;
+
+  private long federationRenameId = 0;
 
   /**
    * Notify that loading of this FSDirectory is complete, and
@@ -955,6 +965,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       this.enableRetryCache =
           conf.getBoolean(DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_KEY,
               DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_DEFAULT);
+      this.federationRenameMap = new FederationInProgressRenameMap();
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -6665,7 +6676,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    * @throws FileNotFoundException
    * @throws AccessControlException
    */
-  private String resolvePath(String path, byte[][] pathComponents)
+  public String resolvePath(String path, byte[][] pathComponents)
       throws FileNotFoundException, AccessControlException {
     if (FSDirectory.isReservedRawName(path)) {
       checkSuperuserPrivilege();
@@ -9615,6 +9626,306 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   @Override
   public void incrChooseRandomInNT() {
     NameNode.getNameNodeMetrics().incrChooseRandomInNT();
+  }
+
+  public DirectorySubTree federationRenameSrcPhase1(String src, String srcId,
+      String dst, String dstId)
+      throws IOException, UnresolvedLinkException {
+    CacheEntryWithPayload cacheEntry =
+        RetryCache.waitForCompletion(retryCache, null);
+    if (cacheEntry != null && cacheEntry.isSuccess()) {
+      return (DirectorySubTree) cacheEntry.getPayload(); // Return previous
+                                                         // response
+    }
+    DirectorySubTree ret = null;
+    try {
+      ret =
+          federationRenameSrcPhase1Int(src, srcId, dst, dstId,
+              cacheEntry != null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, "renameSrcPhase1", src, dst, null);
+      throw e;
+    } finally {
+      RetryCache.setState(cacheEntry, ret != null, ret);
+    }
+    return ret;
+  }
+
+  private DirectorySubTree federationRenameSrcPhase1Int(String srcArg,
+      String srcId, String dstArg, String dstId, boolean logRetryCache)
+      throws IOException,
+      UnresolvedLinkException {
+    String src = srcArg;
+    String dst = dstArg;
+    if (NameNode.stateChangeLog.isDebugEnabled()) {
+      NameNode.stateChangeLog
+          .debug("DIR* NameSystem.federationRenameSrcPhase1: " + src + " to "
+          + dst);
+    }
+    if (!DFSUtil.isValidName(dst)) {
+      throw new IOException("Invalid name: " + dst);
+    }
+    FSPermissionChecker pc = getPermissionChecker();
+    checkOperation(OperationCategory.WRITE);
+    byte[][] srcComponents = FSDirectory.getPathComponentsForReservedPath(src);
+    DirectorySubTree res = null;
+    HdfsFileStatus resultingStat = null;
+    writeLock();
+    try {
+      checkOperation(OperationCategory.WRITE);
+      checkNameNodeSafeMode("Cannot rename " + src);
+      waitForLoadingFSImage();
+      src = resolvePath(src, srcComponents);
+      checkOperation(OperationCategory.WRITE);
+      res =
+          federationRenameSrcPhase1Internal(pc, src, srcId, dst, dstId,
+              logRetryCache);
+      resultingStat = getAuditFileInfo(src, false);
+    } finally {
+      writeUnlock();
+    }
+    getEditLog().logSync();
+    if (res != null) {
+      logAuditEvent(true, "renameSrcPhase1", src, dst, resultingStat);
+    }
+    return res;
+  }
+
+  private DirectorySubTree federationRenameSrcPhase1Internal(
+      FSPermissionChecker pc, String src, String srcId, String dst,
+      String dstId, boolean logRetryCache) throws IOException,
+      UnresolvedLinkException {
+    assert hasWriteLock();
+    if (isPermissionEnabled) {
+      // Rename does not operates on link targets
+      // Do not resolveLink when checking permissions of src and dst
+      // Check write access to parent of src
+      checkPermission(pc, src, false, null, FsAction.WRITE, null, null, false,
+          false);
+    }
+    DirectorySubTree res = dir.federationRenameSrcPhase1(src, dst, dstId);
+    if (res != null) {
+      long renameId = federationRenameId;
+      long start = Time.now();
+      federationRenameId++;
+      federationRenameMap.addRenameRecord(renameId, src, srcId, dst, dstId,
+          true,
+          start);
+      getEditLog().logFederationRenameSrcPhase1(src, srcId, dst, dstId,
+          renameId, start, logRetryCache);
+      res.setRenameId(renameId);
+    }
+    return res;
+  }
+
+  public boolean federationRenameSrcPhase2(long renameId, boolean toCancel)
+      throws IOException {
+    CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);
+    if (cacheEntry != null && cacheEntry.isSuccess()) {
+      return true; // Return previous response
+    }
+    boolean ret = false;
+    try {
+      ret =
+          federationRenameSrcPhase2Int(renameId, toCancel, cacheEntry != null);
+    } finally {
+      RetryCache.setState(cacheEntry, ret);
+    }
+    return ret;
+  }
+
+  public boolean federationRenameSrcPhase2Int(long renameId, boolean toCancel,
+      boolean logRetryCache) throws IOException {
+    RenameRecord rr =
+        federationRenameMap.getRenameRecord(renameId, null, null, true);
+    String src = rr.getSrc();
+    BlocksMapUpdateInfo collectedBlocks = new BlocksMapUpdateInfo();
+    List<INode> removedINodes = new ChunkedArrayList<INode>();
+    byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
+    long mtime = now();
+    waitForLoadingFSImage();
+    writeLock();
+    try {
+      checkNameNodeSafeMode("Cannot delete " + src);
+      src = resolvePath(src, pathComponents);
+      if (toCancel == false) {
+        // Unlink the target directory from directory tree
+        long filesRemoved =
+            dir.delete(src, collectedBlocks, removedINodes, mtime);
+        if (filesRemoved < 0) {
+          return false;
+        }
+        incrDeletedFileCount(filesRemoved);
+        // Blocks/INodes will be handled later
+        removePathAndBlocks(src, null, removedINodes, true);
+      } else {
+        if (dir.federationRenameRemoveFeature(src, false) == false) {
+          return false;
+        }
+      }
+      federationRenameMap.removeRenameRecord(renameId, rr.getSrcId(),
+          rr.getDstId(), true);
+      getEditLog().logFederationRenameSrcPhase2(renameId, mtime, toCancel,
+          logRetryCache);
+    } finally {
+      writeUnlock();
+    }
+    getEditLog().logSync();
+    removeBlocks(collectedBlocks); // Incremental deletion of blocks
+    collectedBlocks.clear();
+    if (NameNode.stateChangeLog.isDebugEnabled()) {
+      NameNode.stateChangeLog.debug("DIR* Namesystem.renameSrcPhase2: " + src
+          + " is removed");
+    }
+    return true;
+  }
+
+  public String federationRenameDestPhase1(String src, String srcId,
+      String dst, String dstId, DirectorySubTree subTree) throws IOException {
+    CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);
+    if (cacheEntry != null && cacheEntry.isSuccess()) {
+      return getBlockPoolId(); // Return previous response
+    }
+    boolean res = false;
+    try {
+      res =
+          federationRenameDestPhase1Int(src, srcId, dst, dstId, subTree,
+              cacheEntry != null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, "renameDestPhase1", src, dst, null);
+      throw e;
+    } finally {
+      RetryCache.setState(cacheEntry, res);
+    }
+    if (res) {
+      return getBlockPoolId();
+    } else {
+      return null;
+    }
+  }
+
+  boolean federationRenameDestPhase1Int(String srcArg, String srcId,
+      String dstArg, String dstId, DirectorySubTree subTree,
+      boolean logRetryCache) throws IOException, UnresolvedLinkException {
+    String src = srcArg;
+    String dst = dstArg;
+    if (NameNode.stateChangeLog.isDebugEnabled()) {
+      NameNode.stateChangeLog
+          .debug("DIR* NameSystem.federationRenameDestPhase1: " + src + " to "
+              + dst);
+    }
+    if (!DFSUtil.isValidName(dst)) {
+      throw new IOException("Invalid name: " + dst);
+    }
+    FSPermissionChecker pc = getPermissionChecker();
+    checkOperation(OperationCategory.WRITE);
+    byte[][] dstComponents = FSDirectory.getPathComponentsForReservedPath(dst);
+    boolean res = false;
+    HdfsFileStatus resultingStat = null;
+    writeLock();
+    try {
+      checkOperation(OperationCategory.WRITE);
+      checkNameNodeSafeMode("Cannot rename " + src);
+      waitForLoadingFSImage();
+      dst = resolvePath(dst, dstComponents);
+      checkOperation(OperationCategory.WRITE);
+      res =
+          federationRenameDestPhase1Internal(pc, src, srcId, dst, dstId,
+              subTree,
+              logRetryCache);
+
+      resultingStat = getAuditFileInfo(dst, false);
+    } finally {
+      writeUnlock();
+    }
+    getEditLog().logSync();
+    if (res) {
+      logAuditEvent(true, "renameSrcPhase1", src, dst, resultingStat);
+    }
+    return res;
+  }
+
+  boolean federationRenameDestPhase1Internal(FSPermissionChecker pc,
+      String src, String srcId, String dst, String dstId,
+      DirectorySubTree subTree,
+      boolean logRetryCache) throws IOException, UnresolvedLinkException {
+    assert hasWriteLock();
+    if (isPermissionEnabled) {
+      // Rename does not operates on link targets
+      // Do not resolveLink when checking permissions of src and dst
+      // Check write access to parent of dst
+      checkPermission(pc, dst, false, null, FsAction.WRITE, null, null, false,
+          false);
+    }
+    boolean res = dir.federationRenameDestPhase1(src, dst, srcId, subTree);
+    if (res) {
+      long renameId = subTree.getRenameId();
+      long start = Time.now();
+      federationRenameMap.addRenameRecord(renameId, src, srcId, dst, dstId,
+          false, start);
+      getEditLog().logFederationRenameDestPhase1(src, srcId, dst, dstId, start,
+          subTree, logRetryCache);
+    }
+    return res;
+  }
+
+  public boolean federationRenameDestPhase2(long renameId, String srcId)
+      throws IOException {
+    CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);
+    if (cacheEntry != null && cacheEntry.isSuccess()) {
+      return true; // Return previous response
+    }
+    boolean res = false;
+    try {
+      res = federationRenameDestPhase2Int(renameId, srcId, cacheEntry != null);
+    } finally {
+      RetryCache.setState(cacheEntry, res);
+    }
+    return res;
+  }
+
+  public boolean federationRenameDestPhase2Int(long renameId, String srcId,
+      boolean logRetryCache) throws IOException {
+    RenameRecord rr =
+        federationRenameMap.getRenameRecord(renameId, srcId, null, false);
+    String dstRecord = rr.getDst();
+    byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(dstRecord);
+    boolean res = false;
+    writeLock();
+    try {
+      String dst = resolvePath(dstRecord, pathComponents);
+      res = dir.federationRenameRemoveFeature(dst, false);
+      if (res) {
+        federationRenameMap.removeRenameRecord(rr.getRenameId(), rr.getSrcId(),
+            rr.getDstId(), false);
+        getEditLog().logFederationRenameDestPhase2(renameId, srcId,
+            logRetryCache);
+      }
+    } finally {
+      writeUnlock();
+    }
+    getEditLog().logSync();
+    return res;
+  }
+
+  public void setFederationRenameId(long lastId) {
+    federationRenameId = lastId;
+  }
+
+  public void addFederationRenameRecord(long renameId, String src,
+      String srcId, String dst, String dstId, boolean isSrc, long start) {
+    federationRenameMap.addRenameRecord(renameId, src, srcId, dst, dstId,
+        isSrc, start);
+  }
+
+  public FederationInProgressRenameMap getFederationRenameMap() {
+    return federationRenameMap;
+  }
+
+  public boolean renameRecordExist(long renameId, String srcId, String dstId,
+      boolean isSource) {
+    return (federationRenameMap.getRenameRecord(renameId, srcId, dstId,
+        isSource) != null);
   }
 }
 

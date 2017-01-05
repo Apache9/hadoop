@@ -55,6 +55,9 @@ public interface INodeAttributes {
   /** @return the XAttrs feature. */
   public XAttrFeature getXAttrFeature();
 
+  /** @return the FederationRename feature. */
+  public FederationRenameFeature getFederationRenameFeature();
+
   /** @return the modification time. */
   public long getModificationTime();
 
@@ -69,10 +72,12 @@ public interface INodeAttributes {
     private final long modificationTime;
     private final long accessTime;
     private XAttrFeature xAttrFeature;
+    private FederationRenameFeature federationRenameFeature;
 
     SnapshotCopy(byte[] name, PermissionStatus permissions,
         AclFeature aclFeature, long modificationTime, long accessTime, 
-        XAttrFeature xAttrFeature) {
+        XAttrFeature xAttrFeature,
+        FederationRenameFeature federationRenameFeature) {
       this.name = name;
       this.permission = PermissionStatusFormat.toLong(permissions);
       if (aclFeature != null) {
@@ -82,6 +87,7 @@ public interface INodeAttributes {
       this.modificationTime = modificationTime;
       this.accessTime = accessTime;
       this.xAttrFeature = xAttrFeature;
+      this.federationRenameFeature = federationRenameFeature;
     }
 
     SnapshotCopy(INode inode) {
@@ -146,6 +152,11 @@ public interface INodeAttributes {
     @Override
     public final XAttrFeature getXAttrFeature() {
       return xAttrFeature;
+    }
+
+    @Override
+    public final FederationRenameFeature getFederationRenameFeature() {
+      return federationRenameFeature;
     }
   }
 }

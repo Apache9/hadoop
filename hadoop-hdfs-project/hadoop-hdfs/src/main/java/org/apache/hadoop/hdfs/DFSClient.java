@@ -156,6 +156,7 @@ import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolIterator;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -163,6 +164,7 @@ import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.EncryptionZoneIterator;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsBlocksMetadata;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
@@ -250,6 +252,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   private final Configuration conf;
   private final Conf dfsClientConf;
   final ClientProtocol namenode;
+  final FederationClientProtocol federatedNamenode;
   /* The service used for delegation tokens */
   private Text dtService;
 
@@ -705,6 +708,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
         DFSConfigKeys.DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_KEY,
         DFSConfigKeys.DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_DEFAULT);
     NameNodeProxies.ProxyAndInfo<ClientProtocol> proxyInfo = null;
+    NameNodeProxies.ProxyAndInfo<FederationClientProtocol> fedProxyInfo = null;
     AtomicBoolean nnFallbackToSimpleAuth = new AtomicBoolean(false);
     if (numResponseToDrop > 0) {
       // This case is used for testing.
@@ -714,23 +718,33 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       proxyInfo = NameNodeProxies.createProxyWithLossyRetryHandler(conf,
           nameNodeUri, ClientProtocol.class, numResponseToDrop,
           nnFallbackToSimpleAuth);
+      fedProxyInfo =
+          NameNodeProxies.createProxyWithLossyRetryHandler(conf, nameNodeUri,
+              FederationClientProtocol.class, numResponseToDrop,
+              nnFallbackToSimpleAuth);
     }
     
     if (proxyInfo != null) {
       this.dtService = proxyInfo.getDelegationTokenService();
       this.namenode = proxyInfo.getProxy();
+      this.federatedNamenode = fedProxyInfo.getProxy();
     } else if (rpcNamenode != null) {
       // This case is used for testing.
       Preconditions.checkArgument(nameNodeUri == null);
       this.namenode = rpcNamenode;
+      this.federatedNamenode = null;
       dtService = null;
     } else {
       Preconditions.checkArgument(nameNodeUri != null,
           "null URI");
       proxyInfo = NameNodeProxies.createProxy(conf, nameNodeUri,
           ClientProtocol.class, nnFallbackToSimpleAuth);
+      fedProxyInfo =
+          NameNodeProxies.createProxy(conf, nameNodeUri,
+              FederationClientProtocol.class, nnFallbackToSimpleAuth);
       this.dtService = proxyInfo.getDelegationTokenService();
       this.namenode = proxyInfo.getProxy();
+      this.federatedNamenode = fedProxyInfo.getProxy();
     }
 
     String localInterfaces[] =
@@ -3304,5 +3318,39 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   
   public ChecksumOpt getDefaultChecksumOpt() {
   	return dfsClientConf.defaultChecksumOpt;
+  }
+
+  public DirectorySubTree renameSrcPhase1(String src, String srcId, String dst,
+      String dstId)
+      throws IOException {
+    if (federatedNamenode != null) {
+      return federatedNamenode.renameSrcPhase1(src, srcId, dst, dstId);
+    }
+    throw new IOException("federatedNamenode does not exist");
+  }
+
+  public boolean renameSrcPhase2(long renameId, boolean toCancel)
+      throws IOException {
+    if (federatedNamenode != null) {
+      return federatedNamenode.renameSrcPhase2(renameId, toCancel);
+    }
+    throw new IOException("federatedNamenode does not exist");
+  }
+
+  public String renameDestPhase1(String src, String srcId, String dst,
+      String dstId, DirectorySubTree subTree) throws IOException {
+    if (federatedNamenode != null) {
+      return federatedNamenode
+          .renameDestPhase1(src, srcId, dst, dstId, subTree);
+    }
+    throw new IOException("federatedNamenode does not exist");
+  }
+
+  public boolean renameDestPhase2(long renameId, String srcId)
+      throws IOException {
+    if (federatedNamenode != null) {
+      return federatedNamenode.renameDestPhase2(renameId, srcId);
+    }
+    throw new IOException("federatedNamenode does not exist");
   }
 }

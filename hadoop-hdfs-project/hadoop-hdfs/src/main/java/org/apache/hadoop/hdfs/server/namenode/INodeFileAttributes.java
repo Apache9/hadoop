@@ -49,7 +49,7 @@ public interface INodeFileAttributes extends INodeAttributes {
         short replication, long preferredBlockSize, byte storagePolicyID,
         XAttrFeature xAttrsFeature) {
       super(name, permissions, aclFeature, modificationTime, accessTime, 
-          xAttrsFeature);
+          xAttrsFeature, null);
       header = HeaderFormat.toLong(preferredBlockSize, replication, storagePolicyID);
     }
 

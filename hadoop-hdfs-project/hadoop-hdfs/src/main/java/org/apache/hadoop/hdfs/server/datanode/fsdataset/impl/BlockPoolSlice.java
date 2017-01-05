@@ -280,6 +280,16 @@ class BlockPoolSlice {
     return blockFile;
   }
 
+  File getFinalizedDirForBlock(Block b) throws IOException {
+    File blockDir = DatanodeUtil.idToBlockDir(finalizedDir, b.getBlockId());
+    if (!blockDir.exists()) {
+      if (!blockDir.mkdirs()) {
+        throw new IOException("Failed to mkdirs " + blockDir);
+      }
+    }
+    return blockDir;
+  }
+
   /**
    * Move a persisted replica from lazypersist directory to a subdirectory
    * under finalized.
