@@ -44,9 +44,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSClient.Conf;
 import org.apache.hadoop.hdfs.protocol.AlreadyBeingCreatedException;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolTranslatorPB;
+import org.apache.hadoop.hdfs.protocolPB.FederationClientNamenodeProtocolPB;
+import org.apache.hadoop.hdfs.protocolPB.FederationClientNamenodeProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.JournalProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.JournalProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolPB;
@@ -315,6 +318,10 @@ public class NameNodeProxies {
     if (xface == ClientProtocol.class) {
       proxy = (T) createNNProxyWithClientProtocol(nnAddr, conf, ugi,
           withRetries, fallbackToSimpleAuth);
+    } else if (xface == FederationClientProtocol.class) {
+      proxy =
+          (T) createNNProxyWithFederationClientProtocol(nnAddr, conf, ugi,
+              withRetries, fallbackToSimpleAuth);
     } else if (xface == JournalProtocol.class) {
       proxy = (T) createNNProxyWithJournalProtocol(nnAddr, conf, ugi);
     } else if (xface == NamenodeProtocol.class) {
@@ -451,6 +458,60 @@ public class NameNodeProxies {
           defaultPolicy);
     } else {
       return new ClientNamenodeProtocolTranslatorPB(proxy);
+    }
+  }
+
+  private static FederationClientProtocol createNNProxyWithFederationClientProtocol(
+      InetSocketAddress address, Configuration conf, UserGroupInformation ugi,
+      boolean withRetries, AtomicBoolean fallbackToSimpleAuth)
+      throws IOException {
+    RPC.setProtocolEngine(conf, FederationClientNamenodeProtocolPB.class,
+        ProtobufRpcEngine.class);
+
+    final RetryPolicy defaultPolicy =
+        RetryUtils.getDefaultRetryPolicy(conf,
+            DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_ENABLED_KEY,
+            DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_ENABLED_DEFAULT,
+            DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_SPEC_KEY,
+            DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_SPEC_DEFAULT,
+            SafeModeException.class);
+
+    final long version = RPC.getProtocolVersion(FederationClientNamenodeProtocolPB.class);
+    FederationClientNamenodeProtocolPB proxy =
+        RPC.getProtocolProxy(FederationClientNamenodeProtocolPB.class, version,
+            address,
+            ugi, conf, NetUtils.getDefaultSocketFactory(conf),
+            org.apache.hadoop.ipc.Client.getTimeout(conf), defaultPolicy,
+            fallbackToSimpleAuth).getProxy();
+
+    if (withRetries) { // create the proxy with retries
+
+      RetryPolicy createPolicy =
+          RetryPolicies.retryUpToMaximumCountWithFixedSleep(5,
+              HdfsConstants.LEASE_SOFTLIMIT_PERIOD, TimeUnit.MILLISECONDS);
+
+      Map<Class<? extends Exception>, RetryPolicy> remoteExceptionToPolicyMap =
+          new HashMap<Class<? extends Exception>, RetryPolicy>();
+      remoteExceptionToPolicyMap.put(AlreadyBeingCreatedException.class,
+          createPolicy);
+
+      RetryPolicy methodPolicy =
+          RetryPolicies.retryByRemoteException(defaultPolicy,
+              remoteExceptionToPolicyMap);
+      Map<String, RetryPolicy> methodNameToPolicyMap =
+          new HashMap<String, RetryPolicy>();
+
+      methodNameToPolicyMap.put("create", methodPolicy);
+
+      FederationClientProtocol translatorProxy =
+          new FederationClientNamenodeProtocolTranslatorPB(proxy);
+      return (FederationClientProtocol) RetryProxy.create(
+          FederationClientProtocol.class,
+          new DefaultFailoverProxyProvider<FederationClientProtocol>(
+              FederationClientProtocol.class, translatorProxy),
+          methodNameToPolicyMap, defaultPolicy);
+    } else {
+      return new FederationClientNamenodeProtocolTranslatorPB(proxy);
     }
   }
 

@@ -64,6 +64,7 @@ import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.FSLimitException.MaxDirectoryItemsExceededException;
 import org.apache.hadoop.hdfs.protocol.FSLimitException.PathComponentTooLongException;
@@ -149,6 +150,9 @@ public class FSDirectory implements Closeable {
   private long yieldCount = 0; // keep track of lock yield count.
   private final int inodeXAttrsLimit; //inode xattrs max limit
 
+  private int federationRenameFilesLimit;
+  private int federationRenameBlocksLimit;
+
   // lock to protect the directory and BlockMap
   private final ReentrantReadWriteLock dirLock;
 
@@ -216,6 +220,13 @@ public class FSDirectory implements Closeable {
     this.inodeXAttrsLimit = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_MAX_XATTRS_PER_INODE_KEY,
         DFSConfigKeys.DFS_NAMENODE_MAX_XATTRS_PER_INODE_DEFAULT);
+
+    this.federationRenameFilesLimit =
+        conf.getInt(DFSConfigKeys.DFS_FEDERATION_RENAME_FILES_LIMIT,
+            DFSConfigKeys.DFS_FEDERATION_RENAME_FILES_LIMIT_DEFAULT);
+    this.federationRenameBlocksLimit =
+        conf.getInt(DFSConfigKeys.DFS_FEDERATION_RENAME_BLOCKS_LIMIT,
+            DFSConfigKeys.DFS_FEDERATION_RENAME_BLOCKS_LIMIT_DEFAULT);
 
     Preconditions.checkArgument(this.inodeXAttrsLimit >= 0,
         "Cannot set a negative limit on the number of xattrs per inode (%s).",
@@ -3333,5 +3344,263 @@ public class FSDirectory implements Closeable {
               "Modification on a read-only snapshot is disallowed");
     }
     return inodesInPath;
+  }
+
+  void buildDirectorySubTree(DirectorySubTree subTree, INode node,
+      int blockLimit, int snapshot, boolean isRawPath, INodesInPath iip)
+      throws IOException {
+    if (subTree.remainingSize() < 1) {
+      throw new FederationRenameTooBigException(
+          "The directory to be renamed between namenode contains too many files");
+    }
+    if (!node.isDirectory()) {
+      HdfsFileStatus status =
+          createFileStatus(node.getLocalNameBytes(), node, true,
+              BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath, iip);
+      if (((HdfsLocatedFileStatus) status).getBlockLocations()
+          .locatedBlockCount() > blockLimit) {
+        throw new FederationRenameTooBigException(
+            "The directory to be renamed between namenode contains too blocks");
+      }
+      subTree.addItem(status);
+      return;
+    } else {
+      int newBlockLimit = blockLimit;
+      final INodeDirectory dirInode = node.asDirectory();
+      final ReadOnlyList<INode> contents = dirInode.getChildrenList(snapshot);
+      if (contents.size() + 1 > subTree.remainingSize()) {
+        throw new FederationRenameTooBigException(
+            "The directory to be renamed between namenode contains too many files");
+      }
+      HdfsFileStatus status =
+          createFileStatus(node.getLocalNameBytes(), node, true,
+              BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath, iip);
+      subTree.addItem(status);
+      for (int i = 0; i < contents.size(); i++) {
+        INode cur = contents.get(i);
+        if (!cur.isDirectory()) {
+          HdfsFileStatus curStatus =
+              createFileStatus(cur.getLocalNameBytes(), cur, true,
+                  BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath,
+                  iip);
+          int blocks =
+              ((HdfsLocatedFileStatus) curStatus).getBlockLocations()
+                  .locatedBlockCount();
+          if (blocks > newBlockLimit) {
+            throw new FederationRenameTooBigException(
+                "The directory to be renamed between namenode contains too many blocks");
+          }
+          subTree.addItem(curStatus);
+          newBlockLimit -= blocks;
+          return;
+        } else {
+          INodesInPath newIip = INodesInPath.fromINode(cur);
+          buildDirectorySubTree(subTree, cur, newBlockLimit, snapshot,
+              isRawPath, newIip);
+        }
+      }
+    }
+  }
+
+  DirectorySubTree federationRenameSrcPhase1(String src, String dst,
+      String dstId)
+      throws IOException {
+    DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit);
+    writeLock();
+    try {
+      INodesInPath srcIIP = getINodesInPath4Write(src, false);
+      final INode srcInode = srcIIP.getLastINode();
+      try {
+        validateRenameSource(src, srcIIP);
+      } catch (SnapshotException e) {
+        throw e;
+      } catch (IOException ignored) {
+        return null;
+      }
+      final int snapshot = srcIIP.getPathSnapshotId();
+      final boolean isRawPath = isReservedRawName(src);
+      buildDirectorySubTree(res, srcInode, federationRenameBlocksLimit,
+          snapshot, isRawPath, srcIIP);
+      srcInode.addFederationRenameFeature(new FederationRenameFeature(true));
+    } finally {
+      writeUnlock();
+    }
+    return res;
+  }
+
+  private void graftSanityCheck(INode child, INode parent) {
+    if (parent == rootDir && isReservedName(child)) {
+      throw new HadoopIllegalArgumentException("File name \""
+          + child.getLocalName() + "\" is reserved and cannot "
+          + "be created. If this is during upgrade change the name of the "
+          + "existing file or directory to another name before upgrading "
+          + "to the new release.");
+    }
+    verifyINodeName(child.getLocalNameBytes());
+  }
+
+  private INode graftToNameSpace(HdfsFileStatus status, INode parent)
+      throws IOException {
+    INode child;
+    if (status.isDir()) {
+      NameNode.stateChangeLog.info("Graft dir " + status.getLocalName());
+      child =
+          new INodeDirectory(namesystem.allocateNewInodeId(),
+              status.getLocalNameInBytes(),
+              PermissionStatus.createImmutable(status.getOwner(),
+                  status.getGroup(), status.getPermission()),
+              status.getModificationTime());
+    } else {
+      NameNode.stateChangeLog.info("Graft file " + status.getLocalName());
+      child =
+          newINodeFile(
+              namesystem.allocateNewInodeId(),
+              PermissionStatus.createImmutable(status.getOwner(),
+                  status.getGroup(), status.getPermission()),
+              status.getModificationTime(), status.getModificationTime(),
+              status.getReplication(), status.getBlockSize());
+      child.setLocalName(status.getLocalNameInBytes());
+    }
+    graftSanityCheck(child, parent);
+    if (((INodeDirectory) parent).addChild(child) == false) {
+      return null;
+    }
+    addToInodeMap(child);
+    if (!status.isDir()) {
+      LocatedBlocks lbs = ((HdfsLocatedFileStatus)status).getBlockLocations();
+      int size = lbs.getLocatedBlocks().size();
+      if (size == 0) {
+        return child;
+      }
+      INodeFile file = child.asFile();
+      for (int i = 0; i < size; i++) {
+        LocatedBlock lb = lbs.get(i);
+        long blkId = lb.getBlock().getBlockId();
+        long genStamp = lb.getBlock().getGenerationStamp();
+        long sz = lb.getBlockSize();
+        Block blk = new Block(blkId, sz, genStamp);
+        BlockInfo bi = new BlockInfo(blk, status.getReplication());
+        namesystem.getBlockManager().addBlockCollection(bi, file);
+        file.addBlock(bi);
+        namesystem.getBlockManager().processQueuedMessagesForBlock(blk);
+      }
+    }
+    return child;
+  }
+
+  INode graftDirectorySubTree(INode parent, DirectorySubTree subTree)
+      throws IOException {
+    // TBD: Add MAX_PATH_LENGTH MAX_PATH_DEPTH check
+    HdfsFileStatus status = subTree.consumeItem();
+    if (status.isDir()) {
+      INode addedNode = graftToNameSpace(status, parent);
+      if (addedNode == null) {
+        return null;
+      }
+      for (int i = 0; i < status.getChildrenNum(); i++) {
+        HdfsFileStatus childStatus = subTree.nextItemToConsume();
+        if (childStatus.isDir()) {
+          if (graftDirectorySubTree(addedNode, subTree) == null) {
+            return null;
+          }
+        } else {
+          childStatus = subTree.consumeItem();
+          if (graftToNameSpace(childStatus, addedNode) == null) {
+            return null;
+          }
+        }
+      }
+      return addedNode;
+    } else {
+      INode addedNode = graftToNameSpace(status, parent);
+      return addedNode;
+    }
+  }
+
+  boolean federationRenameDestPhase1(String src, String dst, String srcId,
+      DirectorySubTree subTree) throws IOException {
+    if (isDir(dst)) {
+      dst += Path.SEPARATOR + new Path(src).getName();
+    }
+    if (subTree.get(0).isSymlink() && dst.equals(subTree.get(0).getSymlink())) {
+      throw new FileAlreadyExistsException("Cannot rename symlink " + src
+          + " to its target " + dst);
+    }
+    int fileNum = subTree.getSize();
+    long spaceNum = 0;
+    for (int i = 0; i < fileNum; i++) {
+      HdfsFileStatus status = subTree.get(i);
+      if (!status.isDir()) {
+        spaceNum += (status.getLen() * status.getReplication());
+      }
+    }
+    writeLock();
+    try {
+      // Check fslimit, quota and permission
+      INodesInPath dstIIP = getINodesInPath4Write(dst, false);
+      if (dstIIP.getLastINode() != null) {
+        NameNode.stateChangeLog
+            .warn("DIR* FSDirectory.federationRenameDestPhase1: "
+            + "failed to rename " + src + " to " + dst
+            + " because destination exists");
+        return false;
+      }
+      INode dstParent = dstIIP.getINode(-2);
+      if (dstParent == null) {
+        NameNode.stateChangeLog
+            .warn("DIR* FSDirectory.federationRenameDestPhase1: "
+                + "failed to rename " + src + " to " + dst
+                + " because destination's parent does not exist");
+        return false;
+      }
+      byte[] dstChildName = dstIIP.getLastLocalName();
+      INode[] dstInodes = dstIIP.getINodes();
+      int pos = dstInodes.length - 1;
+      verifyMaxComponentLength(dstChildName, dstInodes, pos);
+      verifyMaxDirItems(dstInodes, pos);
+      for (int i = dstInodes.length - 2; i >= 0; i--) {
+        final DirectoryWithQuotaFeature q =
+            dstInodes[i].asDirectory().getDirectoryWithQuotaFeature();
+        if (q != null) {
+          try {
+            q.verifyQuota(fileNum, spaceNum);
+          } catch (QuotaExceededException e) {
+            e.setPathName(getFullPathName(dstInodes, i));
+            throw e;
+          }
+        }
+      }
+      // TBD: Check ezManager
+      // Graft the subtree to dest namespace
+      try {
+        INode res = graftDirectorySubTree(dstParent, subTree);
+        assert (res != null);
+        res.addFederationRenameFeature(new FederationRenameFeature(false));
+        // Update quota usage
+        updateCount(dstIIP, fileNum, spaceNum, false);
+        return (res != null);
+      } catch (Throwable t) {
+        NameNode.stateChangeLog.fatal("Graft sub tree to namespace failed", t);
+        assert (false);
+      }
+    } finally {
+      writeUnlock();
+    }
+    return true;
+  }
+
+  boolean federationRenameRemoveFeature(String path, boolean resolveLink)
+      throws IOException {
+    String paths = normalizePath(path);
+    writeLock();
+    try {
+      final INodesInPath inodesInPath = getINodesInPath(paths, resolveLink);
+      final INode[] inodes = inodesInPath.getINodes();
+      final INode i = inodes[inodes.length - 1];
+      i.removeFederationRenameFeature();
+    } finally {
+      writeUnlock();
+    }
+    return true;
   }
 }

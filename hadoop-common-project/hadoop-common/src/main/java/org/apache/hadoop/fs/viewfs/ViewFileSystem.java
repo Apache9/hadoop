@@ -43,6 +43,7 @@ import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FilterFileSystem;
 import org.apache.hadoop.fs.FsConstants;
 import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.Path;
@@ -441,7 +442,17 @@ public class ViewFileSystem extends FileSystem {
     // Alternate 3 : renames ONLY within the the same mount links.
     //
     if (resSrc.targetFileSystem !=resDst.targetFileSystem) {
-      throw new IOException("Renames across Mount points not supported");
+      FileSystem srcFs = resSrc.targetFileSystem;
+      FileSystem dstFs = resDst.targetFileSystem;
+      if (srcFs instanceof FilterFileSystem) {
+        srcFs = ((FilterFileSystem) srcFs).getRawFileSystem();
+      }
+      if (dstFs instanceof FilterFileSystem) {
+        dstFs = ((FilterFileSystem) dstFs).getRawFileSystem();
+      }
+      return srcFs.federationRename(srcFs, resSrc.remainingPath, dstFs,
+          resDst.remainingPath);
+
     }
     return resSrc.targetFileSystem.rename(resSrc.remainingPath,
         resDst.remainingPath);

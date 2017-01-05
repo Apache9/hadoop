@@ -959,4 +959,12 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
 
   public static final String DFS_DATANODE_SOCKET_BACKLOG_KEY = "dfs.datanode.socket.backlog";
   public static final int DFS_DATANODE_SOCKET_BACKLOG_DEFAULT = 0;
+
+  public static final String DFS_FEDERATION_RENAME_FILES_LIMIT =
+      "dfs.federation.rename.files.limit";
+  public static final int DFS_FEDERATION_RENAME_FILES_LIMIT_DEFAULT = 256;
+
+  public static final String DFS_FEDERATION_RENAME_BLOCKS_LIMIT =
+      "dfs.federation.rename.blocks.limit";
+  public static final int DFS_FEDERATION_RENAME_BLOCKS_LIMIT_DEFAULT = 256;
 }

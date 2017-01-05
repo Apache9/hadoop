@@ -32,6 +32,10 @@ import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_DELETE;
 import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_DELETE_SNAPSHOT;
 import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_DISALLOW_SNAPSHOT;
 import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_END_LOG_SEGMENT;
+import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_FEDERATION_RENAME_DEST_PHASE1;
+import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_FEDERATION_RENAME_DEST_PHASE2;
+import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_FEDERATION_RENAME_SRC_PHASE1;
+import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_FEDERATION_RENAME_SRC_PHASE2;
 import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_GET_DELEGATION_TOKEN;
 import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_INVALID;
 import static org.apache.hadoop.hdfs.server.namenode.FSEditLogOpCodes.OP_MKDIR;
@@ -96,9 +100,16 @@ import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
+import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LayoutVersion;
 import org.apache.hadoop.hdfs.protocol.LayoutVersion.Feature;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos.AclEditLogProto;
 import org.apache.hadoop.hdfs.protocol.proto.XAttrProtos.XAttrEditLogProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
@@ -198,6 +209,14 @@ public abstract class FSEditLogOp {
       inst.put(OP_SET_XATTR, new SetXAttrOp());
       inst.put(OP_REMOVE_XATTR, new RemoveXAttrOp());
       inst.put(OP_SET_STORAGE_POLICY, new SetStoragePolicyOp());
+      inst.put(OP_FEDERATION_RENAME_SRC_PHASE1,
+          new FederationRenameSrcPhase1Op());
+      inst.put(OP_FEDERATION_RENAME_DEST_PHASE1,
+          new FederationRenameDestPhase1Op());
+      inst.put(OP_FEDERATION_RENAME_SRC_PHASE2,
+          new FederationRenameSrcPhase2Op());
+      inst.put(OP_FEDERATION_RENAME_DEST_PHASE2,
+          new FederationRenameDestPhase2Op());
     }
     
     public FSEditLogOp get(FSEditLogOpCodes opcode) {
@@ -3896,6 +3915,562 @@ public abstract class FSEditLogOp {
       this.policyId = Byte.valueOf(st.getValue("POLICYID"));
     }
   }  
+
+  static class FederationRenameSrcPhase1Op extends FSEditLogOp {
+    int length;
+    String src;
+    String dst;
+    String srcId;
+    String dstId;
+    long renameId;
+    long startTime;
+
+    private FederationRenameSrcPhase1Op() {
+      super(OP_FEDERATION_RENAME_SRC_PHASE1);
+    }
+
+    static FederationRenameSrcPhase1Op getInstance(OpInstanceCache cache) {
+      return (FederationRenameSrcPhase1Op) cache
+          .get(OP_FEDERATION_RENAME_SRC_PHASE1);
+    }
+
+    FederationRenameSrcPhase1Op setSource(String src) {
+      this.src = src;
+      return this;
+    }
+
+    FederationRenameSrcPhase1Op setDestination(String dst) {
+      this.dst = dst;
+      return this;
+    }
+
+    FederationRenameSrcPhase1Op setSourceId(String srcId) {
+      this.srcId = srcId;
+      return this;
+    }
+
+    FederationRenameSrcPhase1Op setDestinationId(String dstId) {
+      this.dstId = dstId;
+      return this;
+    }
+
+    FederationRenameSrcPhase1Op setRenameId(long renameId) {
+      this.renameId = renameId;
+      return this;
+    }
+
+    FederationRenameSrcPhase1Op setStartTime(long startTime) {
+      this.startTime = startTime;
+      return this;
+    }
+
+    @Override
+    public void writeFields(DataOutputStream out) throws IOException {
+      FSImageSerialization.writeString(src, out);
+      FSImageSerialization.writeString(dst, out);
+      FSImageSerialization.writeString(srcId, out);
+      FSImageSerialization.writeString(dstId, out);
+      FSImageSerialization.writeLong(renameId, out);
+      FSImageSerialization.writeLong(startTime, out);
+      writeRpcIds(rpcClientId, rpcCallId, out);
+    }
+
+    @Override
+    void readFields(DataInputStream in, int logVersion) throws IOException {
+      if (!NameNodeLayoutVersion.supports(
+          LayoutVersion.Feature.EDITLOG_OP_OPTIMIZATION, logVersion)) {
+        this.length = in.readInt();
+        if (this.length != 4) {
+          throw new IOException("Incorrect data format. " + "Rename operation.");
+        }
+      }
+      this.src = FSImageSerialization.readString(in);
+      this.dst = FSImageSerialization.readString(in);
+      this.srcId = FSImageSerialization.readString(in);
+      this.dstId = FSImageSerialization.readString(in);
+      if (NameNodeLayoutVersion.supports(
+          LayoutVersion.Feature.EDITLOG_OP_OPTIMIZATION, logVersion)) {
+        this.renameId = FSImageSerialization.readLong(in);
+        this.startTime = FSImageSerialization.readLong(in);
+      } else {
+        this.renameId = readLong(in);
+        this.startTime = readLong(in);
+      }
+      // read RPC ids if necessary
+      readRpcIds(in, logVersion);
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder builder = new StringBuilder();
+      builder.append("FederationRenameSrcPhase1 [Length=");
+      builder.append(length);
+      builder.append(", src=");
+      builder.append(src);
+      builder.append(", dst=");
+      builder.append(dst);
+      builder.append(", srcId=");
+      builder.append(srcId);
+      builder.append(", dstId=");
+      builder.append(dstId);
+      builder.append(", renameId=");
+      builder.append(renameId);
+      builder.append(", startTime=");
+      builder.append(startTime);
+      appendRpcIdsToString(builder, rpcClientId, rpcCallId);
+      builder.append(", opCode=");
+      builder.append(opCode);
+      builder.append(", txid=");
+      builder.append(txid);
+      builder.append("]");
+      return builder.toString();
+    }
+
+    @Override
+    protected void toXml(ContentHandler contentHandler) throws SAXException {
+      XMLUtils.addSaxString(contentHandler, "LENGTH", Integer.toString(length));
+      XMLUtils.addSaxString(contentHandler, "SRC", src);
+      XMLUtils.addSaxString(contentHandler, "DST", dst);
+      XMLUtils.addSaxString(contentHandler, "SRCID", srcId);
+      XMLUtils.addSaxString(contentHandler, "DSTID", dstId);
+      XMLUtils
+          .addSaxString(contentHandler, "RENAMEID", Long.toString(renameId));
+      XMLUtils.addSaxString(contentHandler, "STARTTIME",
+          Long.toString(startTime));
+      appendRpcIdsToXml(contentHandler, rpcClientId, rpcCallId);
+    }
+
+    @Override
+    void fromXml(Stanza st) throws InvalidXmlException {
+      this.length = Integer.parseInt(st.getValue("LENGTH"));
+      this.src = st.getValue("SRC");
+      this.dst = st.getValue("DST");
+      this.srcId = st.getValue("SRCID");
+      this.dstId = st.getValue("DSTID");
+      this.renameId = Long.parseLong(st.getValue("renameId"));
+      this.startTime = Long.parseLong(st.getValue("startTime"));
+      readRpcIdsFromXml(st);
+    }
+  }
+
+  static class FederationRenameSrcPhase2Op extends FSEditLogOp {
+    int length;
+    long renameId;
+    long mtime;
+    boolean toCancel;
+
+    private FederationRenameSrcPhase2Op() {
+      super(OP_FEDERATION_RENAME_SRC_PHASE2);
+    }
+
+    static FederationRenameSrcPhase2Op getInstance(OpInstanceCache cache) {
+      return (FederationRenameSrcPhase2Op) cache
+          .get(OP_FEDERATION_RENAME_SRC_PHASE2);
+    }
+
+    FederationRenameSrcPhase2Op setRenameId(long id) {
+      this.renameId = id;
+      return this;
+    }
+
+    FederationRenameSrcPhase2Op setMtime(long mtime) {
+      this.mtime = mtime;
+      return this;
+    }
+
+    FederationRenameSrcPhase2Op setToCancel(boolean toCancel) {
+      this.toCancel = toCancel;
+      return this;
+    }
+
+    @Override
+    public void writeFields(DataOutputStream out) throws IOException {
+      FSImageSerialization.writeLong(renameId, out);
+      FSImageSerialization.writeLong(mtime, out);
+      FSImageSerialization.writeBoolean(toCancel, out);
+      writeRpcIds(rpcClientId, rpcCallId, out);
+    }
+
+    @Override
+    void readFields(DataInputStream in, int logVersion) throws IOException {
+      if (!NameNodeLayoutVersion.supports(
+          LayoutVersion.Feature.EDITLOG_OP_OPTIMIZATION, logVersion)) {
+        this.length = in.readInt();
+        if (this.length != 4) {
+          throw new IOException("Incorrect data format. " + "Rename operation.");
+        }
+      }
+      if (NameNodeLayoutVersion.supports(
+          LayoutVersion.Feature.EDITLOG_OP_OPTIMIZATION, logVersion)) {
+        this.renameId = FSImageSerialization.readLong(in);
+        this.mtime = FSImageSerialization.readLong(in);
+      } else {
+        this.renameId = readLong(in);
+        this.mtime = readLong(in);
+      }
+      this.toCancel = FSImageSerialization.readBoolean(in);
+      // read RPC ids if necessary
+      readRpcIds(in, logVersion);
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder builder = new StringBuilder();
+      builder.append("FederationRenameSrcPhase1 [Length=");
+      builder.append(length);
+      builder.append(", renameId=");
+      builder.append(renameId);
+      builder.append(", mtime=");
+      builder.append(mtime);
+      builder.append(", toCancel=");
+      builder.append(toCancel);
+      appendRpcIdsToString(builder, rpcClientId, rpcCallId);
+      builder.append(", opCode=");
+      builder.append(opCode);
+      builder.append(", txid=");
+      builder.append(txid);
+      builder.append("]");
+      return builder.toString();
+    }
+
+    @Override
+    protected void toXml(ContentHandler contentHandler) throws SAXException {
+      XMLUtils
+          .addSaxString(contentHandler, "RENAMEID", Long.toString(renameId));
+      XMLUtils.addSaxString(contentHandler, "MTIME", Long.toString(mtime));
+      XMLUtils.addSaxString(contentHandler, "TOCANCEL",
+          Boolean.toString(toCancel));
+    }
+
+    @Override
+    void fromXml(Stanza st) throws InvalidXmlException {
+      this.renameId = Long.parseLong(st.getValue("RENAMEID"));
+      this.mtime = Long.parseLong(st.getValue("MTIME"));
+      this.toCancel = Boolean.parseBoolean(st.getValue("TOCANCEL"));
+    }
+  }
+
+  static class FederationRenameDestPhase1Op extends FSEditLogOp {
+    int length;
+    String src;
+    String dst;
+    String srcId;
+    String dstId;
+    long startTime;
+    DirectorySubTree subTree;
+
+    private FederationRenameDestPhase1Op() {
+      super(OP_FEDERATION_RENAME_DEST_PHASE1);
+    }
+
+    static FederationRenameDestPhase1Op getInstance(OpInstanceCache cache) {
+      return (FederationRenameDestPhase1Op) cache
+          .get(OP_FEDERATION_RENAME_DEST_PHASE1);
+    }
+
+    FederationRenameDestPhase1Op setSource(String src) {
+      this.src = src;
+      return this;
+    }
+
+    FederationRenameDestPhase1Op setDestination(String dst) {
+      this.dst = dst;
+      return this;
+    }
+
+    FederationRenameDestPhase1Op setSourceId(String srcId) {
+      this.srcId = srcId;
+      return this;
+    }
+
+    FederationRenameDestPhase1Op setDestinationId(String dstId) {
+      this.dstId = dstId;
+      return this;
+    }
+
+    FederationRenameDestPhase1Op setStartTime(long startTime) {
+      this.startTime = startTime;
+      return this;
+    }
+
+    FederationRenameDestPhase1Op setSubTree(DirectorySubTree subTree) {
+      this.subTree = subTree;
+      return this;
+    }
+
+    @Override
+    public void writeFields(DataOutputStream out) throws IOException {
+      FSImageSerialization.writeString(src, out);
+      FSImageSerialization.writeString(dst, out);
+      FSImageSerialization.writeString(srcId, out);
+      FSImageSerialization.writeString(dstId, out);
+      FSImageSerialization.writeLong(startTime, out);
+      FSImageSerialization.writeDirectorySubTree(subTree, out);
+      writeRpcIds(rpcClientId, rpcCallId, out);
+    }
+
+    @Override
+    void readFields(DataInputStream in, int logVersion) throws IOException {
+      if (!NameNodeLayoutVersion.supports(
+          LayoutVersion.Feature.EDITLOG_OP_OPTIMIZATION, logVersion)) {
+        this.length = in.readInt();
+        if (this.length != 4) {
+          throw new IOException("Incorrect data format. " + "Rename operation.");
+        }
+      }
+      this.src = FSImageSerialization.readString(in);
+      this.dst = FSImageSerialization.readString(in);
+      this.srcId = FSImageSerialization.readString(in);
+      this.dstId = FSImageSerialization.readString(in);
+      if (NameNodeLayoutVersion.supports(
+          LayoutVersion.Feature.EDITLOG_OP_OPTIMIZATION, logVersion)) {
+        this.startTime = FSImageSerialization.readLong(in);
+      } else {
+        this.startTime = readLong(in);
+      }
+      // Read sub tree
+      this.subTree = FSImageSerialization.readDirectorySubTree(in);
+      // read RPC ids if necessary
+      readRpcIds(in, logVersion);
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder builder = new StringBuilder();
+      builder.append("FederationRenameDstPhase1 [Length=");
+      builder.append(length);
+      builder.append(", src=");
+      builder.append(src);
+      builder.append(", dst=");
+      builder.append(dst);
+      builder.append(", srctId=");
+      builder.append(srcId);
+      builder.append(", dstId=");
+      builder.append(dstId);
+      builder.append(", renameId=");
+      builder.append(subTree.getRenameId());
+      builder.append(", startTime=");
+      builder.append(startTime);
+      builder.append("files : ");
+      for (int i = 0; i < subTree.getSize(); i++) {
+        builder.append(subTree.get(i).getLocalName()).append(" ");
+      }
+      appendRpcIdsToString(builder, rpcClientId, rpcCallId);
+      builder.append(", opCode=");
+      builder.append(opCode);
+      builder.append(", txid=");
+      builder.append(txid);
+      builder.append("]");
+      return builder.toString();
+    }
+
+    private void fileStatusToXml(ContentHandler contentHandler,
+        HdfsFileStatus status)
+        throws SAXException {
+      XMLUtils.addSaxString(contentHandler, "PATH", status
+          .getLocalNameInBytes().toString());
+      XMLUtils.addSaxString(contentHandler, "SYMLINK", status
+          .getSymlinkInBytes().toString());
+      XMLUtils.addSaxString(contentHandler, "LENGTH",
+          Long.toString(status.getLen()));
+      XMLUtils.addSaxString(contentHandler, "ISDIR",
+          Boolean.toString(status.isDir()));
+      XMLUtils.addSaxString(contentHandler, "REPL",
+          Short.toString(status.getReplication()));
+      XMLUtils.addSaxString(contentHandler, "BLKSIZE",
+          Long.toString(status.getBlockSize()));
+      XMLUtils.addSaxString(contentHandler, "MTIME",
+          Long.toString(status.getModificationTime()));
+      XMLUtils.addSaxString(contentHandler, "ATIME",
+          Long.toString(status.getAccessTime()));
+      XMLUtils.addSaxString(contentHandler, "PERM",
+          Short.valueOf(status.getPermission().toShort()).toString());
+      XMLUtils.addSaxString(contentHandler, "OWN", status.getOwner());
+      XMLUtils.addSaxString(contentHandler, "GRP", status.getGroup());
+      XMLUtils.addSaxString(contentHandler, "CHILDRENNUM",
+          Integer.toString(status.getChildrenNum()));
+      XMLUtils.addSaxString(contentHandler, "SPOLICY",
+          Byte.toString(status.getStoragePolicy()));
+      if (!status.isDir()) {
+        LocatedBlocks lbs = ((HdfsLocatedFileStatus)status).getBlockLocations();
+        int size = lbs.getLocatedBlocks().size();
+        XMLUtils.addSaxString(contentHandler, "BLOCKS",
+            Integer.toString(lbs.getLocatedBlocks().size()));
+        for (int i = 0; i < size; i++) {
+          XMLUtils.addSaxString(contentHandler, "ID",
+              Long.toString(lbs.get(i).getBlock().getBlockId()));
+          XMLUtils.addSaxString(contentHandler, "GENSTAMP",
+              Long.toString(lbs.get(i).getBlock().getGenerationStamp()));
+          XMLUtils.addSaxString(contentHandler, "SIZE",
+              Long.toString(lbs.get(i).getBlockSize()));
+        }
+      }
+    }
+
+    private HdfsFileStatus fileStatusFromXml(Stanza st)
+        throws InvalidXmlException {
+      byte[] path = st.getValue("PATH").getBytes();
+      byte[] symLink = st.getValue("SYMLINK").getBytes();
+      long length = Long.parseLong(st.getValue("LENGTH"));
+      boolean isDir = Boolean.parseBoolean(st.getValue("ISDIR"));
+      short replication = Short.parseShort(st.getValue("REPL"));
+      long blkSize = Long.parseLong(st.getValue("BLKSIZE"));
+      long mtime = Long.parseLong(st.getValue("MTIME"));
+      long atime = Long.parseLong(st.getValue("ATIME"));
+      FsPermission permission =
+          new FsPermission(Short.valueOf(st.getValue("PERM")));
+      String owner = st.getValue("OWN");
+      String grp = st.getValue("GRP");
+      int childrenNum = Integer.parseInt(st.getValue("CHILDRENNUM"));
+      byte storagePolicy = Byte.parseByte(st.getValue("SPOLICY"));
+      if (!isDir) {
+        int blks = Integer.parseInt(st.getValue("BLOCKS"));
+        List<LocatedBlock> blkList = new ArrayList<LocatedBlock>(blks);
+        for (int i = 0; i < blks; i++) {
+          long blkId = Long.parseLong(st.getValue("ID"));
+          long genStamp = Long.parseLong(st.getValue("GENSTAMP"));
+          long numBytes = Long.parseLong(st.getValue("SIZE"));
+          blkList.add(new LocatedBlock(new ExtendedBlock(null, new Block(blkId,
+              numBytes, genStamp)), (DatanodeInfo[]) null));
+        }
+        LocatedBlocks lblks =
+            new LocatedBlocks(length, false, blkList, blkList.get(blks - 1),
+                true, null);
+        return new HdfsLocatedFileStatus(length, isDir, replication, blkSize,
+            mtime, atime, permission, owner, grp, symLink, path, 0, lblks,
+            childrenNum, null, storagePolicy);
+      } else {
+        return new HdfsFileStatus(length, isDir, replication, blkSize, mtime,
+            atime, permission, owner, grp, symLink, path, 0, childrenNum, null,
+            storagePolicy);
+      }
+    }
+
+    @Override
+    protected void toXml(ContentHandler contentHandler) throws SAXException {
+      XMLUtils.addSaxString(contentHandler, "LENGTH", Integer.toString(length));
+      XMLUtils.addSaxString(contentHandler, "SRC", src);
+      XMLUtils.addSaxString(contentHandler, "DST", dst);
+      XMLUtils.addSaxString(contentHandler, "SRCID", srcId);
+      XMLUtils.addSaxString(contentHandler, "DSTID", dstId);
+      XMLUtils.addSaxString(contentHandler, "STARTTIME",
+          Long.toString(startTime));
+      XMLUtils.addSaxString(contentHandler, "RENAMEID",
+          Long.toString(subTree.getRenameId()));
+      XMLUtils.addSaxString(contentHandler, "FILES",
+          Integer.toString(subTree.getSize()));
+      for (int i = 0; i < subTree.getSize(); i++) {
+        fileStatusToXml(contentHandler, subTree.get(i));
+      }
+      appendRpcIdsToXml(contentHandler, rpcClientId, rpcCallId);
+    }
+
+    @Override
+    void fromXml(Stanza st) throws InvalidXmlException {
+      this.length = Integer.parseInt(st.getValue("LENGTH"));
+      this.src = st.getValue("SRC");
+      this.dst = st.getValue("DST");
+      this.srcId = st.getValue("SRCID");
+      this.dstId = st.getValue("DSTID");
+      this.startTime = Long.parseLong(st.getValue("STARTTIME"));
+      long renameId = Long.parseLong(st.getValue("RENAMEID"));
+      int files = Integer.parseInt(st.getValue("FILES"));
+      this.subTree = new DirectorySubTree(files);
+      for (int i = 0; i < files; i++) {
+        subTree.addItem(fileStatusFromXml(st));
+      }
+      subTree.setRenameId(renameId);
+      readRpcIdsFromXml(st);
+    }
+  }
+
+  static class FederationRenameDestPhase2Op extends FSEditLogOp {
+    int length;
+    long renameId;
+    String srcId;
+
+    private FederationRenameDestPhase2Op() {
+      super(OP_FEDERATION_RENAME_DEST_PHASE2);
+    }
+
+    static FederationRenameDestPhase2Op getInstance(OpInstanceCache cache) {
+      return (FederationRenameDestPhase2Op) cache
+          .get(OP_FEDERATION_RENAME_DEST_PHASE2);
+    }
+
+    FederationRenameDestPhase2Op setRenameId(long renameId) {
+      this.renameId = renameId;
+      return this;
+    }
+
+    FederationRenameDestPhase2Op setSrcId(String srcId) {
+      this.srcId = srcId;
+      return this;
+    }
+
+    @Override
+    public void writeFields(DataOutputStream out) throws IOException {
+      FSImageSerialization.writeLong(renameId, out);
+      FSImageSerialization.writeString(srcId, out);
+      writeRpcIds(rpcClientId, rpcCallId, out);
+    }
+
+    @Override
+    void readFields(DataInputStream in, int logVersion) throws IOException {
+      if (!NameNodeLayoutVersion.supports(
+          LayoutVersion.Feature.EDITLOG_OP_OPTIMIZATION, logVersion)) {
+        this.length = in.readInt();
+        if (this.length != 4) {
+          throw new IOException("Incorrect data format. " + "Rename operation.");
+        }
+      }
+
+      if (NameNodeLayoutVersion.supports(
+          LayoutVersion.Feature.EDITLOG_OP_OPTIMIZATION, logVersion)) {
+        this.renameId = FSImageSerialization.readLong(in);
+      } else {
+        this.renameId = readLong(in);
+      }
+      this.srcId = FSImageSerialization.readString(in);
+      // read RPC ids if necessary
+      readRpcIds(in, logVersion);
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder builder = new StringBuilder();
+      builder.append("FederationRenameDstPhase2 [Length=");
+      builder.append(length);
+      builder.append(", renameId=");
+      builder.append(renameId);
+      builder.append(",srcId=");
+      builder.append(srcId);
+      appendRpcIdsToString(builder, rpcClientId, rpcCallId);
+      builder.append(", opCode=");
+      builder.append(opCode);
+      builder.append(", txid=");
+      builder.append(txid);
+      builder.append("]");
+      return builder.toString();
+    }
+
+    @Override
+    protected void toXml(ContentHandler contentHandler) throws SAXException {
+      XMLUtils.addSaxString(contentHandler, "LENGTH", Integer.toString(length));
+      XMLUtils
+          .addSaxString(contentHandler, "RENAMEID", Long.toString(renameId));
+      XMLUtils.addSaxString(contentHandler, "SRCID", srcId);
+      appendRpcIdsToXml(contentHandler, rpcClientId, rpcCallId);
+    }
+
+    @Override
+    void fromXml(Stanza st) throws InvalidXmlException {
+      this.length = Integer.parseInt(st.getValue("LENGTH"));
+      this.renameId = Long.parseLong(st.getValue("RENAMEID"));
+      this.srcId = st.getValue("SRCID");
+      readRpcIdsFromXml(st);
+    }
+  }
 
   /**
    * Class for writing editlog ops

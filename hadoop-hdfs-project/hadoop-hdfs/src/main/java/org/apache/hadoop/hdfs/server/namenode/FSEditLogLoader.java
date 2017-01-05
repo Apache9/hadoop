@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.XAttrSetFlag;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.LayoutVersion;
@@ -62,6 +63,10 @@ import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.CreateSnapshotOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.DeleteOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.DeleteSnapshotOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.DisallowSnapshotOp;
+import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.FederationRenameDestPhase1Op;
+import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.FederationRenameDestPhase2Op;
+import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.FederationRenameSrcPhase1Op;
+import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.FederationRenameSrcPhase2Op;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.GetDelegationTokenOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.MkdirOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.ModifyCacheDirectiveInfoOp;
@@ -89,6 +94,7 @@ import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.SymlinkOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.TimesOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.UpdateBlocksOp;
 import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp.UpdateMasterKeyOp;
+import org.apache.hadoop.hdfs.server.namenode.FederationInProgressRenameMap.RenameRecord;
 import org.apache.hadoop.hdfs.server.namenode.INode.BlocksMapUpdateInfo;
 import org.apache.hadoop.hdfs.server.namenode.LeaseManager.Lease;
 import org.apache.hadoop.hdfs.server.namenode.NNStorage.NameNodeFile;
@@ -876,6 +882,77 @@ public class FSEditLogLoader {
       fsDir.unprotectedSetStoragePolicy(
           renameReservedPathsOnUpgrade(setStoragePolicyOp.path, logVersion),
           setStoragePolicyOp.policyId);
+      break;
+    }
+    case OP_FEDERATION_RENAME_SRC_PHASE1: {
+      FederationRenameSrcPhase1Op renameOp = (FederationRenameSrcPhase1Op) op;
+      final String src = renameReservedPathsOnUpgrade(renameOp.src, logVersion);
+      final String dst = renameReservedPathsOnUpgrade(renameOp.dst, logVersion);
+      final String srcId = renameOp.srcId;
+      final String dstId = renameOp.dstId;
+      long renameId = renameOp.renameId;
+      long startTime = renameOp.startTime;
+      fsDir.federationRenameSrcPhase1(src, dst, dstId);
+      fsNamesys.setFederationRenameId(renameId + 1);
+      fsNamesys.addFederationRenameRecord(renameId, src, srcId, dst, dstId,
+          true, startTime);
+      if (toAddRetryCache) {
+        fsNamesys.addCacheEntry(renameOp.rpcClientId, renameOp.rpcCallId);
+      }
+      break;
+    }
+    case OP_FEDERATION_RENAME_DEST_PHASE1: {
+      FederationRenameDestPhase1Op renameOp = (FederationRenameDestPhase1Op) op;
+      final String src = renameReservedPathsOnUpgrade(renameOp.src, logVersion);
+      final String dst = renameReservedPathsOnUpgrade(renameOp.dst, logVersion);
+      final String srcId = renameOp.srcId;
+      final String dstId = renameOp.dstId;
+      final long startTime = renameOp.startTime;
+      DirectorySubTree subTree = renameOp.subTree;
+      fsDir.federationRenameDestPhase1(src, dst, srcId, subTree);
+      fsNamesys.addFederationRenameRecord(subTree.getRenameId(), src, srcId,
+          dst, dstId, false, startTime);
+      if (toAddRetryCache) {
+        fsNamesys.addCacheEntry(renameOp.rpcClientId, renameOp.rpcCallId);
+      }
+      break;
+    }
+    case OP_FEDERATION_RENAME_SRC_PHASE2: {
+      FederationRenameSrcPhase2Op renameOp = (FederationRenameSrcPhase2Op) op;
+      final long renameId = renameOp.renameId;
+      final long mtime = renameOp.mtime;
+      boolean toCancel = renameOp.toCancel;
+      RenameRecord rr =
+          fsNamesys.getFederationRenameMap().getRenameRecord(renameId, null,
+              null, true);
+      String src = rr.getSrc();
+      if (toCancel) {
+        fsDir.federationRenameRemoveFeature(src, false);
+      } else {
+        fsDir.unprotectedDelete(renameReservedPathsOnUpgrade(src, logVersion),
+            mtime);
+      }
+      fsNamesys.getFederationRenameMap().removeRenameRecord(renameId,
+          rr.getSrcId(), rr.getDstId(), true);
+      if (toAddRetryCache) {
+        fsNamesys.addCacheEntry(renameOp.rpcClientId, renameOp.rpcCallId);
+      }
+      break;
+    }
+    case OP_FEDERATION_RENAME_DEST_PHASE2: {
+      FederationRenameDestPhase2Op renameOp = (FederationRenameDestPhase2Op) op;
+      final long renameId = renameOp.renameId;
+      final String srcId = renameOp.srcId;
+      RenameRecord rr =
+          fsNamesys.getFederationRenameMap().getRenameRecord(renameId, srcId,
+              null, false);
+      String dstRecord = rr.getDst();
+      byte[][] pathComponents =
+          FSDirectory.getPathComponentsForReservedPath(dstRecord);
+      String dst = fsNamesys.resolvePath(dstRecord, pathComponents);
+      fsDir.federationRenameRemoveFeature(dst, false);
+      fsNamesys.getFederationRenameMap().removeRenameRecord(renameId,
+          rr.getSrcId(), rr.getDstId(), false);
       break;
     }
     default:

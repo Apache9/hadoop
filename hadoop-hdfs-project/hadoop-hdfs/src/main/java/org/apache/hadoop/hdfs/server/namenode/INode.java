@@ -218,6 +218,28 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
     return this;
   }
   
+  abstract FederationRenameFeature getFederationRenameFeature(int snapshotId);
+
+  @Override
+  public final FederationRenameFeature getFederationRenameFeature() {
+    return getFederationRenameFeature(Snapshot.CURRENT_STATE_ID);
+  }
+
+  abstract void addFederationRenameFeature(FederationRenameFeature frf);
+
+  final INode addFederationRenameFeature(FederationRenameFeature frf,
+      int latestSnapshotId) {
+    addFederationRenameFeature(frf);
+    return this;
+  }
+
+  abstract void removeFederationRenameFeature();
+
+  final INode removeFederationRenameFeature(int latestSnapshotId) {
+    removeFederationRenameFeature();
+    return this;
+  }
+
   /**
    * @return if the given snapshot id is {@link Snapshot#CURRENT_STATE_ID},
    *         return this; otherwise return the corresponding snapshot inode.

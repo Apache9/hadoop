@@ -48,6 +48,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.StorageType;
 import org.apache.hadoop.hdfs.inotify.Event;
@@ -170,6 +171,7 @@ import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageReportProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageTypeProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageTypesProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageUuidsProto;
+import org.apache.hadoop.hdfs.protocol.proto.FederationClientNamenodeProtocolProtos.DirectorySubTreeProto;
 import org.apache.hadoop.hdfs.protocol.proto.InotifyProtos;
 import org.apache.hadoop.hdfs.protocol.proto.JournalProtocolProtos.JournalInfoProto;
 import org.apache.hadoop.hdfs.protocol.proto.XAttrProtos.GetXAttrsResponseProto;
@@ -2920,4 +2922,23 @@ public class PBHelper {
         ezKeyVersionName);
   }
 
+  public static DirectorySubTree convert(DirectorySubTreeProto subTreeProto) {
+    long renameId = subTreeProto.getRenameId();
+    List<HdfsFileStatusProto> fileStatusList = subTreeProto.getDentryList();
+    DirectorySubTree subTree = new DirectorySubTree(fileStatusList.size());
+    subTree.setRenameId(renameId);
+    for (int i = 0; i < fileStatusList.size(); i++) {
+      subTree.addItem(convert(fileStatusList.get(i)));
+    }
+    return subTree;
+  }
+
+  public static DirectorySubTreeProto convert(DirectorySubTree subTree) {
+    DirectorySubTreeProto.Builder builder = DirectorySubTreeProto.newBuilder();
+    builder.setRenameId(subTree.getRenameId());
+    for (int i = 0; i < subTree.getSize(); i++) {
+      builder.addDentry(PBHelper.convert(subTree.get(i)));
+    }
+    return builder.build();
+  }
 }

@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.RollingUpgradeStartupOption;
@@ -232,7 +233,9 @@ public class NameNode implements NameNodeStatusMXBean {
                                  long clientVersion) throws IOException {
     if (protocol.equals(ClientProtocol.class.getName())) {
       return ClientProtocol.versionID; 
-    } else if (protocol.equals(DatanodeProtocol.class.getName())){
+    } else if (protocol.equals(FederationClientProtocol.class)) {
+      return FederationClientProtocol.versionID;
+    } else if (protocol.equals(DatanodeProtocol.class.getName())) {
       return DatanodeProtocol.versionID;
     } else if (protocol.equals(NamenodeProtocol.class.getName())){
       return NamenodeProtocol.versionID;

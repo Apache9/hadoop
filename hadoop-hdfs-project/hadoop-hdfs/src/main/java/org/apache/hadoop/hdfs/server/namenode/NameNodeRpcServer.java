@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.google.common.collect.Lists;
+
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
@@ -87,12 +88,14 @@ import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolEntry;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
 import org.apache.hadoop.hdfs.protocol.FSLimitException;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
@@ -111,11 +114,14 @@ import org.apache.hadoop.hdfs.protocol.UnregisteredNodeException;
 import org.apache.hadoop.hdfs.protocol.UnresolvedPathException;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ClientNamenodeProtocol;
 import org.apache.hadoop.hdfs.protocol.proto.DatanodeProtocolProtos.DatanodeProtocolService;
+import org.apache.hadoop.hdfs.protocol.proto.FederationClientNamenodeProtocolProtos.FederationClientNamenodeProtocol;
 import org.apache.hadoop.hdfs.protocol.proto.NamenodeProtocolProtos.NamenodeProtocolService;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolServerSideTranslatorPB;
+import org.apache.hadoop.hdfs.protocolPB.FederationClientNamenodeProtocolPB;
+import org.apache.hadoop.hdfs.protocolPB.FederationClientNamenodeProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolServerSideTranslatorPB;
 import org.apache.hadoop.hdfs.security.token.block.DataEncryptionKey;
@@ -272,6 +278,12 @@ class NameNodeRpcServer implements NamenodeProtocols {
          new ClientNamenodeProtocolServerSideTranslatorPB(this);
      BlockingService clientNNPbService = ClientNamenodeProtocol.
          newReflectiveBlockingService(clientProtocolServerTranslator);
+
+    FederationClientNamenodeProtocolServerSideTranslatorPB federationClientProtocolServerTranslator =
+        new FederationClientNamenodeProtocolServerSideTranslatorPB(this);
+    BlockingService fedClientNNPbService =
+        FederationClientNamenodeProtocol
+            .newReflectiveBlockingService(federationClientProtocolServerTranslator);
     
     DatanodeProtocolServerSideTranslatorPB dnProtoPbTranslator = 
         new DatanodeProtocolServerSideTranslatorPB(this);
@@ -343,6 +355,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
           .build();
 
       // Add all the RPC protocols that the namenode implements
+      DFSUtil.addPBProtocol(conf, FederationClientNamenodeProtocolPB.class,
+          fedClientNNPbService, serviceRpcServer);
       DFSUtil.addPBProtocol(conf, HAServiceProtocolPB.class, haPbService,
           serviceRpcServer);
       DFSUtil.addPBProtocol(conf, NamenodeProtocolPB.class, NNPbService,
@@ -388,6 +402,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
         .setSecretManager(namesystem.getDelegationTokenSecretManager()).build();
 
     // Add all the RPC protocols that the namenode implements
+    DFSUtil.addPBProtocol(conf, FederationClientNamenodeProtocolPB.class,
+        fedClientNNPbService, clientRpcServer);
     DFSUtil.addPBProtocol(conf, HAServiceProtocolPB.class, haPbService,
         clientRpcServer);
     DFSUtil.addPBProtocol(conf, NamenodeProtocolPB.class, NNPbService,
@@ -429,6 +445,7 @@ class NameNodeRpcServer implements NamenodeProtocols {
 
     List<Class<?>> protocols = new LinkedList<Class<?>>();
     protocols.add(org.apache.hadoop.hdfs.protocol.ClientProtocol.class);
+    protocols.add(org.apache.hadoop.hdfs.protocol.FederationClientProtocol.class);
     protocols.add(org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol.class);
     protocols.add(org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol.class);
     protocols.add(org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol.class);
@@ -1752,5 +1769,56 @@ class NameNodeRpcServer implements NamenodeProtocols {
   public void removeSpanReceiver(long id) throws IOException {
     namesystem.checkSuperuserPrivilege();
     nn.spanReceiverHost.removeSpanReceiver(id);
+  }
+
+  @Override
+  public boolean rename(String src, String dst, String dstId) {
+    return false;
+  }
+
+  @Override
+  public void rename2(String src, String dst, String dstId,
+      Options.Rename... options) {
+
+  }
+
+  @Override
+  public DirectorySubTree renameSrcPhase1(String src, String srcId, String dst,
+      String dstId) throws IOException {
+    if (stateChangeLog.isDebugEnabled()) {
+      stateChangeLog.debug("*DIR* NameNode.rename: " + src + " to " + dst);
+    }
+    if (!checkPathLength(dst)) {
+      throw new IOException("rename: Pathname too long.  Limit "
+          + MAX_PATH_LENGTH + " characters, " + MAX_PATH_DEPTH + " levels.");
+    }
+    return namesystem.federationRenameSrcPhase1(src, srcId, dst, dstId);
+  }
+
+  @Override
+  public boolean renameSrcPhase2(long renameId, boolean toCancel)
+      throws IOException {
+    return namesystem.federationRenameSrcPhase2(renameId, toCancel);
+  }
+
+  @Override
+  public String renameDestPhase1(String src, String srcId, String dst,
+      String dstId, DirectorySubTree subTree)
+ throws IOException {
+    return namesystem.federationRenameDestPhase1(src, srcId, dst, dstId,
+        subTree);
+  }
+
+  @Override
+  public boolean renameDestPhase2(long renameId, String srcId)
+      throws IOException {
+    return namesystem.federationRenameDestPhase2(renameId, srcId);
+  }
+
+  @Override
+  public boolean renameRecordExist(long renameId, String srcId, String dstId,
+      boolean isSource)
+      throws IOException {
+    return namesystem.renameRecordExist(renameId, srcId, dstId, isSource);
   }
 }

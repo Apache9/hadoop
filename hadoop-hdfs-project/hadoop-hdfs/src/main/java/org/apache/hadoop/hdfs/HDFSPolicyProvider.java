@@ -23,6 +23,8 @@ import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.ha.ZKFCProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+import org.apache.hadoop.hdfs.protocol.FederationClientDatanodeProtocol;
+import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
 import org.apache.hadoop.hdfs.protocol.RaidDatanodeProtocol;
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocol;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
@@ -80,7 +82,13 @@ public class HDFSPolicyProvider extends PolicyProvider {
         TraceAdminProtocol.class),
     new Service(
         CommonConfigurationKeys.SECURITY_RAID_DATANODE_PROTOCOL_ACL,
-        RaidDatanodeProtocol.class)
+        RaidDatanodeProtocol.class),
+    new Service(
+        CommonConfigurationKeys.SECURITY_FEDERATION_CLIENT_NN_PROTOCOL_ACL,
+        FederationClientProtocol.class),
+    new Service(
+        CommonConfigurationKeys.SECURITY_FEDERATION_CLIENT_DN_PROTOCOL_ACL,
+        FederationClientDatanodeProtocol.class)
   };
   
   @Override

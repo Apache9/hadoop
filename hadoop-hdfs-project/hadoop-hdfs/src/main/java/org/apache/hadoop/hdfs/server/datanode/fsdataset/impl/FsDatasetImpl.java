@@ -48,10 +48,12 @@ import javax.management.StandardMBean;
 
 import com.google.common.collect.Lists;
 import com.google.common.base.Preconditions;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.HardLink;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -89,7 +91,9 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.ReplicaOutputStreams;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.RollingLogs;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.RoundRobinVolumeChoosingPolicy;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.VolumeChoosingPolicy;
+
 import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.RamDiskReplicaTracker.RamDiskReplica;
+
 import org.apache.hadoop.hdfs.server.datanode.metrics.FSDatasetMBean;
 import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlock;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
@@ -2809,5 +2813,55 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       shouldRun = false;
     }
   }
+  
+  synchronized private boolean addOneBlockToNewPool(String srcPool,
+      String dstPool, Block blk)
+      throws IOException {
+    ReplicaInfo srcReplica = volumeMap.get(srcPool, blk.getBlockId());
+    if (srcReplica == null) {
+      LOG.warn("Block " + blk + " does not exist in " + srcPool
+          + " when trying to add to " + dstPool);
+      throw new ReplicaNotFoundException("Block " + blk
+          + " does not exists in " + srcPool);
+    }
+    ReplicaInfo dstReplica = volumeMap.get(dstPool, blk.getBlockId());
+    if (dstReplica != null) {
+      LOG.warn("Block " + blk + " already exist in " + dstPool
+          + " when trying to add from " + srcPool);
+      throw new ReplicaAlreadyExistsException("Block " + blk
+          + " already exist in " + dstPool);
+    }
+    FsVolumeImpl v = (FsVolumeImpl) srcReplica.getVolume();
+    File srcFile = srcReplica.getBlockFile();
+    File srcMetaFile = srcReplica.getMetaFile();
+    File destDir = v.getBlockPoolSlice(dstPool).getFinalizedDirForBlock(blk);
+    File dstFile = new File(destDir, srcFile.getName());
+    File dstMetaFile = new File(destDir, srcMetaFile.getName());
+    HardLink.createHardLink(srcFile, dstFile);
+    HardLink.createHardLink(srcMetaFile, dstMetaFile);
+    dstReplica = new FinalizedReplica(blk, v, destDir);
+    volumeMap.add(dstPool, dstReplica);
+    ExtendedBlock extendedBlock = new ExtendedBlock(dstPool, dstReplica);
+    datanode.notifyNamenodeReceivedBlock(extendedBlock, null,
+        dstReplica.getStorageUuid());
+    return true;
+  }
+
+  @Override
+  public Block[] addBlocksToNewPool(String srcPool, String dstPool, Block[] blks)
+      throws IOException {
+    List<Block> lblk = new LinkedList<Block>();
+    for (int i = 0; i < blks.length; i++) {
+      try {
+        if (addOneBlockToNewPool(srcPool, dstPool, blks[i])) {
+          lblk.add(blks[i]);
+        }
+      } catch (IOException ioe) {
+        // IGNORE
+      }
+    }
+    return lblk.toArray(new Block[0]);
+  }
+
 }
 
