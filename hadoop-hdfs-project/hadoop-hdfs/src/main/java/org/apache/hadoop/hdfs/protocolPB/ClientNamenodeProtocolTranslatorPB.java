@@ -25,6 +25,7 @@ import java.util.EnumSet;
 import java.util.List;
 
 import com.google.common.collect.Lists;
+import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.crypto.CipherSuite;
@@ -253,13 +254,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setOffset(offset)
         .setLength(length)
         .build();
+    long startTime = System.currentTimeMillis();
     try {
-      GetBlockLocationsResponseProto resp = rpcProxy.getBlockLocations(null,
-          req);
-      return resp.hasLocations() ? 
-        PBHelper.convert(resp.getLocations()) : null;
+      GetBlockLocationsResponseProto resp =
+          rpcProxy.getBlockLocations(null, req);
+      return resp.hasLocations() ? PBHelper.convert(resp.getLocations()) : null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("open", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter.count("open", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -294,11 +298,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setBlockSize(blockSize);
     builder.addAllCryptoProtocolVersion(PBHelper.convert(supportedVersions));
     CreateRequestProto req = builder.build();
+    long startTime = System.currentTimeMillis();
     try {
       CreateResponseProto res = rpcProxy.create(null, req);
       return res.hasFs() ? PBHelper.convert(res.getFs()) : null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("create", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("create", 1, System.currentTimeMillis() - startTime);
     }
 
   }
@@ -312,11 +321,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setSrc(src)
         .setClientName(clientName)
         .build();
+    long startTime = System.currentTimeMillis();
     try {
       AppendResponseProto res = rpcProxy.append(null, req);
       return res.hasBlock() ? PBHelper.convert(res.getBlock()) : null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("append", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("append", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -442,10 +456,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setFileId(fileId);
     if (last != null)
       req.setLast(PBHelper.convert(last));
+    long startTime = System.currentTimeMillis();
     try {
       return rpcProxy.complete(null, req.build()).getResult();
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("complete", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("complete", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -467,10 +486,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
     RenameRequestProto req = RenameRequestProto.newBuilder()
         .setSrc(src)
         .setDst(dst).build();
+    long startTime = System.currentTimeMillis();
     try {
       return rpcProxy.rename(null, req).getResult();
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("rename", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("rename", 1, System.currentTimeMillis() - startTime);
     }
   }
   
@@ -493,12 +517,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
         setSrc(src).
         setDst(dst).setOverwriteDest(overwrite).
         build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.rename2(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("rename2", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("rename2", 1, System.currentTimeMillis() - startTime);
     }
-
   }
 
   @Override
@@ -520,10 +548,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
       throws AccessControlException, FileNotFoundException, SafeModeException,
       UnresolvedLinkException, IOException {
     DeleteRequestProto req = DeleteRequestProto.newBuilder().setSrc(src).setRecursive(recursive).build();
+
+    long startTime = System.currentTimeMillis();
     try {
       return rpcProxy.delete(null, req).getResult();
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("delete", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("delete", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -538,10 +572,14 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setMasked(PBHelper.convert(masked))
         .setCreateParent(createParent).build();
 
+    long startTime = System.currentTimeMillis();
     try {
       return rpcProxy.mkdirs(null, req).getResult();
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("mkdirs", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter.count("mkdirs", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -553,6 +591,7 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setSrc(src)
         .setStartAfter(ByteString.copyFrom(startAfter))
         .setNeedLocation(needLocation).build();
+    long startTime = System.currentTimeMillis();
     try {
       GetListingResponseProto result = rpcProxy.getListing(null, req);
       
@@ -561,7 +600,11 @@ public class ClientNamenodeProtocolTranslatorPB implements
       }
       return null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("getListing", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("getListing", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -761,11 +804,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
       FileNotFoundException, UnresolvedLinkException, IOException {
     GetFileInfoRequestProto req = GetFileInfoRequestProto.newBuilder()
         .setSrc(src).build();
+    long startTime = System.currentTimeMillis();
     try {
       GetFileInfoResponseProto res = rpcProxy.getFileInfo(null, req);
       return res.hasFs() ? PBHelper.convert(res.getFs()) : null;
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("getFileInfo", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("getFileInfo", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -839,10 +887,14 @@ public class ClientNamenodeProtocolTranslatorPB implements
     FsyncRequestProto req = FsyncRequestProto.newBuilder().setSrc(src)
         .setClient(client).setLastBlockLength(lastBlockLength)
             .setFileId(fileId).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.fsync(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("fsync", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter.count("fsync", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1283,10 +1335,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
     ModifyAclEntriesRequestProto req = ModifyAclEntriesRequestProto
         .newBuilder().setSrc(src)
         .addAllAclSpec(PBHelper.convertAclEntryProto(aclSpec)).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.modifyAclEntries(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("modifyAclEntries", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("modifyAclEntries", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1296,10 +1353,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
     RemoveAclEntriesRequestProto req = RemoveAclEntriesRequestProto
         .newBuilder().setSrc(src)
         .addAllAclSpec(PBHelper.convertAclEntryProto(aclSpec)).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.removeAclEntries(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("removeAclEntries", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("removeAclEntries", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1307,10 +1369,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
   public void removeDefaultAcl(String src) throws IOException {
     RemoveDefaultAclRequestProto req = RemoveDefaultAclRequestProto
         .newBuilder().setSrc(src).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.removeDefaultAcl(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("removeDefaultAcl", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("removeDefaultAcl", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1318,10 +1385,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
   public void removeAcl(String src) throws IOException {
     RemoveAclRequestProto req = RemoveAclRequestProto.newBuilder()
         .setSrc(src).build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.removeAcl(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("removeAcl", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("removeAcl", 1, System.currentTimeMillis() - startTime);
     }
   }
 
@@ -1331,10 +1403,15 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setSrc(src)
         .addAllAclSpec(PBHelper.convertAclEntryProto(aclSpec))
         .build();
+    long startTime = System.currentTimeMillis();
     try {
       rpcProxy.setAcl(null, req);
     } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("setAcl", 1);
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter
+          .count("setAcl", 1, System.currentTimeMillis() - startTime);
     }
   }
 

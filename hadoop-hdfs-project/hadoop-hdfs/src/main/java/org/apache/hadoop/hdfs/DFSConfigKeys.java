@@ -847,4 +847,8 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_DATANODE_ENABLE_RAID_SERVICE =
       "dfs.datanode.enable.raid.service";
   public static final boolean DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT = false;
+
+  public static final String DFS_CLIENT_PERFCOUNTER_ENABLED_KEY =
+      "dfs.client.perfcounter.enabled";
+  public static final boolean DFS_CLIENT_PERFCOUNTER_ENABLED_DEFAULT = false;
 }
