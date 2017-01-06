@@ -53,7 +53,7 @@ public class TestHdfsPerfCounter {
     out.close();
     assertEquals(PerfCounter.getCounterValue(CounterName("create")), 1);
     assertEquals(PerfCounter.getCounterValue(CounterName("sendPacket")), 9);
-    assertEquals(PerfCounter.getCounterValue(CounterName("complete")), 1);
+    assertEquals(PerfCounter.getCounterValue(CounterName("complete")), 2);
 
     InputStream in = client.open("/tmp/file1");
     in.read(new byte[data_len], 0, data_len);
