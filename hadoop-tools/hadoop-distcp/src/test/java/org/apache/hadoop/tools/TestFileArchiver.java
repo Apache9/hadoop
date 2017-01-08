@@ -23,14 +23,19 @@ import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -111,6 +116,19 @@ public class TestFileArchiver {
       archiver = new FileArchiver();
     } catch (Exception e) {
       LOG.info("setup test env failed " + e.getMessage());
+    }
+  }
+  
+  @After
+  public void tearDown() throws Exception {
+    if (srcCluster != null) {
+      srcCluster.shutdown();
+    }
+    if (targetCluster != null) {
+      targetCluster.shutdown();
+    }
+    if (mrCluster != null) {
+      mrCluster.close();
     }
   }
 
@@ -493,5 +511,38 @@ public class TestFileArchiver {
       Assert.assertTrue(
           srcFs.exists(new Path(trashDir, fullPath.toString().substring(1))));
     }
+  }
+
+  @Test
+  public void testBlackList() throws Exception {
+    // create the blacklist
+    FileOutputStream fos = new FileOutputStream(new File("blacklist-file"));
+    BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fos));
+    bw.write("mi-user-0");
+    bw.newLine();
+    bw.write("mi-user-2");
+    bw.close();
+
+    final String PATTERN = "year=2016/month=(0[4-9]|1[0-2])";
+    JobConf tmpConf = new JobConf(jobConf);
+    tmpConf.setInt("dfs.file.archiver.schedule.interval.sec", 10);
+    tmpConf.setInt("dfs.file.archiver.max.maps", 20);
+    tmpConf.set("dfs.file.archiver.pattern.path.filter.exclude",
+        PATTERN);
+    tmpConf.set("dfs.file.archiver.black.list", "blacklist-file");
+    Path taskDir = startFileArchiverAndWaitForJobSubmit(tmpConf);
+
+    waitForAllJobFinished();
+    Path completeFile = new Path(taskDir, "completed");
+    List<String> completeFiles = readFile(srcFs, completeFile);
+
+    boolean testSucceed = true;
+    for (String line : completeFiles) {
+      if (line.contains("mi-user-0") || line.contains(("mi-user-2"))) {
+        testSucceed = false;
+        break;
+      }
+    }
+    Assert.assertTrue(testSucceed);
   }
 }

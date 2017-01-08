@@ -8,6 +8,7 @@ import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.Stat;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
@@ -21,12 +22,16 @@ import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
+import java.io.BufferedReader;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.URI;
@@ -193,6 +198,8 @@ public class FileArchiver implements Tool {
   private static final String BANDWIDTH_LIMIT_MB =
       "dfs.file.archiver.bandwidth.limit.mb";
   private static final int BANDWIDTH_LIMIT_MB_DEFAULT = 1;
+  private static final String BLACK_LIST =
+      "dfs.file.archiver.black.list";
 
   // Working files
   private static final String DIR_STAT_FILE = "dir_stats";
@@ -231,6 +238,9 @@ public class FileArchiver implements Tool {
   private TreeMap<String, Long> inconsistentMap = new TreeMap<String, Long>();
   private TreeSet<String> deletedSet = new TreeSet<String>();
 
+  private LinkedList<String> blackList = new LinkedList<String>();
+  private int pathesInBlackList = 0;
+
   @Override public Configuration getConf() {
     return conf;
   }
@@ -248,6 +258,13 @@ public class FileArchiver implements Tool {
   private void execute() throws IOException,InterruptedException {
     long lastDeteTime = Time.now();
     while (!shouldStop()) {
+      if (unscheduledSet.isEmpty() && inFlightSet.isEmpty()
+          && inconsistentMap.isEmpty()
+          && (!deleteAfterCopy || completeSet.isEmpty())) {
+        LOG.info("All copy job completed, exiting");
+        break;
+      }
+     
       LOG.info("Check all in-flight tasks");
       for (String p : new TreeSet<>(inFlightSet)) {
         checkAndUpdateDirState(p);
@@ -263,7 +280,7 @@ public class FileArchiver implements Tool {
       Thread.sleep(scheduleInterval * 1000);
 
       long current = Time.now();
-      if (deleteAfterCopy && current > lastDeteTime + deleteInterval) {
+      if (deleteAfterCopy && current > lastDeteTime + deleteInterval*1000) {
         moveCompletedTaskToTrash();
         lastDeteTime = current;
       }
@@ -352,6 +369,7 @@ public class FileArchiver implements Tool {
     LOG.info("maxMaps: " + maxMaps + ", band width limit: " +
         bandWidthLimit + " MB per map");
 
+    loadBlackList();
     // setup working directory
     String taskID = getTaskID(srcBaseDir);
     if (taskID == null) {
@@ -468,10 +486,11 @@ public class FileArchiver implements Tool {
     }
     out.close();
 
-    LOG.info(String.format("[CURRENT STATUS] un-scheduled:%d, ongoing:%d, "
-            + "complete:%d, inconsistent:%d, deleted:%d", unscheduledSet.size(),
-        inFlightSet.size(), completeSet.size(), inconsistentMap.size(),
-        deletedSet.size()));
+    LOG.info(String.format(
+        "[CURRENT STATUS] un-scheduled:%d, ongoing:%d, "
+            + "complete:%d, inconsistent:%d, deleted:%d, in-blacklist:%d",
+        unscheduledSet.size(), inFlightSet.size(), completeSet.size(),
+        inconsistentMap.size(), deletedSet.size(), pathesInBlackList));
   }
 
   private void loadDirStatsFromFile(Path file) throws IOException {
@@ -482,6 +501,21 @@ public class FileArchiver implements Tool {
       sum.readFields(in);
       srcDirs.put(sum.path, sum);
       addPathToSets(sum.path, sum.state);
+    }
+  }
+  
+  private void loadBlackList() throws IOException {
+    LOG.info("loading blacklist file...");
+    String blackListFile = conf.get(BLACK_LIST, null);
+    if (blackListFile != null) {
+      InputStream fin = new FileInputStream(blackListFile);
+      BufferedReader br = new BufferedReader(new InputStreamReader(fin));
+      String line;
+      while ((line = br.readLine()) != null) {
+        blackList.add(line.trim());
+        LOG.info("blacklist item: " + line.trim());
+      }
+      fin.close();
     }
   }
 
@@ -603,15 +637,41 @@ public class FileArchiver implements Tool {
       sum.mapCount = 0;
     }
 
+    // if inconsistency cause by src data change
+    if (sum.state == States.IN_CONSISTENT) {
+      ContentSummary contentSummary =
+          srcFs.getContentSummary(new Path(srcBaseDir, dir));
+      if (contentSummary.getLength() != sum.summary.getLength()) {
+        sum.summary = contentSummary;
+      }
+    }
+
     Path destPath = new Path(destBaseDir, dir);
     if (sum.summary.getLength() == 0) {
+      // this condition is actually checked before schedule copy tasks
+      // if directory is empty, then mark it as complete
       sum.state = States.COMPLETE;
       availableMaps += sum.mapCount;
       assert(availableMaps <= maxMaps);
       sum.mapCount = 0;
       sum.jobID = "";
-    }else if (!destFs.exists(destPath)) {
-      sum.state = States.NOT_START;
+    } else if (!destFs.exists(destPath)) {
+      if (sum.state == States.COMPLETE) {
+        // this check is perform after copy complete, and found dest
+        // path not exists. then it might caused by cached contentSummary
+        // outdated, we've scheduled an actually empty directory.
+        // in this case, we should update the contentSummary cache
+        Path srcPath = new Path(srcBaseDir, dir);
+        if (srcFs.exists(srcPath)) {
+          ContentSummary contentSummary = srcFs.getContentSummary(srcPath);
+          if (contentSummary.getLength() != sum.summary.getLength()) {
+            sum.summary = contentSummary;
+          }
+          sum.state = States.NOT_START;
+        } // else if srcPath not exists, then simply keep it as COMPLETE
+      } else {
+        sum.state = States.NOT_START;
+      }
     } else {
       ContentSummary contentSummary = destFs.getContentSummary(destPath);
       if (contentSummary.getLength() == sum.summary
@@ -645,12 +705,19 @@ public class FileArchiver implements Tool {
         checkAndUpdateDirState(p);
         DirSummary sum = srcDirs.get(p);
         if (sum.state == States.NOT_START) {
+          if (isInBlackList(p)) {
+              unscheduledSet.remove(p);
+              pathesInBlackList++;
+              LOG.info(p + " is excluded because it's in blacklist");
+              continue;
+          }
           int mapCount = (int)(sum.summary.getLength()/dataSizePerMap) + 1;
           // maps count should not bigger than file count
           mapCount = (int) Math.min((long)mapCount, sum.summary.getFileCount());
           // if directory too big, using few maps will spend very long time,
           // waiting for enough resources
-          if (inFlightSet.size() > 0 && mapCount > 2 * availableMaps) {
+          if (inFlightSet.size() > 0 && mapCount > 2 * availableMaps &&
+              availableMaps < maxMaps/2) {
             LOG.info(
                 "only " + availableMaps + " maps available, " + p + " requires "
                     + mapCount + " skip it temporarily, "
@@ -743,11 +810,25 @@ public class FileArchiver implements Tool {
           removePathFromSets(p, sum.state);
           sum.state = States.DELETED;
           addPathToSets(p, sum.state);
+        } else if (srcSum.getLength() != destSum.getLength()) {
+          DirSummary sum = srcDirs.get(p);
+          removePathFromSets(p, sum.state);
+          sum.state = States.IN_CONSISTENT;
+          addPathToSets(p, sum.state);
         }
       } catch (IOException e) {
         LOG.warn("move to trash failed", e);
       }
     }
+  }
+
+  private boolean isInBlackList(String path) {
+    for (String p : blackList) {
+      if (path.startsWith(p)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public static void main(String argv[]) {
