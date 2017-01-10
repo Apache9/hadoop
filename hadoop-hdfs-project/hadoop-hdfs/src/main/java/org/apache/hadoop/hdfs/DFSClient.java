@@ -3316,4 +3316,10 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
     throw new IOException("federatedNamenode does not exist");
   }
+  
+  @VisibleForTesting
+  public boolean renameRecordExist(long renameId, String srcId, String dstId, boolean isSource)
+      throws IOException {
+    return federatedNamenode.renameRecordExist(renameId, srcId, dstId, isSource);
+  }
 }

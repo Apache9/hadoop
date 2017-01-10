@@ -966,5 +966,10 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
 
   public static final String DFS_FEDERATION_RENAME_BLOCKS_LIMIT =
       "dfs.federation.rename.blocks.limit";
-  public static final int DFS_FEDERATION_RENAME_BLOCKS_LIMIT_DEFAULT = 256;
+  public static final int DFS_FEDERATION_RENAME_BLOCKS_LIMIT_DEFAULT = 4096;
+  
+  public static final String DFS_FEDERATION_RENAME_SOURCE_TIMEOUT = "dfs.federation.rename.source.timeout";
+  public static final long DFS_FEDERATION_RENAME_SOURCE_TIMEOUT_DEFAULT = 600000; //10mins
+  public static final String DFS_FEDERATION_RENAME_DEST_TIMEOUT = "dfs.federation.rename.dest.timeout";
+  public static final long DFS_FEDERATION_RENAME_DEST_TIMEOUT_DEFAULT = 900000; //15mins
 }

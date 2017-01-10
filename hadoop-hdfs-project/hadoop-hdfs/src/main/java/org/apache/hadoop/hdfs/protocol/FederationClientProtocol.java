@@ -140,4 +140,6 @@ public interface FederationClientProtocol {
   public boolean renameRecordExist(long renameId, String srcId, String dstId,
       boolean isSource) throws IOException;
 
+  public String getPoolId() throws IOException;
+
 }

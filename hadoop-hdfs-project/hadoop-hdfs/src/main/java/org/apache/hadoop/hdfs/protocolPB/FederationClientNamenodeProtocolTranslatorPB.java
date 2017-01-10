@@ -214,6 +214,23 @@ public class FederationClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
+  public String getPoolId() throws IOException {
+    GetPoolIdRequestProto req = GetPoolIdRequestProto.newBuilder().build();
+    String res = null;
+    long startTime = System.currentTimeMillis();
+    try {
+      res = rpcProxy.getPoolId(null, req).getPoolId();
+    } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("getPoolId", 1);
+      throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter.count("getPoolId", 1, System.currentTimeMillis()
+          - startTime);
+    }
+    return res;
+  }
+
+  @Override
   public boolean isMethodSupported(String methodName) throws IOException {
     return RpcClientUtil.isMethodSupported(rpcProxy,
         FederationClientNamenodeProtocolPB.class, RPC.RpcKind.RPC_PROTOCOL_BUFFER,

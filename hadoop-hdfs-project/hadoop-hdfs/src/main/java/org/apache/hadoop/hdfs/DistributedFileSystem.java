@@ -2251,4 +2251,10 @@ public class DistributedFileSystem extends FileSystem {
       }
     return false;
   }
+
+  @VisibleForTesting
+  public boolean renameRecordExist(long renameId, String srcId, String dstId,
+      boolean isSource) throws IOException {
+    return dfs.renameRecordExist(renameId, srcId, dstId, isSource);
+  }
 }

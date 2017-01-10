@@ -156,4 +156,17 @@ public class FederationClientNamenodeProtocolServerSideTranslatorPB implements
     }
   }
 
+  @Override
+  public GetPoolIdResponseProto getPoolId(
+      RpcController controller, GetPoolIdRequestProto req)
+      throws ServiceException {
+    String res;
+    try {
+      res = server.getPoolId();
+      return GetPoolIdResponseProto.newBuilder().setPoolId(res).build();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+
 }

@@ -115,6 +115,13 @@ message FederationRenameRecordExistResponseProto {
   required bool  exist = 1;
 }
 
+message GetPoolIdRequestProto {
+}
+
+message GetPoolIdResponseProto {
+  required string poolId = 1;
+}
+
 service FederationClientNamenodeProtocol {
   rpc rename(FederationRenameRequestProto) returns(FederationRenameResponseProto);
   rpc rename2(FederationRename2RequestProto) returns(FederationRename2ResponseProto);
@@ -123,4 +130,5 @@ service FederationClientNamenodeProtocol {
   rpc renameDestPhase1(FederationRenameDestPhase1RequestProto) returns(FederationRenameDestPhase1ResponseProto);
   rpc renameDestPhase2(FederationRenameDestPhase2RequestProto) returns(FederationRenameDestPhase2ResponseProto);
   rpc renameRecordExist(FederationRenameRecordExistRequestProto) returns(FederationRenameRecordExistResponseProto);
+  rpc getPoolId(GetPoolIdRequestProto) returns(GetPoolIdResponseProto);
 }

@@ -1,10 +1,16 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
+import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 
-public class FederationInProgressRenameMap {
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.util.Time;
 
+public class FederationInProgressRenameMap {
+  public static final Log LOG = LogFactory
+      .getLog(FederationInProgressRenameMap.class);
   public class RenameRecord {
     String src;
     String dst;
@@ -76,7 +82,7 @@ public class FederationInProgressRenameMap {
       destInProgress.add(new RenameRecord(src, srcId, dst, dstId, txid, start));
     }
   }
-
+  
   synchronized void removeRenameRecord(long txid, String srcId, String dstId,
       boolean isSource) {
     RenameRecord rr = getRenameRecord(txid, srcId, dstId, isSource);
@@ -96,18 +102,36 @@ public class FederationInProgressRenameMap {
       for (RenameRecord rr : sourceInProgress) {
         // RenameId is unique in source list
         if (rr.getRenameId() == txid) {
-          sourceInProgress.remove(rr);
           return rr;
         }
       }
     } else {
       for (RenameRecord rr : destInProgress) {
         if (rr.getRenameId() == txid && rr.getSrcId().equals(srcId)) {
-          destInProgress.remove(rr);
           return rr;
         }
       }
     }
     return null;
+  }
+  
+  synchronized List<RenameRecord> getTimeoutItems(long timeout, boolean isSource) {
+    long now = Time.now();
+    List<RenameRecord> res = new LinkedList<RenameRecord>();
+    List<RenameRecord> list = null;
+    if (isSource) {
+      list = sourceInProgress;
+    } else {
+      list = destInProgress;
+    }
+    for (int idx = 0; idx < list.size(); idx++) {
+      RenameRecord rr = list.get(idx);
+      if (now - rr.getStartTime() >= timeout) {
+        res.add(rr);
+      } else {
+        break;
+      }
+    }
+    return res;
   }
 }
