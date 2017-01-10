@@ -3428,6 +3428,24 @@ public class FSDirectory implements Closeable {
     return res;
   }
 
+  DirectorySubTree federationRenameBuildSubTree(String src) {
+    DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit);
+    readLock();
+    try {
+      INodesInPath srcIIP = getINodesInPath4Write(src, false);
+      final INode srcInode = srcIIP.getLastINode();
+      final int snapshot = srcIIP.getPathSnapshotId();
+      final boolean isRawPath = isReservedRawName(src);
+      buildDirectorySubTree(res, srcInode, federationRenameBlocksLimit,
+          snapshot, isRawPath, srcIIP);
+    } catch (Exception e) {
+      res = null;
+    } finally {
+      readUnlock();
+    }
+    return res;
+  }
+
   private void graftSanityCheck(INode child, INode parent) {
     if (parent == rootDir && isReservedName(child)) {
       throw new HadoopIllegalArgumentException("File name \""

@@ -598,9 +598,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private long logLockDurationThreshold;
   private long logLockMinInterval;
 
-  private FederationInProgressRenameMap federationRenameMap;
-
+  private FederationInProgressRenameMap federationRenameMap = null;
   private long federationRenameId = 0;
+  private FederationRenameFixer federationRenameFixer = null;
 
   /**
    * Notify that loading of this FSDirectory is complete, and
@@ -966,6 +966,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
           conf.getBoolean(DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_KEY,
               DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_DEFAULT);
       this.federationRenameMap = new FederationInProgressRenameMap();
+      this.federationRenameFixer = new FederationRenameFixer(conf, this);
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -1281,6 +1282,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
       cacheManager.startMonitorThread();
       blockManager.getDatanodeManager().setShouldSendCachingCommands(true);
+      federationRenameFixer.activate();
     } finally {
       startingActiveService = false;
       checkSafeMode();
@@ -1353,6 +1355,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       // Don't want to keep replication queues when not in Active.
       blockManager.clearQueues();
       initializedReplQueues = false;
+      federationRenameFixer.deactivate();
     } finally {
       writeUnlock();
     }
@@ -9718,6 +9721,16 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     return res;
   }
 
+  public DirectorySubTree federationRenameBuildSubTree(String src)
+      throws IOException {
+    readLock();
+    try {
+      return dir.federationRenameBuildSubTree(src);
+    } finally {
+      readUnlock();
+    }
+  }
+
   public boolean federationRenameSrcPhase2(long renameId, boolean toCancel)
       throws IOException {
     CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);
@@ -9840,7 +9853,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     }
     getEditLog().logSync();
     if (res) {
-      logAuditEvent(true, "renameSrcPhase1", src, dst, resultingStat);
+      logAuditEvent(true, "renameDestPhase1", src, dst, resultingStat);
     }
     return res;
   }

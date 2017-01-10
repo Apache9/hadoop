@@ -15,6 +15,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -29,6 +30,8 @@ public class TestFederationRename {
     CONF.setBoolean(DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY,
         true);
     CONF.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs:///");
+    CONF.setLong(DFSConfigKeys.DFS_FEDERATION_RENAME_SOURCE_TIMEOUT, 10000);
+    CONF.setLong(DFSConfigKeys.DFS_FEDERATION_RENAME_DEST_TIMEOUT, 10000);
     cluster =
         new MiniDFSCluster.Builder(CONF)
             .nnTopology(MiniDFSNNTopology.simpleFederatedTopology(2))
@@ -37,13 +40,6 @@ public class TestFederationRename {
 
     fHdfs1 = cluster.getFileSystem(0);
     fHdfs2 = cluster.getFileSystem(1);
-  }
-
-  private void basicTestEnvSetup() throws IOException {
-
-    fHdfs1.mkdirs(new Path("/a/b"), null);
-    fHdfs1.mkdirs(new Path("/a/c"), null);
-    fHdfs2.mkdirs(new Path("/c/d"), null);
     ConfigUtil.addLink(CONF, "/home", fHdfs1.getUri());
     ConfigUtil.addLink(CONF, "/user", fHdfs2.getUri());
   }
@@ -57,6 +53,12 @@ public class TestFederationRename {
         dumpDir(fs, st.getPath());
       }
     }
+  }
+
+  private void basicTestEnvSetup() throws IOException {
+    fHdfs1.mkdirs(new Path("/a/b"), null);
+    fHdfs1.mkdirs(new Path("/a/c"), null);
+    fHdfs2.mkdirs(new Path("/c/d"), null);
   }
 
   @Test
@@ -91,4 +93,100 @@ public class TestFederationRename {
     Assert.assertEquals(str, res);
   }
 
+  private void fixerTestEnvSetup(String str) throws IOException {
+    fHdfs1.mkdirs(new Path("/sp1"), null);
+    OutputStream out = fHdfs1.create(new Path("/sp1/testfile"));
+    out.write(str.getBytes());
+    out.close();
+
+    fHdfs1.mkdirs(new Path("/dp1"), null);
+    out = fHdfs1.create(new Path("/dp1/testfile"));
+    out.write(str.getBytes());
+    out.close();
+
+    fHdfs1.mkdirs(new Path("/sp2"), null);
+    out = fHdfs1.create(new Path("/sp2/testfile"));
+    out.write(str.getBytes());
+    out.close();
+
+    fHdfs2.mkdirs(new Path("/dest"));
+  }
+
+  @Test
+  public void testFixer() throws IOException {
+    String str = "testSourceFixer";
+    fixerTestEnvSetup(str);
+
+    DistributedFileSystem dfs1 =
+        (DistributedFileSystem) fHdfs1.getDistributedFileSystem();
+    DistributedFileSystem dfs2 =
+        (DistributedFileSystem) fHdfs2.getDistributedFileSystem();
+
+    // Source fixer case 1: reanemSrcPhase1 is called then client terminate
+    DirectorySubTree sp1 =
+        dfs1.renameSrcPhase1("/sp1", dfs1.getUri().toString(), "/dest/sp1",
+            dfs2.getUri().toString());
+    Assert.assertTrue(sp1 != null);
+
+    // Source fixer case 2: renameDstPhase1 is called then client terminate
+    DirectorySubTree dp1 =
+        dfs1.renameSrcPhase1("/dp1", dfs1.getUri().toString(), "/dest/dp1",
+            dfs2.getUri().toString());
+    Assert.assertTrue(dp1 != null);
+    String dp1Pool =
+        dfs2.renameDestPhase1("/dp1", dfs1.getUri().toString(), "/dest/dp1",
+            dfs2.getUri().toString(), dp1);
+    Assert.assertTrue(dp1Pool != null);
+
+    // Source fixer case 3 : renameSrcPhase2 is called then client terminate
+    DirectorySubTree sp2 =
+        dfs1.renameSrcPhase1("/sp2", dfs1.getUri().toString(), "/dest/sp2",
+            dfs2.getUri().toString());
+    Assert.assertTrue(sp2 != null);
+    String sp2Pool =
+        dfs2.renameDestPhase1("/sp2", dfs1.getUri().toString(), "/dest/sp2",
+            dfs2.getUri().toString(), sp2);
+    Assert.assertTrue(sp2Pool != null);
+    FederationRenameBlockCollector frbc =
+        new FederationRenameBlockCollector(null, sp2Pool, sp2, CONF);
+    frbc.linkBlocksToNewPool();
+    boolean sp2Sp2Res = dfs1.renameSrcPhase2(sp2.getRenameId(), false);
+
+    try {
+      Thread.sleep(15000);
+    } catch (InterruptedException ie) {
+    }
+
+    // case1
+    Assert.assertTrue(dfs1.exists(new Path("/sp1")));
+    Assert.assertFalse(dfs2.exists(new Path("/dest/sp1")));
+    Assert.assertFalse(dfs1.renameRecordExist(sp1.getRenameId(), dfs1.getUri()
+        .toString(), dfs2.getUri().toString(), true));
+
+    // case2
+    Assert.assertFalse(dfs1.exists(new Path("/dp1")));
+    Assert.assertTrue(dfs2.exists(new Path("/dest/dp1/testfile")));
+    InputStream in = dfs2.open(new Path("/dest/dp1/testfile"));
+    BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+    String res = reader.readLine();
+    in.close();
+    Assert.assertEquals(str, res);
+    Assert.assertFalse(dfs1.renameRecordExist(dp1.getRenameId(), dfs1.getUri()
+        .toString(), dfs2.getUri().toString(), true));
+    Assert.assertFalse(dfs2.renameRecordExist(dp1.getRenameId(), dfs1.getUri()
+        .toString(), dfs2.getUri().toString(), false));
+
+    // case3
+    Assert.assertFalse(dfs1.exists(new Path("/sp2")));
+    Assert.assertTrue(dfs2.exists(new Path("/dest/sp2/testfile")));
+    in = dfs2.open(new Path("/dest/sp2/testfile"));
+    reader = new BufferedReader(new InputStreamReader(in));
+    res = reader.readLine();
+    in.close();
+    Assert.assertEquals(str, res);
+    Assert.assertFalse(dfs1.renameRecordExist(sp2.getRenameId(), dfs1.getUri()
+        .toString(), dfs2.getUri().toString(), true));
+    Assert.assertFalse(dfs2.renameRecordExist(sp2.getRenameId(), dfs1.getUri()
+        .toString(), dfs2.getUri().toString(), false));
+  }
 }

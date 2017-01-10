@@ -1817,8 +1817,12 @@ class NameNodeRpcServer implements NamenodeProtocols {
 
   @Override
   public boolean renameRecordExist(long renameId, String srcId, String dstId,
-      boolean isSource)
-      throws IOException {
+      boolean isSource) throws IOException {
     return namesystem.renameRecordExist(renameId, srcId, dstId, isSource);
+  }
+
+  @Override
+  public String getPoolId() throws IOException {
+    return namesystem.getBlockPoolId();
   }
 }
