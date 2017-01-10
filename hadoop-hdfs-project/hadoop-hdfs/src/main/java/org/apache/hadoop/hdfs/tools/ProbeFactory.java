@@ -1,5 +1,6 @@
 package org.apache.hadoop.hdfs.tools;
 
+import com.xiaomi.infra.hadoop.FalconSink;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -79,9 +80,16 @@ class DataNodeLatencyProbe extends Thread implements Probe {
                 info.getHostName(), latency));
         sink.publishDataNodeLatency(info.getHostName(), Canary.Sink.OpType.READ, latency);
       } catch (IOException e) {
+        if (sink.getClass().equals(FalconSink.class)) {
+          ((FalconSink)sink).addFailedDatanodes(1);
+        }
         // when I/O error, we set the latency to the default max
         sink.publishDataNodeLatency(info.getHostName(), Canary.Sink.OpType.READ, timeout);
         LOG.error(String.format("Get datanode [%s]:[%s] info failed", info.getHostName(), info.getInfoPort()), e);
+      }
+
+      if (sink.getClass().equals(FalconSink.class)) {
+        ((FalconSink)sink).addProbedDatanodes(1);
       }
     }
   }
@@ -104,6 +112,15 @@ class DataNodeLatencyProbe extends Thread implements Probe {
   }
 
   public void CompleteCallBack() {
-    canary.getSink().publishDNReadLatencyPercentitle();
+    Canary.Sink sink = canary.getSink();
+
+    sink.publishDNReadLatencyPercentitle();
+    sink.publishDatanodeAvailability();
+    sink.publishDatanodeSLAAvailability();
+
+    if (sink.getClass().equals(FalconSink.class)) {
+      ((FalconSink)sink).setFailedDatanode(0);
+      ((FalconSink)sink).setProbedDatanode(0);
+    }
   }
 }

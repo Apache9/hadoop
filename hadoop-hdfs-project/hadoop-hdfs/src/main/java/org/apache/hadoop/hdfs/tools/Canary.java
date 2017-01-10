@@ -57,6 +57,9 @@ public class Canary implements Tool {
     void publishDNReadLatencyPercentitle();
     void publishMaxTxIdDelta(String ns, long maxTxDelta);
     void publishMaxJournalDelay(String ns, long maxJournalDelay);
+    void publishMaxLiveNodesDiff(String ns, long maxLiveNodesDiff);
+    void publishDatanodeAvailability();
+    void publishDatanodeSLAAvailability();
 
     void reportSummary();
   }
@@ -141,6 +144,15 @@ public class Canary implements Tool {
     public void publishMaxJournalDelay(String ns, long maxTxDelta) {
       return;
     }
+
+    @Override
+    public void publishMaxLiveNodesDiff(String ns, long maxLiveNodesDiff) { return;}
+
+    @Override
+    public void publishDatanodeAvailability()  { return; }
+
+    @Override
+    public void publishDatanodeSLAAvailability() { return; }
 
   }
 
@@ -326,7 +338,7 @@ public class Canary implements Tool {
       } else {
         checkClusterCapacityRemaining();
         checkJNHealth();
-        checkJournalNodesAndTxId();
+        checkNameNodeSerivce();
         listCorruptBlocks();
       }
 
@@ -539,6 +551,24 @@ public class Canary implements Tool {
     return maxTxDelta;
   }
 
+
+  private long getLiveNodes(JSONObject jsonObj) {
+    long minTxid = Long.MAX_VALUE;
+    long maxTxid = 0;
+    try {
+      String liveNodesStr = (String) jsonObj.getJSONArray("beans").getJSONObject(0).get("LiveNodes");
+      JSONObject liveNodesJO = new JSONObject(liveNodesStr);
+      if (liveNodesJO != null) {
+        return liveNodesJO.length();
+      }
+    } catch (JSONException je) {
+      if (jsonObj != null)
+        LOG.error("Can't parse the jmx content as JSON when get live nodes\n" + jsonObj);
+    }
+
+    return 0;
+  }
+
   private long getMaxJournalDelay(JSONObject jsonObj) {
     long minTxid = Long.MAX_VALUE;
     long maxTxid = 0;
@@ -579,8 +609,7 @@ public class Canary implements Tool {
     return maxTxid - minTxid;
   }
 
-
-  void checkJournalNodesAndTxId() {
+  void checkNameNodeSerivce() {
     long currentTime = System.currentTimeMillis();
     if (currentTime - lastTxCheckTime < DEFAULT_TX_DETECT_INTERAL) {
       return;
@@ -588,6 +617,8 @@ public class Canary implements Tool {
 
     long maxTxDelta = 0;
     long maxJournalDelay = 0;
+    long minLiveNodes = Long.MAX_VALUE;
+    long maxLiveNodes = Long.MIN_VALUE;
     String ns = conf.get(DFSConfigKeys.DFS_NAMESERVICES);
 
     try {
@@ -617,6 +648,15 @@ public class Canary implements Tool {
             maxJournalDelay = tmpMaxJournalDelay;
           }
 
+          //check the livenodes
+          long liveNodes = getLiveNodes(jsonObj);
+          if (liveNodes < minLiveNodes) {
+            minLiveNodes = liveNodes;
+          }
+          if (liveNodes > maxLiveNodes) {
+            maxLiveNodes = liveNodes;
+          }
+
         } catch (IOException ioe) {
           LOG.error("Get JMX from NameNode faild, jmx url:" + nnJmxUrl, ioe);
           //sink.publishNodeHealth(Sink.NodeType.NMAE_NODE, NNHost, Sink.NodeState.FAILED);
@@ -631,6 +671,9 @@ public class Canary implements Tool {
 
       LOG.info("MaxJournalDelay: " + maxJournalDelay);
       sink.publishMaxJournalDelay(ns, maxJournalDelay);
+
+      LOG.info("MaxLiveNodesDiff: " + (maxLiveNodes - minLiveNodes));
+      sink.publishMaxLiveNodesDiff(ns, maxLiveNodes - minLiveNodes);
 
     } catch (IOException e) {
       LOG.error("check transaction ID failed", e);

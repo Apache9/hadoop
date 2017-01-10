@@ -38,14 +38,43 @@ public class FalconSink implements Canary.Sink, Configurable {
   private long percentile95Latency = 0;
   private long percentile75Latency = 0;
   private String nameService = null;
-  private long maxTxDelta= 0;
-  private long maxJournalDelay= 0;
+  private long maxTxDelta = 0;
+  private long maxJournalDelay = 0;
+  private long maxLiveNodesDiff = 0;
+  private long failedDatanode = 0;
+  private long probedDatanode = 0;
+  private float datanodeAvailability = 100;
+  private float datanodeSLAAvailability = 100;
 
   // For availability calculating
   private boolean clusterAvailableStatus = true;
   private long lastSummaryTime = 0;
   private long lastStatusChangeTime = 0;
   private long unavailableTime = 0;
+
+  public synchronized void addFailedDatanodes (long nodesToAdd) {
+    failedDatanode += nodesToAdd;
+  }
+
+  public synchronized void setFailedDatanode (long nodesToSet) {
+    failedDatanode = nodesToSet;
+  }
+
+  public synchronized long getFailedDatanode () {
+    return failedDatanode;
+  }
+
+  public synchronized void addProbedDatanodes (long nodesToAdd) {
+    probedDatanode += nodesToAdd;
+  }
+
+  public synchronized void setProbedDatanode (long nodesToSet) {
+    probedDatanode = nodesToSet;
+  }
+
+  public synchronized long getProbedDatanode () {
+    return probedDatanode;
+  }
 
   @Override
   public void publishNodeHealth(NodeType type, String host, NodeState state) {
@@ -117,6 +146,58 @@ public class FalconSink implements Canary.Sink, Configurable {
   }
 
   @Override
+  public void publishDatanodeAvailability() {
+    float all = getProbedDatanode();
+    float failednodes = getFailedDatanode();
+    if (all <= 2) {
+      LOG.warn("The number of the datanode is not correct");
+      return;
+    }
+
+    if (failednodes > 2) {
+      // 1 - C(3,k)/C(3,n) k:failed nodes, n:all nodes
+      datanodeAvailability = 100 - (failednodes * (failednodes - 1) * (failednodes - 2 ) * 100 / (all * (all - 1) * (all - 2)));
+    } else {
+      datanodeAvailability = 100;
+    }
+
+    LOG.info("All datanodes: " + all + " failed datanodes: " + failednodes);
+    LOG.info(String.format("Datanode availability: %f", datanodeAvailability));
+  }
+
+  @Override
+  public void publishDatanodeSLAAvailability() {
+    float a = getProbedDatanode();
+    float f = getFailedDatanode();
+    if (a <= 2) {
+      LOG.warn("The number of the datanode is not correct");
+      return;
+    }
+
+    if (a < f) {
+      LOG.warn("the failed datanodes are more than total datanodes");
+      return;
+    }
+
+    if (f == 1) {
+      //C(1,k)*C(2,n-k) / C(3,n)
+      datanodeSLAAvailability = 100 - ((a - 1) * 3 * 100)/(a * (a - 1) * (a - 2));
+
+    } else if (f == 2) {
+      //(C(1,k)*C(2,n-k) + C(2,k)*C(1,n-k)) / C(3,n)
+      datanodeSLAAvailability = 100 - (3 * f * (a - f) * (a - 2 ) * 100 / (a * (a - 1) * (a - 2)));
+    } else
+    if (f > 2) {
+      // (C(1,k)*C(2,n-k) + C(2,k)*C(1,n-k) + C(3,k)) / C(3,n)
+      datanodeSLAAvailability = 100 - ((3 * f * (a - f) * (a - 2 ) + f * (f - 1) * (f - 2)) * 100 / (a * (a - 1) * (a - 2)));
+    } else {
+      datanodeSLAAvailability = 100;
+    }
+
+    LOG.info(String.format("Datanode SLA availability: %f", datanodeAvailability));
+  }
+
+  @Override
   public void publishMaxTxIdDelta(String ns, long maxTxDelta) {
     if (nameService == null) {
       nameService = ns;
@@ -130,6 +211,14 @@ public class FalconSink implements Canary.Sink, Configurable {
       nameService = ns;
     }
     this.maxJournalDelay = maxJournalDelay;
+  }
+
+  @Override
+  public void publishMaxLiveNodesDiff(String ns, long maxLiveNodesDiff) {
+    if (nameService == null) {
+      nameService = ns;
+    }
+    this.maxLiveNodesDiff = maxLiveNodesDiff;
   }
 
   private void updateRecentFailedTimes() {
@@ -157,6 +246,7 @@ public class FalconSink implements Canary.Sink, Configurable {
     percentile99Latency = 0;
     percentile95Latency = 0;
     percentile75Latency = 0;
+    maxLiveNodesDiff = 0;
   }
 
   private synchronized void clearDataNodeReadLatencyMap() {
@@ -236,13 +326,17 @@ public class FalconSink implements Canary.Sink, Configurable {
     if (!clusterAvailableStatus) {
       unavailableTime += curTime - lastStatusChangeTime;
     }
-    double availableRate = (1.0 - unavailableTime/(double)(curTime - lastSummaryTime)) * 100;
+    double namenodeAvailableRate = (1.0 - unavailableTime/(double)(curTime - lastSummaryTime)) * 100;
     lastStatusChangeTime = curTime;
     lastSummaryTime = curTime;
+    // the availability rate of the cluster should be the min of the ones of the nn and dn
+    double availableRate = namenodeAvailableRate > datanodeAvailability ? datanodeAvailability : namenodeAvailableRate;
     payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "cluster-availability", availableRate));
+    LOG.info("cluster-availability: " + availableRate);
 
     // Report cluster remaining capacity
     payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "cluster-capacity-remaining", capacityRemaining));
+    LOG.info("cluster-capacity-remaining: " + capacityRemaining);
 
     // if cluster is available and sniff succeed
     if (!nodeCount.isEmpty()) {
@@ -286,6 +380,15 @@ public class FalconSink implements Canary.Sink, Configurable {
 
       // journal delay
       buildMaxJournalDelayMetrix(payload);
+
+      // max livenodes diff
+      buildMaxLiveNodesDiffMetrix(payload);
+
+      // datanode availability
+      buildDatanodeAvailabilityMetrix(payload);
+
+      // datanode SLA availability
+      buildDatanodeSLAAvailabilityMetrix(payload);
 
     }
 
@@ -341,5 +444,20 @@ public class FalconSink implements Canary.Sink, Configurable {
   public void buildMaxJournalDelayMetrix(JSONArray payload)
   {
     payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "MaxJournalDelay", maxJournalDelay));
+  }
+
+  public void buildMaxLiveNodesDiffMetrix(JSONArray payload)
+  {
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "MaxLiveNodesDiff", maxLiveNodesDiff));
+  }
+
+  public void buildDatanodeAvailabilityMetrix(JSONArray payload)
+  {
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "DatanodeAvailability", datanodeAvailability));
+  }
+
+  public void buildDatanodeSLAAvailabilityMetrix(JSONArray payload)
+  {
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "DatanodeSLAAvailability", datanodeSLAAvailability));
   }
 }
