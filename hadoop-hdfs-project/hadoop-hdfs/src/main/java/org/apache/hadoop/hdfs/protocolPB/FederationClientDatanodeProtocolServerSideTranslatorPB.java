@@ -27,6 +27,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.ReconfigurationTaskStatus;
 import org.apache.hadoop.conf.ReconfigurationUtil.PropertyChange;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.FederationClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsBlocksMetadata;
 import org.apache.hadoop.hdfs.protocol.proto.FederationClientDatanodeProtocolProtos.AddBlocksToNewPoolRequestProto;
@@ -61,15 +62,11 @@ public class FederationClientDatanodeProtocolServerSideTranslatorPB implements
   public AddBlocksToNewPoolResponseProto addBlocksToNewPool(
       RpcController unused, AddBlocksToNewPoolRequestProto request)
       throws ServiceException {
+    BlocksToDup blksToDup;
     Block[] res;
     try {
-      List<BlockProto> blklist = request.getBlocksList();
-      Block[] blks = new Block[blklist.size()];
-      for (int i = 0; i < blks.length; i++) {
-        blks[i] = PBHelper.convert(blklist.get(i));
-      }
-      res = impl.addBlocksToNewPool(request.getSrcPool(), request.getDstPool(),
-        blks);
+      blksToDup = PBHelper.convert(request.getBlocks());
+      res = impl.addBlocksToNewPool(request.getSrcPool(), blksToDup);
     } catch (IOException e) {
       throw new ServiceException(e);
     }

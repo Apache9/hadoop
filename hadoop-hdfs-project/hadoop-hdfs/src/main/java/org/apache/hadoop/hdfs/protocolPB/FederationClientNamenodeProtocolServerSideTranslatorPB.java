@@ -23,7 +23,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
-
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.proto.FederationClientNamenodeProtocolProtos.*;
 
@@ -115,13 +115,13 @@ public class FederationClientNamenodeProtocolServerSideTranslatorPB implements
   public FederationRenameDestPhase1ResponseProto renameDestPhase1(
       RpcController controller, FederationRenameDestPhase1RequestProto req)
       throws ServiceException {
-    String res;
+    BlocksToDup res;
     try {
       res =
           server.renameDestPhase1(req.getSrc(), req.getSrcId(), req.getDst(), req.getDstId(),
               PBHelper.convert(req.getSubTree()));
       return FederationRenameDestPhase1ResponseProto.newBuilder()
-          .setDestPhase1Res(res).build();
+          .setDestPhase1Res(PBHelper.convert(res)).build();
     } catch (IOException e) {
       throw new ServiceException(e);
     }
@@ -151,6 +151,20 @@ public class FederationClientNamenodeProtocolServerSideTranslatorPB implements
            req.getIsSource());
       return FederationRenameRecordExistResponseProto.newBuilder()
           .setExist(res).build();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+
+  @Override
+  public GetRenameDestSubTreeResponseProto getRenameDestSubTree(
+      RpcController controller, GetRenameDestSubTreeRequestProto req)
+      throws ServiceException {
+    DirectorySubTree res;
+    try {
+      res = server.getRenameDestSubTree(req.getDst());
+      return GetRenameDestSubTreeResponseProto.newBuilder()
+          .setSubTree(PBHelper.convert(res)).build();
     } catch (IOException e) {
       throw new ServiceException(e);
     }

@@ -196,6 +196,7 @@ import org.apache.hadoop.hdfs.XAttrHelper;
 import org.apache.hadoop.hdfs.protocol.AclException;
 import org.apache.hadoop.hdfs.protocol.AlreadyBeingCreatedException;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolEntry;
@@ -7085,6 +7086,13 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     return blockId;
   }
 
+  public long nextBlockIdWithoutLog() throws IOException {
+    assert hasWriteLock();
+    checkNameNodeSafeMode("Cannot get next block ID");
+    final long blockId = blockIdGenerator.nextValue();
+    return blockId;
+  }
+
   private boolean isFileDeleted(INodeFile file) {
     // Not in the inodeMap or in the snapshot but marked deleted.
     if (dir.getInode(file.getId()) == null) {
@@ -9793,32 +9801,32 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     return true;
   }
 
-  public String federationRenameDestPhase1(String src, String srcId,
+  public BlocksToDup federationRenameDestPhase1(String src, String srcId,
       String dst, String dstId, DirectorySubTree subTree) throws IOException {
-    CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);
+    CacheEntryWithPayload cacheEntry =
+        RetryCache.waitForCompletion(retryCache, null);
     if (cacheEntry != null && cacheEntry.isSuccess()) {
-      return getBlockPoolId(); // Return previous response
+      return (BlocksToDup) cacheEntry.getPayload(); // Return previous
+                                                    // response
     }
-    boolean res = false;
+    BlocksToDup blks = new BlocksToDup(getBlockPoolId());
     try {
-      res =
-          federationRenameDestPhase1Int(src, srcId, dst, dstId, subTree,
-              cacheEntry != null);
+      if (federationRenameDestPhase1Int(src, srcId, dst, dstId, subTree, blks,
+          cacheEntry != null) == false) {
+        throw new IOException("Failed to do rename dest phase1");
+      }
     } catch (AccessControlException e) {
       logAuditEvent(false, "renameDestPhase1", src, dst, null);
       throw e;
     } finally {
-      RetryCache.setState(cacheEntry, res);
+      RetryCache.setState(cacheEntry, false);
     }
-    if (res) {
-      return getBlockPoolId();
-    } else {
-      return null;
-    }
+    RetryCache.setState(cacheEntry, true, blks);
+    return blks;
   }
 
   boolean federationRenameDestPhase1Int(String srcArg, String srcId,
-      String dstArg, String dstId, DirectorySubTree subTree,
+      String dstArg, String dstId, DirectorySubTree subTree, BlocksToDup blks,
       boolean logRetryCache) throws IOException, UnresolvedLinkException {
     String src = srcArg;
     String dst = dstArg;
@@ -9833,8 +9841,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     FSPermissionChecker pc = getPermissionChecker();
     checkOperation(OperationCategory.WRITE);
     byte[][] dstComponents = FSDirectory.getPathComponentsForReservedPath(dst);
-    boolean res = false;
     HdfsFileStatus resultingStat = null;
+    boolean res = false;
     writeLock();
     try {
       checkOperation(OperationCategory.WRITE);
@@ -9844,10 +9852,12 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       checkOperation(OperationCategory.WRITE);
       res =
           federationRenameDestPhase1Internal(pc, src, srcId, dst, dstId,
-              subTree,
-              logRetryCache);
+              subTree, blks, logRetryCache);
 
       resultingStat = getAuditFileInfo(dst, false);
+    } catch (Throwable t) {
+      logAuditEvent(false, "renameDestPhase1", src, dst, resultingStat);
+      throw t;
     } finally {
       writeUnlock();
     }
@@ -9860,8 +9870,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
   boolean federationRenameDestPhase1Internal(FSPermissionChecker pc,
       String src, String srcId, String dst, String dstId,
-      DirectorySubTree subTree,
-      boolean logRetryCache) throws IOException, UnresolvedLinkException {
+      DirectorySubTree subTree, BlocksToDup blks, boolean logRetryCache)
+      throws IOException, UnresolvedLinkException {
     assert hasWriteLock();
     if (isPermissionEnabled) {
       // Rename does not operates on link targets
@@ -9870,14 +9880,22 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       checkPermission(pc, dst, false, null, FsAction.WRITE, null, null, false,
           false);
     }
-    boolean res = dir.federationRenameDestPhase1(src, dst, srcId, subTree);
+    boolean res =
+        dir.federationRenameDestPhase1(src, dst, srcId, subTree, blks);
     if (res) {
       long renameId = subTree.getRenameId();
       long start = Time.now();
       federationRenameMap.addRenameRecord(renameId, src, srcId, dst, dstId,
           false, start);
+      // 0 is reserved block id. If pass 0 to edit log, it implies there are no
+      // blocks should be moved to this pool and log replay logic should not
+      // update the allocated block id.
+      long lastBlkId = 0;
+      if (blks.size() > 0) {
+        lastBlkId = blks.get(blks.size() - 1).getDstBlockId();
+      }
       getEditLog().logFederationRenameDestPhase1(src, srcId, dst, dstId, start,
-          subTree, logRetryCache);
+          subTree, blks, logRetryCache);
     }
     return res;
   }
@@ -9940,5 +9958,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     return (federationRenameMap.getRenameRecord(renameId, srcId, dstId,
         isSource) != null);
   }
-}
 
+  public DirectorySubTree getRenameDestSubTree(String dst) throws IOException {
+    return federationRenameBuildSubTree(dst);
+  }
+}

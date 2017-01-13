@@ -15,23 +15,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.protocol;
 
-import java.io.IOException;
+/**
+ * These .proto interfaces are private and stable.
+ * Please see http://wiki.apache.org/hadoop/Compatibility
+ * for what changes are allowed for a *stable* .proto interface.
+ */
 
-import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
-import org.apache.hadoop.hdfs.protocol.BlocksToDup;
-import org.apache.hadoop.hdfs.security.token.block.BlockTokenSelector;
-import org.apache.hadoop.security.KerberosInfo;
-import org.apache.hadoop.security.token.TokenInfo;
+// This file contains protocol buffers that are used throughout HDFS -- i.e.
+// by the client, server, and data transfer protocols.
 
-@InterfaceAudience.Private
-@InterfaceStability.Evolving
-@KerberosInfo(serverPrincipal = DFSConfigKeys.DFS_DATANODE_KERBEROS_PRINCIPAL_KEY)
-@TokenInfo(BlockTokenSelector.class)
-public interface FederationClientDatanodeProtocol {
-  public Block[] addBlocksToNewPool(String srcPool, BlocksToDup blksToDup)
-      throws IOException;
+
+option java_package = "org.apache.hadoop.hdfs.protocol.proto";
+option java_outer_classname = "FederationProtos";
+option java_generate_equals_and_hash = true;
+package hadoop.hdfs;
+
+
+message DupBlockInfoProto {
+  required int64 srcId = 1;
+  required int64 dstId = 2;
+  required int64 blkSize = 3;
+  required int64 genStamp = 4;
 }
+
+message BlocksToDupProto {
+  required string dstId = 1;
+  repeated DupBlockInfoProto blks = 2;
+}
+

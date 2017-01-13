@@ -54,6 +54,7 @@ import org.apache.hadoop.hdfs.StorageType;
 import org.apache.hadoop.hdfs.inotify.Event;
 import org.apache.hadoop.hdfs.inotify.EventsList;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveStats;
@@ -73,6 +74,7 @@ import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.fs.FileEncryptionInfo;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup.DupBlockInfo;
 import org.apache.hadoop.hdfs.protocol.FsPermissionExtension;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
@@ -172,6 +174,7 @@ import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageTypeProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageTypesProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageUuidsProto;
 import org.apache.hadoop.hdfs.protocol.proto.FederationClientNamenodeProtocolProtos.DirectorySubTreeProto;
+import org.apache.hadoop.hdfs.protocol.proto.FederationProtos.*;
 import org.apache.hadoop.hdfs.protocol.proto.InotifyProtos;
 import org.apache.hadoop.hdfs.protocol.proto.JournalProtocolProtos.JournalInfoProto;
 import org.apache.hadoop.hdfs.protocol.proto.XAttrProtos.GetXAttrsResponseProto;
@@ -2938,6 +2941,33 @@ public class PBHelper {
     builder.setRenameId(subTree.getRenameId());
     for (int i = 0; i < subTree.getSize(); i++) {
       builder.addDentry(PBHelper.convert(subTree.get(i)));
+    }
+    return builder.build();
+  }
+
+  public static BlocksToDup convert(BlocksToDupProto btdp) {
+    String dstPoolId = btdp.getDstId();
+    BlocksToDup res = new BlocksToDup(dstPoolId);
+    List<DupBlockInfoProto> dblks = btdp.getBlksList();
+    for (DupBlockInfoProto dblk : dblks) {
+      res.addDupBlock(dblk.getSrcId(), dblk.getDstId(), dblk.getBlkSize(),
+          dblk.getGenStamp());
+    }
+    return res;
+  }
+
+  public static DupBlockInfoProto convert(DupBlockInfo dbi) {
+    DupBlockInfoProto.Builder builder = DupBlockInfoProto.newBuilder();
+    builder.setSrcId(dbi.getSrcBlockId()).setDstId(dbi.getDstBlockId())
+        .setBlkSize(dbi.getBlockSize()).setGenStamp(dbi.getBlockGenStamp());
+    return builder.build();
+  }
+
+  public static BlocksToDupProto convert(BlocksToDup btd) {
+    BlocksToDupProto.Builder builder = BlocksToDupProto.newBuilder();
+    builder.setDstId(btd.getDstPoolId());
+    for (int i = 0; i < btd.size(); i++) {
+      builder.addBlks(PBHelper.convert(btd.get(i)));
     }
     return builder.build();
   }

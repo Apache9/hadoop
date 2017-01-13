@@ -32,6 +32,8 @@ import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DeprecatedUTF8;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup.DupBlockInfo;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -822,6 +824,33 @@ public class FSImageSerialization {
           writeLong(lblk.getBlockSize(), out);
         }
       }
+    }
+  }
+
+  public static BlocksToDup readBlocksToDup(DataInput in) throws IOException {
+    String poolId = readString(in);
+    BlocksToDup btd = new BlocksToDup(poolId);
+    int sz = readInt(in);
+    for (int i = 0; i < sz; i++) {
+      long srcId = readLong(in);
+      long dstId = readLong(in);
+      long blkSz = readLong(in);
+      long genStamp = readLong(in);
+      btd.addDupBlock(srcId, dstId, blkSz, genStamp);
+    }
+    return btd;
+  }
+
+  public static void writeBlocksToDup(BlocksToDup btd, DataOutputStream out)
+      throws IOException {
+    writeString(btd.getDstPoolId(), out);
+    writeInt(btd.size(), out);
+    for (int i = 0; i < btd.size(); i++) {
+      DupBlockInfo dbi = btd.get(i);
+      writeLong(dbi.getSrcBlockId(), out);
+      writeLong(dbi.getDstBlockId(), out);
+      writeLong(dbi.getBlockSize(), out);
+      writeLong(dbi.getBlockGenStamp(), out);
     }
   }
 }
