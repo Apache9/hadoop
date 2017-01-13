@@ -29,6 +29,7 @@ option java_generate_equals_and_hash = true;
 package hadoop.hdfs;
 
 import "hdfs.proto";
+import "federation.proto";
 
 /**
  * The FederationClientNamenodeProtocol Service defines the interface between a 
@@ -92,7 +93,7 @@ message FederationRenameDestPhase1RequestProto {
 }
 
 message FederationRenameDestPhase1ResponseProto {
-  required string destPhase1Res = 1;
+  required BlocksToDupProto destPhase1Res = 1;
 }
 
 message FederationRenameDestPhase2RequestProto {
@@ -122,6 +123,14 @@ message GetPoolIdResponseProto {
   required string poolId = 1;
 }
 
+message GetRenameDestSubTreeRequestProto {
+  required string dst = 1;
+}
+
+message GetRenameDestSubTreeResponseProto {
+  required DirectorySubTreeProto subTree = 1;
+}
+
 service FederationClientNamenodeProtocol {
   rpc rename(FederationRenameRequestProto) returns(FederationRenameResponseProto);
   rpc rename2(FederationRename2RequestProto) returns(FederationRename2ResponseProto);
@@ -131,4 +140,5 @@ service FederationClientNamenodeProtocol {
   rpc renameDestPhase2(FederationRenameDestPhase2RequestProto) returns(FederationRenameDestPhase2ResponseProto);
   rpc renameRecordExist(FederationRenameRecordExistRequestProto) returns(FederationRenameRecordExistResponseProto);
   rpc getPoolId(GetPoolIdRequestProto) returns(GetPoolIdResponseProto);
+  rpc getRenameDestSubTree(GetRenameDestSubTreeRequestProto) returns(GetRenameDestSubTreeResponseProto);
 }

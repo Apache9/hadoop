@@ -38,6 +38,7 @@ import org.apache.hadoop.conf.ReconfigurationTaskStatus;
 import org.apache.hadoop.conf.ReconfigurationUtil.PropertyChange;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.FederationClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
@@ -163,13 +164,10 @@ public class FederationClientDatanodeProtocolTranslatorPB implements
   }
 
   @Override
-  public Block[] addBlocksToNewPool(String srcPool, String dstPool, Block[] blks) throws IOException {
+  public Block[] addBlocksToNewPool(String srcPool, BlocksToDup blksToDup) throws IOException {
     AddBlocksToNewPoolRequestProto.Builder builder = AddBlocksToNewPoolRequestProto 
-        .newBuilder().setSrcPool(srcPool).setDstPool(dstPool);
+        .newBuilder().setSrcPool(srcPool).setBlocks(PBHelper.convert(blksToDup));
     AddBlocksToNewPoolResponseProto res;
-    for (int i = 0; i < blks.length; i++) {
-      builder.addBlocks(PBHelper.convert(blks[i]));
-    }
     try {
       res = rpcProxy.addBlocksToNewPool(NULL_CONTROLLER, builder.build());
     } catch (ServiceException e) {

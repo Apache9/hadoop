@@ -38,6 +38,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.XAttrSetFlag;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -892,12 +893,14 @@ public class FSEditLogLoader {
       final String dstId = renameOp.dstId;
       long renameId = renameOp.renameId;
       long startTime = renameOp.startTime;
-      fsDir.federationRenameSrcPhase1(src, dst, dstId);
+      DirectorySubTree subTree =
+          fsDir.federationRenameSrcPhase1(src, dst, dstId);
       fsNamesys.setFederationRenameId(renameId + 1);
       fsNamesys.addFederationRenameRecord(renameId, src, srcId, dst, dstId,
           true, startTime);
       if (toAddRetryCache) {
-        fsNamesys.addCacheEntry(renameOp.rpcClientId, renameOp.rpcCallId);
+        fsNamesys.addCacheEntryWithPayload(renameOp.rpcClientId,
+            renameOp.rpcCallId, subTree);
       }
       break;
     }
@@ -909,11 +912,20 @@ public class FSEditLogLoader {
       final String dstId = renameOp.dstId;
       final long startTime = renameOp.startTime;
       DirectorySubTree subTree = renameOp.subTree;
-      fsDir.federationRenameDestPhase1(src, dst, srcId, subTree);
+      BlocksToDup dupBlks = renameOp.blksToDup;
+      // TBD: Sanity check to make sure block ids in subTree matche ids in
+      // dupBlks
+      fsDir.federationRenameDestPhase1(src, dst, srcId, subTree, null);
       fsNamesys.addFederationRenameRecord(subTree.getRenameId(), src, srcId,
           dst, dstId, false, startTime);
+      if (dupBlks.size() > 0) {
+        long lastBlkId = dupBlks.get(dupBlks.size() - 1).getDstBlockId();
+        assert (lastBlkId != 0);
+        fsNamesys.setLastAllocatedBlockId(lastBlkId);
+      }
       if (toAddRetryCache) {
-        fsNamesys.addCacheEntry(renameOp.rpcClientId, renameOp.rpcCallId);
+        fsNamesys.addCacheEntryWithPayload(renameOp.rpcClientId,
+            renameOp.rpcCallId, dupBlks);
       }
       break;
     }
@@ -953,6 +965,9 @@ public class FSEditLogLoader {
       fsDir.federationRenameRemoveFeature(dst, false);
       fsNamesys.getFederationRenameMap().removeRenameRecord(renameId,
           rr.getSrcId(), rr.getDstId(), false);
+      if (toAddRetryCache) {
+        fsNamesys.addCacheEntry(renameOp.rpcClientId, renameOp.rpcCallId);
+      }
       break;
     }
     default:

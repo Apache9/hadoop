@@ -30,11 +30,13 @@ import org.apache.hadoop.crypto.CryptoProtocolVersion;
 import org.apache.hadoop.fs.BatchedRemoteIterator.BatchedEntries;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.Options.Rename;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
 import org.apache.hadoop.hdfs.protocol.proto.FederationClientNamenodeProtocolProtos.*;
+import org.apache.hadoop.hdfs.protocol.proto.FederationProtos.*;
 import org.apache.hadoop.hdfs.server.namenode.SafeModeException;
 import org.apache.hadoop.ipc.*;
 import org.apache.hadoop.security.AccessControlException;
@@ -152,13 +154,13 @@ public class FederationClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
-  public String renameDestPhase1(String src, String srcId, String dst, String dstId,
+  public BlocksToDup renameDestPhase1(String src, String srcId, String dst, String dstId,
       DirectorySubTree subTree) throws IOException {
     FederationRenameDestPhase1RequestProto req =
         FederationRenameDestPhase1RequestProto.newBuilder().setSrc(src)
         .setSrcId(srcId).setDst(dst).setDstId(dstId)
         .setSubTree(PBHelper.convert(subTree)).build();
-    String res = null;
+    BlocksToDupProto res = null;
     long startTime = System.currentTimeMillis();
     try {
       res = rpcProxy.renameDestPhase1(null, req).getDestPhase1Res();
@@ -169,7 +171,7 @@ public class FederationClientNamenodeProtocolTranslatorPB implements
       HdfsPerfCounter
           .count("renameSrcPhase1", 1, System.currentTimeMillis() - startTime);
     }
-    return res;
+    return PBHelper.convert(res);
   }
 
   @Override
@@ -229,6 +231,25 @@ public class FederationClientNamenodeProtocolTranslatorPB implements
     }
     return res;
   }
+
+  @Override
+  public DirectorySubTree getRenameDestSubTree(String dst) throws IOException {
+    GetRenameDestSubTreeRequestProto req = GetRenameDestSubTreeRequestProto.newBuilder()
+        .setDst(dst).build();
+    GetRenameDestSubTreeResponseProto res = null;
+    long startTime = System.currentTimeMillis();
+    try {
+      res = rpcProxy.getRenameDestSubTree(null, req);
+    } catch (ServiceException e) {
+      HdfsPerfCounter.countFail("getRenameDestSubTree", 1);
+      throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      HdfsPerfCounter.count("getRenameDestSubTree", 1, System.currentTimeMillis()
+          - startTime);
+    }
+    return PBHelper.convert(res.getSubTree());
+  }
+
 
   @Override
   public boolean isMethodSupported(String methodName) throws IOException {

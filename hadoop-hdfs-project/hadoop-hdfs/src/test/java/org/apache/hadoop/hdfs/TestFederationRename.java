@@ -15,6 +15,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.junit.Before;
 import org.junit.Test;
@@ -133,22 +134,22 @@ public class TestFederationRename {
         dfs1.renameSrcPhase1("/dp1", dfs1.getUri().toString(), "/dest/dp1",
             dfs2.getUri().toString());
     Assert.assertTrue(dp1 != null);
-    String dp1Pool =
+    BlocksToDup dp1BlksToDup =
         dfs2.renameDestPhase1("/dp1", dfs1.getUri().toString(), "/dest/dp1",
             dfs2.getUri().toString(), dp1);
-    Assert.assertTrue(dp1Pool != null);
+    Assert.assertTrue(dp1BlksToDup != null);
 
     // Source fixer case 3 : renameSrcPhase2 is called then client terminate
     DirectorySubTree sp2 =
         dfs1.renameSrcPhase1("/sp2", dfs1.getUri().toString(), "/dest/sp2",
             dfs2.getUri().toString());
     Assert.assertTrue(sp2 != null);
-    String sp2Pool =
+    BlocksToDup sp2BlksToDup =
         dfs2.renameDestPhase1("/sp2", dfs1.getUri().toString(), "/dest/sp2",
             dfs2.getUri().toString(), sp2);
-    Assert.assertTrue(sp2Pool != null);
+    Assert.assertTrue(sp2BlksToDup != null);
     FederationRenameBlockCollector frbc =
-        new FederationRenameBlockCollector(null, sp2Pool, sp2, CONF);
+        new FederationRenameBlockCollector(sp2, sp2BlksToDup, CONF);
     frbc.linkBlocksToNewPool();
     boolean sp2Sp2Res = dfs1.renameSrcPhase2(sp2.getRenameId(), false);
 

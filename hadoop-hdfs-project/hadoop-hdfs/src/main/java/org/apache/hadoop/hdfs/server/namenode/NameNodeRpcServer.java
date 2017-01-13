@@ -82,6 +82,7 @@ import org.apache.hadoop.hdfs.inotify.EventsList;
 import org.apache.hadoop.hdfs.protocol.AclException;
 import org.apache.hadoop.hdfs.protocol.AlreadyBeingCreatedException;
 import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
@@ -1802,7 +1803,7 @@ class NameNodeRpcServer implements NamenodeProtocols {
   }
 
   @Override
-  public String renameDestPhase1(String src, String srcId, String dst,
+  public BlocksToDup renameDestPhase1(String src, String srcId, String dst,
       String dstId, DirectorySubTree subTree)
  throws IOException {
     return namesystem.federationRenameDestPhase1(src, srcId, dst, dstId,
@@ -1824,5 +1825,10 @@ class NameNodeRpcServer implements NamenodeProtocols {
   @Override
   public String getPoolId() throws IOException {
     return namesystem.getBlockPoolId();
+  }
+
+  @Override
+  public DirectorySubTree getRenameDestSubTree(String dst) throws IOException {
+    return namesystem.getRenameDestSubTree(dst);
   }
 }

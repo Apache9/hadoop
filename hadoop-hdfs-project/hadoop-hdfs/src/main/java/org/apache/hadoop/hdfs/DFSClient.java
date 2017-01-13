@@ -147,6 +147,7 @@ import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.net.TcpPeerServer;
 import org.apache.hadoop.hdfs.protocol.AclException;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveIterator;
@@ -3300,7 +3301,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     throw new IOException("federatedNamenode does not exist");
   }
 
-  public String renameDestPhase1(String src, String srcId, String dst,
+  public BlocksToDup renameDestPhase1(String src, String srcId, String dst,
       String dstId, DirectorySubTree subTree) throws IOException {
     if (federatedNamenode != null) {
       return federatedNamenode

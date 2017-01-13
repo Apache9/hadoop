@@ -97,6 +97,8 @@ import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DeprecatedUTF8;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup.DupBlockInfo;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
@@ -4158,6 +4160,7 @@ public abstract class FSEditLogOp {
     String dstId;
     long startTime;
     DirectorySubTree subTree;
+    BlocksToDup blksToDup;
 
     private FederationRenameDestPhase1Op() {
       super(OP_FEDERATION_RENAME_DEST_PHASE1);
@@ -4193,6 +4196,11 @@ public abstract class FSEditLogOp {
       return this;
     }
 
+    FederationRenameDestPhase1Op setDupBlks(BlocksToDup blksToDup) {
+      this.blksToDup = blksToDup;
+      return this;
+    }
+
     FederationRenameDestPhase1Op setSubTree(DirectorySubTree subTree) {
       this.subTree = subTree;
       return this;
@@ -4206,6 +4214,7 @@ public abstract class FSEditLogOp {
       FSImageSerialization.writeString(dstId, out);
       FSImageSerialization.writeLong(startTime, out);
       FSImageSerialization.writeDirectorySubTree(subTree, out);
+      FSImageSerialization.writeBlocksToDup(blksToDup, out);
       writeRpcIds(rpcClientId, rpcCallId, out);
     }
 
@@ -4230,6 +4239,8 @@ public abstract class FSEditLogOp {
       }
       // Read sub tree
       this.subTree = FSImageSerialization.readDirectorySubTree(in);
+      // Read to dup blocks
+      this.blksToDup = FSImageSerialization.readBlocksToDup(in);
       // read RPC ids if necessary
       readRpcIds(in, logVersion);
     }
@@ -4254,6 +4265,12 @@ public abstract class FSEditLogOp {
       builder.append("files : ");
       for (int i = 0; i < subTree.getSize(); i++) {
         builder.append(subTree.get(i).getLocalName()).append(" ");
+      }
+      builder.append("to dup blks: ");
+      for (int i = 0; i < blksToDup.size(); i++) {
+        DupBlockInfo dbi = blksToDup.get(i);
+        builder.append(" srcId=").append(dbi.getSrcBlockId())
+            .append(",dstId =").append(dbi.getDstBlockId()).append(" ");
       }
       appendRpcIdsToString(builder, rpcClientId, rpcCallId);
       builder.append(", opCode=");
@@ -4362,6 +4379,21 @@ public abstract class FSEditLogOp {
       for (int i = 0; i < subTree.getSize(); i++) {
         fileStatusToXml(contentHandler, subTree.get(i));
       }
+      XMLUtils.addSaxString(contentHandler, "BLOCKPOOL",
+          blksToDup.getDstPoolId());
+      XMLUtils.addSaxString(contentHandler, "BLOCKS",
+          Integer.toString(blksToDup.size()));
+      for (int i = 0; i < blksToDup.size(); i++) {
+        DupBlockInfo dbi = blksToDup.get(i);
+        XMLUtils.addSaxString(contentHandler, "SRCBLKID",
+            Long.toString(dbi.getSrcBlockId()));
+        XMLUtils.addSaxString(contentHandler, "DSTBLKID",
+            Long.toString(dbi.getDstBlockId()));
+        XMLUtils.addSaxString(contentHandler, "BLKSZ",
+            Long.toString(dbi.getBlockSize()));
+        XMLUtils.addSaxString(contentHandler, "BLKGEN",
+            Long.toString(dbi.getBlockGenStamp()));
+      }
       appendRpcIdsToXml(contentHandler, rpcClientId, rpcCallId);
     }
 
@@ -4380,6 +4412,16 @@ public abstract class FSEditLogOp {
         subTree.addItem(fileStatusFromXml(st));
       }
       subTree.setRenameId(renameId);
+      String poolId = st.getValue("BLOCKPOOL");
+      int blocks = Integer.parseInt(st.getValue("BLOCKS"));
+      this.blksToDup = new BlocksToDup(poolId);
+      for (int i = 0; i < blocks; i++) {
+        long srcBlkId = Long.parseLong(st.getValue("SRCBLKID"));
+        long dstBlkId = Long.parseLong(st.getValue("DSTBLKID"));
+        long blkSz = Long.parseLong(st.getValue("BLKSZ"));
+        long blkGen = Long.parseLong(st.getValue("BLKGEN"));
+        blksToDup.addDupBlock(srcBlkId, dstBlkId, blkSz, blkGen);
+      }
       readRpcIdsFromXml(st);
     }
   }

@@ -108,6 +108,7 @@ import org.apache.hadoop.hdfs.StorageType;
 import org.apache.hadoop.hdfs.net.DomainPeerServer;
 import org.apache.hadoop.hdfs.net.TcpPeerServer;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.BlockLocalPathInfo;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
@@ -3110,9 +3111,8 @@ public class DataNode extends ReconfigurableBase
 
   @Override
   // FederationClientDatanodeProtocol
-  public Block[] addBlocksToNewPool(String srcPool, String dstPool,
-      Block[] blocks)
+  public Block[] addBlocksToNewPool(String srcPool, BlocksToDup blksToDup)
       throws IOException {
-    return data.addBlocksToNewPool(srcPool, dstPool, blocks);
+    return data.addBlocksToNewPool(srcPool, blksToDup);
   }
 }

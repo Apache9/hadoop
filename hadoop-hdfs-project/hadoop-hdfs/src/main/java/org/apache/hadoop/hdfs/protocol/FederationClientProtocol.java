@@ -130,7 +130,7 @@ public interface FederationClientProtocol {
       throws IOException;
 
   @AtMostOnce
-  public String renameDestPhase1(String src, String srcId, String dst,
+  public BlocksToDup renameDestPhase1(String src, String srcId, String dst,
       String dstId, DirectorySubTree subTree) throws IOException;
 
   @AtMostOnce
@@ -142,4 +142,5 @@ public interface FederationClientProtocol {
 
   public String getPoolId() throws IOException;
 
+  public DirectorySubTree getRenameDestSubTree(String dst) throws IOException;
 }

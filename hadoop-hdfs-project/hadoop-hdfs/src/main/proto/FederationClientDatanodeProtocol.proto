@@ -33,6 +33,7 @@ package hadoop.hdfs;
 
 import "Security.proto";
 import "hdfs.proto";
+import "federation.proto";
 
 
 /**
@@ -40,8 +41,7 @@ import "hdfs.proto";
  */
 message AddBlocksToNewPoolRequestProto {
   required string srcPool = 1;
-  required string dstPool = 2;
-  repeated BlockProto blocks = 3; 
+  required BlocksToDupProto blocks = 2; 
 }
 
 message AddBlocksToNewPoolResponseProto {

@@ -67,6 +67,7 @@ import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.hdfs.client.HdfsAdmin;
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
@@ -2185,7 +2186,7 @@ public class DistributedFileSystem extends FileSystem {
     return dfs.renameSrcPhase2(renameId, toCancel);
   }
 
-  public String renameDestPhase1(final String src, final String srcId,
+  public BlocksToDup renameDestPhase1(final String src, final String srcId,
       String dst, String dstId, final DirectorySubTree subTree)
       throws IOException {
     try {
@@ -2216,7 +2217,7 @@ public class DistributedFileSystem extends FileSystem {
     String src = getPathName(absSrc);
     String dst = getPathName(absDst);
     String srcPool = null;
-    String dstPool = null;
+    BlocksToDup blksToDup = null;
 
     DistributedFileSystem dsrcFs =
         (DistributedFileSystem) srcFs.getDistributedFileSystem();
@@ -2226,13 +2227,13 @@ public class DistributedFileSystem extends FileSystem {
         dsrcFs.renameSrcPhase1(src, dsrcFs.getUri().toString(), dst, ddstFs
             .getUri().toString());
     if (subTree != null && subTree.getSize() > 0) {
-      dstPool =
+      blksToDup =
           ddstFs.renameDestPhase1(src, dsrcFs.getUri().toString(), dst, ddstFs
               .getUri().toString(), subTree);
       FederationRenameBlockCollector frbc = null;
-      if (dstPool != null) {
+      if (blksToDup.size() != 0) {
         frbc =
-            new FederationRenameBlockCollector(null, dstPool, subTree,
+            new FederationRenameBlockCollector(subTree, blksToDup,
                 dfs.getConfiguration());
         }
         // ask DN to add new link

@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
@@ -1143,7 +1144,8 @@ public class FSEditLog implements LogsPurgeable {
   }
 
   void logFederationRenameDestPhase1(String src, String srcId, String dst,
-      String dstId, long start, DirectorySubTree subTree, boolean toLogRpcIds) {
+      String dstId, long start, DirectorySubTree subTree, BlocksToDup blks,
+      boolean toLogRpcIds) {
     final FederationRenameDestPhase1Op op =
         FederationRenameDestPhase1Op.getInstance(cache.get());
     op.src = src;
@@ -1152,6 +1154,7 @@ public class FSEditLog implements LogsPurgeable {
     op.dstId = dstId;
     op.startTime = start;
     op.subTree = subTree;
+    op.blksToDup = blks;
     logRpcIds(op, toLogRpcIds);
     logEdit(op);
   }

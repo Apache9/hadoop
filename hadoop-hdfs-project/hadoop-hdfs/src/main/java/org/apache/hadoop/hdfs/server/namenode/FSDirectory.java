@@ -61,6 +61,7 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.XAttrHelper;
 import org.apache.hadoop.hdfs.protocol.AclException;
 import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
@@ -3457,7 +3458,8 @@ public class FSDirectory implements Closeable {
     verifyINodeName(child.getLocalNameBytes());
   }
 
-  private INode graftToNameSpace(HdfsFileStatus status, INode parent)
+  private INode graftToNameSpace(HdfsFileStatus status, INode parent,
+      BlocksToDup blks)
       throws IOException {
     INode child;
     if (status.isDir()) {
@@ -3496,7 +3498,17 @@ public class FSDirectory implements Closeable {
         long blkId = lb.getBlock().getBlockId();
         long genStamp = lb.getBlock().getGenerationStamp();
         long sz = lb.getBlockSize();
-        Block blk = new Block(blkId, sz, genStamp);
+        Block blk = null;
+        if (blks == null) {
+          blk = new Block(blkId, sz, genStamp);
+        } else {
+          long newId = namesystem.nextBlockIdWithoutLog();
+          blk = new Block(newId, sz, genStamp);
+          blks.addDupBlock(blkId, newId, sz, genStamp);
+          // Change the original blkid so that the log replay will pick up the
+          // new block Id
+          lb.getBlock().setBlockId(blkId);
+        }
         BlockInfo bi = new BlockInfo(blk, status.getReplication());
         namesystem.getBlockManager().addBlockCollection(bi, file);
         file.addBlock(bi);
@@ -3506,37 +3518,38 @@ public class FSDirectory implements Closeable {
     return child;
   }
 
-  INode graftDirectorySubTree(INode parent, DirectorySubTree subTree)
+  INode graftDirectorySubTree(INode parent, DirectorySubTree subTree,
+      BlocksToDup blks)
       throws IOException {
     // TBD: Add MAX_PATH_LENGTH MAX_PATH_DEPTH check
     HdfsFileStatus status = subTree.consumeItem();
     if (status.isDir()) {
-      INode addedNode = graftToNameSpace(status, parent);
+      INode addedNode = graftToNameSpace(status, parent, blks);
       if (addedNode == null) {
         return null;
       }
       for (int i = 0; i < status.getChildrenNum(); i++) {
         HdfsFileStatus childStatus = subTree.nextItemToConsume();
         if (childStatus.isDir()) {
-          if (graftDirectorySubTree(addedNode, subTree) == null) {
+          if (graftDirectorySubTree(addedNode, subTree, blks) == null) {
             return null;
           }
         } else {
           childStatus = subTree.consumeItem();
-          if (graftToNameSpace(childStatus, addedNode) == null) {
+          if (graftToNameSpace(childStatus, addedNode, blks) == null) {
             return null;
           }
         }
       }
       return addedNode;
     } else {
-      INode addedNode = graftToNameSpace(status, parent);
+      INode addedNode = graftToNameSpace(status, parent, blks);
       return addedNode;
     }
   }
 
   boolean federationRenameDestPhase1(String src, String dst, String srcId,
-      DirectorySubTree subTree) throws IOException {
+      DirectorySubTree subTree, BlocksToDup blks) throws IOException {
     if (isDir(dst)) {
       dst += Path.SEPARATOR + new Path(src).getName();
     }
@@ -3591,7 +3604,7 @@ public class FSDirectory implements Closeable {
       // TBD: Check ezManager
       // Graft the subtree to dest namespace
       try {
-        INode res = graftDirectorySubTree(dstParent, subTree);
+        INode res = graftDirectorySubTree(dstParent, subTree, blks);
         assert (res != null);
         res.addFederationRenameFeature(new FederationRenameFeature(false));
         // Update quota usage

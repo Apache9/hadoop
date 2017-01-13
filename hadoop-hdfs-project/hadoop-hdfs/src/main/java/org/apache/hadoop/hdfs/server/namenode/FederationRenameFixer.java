@@ -16,6 +16,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.FederationRenameBlockCollector;
 import org.apache.hadoop.hdfs.NameNodeProxies;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
 import org.apache.hadoop.hdfs.server.namenode.FederationInProgressRenameMap;
@@ -87,17 +88,17 @@ public class FederationRenameFixer {
     } else {
       // Case 2 : record does exist on dest. Redo the left steps of the two
       // phase commit.
-      DirectorySubTree subTree =
+      DirectorySubTree srcSubTree =
           fsNameSys.federationRenameBuildSubTree(rr.getSrc());
-      if (subTree == null) {
+      DirectorySubTree dstSubTree = fcp.getRenameDestSubTree(rr.getDst());
+      if (srcSubTree == null || dstSubTree == null) {
         return false;
       }
+      BlocksToDup blksToDup =
+          BlocksToDup.buildFromSubTrees(srcSubTree, dstSubTree);
       // Ask datanodes to add new links
       FederationRenameBlockCollector frbc = null;
-      String dstPool = fcp.getPoolId();
-      frbc =
-          new FederationRenameBlockCollector(fsNameSys.getBlockPoolId(),
-              dstPool, subTree, conf);
+      frbc = new FederationRenameBlockCollector(srcSubTree, blksToDup, conf);
       frbc.linkBlocksToNewPool();
       // Commit source
       fsNameSys.federationRenameSrcPhase2(rr.getRenameId(), false);
