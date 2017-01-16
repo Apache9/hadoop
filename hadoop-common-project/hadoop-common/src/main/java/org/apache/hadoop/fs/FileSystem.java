@@ -2604,6 +2604,17 @@ public abstract class FileSystem extends Configured implements Closeable {
     return false;
   }
 
+  public boolean supportFederation() {
+    return false;
+  }
+
+  // for federation feature
+  // if the fs support federation, but uri host-specific, return false
+  // other case, return true
+  public boolean isUriCompatible(URI uri) {
+    return true;
+  }
+
   public boolean isDistributedFileSystem() {
     return false;
   }
@@ -2646,6 +2657,18 @@ public abstract class FileSystem extends Configured implements Closeable {
               CommonConfigurationKeys.HADOOP_RAID_FILESYSTEM_CLASS_KEY, null);
         if (clazz == null) {
           throw new IOException("Raid is enabled whereas no raid file system is specified");
+        }
+        fs = (FileSystem) ReflectionUtils.newInstance(clazz, conf);
+      }
+    }
+
+    if (uri.getScheme().equals("hdfs") && fs.supportFederation()) {
+      if (!fs.isUriCompatible(uri)) {
+        // get the default filesystem
+        clazz = (Class<? extends FileSystem>) SERVICE_FILE_SYSTEMS.get("hdfs");
+        if (clazz == null) {
+          throw new IOException(
+                  fs.getClass().getName() + " no supoort uri with authority");
         }
         fs = (FileSystem) ReflectionUtils.newInstance(clazz, conf);
       }

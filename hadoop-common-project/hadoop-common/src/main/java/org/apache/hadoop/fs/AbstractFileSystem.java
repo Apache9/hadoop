@@ -20,6 +20,7 @@ package org.apache.hadoop.fs;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -154,7 +155,30 @@ public abstract class AbstractFileSystem {
       throw new UnsupportedFileSystemException(
           "No AbstractFileSystem for scheme: " + uri.getScheme());
     }
-    return (AbstractFileSystem) newInstance(clazz, uri, conf);
+    AbstractFileSystem afs = null;
+    try {
+      afs = (AbstractFileSystem) newInstance(clazz, uri, conf);
+    } catch (RuntimeException e) {
+      if (e.getCause() instanceof InvocationTargetException) {
+        InvocationTargetException ite =
+            (InvocationTargetException) e.getCause();
+        if (ite.getTargetException() instanceof URISyntaxException
+            && uri.getScheme().equals("hdfs")) {
+          Configuration defaultConf = new Configuration(false);
+          defaultConf.addResource("core-default.xml");
+          clazz = defaultConf.getClass(
+              "fs.AbstractFileSystem." + uri.getScheme() + ".impl", null);
+          if (clazz == null) {
+            throw new UnsupportedFileSystemException(
+                "No AbstractFileSystem for scheme: " + uri.getScheme());
+          }
+          afs = (AbstractFileSystem) newInstance(clazz, uri, conf);
+          return afs;
+        }
+      }
+      throw e;
+    }
+    return afs;
   }
 
   /**
