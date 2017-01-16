@@ -116,7 +116,8 @@ class DataNodeLatencyProbe extends Thread implements Probe {
 
     sink.publishDNReadLatencyPercentitle();
     sink.publishDatanodeAvailability();
-    sink.publishDatanodeSLAAvailability();
+    sink.publishDatanodeReadSLAAvailability();
+    sink.publishDatanodeWriteSLAAvailability();
 
     if (sink.getClass().equals(FalconSink.class)) {
       ((FalconSink)sink).setFailedDatanode(0);

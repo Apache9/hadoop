@@ -44,7 +44,8 @@ public class FalconSink implements Canary.Sink, Configurable {
   private long failedDatanode = 0;
   private long probedDatanode = 0;
   private float datanodeAvailability = 100;
-  private float datanodeSLAAvailability = 100;
+  private float datanodeReadSLAAvailability = 100;
+  private float datanodeWriteSLAAvailability = 100;
 
   // For availability calculating
   private boolean clusterAvailableStatus = true;
@@ -166,7 +167,7 @@ public class FalconSink implements Canary.Sink, Configurable {
   }
 
   @Override
-  public void publishDatanodeSLAAvailability() {
+  public void publishDatanodeWriteSLAAvailability() {
     float a = getProbedDatanode();
     float f = getFailedDatanode();
     if (a <= 2) {
@@ -181,20 +182,39 @@ public class FalconSink implements Canary.Sink, Configurable {
 
     if (f == 1) {
       //C(1,k)*C(2,n-k) / C(3,n)
-      datanodeSLAAvailability = 100 - ((a - 1) * 3 * 100)/(a * (a - 1) * (a - 2));
+      datanodeWriteSLAAvailability = 100 - ((a - 1) * 3 * 100)/(a * (a - 1) * (a - 2));
 
     } else if (f == 2) {
       //(C(1,k)*C(2,n-k) + C(2,k)*C(1,n-k)) / C(3,n)
-      datanodeSLAAvailability = 100 - (3 * f * (a - f) * (a - 2 ) * 100 / (a * (a - 1) * (a - 2)));
+      datanodeWriteSLAAvailability = 100 - (3 * f * (a - f) * (a - 2 ) * 100 / (a * (a - 1) * (a - 2)));
     } else
     if (f > 2) {
       // (C(1,k)*C(2,n-k) + C(2,k)*C(1,n-k) + C(3,k)) / C(3,n)
-      datanodeSLAAvailability = 100 - ((3 * f * (a - f) * (a - 2 ) + f * (f - 1) * (f - 2)) * 100 / (a * (a - 1) * (a - 2)));
+      datanodeWriteSLAAvailability = 100 - ((3 * f * (a - f) * (a - 2 ) + f * (f - 1) * (f - 2)) * 100 / (a * (a - 1) * (a - 2)));
     } else {
-      datanodeSLAAvailability = 100;
+      datanodeWriteSLAAvailability = 100;
     }
 
-    LOG.info(String.format("Datanode SLA availability: %f", datanodeAvailability));
+    LOG.info(String.format("Datanode Write SLA availability: %f", datanodeWriteSLAAvailability));
+  }
+
+  @Override
+  public void publishDatanodeReadSLAAvailability() {
+    float a = getProbedDatanode();
+    float f = getFailedDatanode();
+    if (a <= 0) {
+      LOG.warn("The number of the datanode is not correct");
+      return;
+    }
+
+    if (a < f) {
+      LOG.warn("the failed datanodes are more than total datanodes");
+      return;
+    }
+
+    datanodeReadSLAAvailability = 100 - f * 100 / a;
+
+    LOG.info(String.format("Datanode Read SLA availability: %f", datanodeReadSLAAvailability));
   }
 
   @Override
@@ -387,8 +407,11 @@ public class FalconSink implements Canary.Sink, Configurable {
       // datanode availability
       buildDatanodeAvailabilityMetrix(payload);
 
-      // datanode SLA availability
-      buildDatanodeSLAAvailabilityMetrix(payload);
+      // datanode read SLA availability
+      buildDatanodeReadSLAAvailabilityMetrix(payload);
+
+      // datanode write SLA availability
+      buildDatanodeWriteSLAAvailabilityMetrix(payload);
 
     }
 
@@ -456,8 +479,13 @@ public class FalconSink implements Canary.Sink, Configurable {
     payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "DatanodeAvailability", datanodeAvailability));
   }
 
-  public void buildDatanodeSLAAvailabilityMetrix(JSONArray payload)
+  public void buildDatanodeWriteSLAAvailabilityMetrix(JSONArray payload)
   {
-    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "DatanodeSLAAvailability", datanodeSLAAvailability));
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "DatanodeWriteSLAAvailability", datanodeWriteSLAAvailability));
+  }
+
+  public void buildDatanodeReadSLAAvailabilityMetrix(JSONArray payload)
+  {
+    payload.put(buildFalconMetric(DEFAULT_CANARY_ENDPOINT, "DatanodeReadSLAAvailability", datanodeReadSLAAvailability));
   }
 }

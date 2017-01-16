@@ -59,7 +59,8 @@ public class Canary implements Tool {
     void publishMaxJournalDelay(String ns, long maxJournalDelay);
     void publishMaxLiveNodesDiff(String ns, long maxLiveNodesDiff);
     void publishDatanodeAvailability();
-    void publishDatanodeSLAAvailability();
+    void publishDatanodeReadSLAAvailability();
+    void publishDatanodeWriteSLAAvailability();
 
     void reportSummary();
   }
@@ -152,7 +153,10 @@ public class Canary implements Tool {
     public void publishDatanodeAvailability()  { return; }
 
     @Override
-    public void publishDatanodeSLAAvailability() { return; }
+    public void publishDatanodeReadSLAAvailability() { return; }
+
+    @Override
+    public void publishDatanodeWriteSLAAvailability() { return; }
 
   }
 
