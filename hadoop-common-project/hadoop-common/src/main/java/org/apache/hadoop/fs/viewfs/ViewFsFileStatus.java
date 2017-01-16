@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
  * {@link ViewFileSystem#getFileStatus(org.apache.hadoop.fs.Path)} and
  * {@link ViewFs#getFileStatus(org.apache.hadoop.fs.Path)}
  */
-class ViewFsFileStatus extends FileStatus {
+public class ViewFsFileStatus extends FileStatus {
    final FileStatus myFs;
    Path modifiedPath;
    ViewFsFileStatus(FileStatus fs, Path newPath) {
@@ -121,6 +121,10 @@ class ViewFsFileStatus extends FileStatus {
    @Override
    public Path getSymlink() throws IOException {
      return myFs.getSymlink();
+   }
+
+   public FileStatus getRawFileStatus() {
+       return myFs;
    }
 }
 
