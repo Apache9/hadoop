@@ -894,7 +894,8 @@ public class FSEditLogLoader {
       long renameId = renameOp.renameId;
       long startTime = renameOp.startTime;
       DirectorySubTree subTree =
-          fsDir.federationRenameSrcPhase1(src, dst, dstId);
+          fsDir.federationRenameSrcPhase1(renameId, src, srcId, dst, dstId,
+              startTime);
       fsNamesys.setFederationRenameId(renameId + 1);
       fsNamesys.addFederationRenameRecord(renameId, src, srcId, dst, dstId,
           true, startTime);
@@ -915,7 +916,8 @@ public class FSEditLogLoader {
       BlocksToDup dupBlks = renameOp.blksToDup;
       // TBD: Sanity check to make sure block ids in subTree matche ids in
       // dupBlks
-      fsDir.federationRenameDestPhase1(src, dst, srcId, subTree, null);
+      fsDir.federationRenameDestPhase1(src, srcId, dst, dstId, subTree, null,
+          startTime);
       fsNamesys.addFederationRenameRecord(subTree.getRenameId(), src, srcId,
           dst, dstId, false, startTime);
       if (dupBlks.size() > 0) {

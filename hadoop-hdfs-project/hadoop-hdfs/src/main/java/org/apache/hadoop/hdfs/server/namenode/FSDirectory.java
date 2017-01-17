@@ -3403,9 +3403,8 @@ public class FSDirectory implements Closeable {
     }
   }
 
-  DirectorySubTree federationRenameSrcPhase1(String src, String dst,
-      String dstId)
-      throws IOException {
+  DirectorySubTree federationRenameSrcPhase1(long renameId, String src,
+      String srcId, String dst, String dstId, long stTime) throws IOException {
     DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit);
     writeLock();
     try {
@@ -3422,7 +3421,8 @@ public class FSDirectory implements Closeable {
       final boolean isRawPath = isReservedRawName(src);
       buildDirectorySubTree(res, srcInode, federationRenameBlocksLimit,
           snapshot, isRawPath, srcIIP);
-      srcInode.addFederationRenameFeature(new FederationRenameFeature(true));
+      srcInode.addFederationRenameFeature(new FederationRenameFeature(true,
+          renameId, src, srcId, dst, dstId, stTime));
     } finally {
       writeUnlock();
     }
@@ -3548,8 +3548,9 @@ public class FSDirectory implements Closeable {
     }
   }
 
-  boolean federationRenameDestPhase1(String src, String dst, String srcId,
-      DirectorySubTree subTree, BlocksToDup blks) throws IOException {
+  boolean federationRenameDestPhase1(String src, String srcId, String dst,
+      String dstId, DirectorySubTree subTree, BlocksToDup blks, long stTime)
+      throws IOException {
     if (isDir(dst)) {
       dst += Path.SEPARATOR + new Path(src).getName();
     }
@@ -3606,7 +3607,8 @@ public class FSDirectory implements Closeable {
       try {
         INode res = graftDirectorySubTree(dstParent, subTree, blks);
         assert (res != null);
-        res.addFederationRenameFeature(new FederationRenameFeature(false));
+        res.addFederationRenameFeature(new FederationRenameFeature(false,
+            subTree.getRenameId(), src, srcId, dst, dstId, stTime));
         // Update quota usage
         updateCount(dstIIP, fileNum, spaceNum, false);
         return (res != null);
