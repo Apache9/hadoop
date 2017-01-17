@@ -127,6 +127,16 @@ message INodeSection {
   message XAttrFeatureProto {
     repeated XAttrCompactProto xAttrs = 1;
   }
+
+  message FederationRenameFeatureProto {
+    required bool    isSource = 1;
+    required uint64  renameId = 2;
+    required string  src = 3;
+    required string  srcId = 4;
+    required string  dst = 5;
+    required string  dstId = 6;
+    required uint64  start = 7;
+  }
   
   message INodeFile {
     optional uint32 replication = 1;
@@ -138,7 +148,8 @@ message INodeSection {
     optional FileUnderConstructionFeature fileUC = 7;
     optional AclFeatureProto acl = 8;
     optional XAttrFeatureProto xAttrs = 9;
-    optional uint32 storagePolicyID = 10;
+    optional FederationRenameFeatureProto frf = 10;
+    optional uint32 storagePolicyID = 11;
   }
 
   message INodeDirectory {
@@ -150,6 +161,7 @@ message INodeSection {
     optional fixed64 permission = 4;
     optional AclFeatureProto acl = 5;
     optional XAttrFeatureProto xAttrs = 6;
+    optional FederationRenameFeatureProto frf = 7;
   }
 
   message INodeSymlink {

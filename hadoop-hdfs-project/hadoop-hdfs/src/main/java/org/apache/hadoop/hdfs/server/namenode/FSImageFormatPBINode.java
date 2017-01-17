@@ -50,6 +50,7 @@ import org.apache.hadoop.hdfs.server.namenode.FsImageProto.FilesUnderConstructio
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeDirectorySection;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection.AclFeatureProto;
+import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection.FederationRenameFeatureProto;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection.XAttrCompactProto;
 import org.apache.hadoop.hdfs.server.namenode.FsImageProto.INodeSection.XAttrFeatureProto;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
@@ -140,6 +141,19 @@ public final class FSImageFormatPBINode {
       return b.build();
     }
 
+    public static FederationRenameFeature loadFrf(
+        FederationRenameFeatureProto proto, final String[] stringTable) {
+      boolean isSrc = proto.getIsSource();
+      long renameId = proto.getRenameId();
+      String src = proto.getSrc();
+      String srcId = proto.getSrcId();
+      String dst = proto.getDst();
+      String dstId = proto.getDstId();
+      long start = proto.getStart();
+      return new FederationRenameFeature(isSrc, renameId, src, srcId, dst,
+          dstId, start);
+    }
+
     public static INodeDirectory loadINodeDirectory(INodeSection.INode n,
         LoaderContext state) {
       assert n.getType() == INodeSection.INode.Type.DIRECTORY;
@@ -165,6 +179,19 @@ public final class FSImageFormatPBINode {
             loadXAttrs(d.getXAttrs(), state.getStringTable())));
       }
       return dir;
+    }
+
+    public void addFrfToDirectory(INodeDirectory dir, INodeSection.INode n,
+        LoaderContext state) {
+      INodeSection.INodeDirectory d = n.getDirectory();
+      if (d.hasFrf()) {
+        FederationRenameFeature frf =
+            loadFrf(d.getFrf(), state.getStringTable());
+        dir.addFederationRenameFeature(frf);
+        fsn.getFederationRenameMap().addRenameRecord(frf.getRenameId(),
+            frf.getSrc(), frf.getSrcId(), frf.getDst(), frf.getDstId(),
+            frf.isSource(), frf.getStart());
+      }
     }
 
     public static void updateBlocksMap(INodeFile file, BlockManager bm) {
@@ -265,7 +292,9 @@ public final class FSImageFormatPBINode {
       case FILE:
         return loadINodeFile(n);
       case DIRECTORY:
-        return loadINodeDirectory(n, parent.getLoaderContext());
+        INodeDirectory dir = loadINodeDirectory(n, parent.getLoaderContext());
+        addFrfToDirectory(dir, n, parent.getLoaderContext());
+        return dir;
       case SYMLINK:
         return loadINodeSymlink(n);
       default:
@@ -302,6 +331,15 @@ public final class FSImageFormatPBINode {
       if (f.hasXAttrs()) {
         file.addXAttrFeature(new XAttrFeature(
             loadXAttrs(f.getXAttrs(), state.getStringTable())));
+      }
+
+      if (f.hasFrf()) {
+        FederationRenameFeature frf =
+            loadFrf(f.getFrf(), state.getStringTable());
+        file.addFederationRenameFeature(frf);
+        fsn.getFederationRenameMap().addRenameRecord(frf.getRenameId(),
+            frf.getSrc(), frf.getSrcId(), frf.getDst(), frf.getDstId(),
+            frf.isSource(), frf.getStart());
       }
 
       // under-construction information
@@ -396,6 +434,20 @@ public final class FSImageFormatPBINode {
       return b;
     }
 
+    private static FederationRenameFeatureProto.Builder buildFrf(
+        FederationRenameFeature frf,
+        final SaverContext.DeduplicationMap<String> map) {
+      FederationRenameFeatureProto.Builder b =
+          FederationRenameFeatureProto.newBuilder();
+      b.setIsSource(frf.isSource());
+      b.setRenameId(frf.getRenameId());
+      b.setSrc(frf.getSrc());
+      b.setSrcId(frf.getSrcId());
+      b.setDst(frf.getDst());
+      b.setDstId(frf.getDstId());
+      return b;
+    }
+
     public static INodeSection.INodeFile.Builder buildINodeFile(
         INodeFileAttributes file, final SaverContext state) {
       INodeSection.INodeFile.Builder b = INodeSection.INodeFile.newBuilder()
@@ -413,6 +465,10 @@ public final class FSImageFormatPBINode {
       XAttrFeature xAttrFeature = file.getXAttrFeature();
       if (xAttrFeature != null) {
         b.setXAttrs(buildXAttrs(xAttrFeature, state.getStringMap()));
+      }
+      FederationRenameFeature frf = file.getFederationRenameFeature();
+      if (frf != null) {
+        b.setFrf(buildFrf(frf, state.getStringMap()));
       }
       return b;
     }
@@ -433,6 +489,10 @@ public final class FSImageFormatPBINode {
       XAttrFeature xAttrFeature = dir.getXAttrFeature();
       if (xAttrFeature != null) {
         b.setXAttrs(buildXAttrs(xAttrFeature, state.getStringMap()));
+      }
+      FederationRenameFeature frf = dir.getFederationRenameFeature();
+      if (frf != null) {
+        b.setFrf(buildFrf(frf, state.getStringMap()));
       }
       return b;
     }

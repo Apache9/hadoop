@@ -9693,10 +9693,11 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       checkPermission(pc, src, false, null, FsAction.WRITE, null, null, false,
           false);
     }
-    DirectorySubTree res = dir.federationRenameSrcPhase1(src, dst, dstId);
+    long renameId = federationRenameId;
+    long start = Time.now();
+    DirectorySubTree res =
+        dir.federationRenameSrcPhase1(renameId, src, srcId, dst, dstId, start);
     if (res != null) {
-      long renameId = federationRenameId;
-      long start = Time.now();
       federationRenameId++;
       federationRenameMap.addRenameRecord(renameId, src, srcId, dst, dstId,
           true,
@@ -9859,20 +9860,14 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       checkPermission(pc, dst, false, null, FsAction.WRITE, null, null, false,
           false);
     }
+    long start = Time.now();
     boolean res =
-        dir.federationRenameDestPhase1(src, dst, srcId, subTree, blks);
+        dir.federationRenameDestPhase1(src, srcId, dst, dstId, subTree, blks,
+            start);
     if (res) {
       long renameId = subTree.getRenameId();
-      long start = Time.now();
       federationRenameMap.addRenameRecord(renameId, src, srcId, dst, dstId,
           false, start);
-      // 0 is reserved block id. If pass 0 to edit log, it implies there are no
-      // blocks should be moved to this pool and log replay logic should not
-      // update the allocated block id.
-      long lastBlkId = 0;
-      if (blks.size() > 0) {
-        lastBlkId = blks.get(blks.size() - 1).getDstBlockId();
-      }
       getEditLog().logFederationRenameDestPhase1(src, srcId, dst, dstId, start,
           subTree, blks, logRetryCache);
     }
