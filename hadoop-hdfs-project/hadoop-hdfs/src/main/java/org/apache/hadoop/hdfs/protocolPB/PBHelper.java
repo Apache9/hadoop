@@ -49,6 +49,7 @@ import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree.HdfsExtendedFileStatus;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.StorageType;
 import org.apache.hadoop.hdfs.inotify.Event;
@@ -174,6 +175,7 @@ import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageTypeProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageTypesProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.StorageUuidsProto;
 import org.apache.hadoop.hdfs.protocol.proto.FederationClientNamenodeProtocolProtos.DirectorySubTreeProto;
+import org.apache.hadoop.hdfs.protocol.proto.FederationClientNamenodeProtocolProtos.HdfsExtendedFileStatusProto;
 import org.apache.hadoop.hdfs.protocol.proto.FederationProtos.*;
 import org.apache.hadoop.hdfs.protocol.proto.InotifyProtos;
 import org.apache.hadoop.hdfs.protocol.proto.JournalProtocolProtos.JournalInfoProto;
@@ -2925,13 +2927,37 @@ public class PBHelper {
         ezKeyVersionName);
   }
 
+  public static HdfsExtendedFileStatus convert(
+      HdfsExtendedFileStatusProto efsProto, DirectorySubTree subTree) {
+    HdfsFileStatus fstatus = convert(efsProto.getFstatus());
+    AclStatusProto a = efsProto.getAstatus();
+    AclStatus astatus =
+        new AclStatus.Builder().owner(a.getOwner()).group(a.getGroup())
+            .stickyBit(a.getSticky())
+            .addEntries(convertAclEntry(a.getEntriesList())).build();
+    return subTree.new HdfsExtendedFileStatus(fstatus, astatus);
+  }
+
+  public static HdfsExtendedFileStatusProto convert(HdfsExtendedFileStatus efs) {
+    AclStatus a = efs.getAclStatus();
+    AclStatusProto r =
+        AclStatusProto.newBuilder().setOwner(a.getOwner())
+            .setGroup(a.getGroup()).setSticky(a.isStickyBit())
+            .addAllEntries(convertAclEntryProto(a.getEntries())).build();
+    HdfsExtendedFileStatusProto.Builder builder =
+        HdfsExtendedFileStatusProto.newBuilder();
+    builder.setFstatus(PBHelper.convert(efs.getFileStatus())).setAstatus(r);
+    return builder.build();
+  }
+
   public static DirectorySubTree convert(DirectorySubTreeProto subTreeProto) {
     long renameId = subTreeProto.getRenameId();
-    List<HdfsFileStatusProto> fileStatusList = subTreeProto.getDentryList();
+    List<HdfsExtendedFileStatusProto> fileStatusList =
+        subTreeProto.getDentryList();
     DirectorySubTree subTree = new DirectorySubTree(fileStatusList.size());
     subTree.setRenameId(renameId);
     for (int i = 0; i < fileStatusList.size(); i++) {
-      subTree.addItem(convert(fileStatusList.get(i)));
+      subTree.addItem(convert(fileStatusList.get(i), subTree));
     }
     return subTree;
   }

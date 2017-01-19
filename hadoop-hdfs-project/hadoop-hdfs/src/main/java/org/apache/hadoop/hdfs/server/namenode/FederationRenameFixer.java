@@ -59,10 +59,18 @@ public class FederationRenameFixer {
   public void deactivate() {
     shouldRuning = false;
     try {
-      this.sourceFixerThread.interrupt();
-      this.destFixerThread.interrupt();
-      this.sourceFixerThread.join(2000);
-      this.destFixerThread.join(1000);
+      if (this.sourceFixerThread != null) {
+        this.sourceFixerThread.interrupt();
+      }
+      if (this.destFixerThread != null) {
+        this.destFixerThread.interrupt();
+      }
+      if (this.sourceFixerThread != null) {
+        this.sourceFixerThread.join(2000);
+      }
+      if (this.destFixerThread != null) {
+        this.destFixerThread.join(1000);
+      }
     } catch (InterruptedException ie) {
     }
     this.sourceFixerThread = null;

@@ -88,8 +88,8 @@ public class BlocksToDup {
       return res;
     }
     for (int i = 0; i < srcTree.getSize(); i++) {
-      HdfsFileStatus srcStatus = srcTree.get(i);
-      HdfsFileStatus dstStatus = dstTree.get(i);
+      HdfsFileStatus srcStatus = srcTree.get(i).getFileStatus();
+      HdfsFileStatus dstStatus = dstTree.get(i).getFileStatus();
       if (srcStatus.isDir() != dstStatus.isDir()
           || srcStatus.isSymlink() != dstStatus.isSymlink()) {
         return res;

@@ -22,6 +22,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 
 import org.apache.commons.logging.Log;
 
+import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.hdfs.protocol.Block;
 
 @InterfaceAudience.Private
@@ -31,10 +32,33 @@ public class DirectorySubTree {
   private long renameId;
   private int currentIdx = 0;
   private int consumedIdx = 0;
-  private HdfsFileStatus[] subTree;
+  private HdfsExtendedFileStatus[] subTree;
+
+  public class HdfsExtendedFileStatus {
+    private HdfsFileStatus fstatus;
+    private AclStatus astatus;
+
+    public HdfsFileStatus getFileStatus() {
+      return fstatus;
+    }
+
+    public AclStatus getAclStatus() {
+      return astatus;
+    }
+
+    public HdfsExtendedFileStatus(HdfsFileStatus inFstatus, AclStatus inAstatus) {
+      fstatus = inFstatus;
+      astatus = inAstatus;
+    }
+
+    @Override
+    public String toString() {
+      return "Status: " + fstatus.toString() + "  ACL : " + astatus.toString();
+    }
+  }
 
   public DirectorySubTree(int len) {
-    subTree = new HdfsFileStatus[len];
+    subTree = new HdfsExtendedFileStatus[len];
     length = len;
   }
 
@@ -42,7 +66,7 @@ public class DirectorySubTree {
     return length - currentIdx;
   }
 
-  public boolean addItem(HdfsFileStatus status) {
+  public boolean addItem(HdfsExtendedFileStatus status) {
     if (currentIdx < length) {
       subTree[currentIdx] = status;
       currentIdx++;
@@ -51,18 +75,18 @@ public class DirectorySubTree {
     return false;
   }
 
-  public HdfsFileStatus consumeItem() {
+  public HdfsExtendedFileStatus consumeItem() {
     if (consumedIdx < currentIdx) {
-      HdfsFileStatus res = subTree[consumedIdx];
+      HdfsExtendedFileStatus res = subTree[consumedIdx];
       consumedIdx++;
       return res;
     }
     return null;
   }
 
-  public HdfsFileStatus nextItemToConsume() {
+  public HdfsExtendedFileStatus nextItemToConsume() {
     if (consumedIdx < currentIdx) {
-      HdfsFileStatus res = subTree[consumedIdx];
+      HdfsExtendedFileStatus res = subTree[consumedIdx];
       return res;
     }
     return null;
@@ -80,14 +104,14 @@ public class DirectorySubTree {
     return renameId;
   }
 
-  public HdfsFileStatus get(int idx) {
+  public HdfsExtendedFileStatus get(int idx) {
     return subTree[idx];
   }
 
   public void dumpSubTree(Log log) {
-    log.debug("subtree length " + subTree.length);
+    log.info("subtree length " + subTree.length);
     for (int i = 0; i < subTree.length; i++) {
-      log.debug(i + "th item is " + subTree[i]);
+      log.info(i + "th item is " + subTree[i]);
     }
   }
 }

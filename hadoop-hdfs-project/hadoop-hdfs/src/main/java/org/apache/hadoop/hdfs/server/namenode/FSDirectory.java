@@ -66,6 +66,7 @@ import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree.HdfsExtendedFileStatus;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.FSLimitException.MaxDirectoryItemsExceededException;
 import org.apache.hadoop.hdfs.protocol.FSLimitException.PathComponentTooLongException;
@@ -3355,15 +3356,21 @@ public class FSDirectory implements Closeable {
           "The directory to be renamed between namenode contains too many files");
     }
     if (!node.isDirectory()) {
-      HdfsFileStatus status =
+      HdfsFileStatus fstatus =
           createFileStatus(node.getLocalNameBytes(), node, true,
               BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath, iip);
-      if (((HdfsLocatedFileStatus) status).getBlockLocations()
+      if (((HdfsLocatedFileStatus) fstatus).getBlockLocations()
           .locatedBlockCount() > blockLimit) {
         throw new FederationRenameTooBigException(
             "The directory to be renamed between namenode contains too blocks");
       }
-      subTree.addItem(status);
+      List<AclEntry> acl = AclStorage.readINodeAcl(node, snapshot);
+      AclStatus astatus =
+          new AclStatus.Builder().owner(node.getUserName())
+              .group(node.getGroupName())
+              .stickyBit(node.getFsPermission(snapshot).getStickyBit())
+              .addEntries(acl).build();
+      subTree.addItem(subTree.new HdfsExtendedFileStatus(fstatus, astatus));
       return;
     } else {
       int newBlockLimit = blockLimit;
@@ -3373,25 +3380,38 @@ public class FSDirectory implements Closeable {
         throw new FederationRenameTooBigException(
             "The directory to be renamed between namenode contains too many files");
       }
-      HdfsFileStatus status =
+      HdfsFileStatus fstatus =
           createFileStatus(node.getLocalNameBytes(), node, true,
               BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath, iip);
-      subTree.addItem(status);
+      List<AclEntry> acl = AclStorage.readINodeAcl(node, snapshot);
+      AclStatus astatus =
+          new AclStatus.Builder().owner(node.getUserName())
+              .group(node.getGroupName())
+              .stickyBit(node.getFsPermission(snapshot).getStickyBit())
+              .addEntries(acl).build();
+      subTree.addItem(subTree.new HdfsExtendedFileStatus(fstatus, astatus));
       for (int i = 0; i < contents.size(); i++) {
         INode cur = contents.get(i);
         if (!cur.isDirectory()) {
-          HdfsFileStatus curStatus =
+          HdfsFileStatus curFstatus =
               createFileStatus(cur.getLocalNameBytes(), cur, true,
                   BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath,
                   iip);
           int blocks =
-              ((HdfsLocatedFileStatus) curStatus).getBlockLocations()
+              ((HdfsLocatedFileStatus) curFstatus).getBlockLocations()
                   .locatedBlockCount();
           if (blocks > newBlockLimit) {
             throw new FederationRenameTooBigException(
                 "The directory to be renamed between namenode contains too many blocks");
           }
-          subTree.addItem(curStatus);
+          acl = AclStorage.readINodeAcl(cur, snapshot);
+          AclStatus curAstatus =
+              new AclStatus.Builder().owner(node.getUserName())
+                  .group(node.getGroupName())
+                  .stickyBit(node.getFsPermission(snapshot).getStickyBit())
+                  .addEntries(acl).build();
+          subTree.addItem(subTree.new HdfsExtendedFileStatus(curFstatus,
+              curAstatus));
           newBlockLimit -= blocks;
           return;
         } else {
@@ -3458,40 +3478,37 @@ public class FSDirectory implements Closeable {
     verifyINodeName(child.getLocalNameBytes());
   }
 
-  private INode graftToNameSpace(HdfsFileStatus status, INode parent,
-      BlocksToDup blks)
-      throws IOException {
+  private INode graftToNameSpace(HdfsExtendedFileStatus status, INode parent,
+      BlocksToDup blks, int snapshot) throws IOException {
     INode child;
-    if (status.isDir()) {
-      NameNode.stateChangeLog.info("Graft dir " + status.getLocalName());
+    HdfsFileStatus fstatus = status.getFileStatus();
+    AclStatus astatus = status.getAclStatus();
+    if (fstatus.isDir()) {
+      NameNode.stateChangeLog.info("Graft dir " + fstatus.getLocalName());
       child =
           new INodeDirectory(namesystem.allocateNewInodeId(),
-              status.getLocalNameInBytes(),
-              PermissionStatus.createImmutable(status.getOwner(),
-                  status.getGroup(), status.getPermission()),
-              status.getModificationTime());
+              fstatus.getLocalNameInBytes(), PermissionStatus.createImmutable(
+                  fstatus.getOwner(), fstatus.getGroup(),
+                  fstatus.getPermission()), fstatus.getModificationTime());
     } else {
-      NameNode.stateChangeLog.info("Graft file " + status.getLocalName());
+      NameNode.stateChangeLog.info("Graft file " + fstatus.getLocalName());
       child =
           newINodeFile(
               namesystem.allocateNewInodeId(),
-              PermissionStatus.createImmutable(status.getOwner(),
-                  status.getGroup(), status.getPermission()),
-              status.getModificationTime(), status.getModificationTime(),
-              status.getReplication(), status.getBlockSize());
-      child.setLocalName(status.getLocalNameInBytes());
+              PermissionStatus.createImmutable(fstatus.getOwner(),
+                  fstatus.getGroup(), fstatus.getPermission()),
+              fstatus.getModificationTime(), fstatus.getModificationTime(),
+              fstatus.getReplication(), fstatus.getBlockSize());
+      child.setLocalName(fstatus.getLocalNameInBytes());
     }
     graftSanityCheck(child, parent);
     if (((INodeDirectory) parent).addChild(child) == false) {
       return null;
     }
     addToInodeMap(child);
-    if (!status.isDir()) {
-      LocatedBlocks lbs = ((HdfsLocatedFileStatus)status).getBlockLocations();
+    if (!fstatus.isDir()) {
+      LocatedBlocks lbs = ((HdfsLocatedFileStatus) fstatus).getBlockLocations();
       int size = lbs.getLocatedBlocks().size();
-      if (size == 0) {
-        return child;
-      }
       INodeFile file = child.asFile();
       for (int i = 0; i < size; i++) {
         LocatedBlock lb = lbs.get(i);
@@ -3509,41 +3526,48 @@ public class FSDirectory implements Closeable {
           // new block Id
           lb.getBlock().setBlockId(blkId);
         }
-        BlockInfo bi = new BlockInfo(blk, status.getReplication());
+        BlockInfo bi = new BlockInfo(blk, fstatus.getReplication());
         namesystem.getBlockManager().addBlockCollection(bi, file);
         file.addBlock(bi);
         namesystem.getBlockManager().processQueuedMessagesForBlock(blk);
       }
     }
+    if (!status.getAclStatus().getEntries().isEmpty()) {
+      List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(child);
+      List<AclEntry> newAcl =
+          AclTransformation.mergeAclEntries(existingAcl, status.getAclStatus()
+              .getEntries());
+      AclStorage.updateINodeAcl(child, newAcl, snapshot);
+    }
     return child;
   }
 
   INode graftDirectorySubTree(INode parent, DirectorySubTree subTree,
-      BlocksToDup blks)
+      BlocksToDup blks, int snapshot)
       throws IOException {
     // TBD: Add MAX_PATH_LENGTH MAX_PATH_DEPTH check
-    HdfsFileStatus status = subTree.consumeItem();
-    if (status.isDir()) {
-      INode addedNode = graftToNameSpace(status, parent, blks);
+    HdfsExtendedFileStatus status = subTree.consumeItem();
+    if (status.getFileStatus().isDir()) {
+      INode addedNode = graftToNameSpace(status, parent, blks, snapshot);
       if (addedNode == null) {
         return null;
       }
-      for (int i = 0; i < status.getChildrenNum(); i++) {
-        HdfsFileStatus childStatus = subTree.nextItemToConsume();
-        if (childStatus.isDir()) {
-          if (graftDirectorySubTree(addedNode, subTree, blks) == null) {
+      for (int i = 0; i < status.getFileStatus().getChildrenNum(); i++) {
+        HdfsExtendedFileStatus childStatus = subTree.nextItemToConsume();
+        if (childStatus.getFileStatus().isDir()) {
+          if (graftDirectorySubTree(addedNode, subTree, blks, snapshot) == null) {
             return null;
           }
         } else {
           childStatus = subTree.consumeItem();
-          if (graftToNameSpace(childStatus, addedNode, blks) == null) {
+          if (graftToNameSpace(childStatus, addedNode, blks, snapshot) == null) {
             return null;
           }
         }
       }
       return addedNode;
     } else {
-      INode addedNode = graftToNameSpace(status, parent, blks);
+      INode addedNode = graftToNameSpace(status, parent, blks, snapshot);
       return addedNode;
     }
   }
@@ -3551,17 +3575,19 @@ public class FSDirectory implements Closeable {
   boolean federationRenameDestPhase1(String src, String srcId, String dst,
       String dstId, DirectorySubTree subTree, BlocksToDup blks, long stTime)
       throws IOException {
+    int snapshot;
     if (isDir(dst)) {
       dst += Path.SEPARATOR + new Path(src).getName();
     }
-    if (subTree.get(0).isSymlink() && dst.equals(subTree.get(0).getSymlink())) {
+    if (subTree.get(0).getFileStatus().isSymlink()
+        && dst.equals(subTree.get(0).getFileStatus().getSymlink())) {
       throw new FileAlreadyExistsException("Cannot rename symlink " + src
           + " to its target " + dst);
     }
     int fileNum = subTree.getSize();
     long spaceNum = 0;
     for (int i = 0; i < fileNum; i++) {
-      HdfsFileStatus status = subTree.get(i);
+      HdfsFileStatus status = subTree.get(i).getFileStatus();
       if (!status.isDir()) {
         spaceNum += (status.getLen() * status.getReplication());
       }
@@ -3577,6 +3603,7 @@ public class FSDirectory implements Closeable {
             + " because destination exists");
         return false;
       }
+      snapshot = dstIIP.getLatestSnapshotId();
       INode dstParent = dstIIP.getINode(-2);
       if (dstParent == null) {
         NameNode.stateChangeLog
@@ -3605,7 +3632,7 @@ public class FSDirectory implements Closeable {
       // TBD: Check ezManager
       // Graft the subtree to dest namespace
       try {
-        INode res = graftDirectorySubTree(dstParent, subTree, blks);
+        INode res = graftDirectorySubTree(dstParent, subTree, blks, snapshot);
         assert (res != null);
         res.addFederationRenameFeature(new FederationRenameFeature(false,
             subTree.getRenameId(), src, srcId, dst, dstId, stTime));

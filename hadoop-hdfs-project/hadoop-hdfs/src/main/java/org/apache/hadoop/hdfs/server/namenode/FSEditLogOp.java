@@ -91,6 +91,7 @@ import org.apache.hadoop.fs.XAttrCodec;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclEntryScope;
 import org.apache.hadoop.fs.permission.AclEntryType;
+import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
@@ -104,6 +105,7 @@ import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree.HdfsExtendedFileStatus;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
@@ -113,6 +115,7 @@ import org.apache.hadoop.hdfs.protocol.LayoutVersion.Feature;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos.AclEditLogProto;
+import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.protocol.proto.XAttrProtos.XAttrEditLogProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
@@ -4264,7 +4267,8 @@ public abstract class FSEditLogOp {
       builder.append(startTime);
       builder.append("files : ");
       for (int i = 0; i < subTree.getSize(); i++) {
-        builder.append(subTree.get(i).getLocalName()).append(" ");
+        builder.append(subTree.get(i).getFileStatus().getLocalName()).append(
+            " ");
       }
       builder.append("to dup blks: ");
       for (int i = 0; i < blksToDup.size(); i++) {
@@ -4282,34 +4286,37 @@ public abstract class FSEditLogOp {
     }
 
     private void fileStatusToXml(ContentHandler contentHandler,
-        HdfsFileStatus status)
+        HdfsExtendedFileStatus estatus)
         throws SAXException {
-      XMLUtils.addSaxString(contentHandler, "PATH", status
+      HdfsFileStatus fstatus = estatus.getFileStatus();
+      AclStatus astatus = estatus.getAclStatus();
+      XMLUtils.addSaxString(contentHandler, "PATH", fstatus
           .getLocalNameInBytes().toString());
-      XMLUtils.addSaxString(contentHandler, "SYMLINK", status
+      XMLUtils.addSaxString(contentHandler, "SYMLINK", fstatus
           .getSymlinkInBytes().toString());
       XMLUtils.addSaxString(contentHandler, "LENGTH",
-          Long.toString(status.getLen()));
+          Long.toString(fstatus.getLen()));
       XMLUtils.addSaxString(contentHandler, "ISDIR",
-          Boolean.toString(status.isDir()));
+          Boolean.toString(fstatus.isDir()));
       XMLUtils.addSaxString(contentHandler, "REPL",
-          Short.toString(status.getReplication()));
+          Short.toString(fstatus.getReplication()));
       XMLUtils.addSaxString(contentHandler, "BLKSIZE",
-          Long.toString(status.getBlockSize()));
+          Long.toString(fstatus.getBlockSize()));
       XMLUtils.addSaxString(contentHandler, "MTIME",
-          Long.toString(status.getModificationTime()));
+          Long.toString(fstatus.getModificationTime()));
       XMLUtils.addSaxString(contentHandler, "ATIME",
-          Long.toString(status.getAccessTime()));
+          Long.toString(fstatus.getAccessTime()));
       XMLUtils.addSaxString(contentHandler, "PERM",
-          Short.valueOf(status.getPermission().toShort()).toString());
-      XMLUtils.addSaxString(contentHandler, "OWN", status.getOwner());
-      XMLUtils.addSaxString(contentHandler, "GRP", status.getGroup());
+          Short.valueOf(fstatus.getPermission().toShort()).toString());
+      XMLUtils.addSaxString(contentHandler, "OWN", fstatus.getOwner());
+      XMLUtils.addSaxString(contentHandler, "GRP", fstatus.getGroup());
       XMLUtils.addSaxString(contentHandler, "CHILDRENNUM",
-          Integer.toString(status.getChildrenNum()));
+          Integer.toString(fstatus.getChildrenNum()));
       XMLUtils.addSaxString(contentHandler, "SPOLICY",
-          Byte.toString(status.getStoragePolicy()));
-      if (!status.isDir()) {
-        LocatedBlocks lbs = ((HdfsLocatedFileStatus)status).getBlockLocations();
+          Byte.toString(fstatus.getStoragePolicy()));
+      if (!fstatus.isDir()) {
+        LocatedBlocks lbs =
+            ((HdfsLocatedFileStatus) fstatus).getBlockLocations();
         int size = lbs.getLocatedBlocks().size();
         XMLUtils.addSaxString(contentHandler, "BLOCKS",
             Integer.toString(lbs.getLocatedBlocks().size()));
@@ -4321,10 +4328,16 @@ public abstract class FSEditLogOp {
           XMLUtils.addSaxString(contentHandler, "SIZE",
               Long.toString(lbs.get(i).getBlockSize()));
         }
+        XMLUtils.addSaxString(contentHandler, "AOWNER", astatus.getOwner());
+        XMLUtils.addSaxString(contentHandler, "AGROUP", astatus.getGroup());
+        XMLUtils.addSaxString(contentHandler, "ASTICK",
+            Boolean.toString(astatus.isStickyBit()));
+        appendAclEntriesToXml(contentHandler, astatus.getEntries());
       }
     }
 
-    private HdfsFileStatus fileStatusFromXml(Stanza st)
+    private HdfsExtendedFileStatus fileStatusFromXml(Stanza st,
+        DirectorySubTree subTree)
         throws InvalidXmlException {
       byte[] path = st.getValue("PATH").getBytes();
       byte[] symLink = st.getValue("SYMLINK").getBytes();
@@ -4340,6 +4353,7 @@ public abstract class FSEditLogOp {
       String grp = st.getValue("GRP");
       int childrenNum = Integer.parseInt(st.getValue("CHILDRENNUM"));
       byte storagePolicy = Byte.parseByte(st.getValue("SPOLICY"));
+      HdfsFileStatus fstatus;
       if (!isDir) {
         int blks = Integer.parseInt(st.getValue("BLOCKS"));
         List<LocatedBlock> blkList = new ArrayList<LocatedBlock>(blks);
@@ -4353,14 +4367,25 @@ public abstract class FSEditLogOp {
         LocatedBlocks lblks =
             new LocatedBlocks(length, false, blkList, blkList.get(blks - 1),
                 true, null);
-        return new HdfsLocatedFileStatus(length, isDir, replication, blkSize,
-            mtime, atime, permission, owner, grp, symLink, path, 0, lblks,
-            childrenNum, null, storagePolicy);
+        fstatus =
+            new HdfsLocatedFileStatus(length, isDir, replication, blkSize,
+                mtime, atime, permission, owner, grp, symLink, path, 0, lblks,
+                childrenNum, null, storagePolicy);
       } else {
-        return new HdfsFileStatus(length, isDir, replication, blkSize, mtime,
-            atime, permission, owner, grp, symLink, path, 0, childrenNum, null,
-            storagePolicy);
+        fstatus =
+            new HdfsFileStatus(length, isDir, replication, blkSize, mtime,
+                atime, permission, owner, grp, symLink, path, 0, childrenNum,
+                null, storagePolicy);
       }
+      AclStatus.Builder abuilder = new AclStatus.Builder();
+      abuilder.owner(st.getValue("AOWNER")).group(st.getValue("AGROUP"))
+          .stickyBit(Boolean.parseBoolean(st.getValue("ASTICK")));
+      List<AclEntry> aclEntries = readAclEntriesFromXml(st);
+      if (aclEntries == null) {
+        aclEntries = Lists.newArrayList();
+      }
+      AclStatus astatus = abuilder.addEntries(aclEntries).build();
+      return subTree.new HdfsExtendedFileStatus(fstatus, astatus);
     }
 
     @Override
@@ -4409,7 +4434,7 @@ public abstract class FSEditLogOp {
       int files = Integer.parseInt(st.getValue("FILES"));
       this.subTree = new DirectorySubTree(files);
       for (int i = 0; i < files; i++) {
-        subTree.addItem(fileStatusFromXml(st));
+        subTree.addItem(fileStatusFromXml(st, subTree));
       }
       subTree.setRenameId(renameId);
       String poolId = st.getValue("BLOCKPOOL");

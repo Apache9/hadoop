@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -27,6 +28,8 @@ import java.util.List;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.AclEntry;
+import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.DFSUtil;
@@ -34,6 +37,7 @@ import org.apache.hadoop.hdfs.DeprecatedUTF8;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.BlocksToDup.DupBlockInfo;
+import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -44,6 +48,7 @@ import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LayoutVersion;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.protocol.proto.AclProtos.AclEditLogProto;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoUnderConstruction;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.BlockUCState;
@@ -758,6 +763,7 @@ public class FSImageSerialization {
       String grp = readString(in);
       int childrenNum = readInt(in);
       byte storagePolicy = readByte(in);
+      HdfsFileStatus fstatus;
       if (!isDir) {
         int numBlks = readInt(in);
         List<LocatedBlock> blkList = new ArrayList<LocatedBlock>(numBlks);
@@ -771,14 +777,31 @@ public class FSImageSerialization {
         LocatedBlocks lblks =
             new LocatedBlocks(length, false, blkList, blkList.get(numBlks - 1),
                 true, null);
-        subTree.addItem(new HdfsLocatedFileStatus(length, isDir, replication,
-            blkSize, mtime, atime, permission, owner, grp, symLink, path, 0,
-            lblks, childrenNum, null, storagePolicy));
+        fstatus =
+            new HdfsLocatedFileStatus(length, isDir, replication, blkSize,
+                mtime, atime, permission, owner, grp, symLink, path, 0, lblks,
+                childrenNum, null, storagePolicy);
       } else {
-        subTree.addItem(new HdfsFileStatus(length, isDir, replication, blkSize,
-            mtime, atime, permission, owner, grp, symLink, path, 0,
-            childrenNum, null, storagePolicy));
+        fstatus =
+            new HdfsFileStatus(length, isDir, replication, blkSize, mtime,
+                atime, permission, owner, grp, symLink, path, 0, childrenNum,
+                null, storagePolicy);
       }
+      String aowner = readString(in);
+      String agroup = readString(in);
+      boolean isStickBit = readBoolean(in);
+      AclEditLogProto p =
+          AclEditLogProto.parseDelimitedFrom((DataInputStream) in);
+      if (p == null) {
+        throw new IOException("Failed to read fields from AclStatus");
+      }
+      String src = p.getSrc();
+      List<AclEntry> aclEntries = PBHelper.convertAclEntry(p.getEntriesList());
+      AclStatus.Builder abuilder = new AclStatus.Builder();
+      abuilder.owner(aowner).group(agroup).stickyBit(isStickBit)
+          .addEntries(aclEntries);
+      AclStatus astatus = abuilder.build();
+      subTree.addItem(subTree.new HdfsExtendedFileStatus(fstatus, astatus));
     }
     subTree.setRenameId(renameId);
     return subTree;
@@ -789,7 +812,7 @@ public class FSImageSerialization {
     writeLong(subTree.getRenameId(), out);
     writeInt(subTree.getSize(), out);
     for (int i = 0; i < subTree.getSize(); i++) {
-      HdfsFileStatus status = subTree.get(i);
+      HdfsFileStatus status = subTree.get(i).getFileStatus();
       if (status.getLocalNameInBytes() != null) {
         writeBytes(status.getLocalNameInBytes(), out);
       } else {
@@ -824,6 +847,14 @@ public class FSImageSerialization {
           writeLong(lblk.getBlockSize(), out);
         }
       }
+      AclStatus astatus = subTree.get(i).getAclStatus();
+      writeString(astatus.getOwner(), out);
+      writeString(astatus.getGroup(), out);
+      writeBoolean(astatus.isStickyBit(), out);
+      AclEditLogProto.Builder b = AclEditLogProto.newBuilder();
+      b.setSrc(status.getLocalName());
+      b.addAllEntries(PBHelper.convertAclEntryProto(astatus.getEntries()));
+      b.build().writeDelimitedTo(out);
     }
   }
 
