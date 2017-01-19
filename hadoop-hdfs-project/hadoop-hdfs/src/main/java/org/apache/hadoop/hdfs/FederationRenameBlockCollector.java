@@ -33,7 +33,7 @@ public class FederationRenameBlockCollector {
     this.dnBlkMap = new HashMap<DatanodeInfo, BlocksToDup>();
     int blksIdx = 0;
     for (int i = 0; i < subTree.getSize(); i++) {
-      HdfsFileStatus st = subTree.get(i);
+      HdfsFileStatus st = subTree.get(i).getFileStatus();
       if (!st.isDir() && !st.isSymlink()) {
         LocatedBlocks blks = ((HdfsLocatedFileStatus) st).getBlockLocations();
         List<LocatedBlock> lblks = blks.getLocatedBlocks();

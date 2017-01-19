@@ -29,6 +29,7 @@ option java_generate_equals_and_hash = true;
 package hadoop.hdfs;
 
 import "hdfs.proto";
+import "acl.proto";
 import "federation.proto";
 
 /**
@@ -36,12 +37,18 @@ import "federation.proto";
  * federation hdfs client and one of the federation Namenodes.
  */
 
+
+message HdfsExtendedFileStatusProto {
+  required HdfsFileStatusProto fstatus = 1;
+  required AclStatusProto      astatus = 2;
+}
+
 /**
  * Directory sub-tree
  */
 message DirectorySubTreeProto {
   required int64 renameId = 1;
-  repeated HdfsFileStatusProto dentry = 2;
+  repeated HdfsExtendedFileStatusProto dentry = 2;
 }
 
 message FederationRenameRequestProto {

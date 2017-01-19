@@ -6,6 +6,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.URI;
+import java.util.List;
+import java.util.Random;
 
 import junit.framework.Assert;
 
@@ -14,10 +16,14 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.AclEntry;
+import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
+import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class TestFederationRename {
@@ -26,13 +32,14 @@ public class TestFederationRename {
   private static FileSystem fHdfs1;
   private static FileSystem fHdfs2;
 
-  @Before
-  public void setup() throws IOException {
+  @BeforeClass
+  public static void setup() throws IOException {
     CONF.setBoolean(DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY,
         true);
     CONF.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs:///");
     CONF.setLong(DFSConfigKeys.DFS_FEDERATION_RENAME_SOURCE_TIMEOUT, 10000);
     CONF.setLong(DFSConfigKeys.DFS_FEDERATION_RENAME_DEST_TIMEOUT, 10000);
+    CONF.setBoolean("dfs.namenode.acls.enabled", true);
     cluster =
         new MiniDFSCluster.Builder(CONF)
             .nnTopology(MiniDFSNNTopology.simpleFederatedTopology(2))
@@ -43,6 +50,11 @@ public class TestFederationRename {
     fHdfs2 = cluster.getFileSystem(1);
     ConfigUtil.addLink(CONF, "/home", fHdfs1.getUri());
     ConfigUtil.addLink(CONF, "/user", fHdfs2.getUri());
+  }
+
+  @After
+  public void tearDown() throws IOException {
+    // cluster.shutdown();
   }
 
   private void dumpDir(FileSystem fs, Path p) throws IOException {
@@ -66,32 +78,130 @@ public class TestFederationRename {
   public void doBasicTest() throws IOException {
     String str = "Just a test";
     basicTestEnvSetup();
-    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
     Assert.assertTrue(fHdfs1 instanceof DistributedFileSystem);
     Assert.assertTrue(fHdfs2 instanceof DistributedFileSystem);
     Assert.assertFalse(fHdfs1 instanceof FederatedDFSFileSystem);
     Assert.assertFalse(fHdfs2 instanceof FederatedDFSFileSystem);
-    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
-    Assert.assertTrue(dfs instanceof DistributedFileSystem);
-    Assert.assertTrue(dfs instanceof FederatedDFSFileSystem);
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+      Assert.assertTrue(dfs instanceof DistributedFileSystem);
+      Assert.assertTrue(dfs instanceof FederatedDFSFileSystem);
+      OutputStream out = dfs.create(new Path("/home/a/b/testfile"));
+      out.write(str.getBytes());
+      out.close();
+      FileStatus sFstatus = dfs.getFileStatus(new Path("/home/a/b/testfile"));
+      AclStatus sAclStatus = dfs.getAclStatus(new Path("/home/a/b/testfile"));
+      boolean rename = dfs.rename(new Path("/home/a"), new Path("/user/c/a"));
+      Assert.assertTrue(rename);
+      dumpDir(fHdfs1, new Path("/"));
+      dumpDir(fHdfs2, new Path("/"));
+      Assert.assertTrue(dfs.exists(new Path("/user/c/a/b/testfile")));
+      Assert.assertFalse(dfs.exists(new Path("/home/a")));
 
-    OutputStream out = dfs.create(new Path("/home/a/b/testfile"));
-    out.write(str.getBytes());
-    out.close();
+      InputStream in = dfs.open(new Path("/user/c/a/b/testfile"));
+      BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+      String res = reader.readLine();
+      in.close();
+      Assert.assertEquals(str, res);
+      FileStatus dFstatus = dfs.getFileStatus(new Path("/user/c/a/b/testfile"));
+      AclStatus dAclStatus = dfs.getAclStatus(new Path("/user/c/a/b/testfile"));
+      Assert.assertEquals(sFstatus.getLen(), dFstatus.getLen());
+      Assert.assertEquals(sFstatus.isDir(), dFstatus.isDir());
+      Assert.assertEquals(sFstatus.getReplication(), dFstatus.getReplication());
+      Assert.assertEquals(sFstatus.getBlockSize(), dFstatus.getBlockSize());
+      Assert.assertTrue(sFstatus.getPermission().equals(
+          dFstatus.getPermission()));
+      Assert.assertTrue(sFstatus.getOwner().equals(dFstatus.getOwner()));
+      Assert.assertTrue(sFstatus.getGroup().equals(dFstatus.getGroup()));
+      Assert.assertTrue(sAclStatus.equals(dAclStatus));
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
+  }
 
-    boolean rename = dfs.rename(new Path("/home/a"), new Path("/user/c/a"));
-    Assert.assertTrue(rename);
+  private void aclTestEnvSetup() throws IOException {
+    fHdfs1.mkdirs(new Path("/sacl1/sacl2/sacl3"), null);
+    fHdfs1.create(new Path("/sacl1/sacl4")).close();
+  }
 
-    dumpDir(fHdfs1, new Path("/"));
-    dumpDir(fHdfs2, new Path("/"));
-    Assert.assertTrue(dfs.exists(new Path("/user/c/a/b/testfile")));
-    Assert.assertFalse(dfs.exists(new Path("/home/a")));
+  private String generateACL() {
+    StringBuilder aclBuilder = new StringBuilder();
+    int aclUsers = 5;
+    int aclGrps = 5;
+    String acls[] = { "r--", "rw-", "r-x", "rwx" };
+    Random rd = new Random();
+    for (int i = 0; i < aclUsers; i++) {
+      if (i != 0) {
+        aclBuilder.append(",");
+      }
+      String user = "user:user" + i;
+      aclBuilder.append(user).append(":").append(acls[rd.nextInt(acls.length)]);
+    }
 
-    InputStream in = dfs.open(new Path("/user/c/a/b/testfile"));
-    BufferedReader reader = new BufferedReader(new InputStreamReader(in));
-    String res = reader.readLine();
-    in.close();
-    Assert.assertEquals(str, res);
+    for (int i = 0; i < aclGrps; i++) {
+      if (aclUsers > 0 || i != 0) {
+        aclBuilder.append(",");
+      }
+      String grp = "group:grp" + i;
+      aclBuilder.append(grp).append(":").append(acls[rd.nextInt(acls.length)]);
+    }
+
+    return aclBuilder.toString();
+  }
+
+  @Test
+  public void testRenameWithAcl() throws IOException {
+    aclTestEnvSetup();
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+      String aclstr = generateACL();
+      System.out.println("aclstr1 : " + aclstr);
+      List<AclEntry> aclEntries = AclEntry.parseAclSpec(aclstr, true);
+      dfs.modifyAclEntries(new Path("/home/sacl1"), aclEntries);
+      aclstr = generateACL();
+      System.out.println("aclstr2 : " + aclstr);
+      aclEntries = AclEntry.parseAclSpec(aclstr, true);
+      dfs.modifyAclEntries(new Path("/home/sacl1/sacl2"), aclEntries);
+      aclstr = generateACL();
+      System.out.println("aclstr4 : " + aclstr);
+      aclEntries = AclEntry.parseAclSpec(aclstr, true);
+      dfs.modifyAclEntries(new Path("/home/sacl1/sacl4"), aclEntries);
+      aclstr = generateACL();
+      System.out.println("aclstr3 : " + aclstr);
+      aclEntries = AclEntry.parseAclSpec(aclstr, true);
+      dfs.modifyAclEntries(new Path("/home/sacl1/sacl2/sacl3"), aclEntries);
+
+      AclStatus sacl1 = dfs.getAclStatus(new Path("/home/sacl1"));
+      System.out.println("sacl1 : " + sacl1);
+      AclStatus sacl2 = dfs.getAclStatus(new Path("/home/sacl1/sacl2"));
+      System.out.println("sacl2 : " + sacl2);
+      AclStatus sacl3 = dfs.getAclStatus(new Path("/home/sacl1/sacl2/sacl3"));
+      System.out.println("sacl3 : " + sacl3);
+      AclStatus sacl4 = dfs.getAclStatus(new Path("/home/sacl1/sacl4"));
+      System.out.println("sacl4 : " + sacl4);
+
+      boolean rename =
+          dfs.rename(new Path("/home/sacl1"), new Path("/user/sacl1"));
+
+      Assert.assertTrue(rename);
+      AclStatus dacl1 = dfs.getAclStatus(new Path("/user/sacl1"));
+      System.out.println("dacl1 : " + dacl1);
+      AclStatus dacl2 = dfs.getAclStatus(new Path("/user/sacl1/sacl2"));
+      System.out.println("dacl2 : " + dacl2);
+      AclStatus dacl3 = dfs.getAclStatus(new Path("/user/sacl1/sacl2/sacl3"));
+      System.out.println("dacl3 : " + dacl3);
+      AclStatus dacl4 = dfs.getAclStatus(new Path("/user/sacl1/sacl4"));
+      System.out.println("dacl4 : " + dacl4);
+
+      Assert.assertTrue((dacl1.equals(sacl1)));
+      Assert.assertTrue(dacl2.equals(sacl2));
+      Assert.assertTrue(dacl3.equals(sacl3));
+      Assert.assertTrue(dacl4.equals(sacl4));
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
   }
 
   private void fixerTestEnvSetup(String str) throws IOException {
