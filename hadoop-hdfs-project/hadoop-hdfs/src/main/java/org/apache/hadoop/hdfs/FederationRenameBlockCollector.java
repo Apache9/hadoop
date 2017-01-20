@@ -2,6 +2,17 @@ package org.apache.hadoop.hdfs;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.Future;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -20,6 +31,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocolPB.FederationClientDatanodeProtocolTranslatorPB;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Daemon;
 
 public class FederationRenameBlockCollector {
 
@@ -64,21 +76,91 @@ public class FederationRenameBlockCollector {
     }
   }
 
+  private Callable<Block[]> getLinkBlocksTskForOneDataNode(
+      final Map.Entry<DatanodeInfo, BlocksToDup> item,
+      final boolean viaHostName, final UserGroupInformation ugi) {
+    return new Callable<Block[]>() {
+      @Override
+      public Block[] call() throws Exception {
+        InetSocketAddress dnAddr =
+            NetUtils.createSocketAddr(item.getKey().getIpcAddr(viaHostName));
+        FederationClientDatanodeProtocol fcdp =
+            FederationClientDatanodeProtocolTranslatorPB
+                .createFederationClientDatanodeProtocolProxy(dnAddr, ugi, conf);
+        return fcdp.addBlocksToNewPool(srcPool, item.getValue());
+      }
+    };
+  }
+
+  private Executor initExecutor(int threads) {
+    return
+        new ThreadPoolExecutor(1, threads, 1, TimeUnit.MILLISECONDS,
+            new SynchronousQueue<Runnable>(), new Daemon.DaemonFactory() {
+              private final AtomicInteger threadIndex = new AtomicInteger(0);
+
+              @Override
+              public Thread newThread(Runnable r) {
+                Thread t = super.newThread(r);
+                t.setName("DfsClientFederation-"
+                    + threadIndex.getAndIncrement());
+                return t;
+              }
+            });
+  }
+
   public void linkBlocksToNewPool() throws IOException {
     boolean connectViaHostName =
         conf.getBoolean(DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME,
             DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT);
+    final UserGroupInformation ugi = UserGroupInformation.getLoginUser();
+    int numDns = dnBlkMap.size();
+    int maxThreads =
+        conf.getInt(DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD,
+            DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD_DEFAULT);
+    int numThreads = (numDns > maxThreads) ? maxThreads : numDns;
+    List<Long> notFinishedBlks = new LinkedList<Long>();
     for (Map.Entry<DatanodeInfo, BlocksToDup> item : dnBlkMap.entrySet()) {
-      // TBD: Make this to be multiple threads
-      final UserGroupInformation ugi = UserGroupInformation.getLoginUser();
-      InetSocketAddress dnAddr =
-          NetUtils.createSocketAddr(item.getKey()
-              .getIpcAddr(connectViaHostName));
-      FederationClientDatanodeProtocol fcdp =
-          FederationClientDatanodeProtocolTranslatorPB
-              .createFederationClientDatanodeProtocolProxy(dnAddr, ugi, conf);
-      fcdp.addBlocksToNewPool(srcPool, item.getValue());
-      // TBD: To add logic to verify that we can go-on to next step
+      for (BlocksToDup.DupBlockInfo dbi : item.getValue().getDupBlocksInfo()) {
+        if (!notFinishedBlks.contains(dbi.getSrcBlockId())) {
+          notFinishedBlks.add(dbi.getSrcBlockId());
+        }
+      }
+    }
+    Executor linkExecutor = initExecutor(numThreads);
+    CompletionService<Block[]> linkService =
+        new ExecutorCompletionService<Block[]>(linkExecutor);
+    List<Future<Block[]>> futures = new LinkedList<Future<Block[]>>();
+    Exception lastExp = null;
+    // TBD: Assert unlinkedBlks contain a src blk only once
+    for (Map.Entry<DatanodeInfo, BlocksToDup> item : dnBlkMap.entrySet()) {
+      Callable<Block[]> oneDnTsk =
+          getLinkBlocksTskForOneDataNode(item, connectViaHostName, ugi);
+      Future<Block[]> tskFuture = linkService.submit(oneDnTsk);
+      futures.add(tskFuture);
+    }
+    while (!futures.isEmpty()) {
+      Future<Block[]> finishedTsk = null;
+      try {
+        finishedTsk = linkService.take();
+        Block[] blks = finishedTsk.get();
+        futures.remove(finishedTsk);
+        for (Block b : blks) {
+          notFinishedBlks.remove(b.getBlockId());
+        }
+      } catch (Exception e) {
+        if (finishedTsk != null) {
+          futures.remove(finishedTsk);
+        }
+        lastExp = e;
+      }
+    }
+    if (!notFinishedBlks.isEmpty()) {
+      if (lastExp != null) {
+        throw new IOException(lastExp);
+      } else {
+        throw new IOException(
+            "Cannot move all blocks for the rename operation in different namenodes");
+      }
     }
   }
 }
