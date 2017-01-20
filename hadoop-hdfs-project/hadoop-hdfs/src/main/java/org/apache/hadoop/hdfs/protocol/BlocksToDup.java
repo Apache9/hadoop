@@ -70,6 +70,10 @@ public class BlocksToDup {
     return destPoolId;
   }
 
+  public List<DupBlockInfo> getDupBlocksInfo() {
+    return blks;
+  }
+
   public int size() {
     return blks.size();
   }
