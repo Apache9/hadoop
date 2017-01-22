@@ -55,19 +55,21 @@ public class FederationRenameBlockCollector {
           }
           long srcId = blksToDup.get(blksIdx).getSrcBlockId();
           long dstId = blksToDup.get(blksIdx).getDstBlockId();
+          long srcGs = blksToDup.get(blksIdx).getSrcBlockGenStamp();
+          long dstGs = blksToDup.get(blksIdx).getDstBlockGenStamp();
           blksIdx++;
           for (DatanodeInfo datanode : lblk.getLocations()) {
             if (dnBlkMap.containsKey(datanode)) {
               BlocksToDup dnBlkToDup = dnBlkMap.get(datanode);
               assert (dnBlkToDup != null);
               assert (srcId == lblk.getBlock().getBlockId());
-              dnBlkToDup.addDupBlock(srcId, dstId, lblk.getBlockSize(), lblk
-                  .getBlock().getGenerationStamp());
+              dnBlkToDup.addDupBlock(srcId, dstId, lblk.getBlockSize(), srcGs,
+                  dstGs);
             } else {
               BlocksToDup dnBlkToDup =
                   new BlocksToDup(blksToDup.getDstPoolId());
-              dnBlkToDup.addDupBlock(srcId, dstId, lblk.getBlockSize(), lblk
-                  .getBlock().getGenerationStamp());
+              dnBlkToDup.addDupBlock(srcId, dstId, lblk.getBlockSize(), srcGs,
+                  dstGs);
               dnBlkMap.put(datanode, dnBlkToDup);
             }
           }

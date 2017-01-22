@@ -922,6 +922,12 @@ public class FSEditLogLoader {
           dst, dstId, false, startTime);
       if (dupBlks.size() > 0) {
         long lastBlkId = dupBlks.get(dupBlks.size() - 1).getDstBlockId();
+        long lastBlkGen = dupBlks.get(dupBlks.size() - 1).getDstBlockGenStamp();
+        if (fsNamesys.isLegacyBlock(new Block(lastBlkId, 0, lastBlkGen))) {
+          fsNamesys.setGenerationStampV1(lastBlkGen);
+        } else {
+          fsNamesys.setGenerationStampV2(lastBlkGen);
+        }
         assert (lastBlkId != 0);
         fsNamesys.setLastAllocatedBlockId(lastBlkId);
       }

@@ -866,8 +866,9 @@ public class FSImageSerialization {
       long srcId = readLong(in);
       long dstId = readLong(in);
       long blkSz = readLong(in);
-      long genStamp = readLong(in);
-      btd.addDupBlock(srcId, dstId, blkSz, genStamp);
+      long srcGenStamp = readLong(in);
+      long dstGenStamp = readLong(in);
+      btd.addDupBlock(srcId, dstId, blkSz, srcGenStamp, dstGenStamp);
     }
     return btd;
   }
@@ -881,7 +882,8 @@ public class FSImageSerialization {
       writeLong(dbi.getSrcBlockId(), out);
       writeLong(dbi.getDstBlockId(), out);
       writeLong(dbi.getBlockSize(), out);
-      writeLong(dbi.getBlockGenStamp(), out);
+      writeLong(dbi.getSrcBlockGenStamp(), out);
+      writeLong(dbi.getDstBlockGenStamp(), out);
     }
   }
 }

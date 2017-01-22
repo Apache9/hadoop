@@ -4416,8 +4416,10 @@ public abstract class FSEditLogOp {
             Long.toString(dbi.getDstBlockId()));
         XMLUtils.addSaxString(contentHandler, "BLKSZ",
             Long.toString(dbi.getBlockSize()));
-        XMLUtils.addSaxString(contentHandler, "BLKGEN",
-            Long.toString(dbi.getBlockGenStamp()));
+        XMLUtils.addSaxString(contentHandler, "SRCBLKGEN",
+            Long.toString(dbi.getSrcBlockGenStamp()));
+        XMLUtils.addSaxString(contentHandler, "DSTBLKGEN",
+            Long.toString(dbi.getDstBlockGenStamp()));
       }
       appendRpcIdsToXml(contentHandler, rpcClientId, rpcCallId);
     }
@@ -4444,8 +4446,9 @@ public abstract class FSEditLogOp {
         long srcBlkId = Long.parseLong(st.getValue("SRCBLKID"));
         long dstBlkId = Long.parseLong(st.getValue("DSTBLKID"));
         long blkSz = Long.parseLong(st.getValue("BLKSZ"));
-        long blkGen = Long.parseLong(st.getValue("BLKGEN"));
-        blksToDup.addDupBlock(srcBlkId, dstBlkId, blkSz, blkGen);
+        long srcBlkGen = Long.parseLong(st.getValue("SRCBLKGEN"));
+        long dstBlkGen = Long.parseLong(st.getValue("DSTBLKGEN"));
+        blksToDup.addDupBlock(srcBlkId, dstBlkId, blkSz, srcBlkGen, dstBlkGen);
       }
       readRpcIdsFromXml(st);
     }
