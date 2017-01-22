@@ -2833,7 +2833,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
     Block blk =
         new Block(dbi.getDstBlockId(), dbi.getBlockSize(),
-            dbi.getBlockGenStamp());
+            dbi.getDstBlockGenStamp());
     FsVolumeImpl v = (FsVolumeImpl) srcReplica.getVolume();
     File srcFile = srcReplica.getBlockFile();
     File srcMetaFile = srcReplica.getMetaFile();
@@ -2861,7 +2861,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         DupBlockInfo dbi = blksToDup.get(i);
         if (addOneBlockToNewPool(srcPool, blksToDup.getDstPoolId(), dbi)) {
           lblk.add(new Block(dbi.getSrcBlockId(), dbi.getBlockSize(), dbi
-              .getBlockGenStamp()));
+              .getSrcBlockGenStamp()));
           LOG.info("Linked " + dbi.getDstBlockId() + " to "
               + dbi.getSrcBlockId());
         }

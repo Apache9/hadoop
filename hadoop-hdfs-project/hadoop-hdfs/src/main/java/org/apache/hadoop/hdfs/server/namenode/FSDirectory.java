@@ -527,6 +527,7 @@ public class FSDirectory implements Closeable {
     FileAlreadyExistsException, SnapshotAccessControlException, IOException {
     assert hasWriteLock();
     INodesInPath srcIIP = getINodesInPath4Write(src, false);
+    srcIIP.verifyFederationRename();
     final INode srcInode = srcIIP.getLastINode();
     try {
       validateRenameSource(src, srcIIP);
@@ -552,6 +553,7 @@ public class FSDirectory implements Closeable {
     }
 
     INodesInPath dstIIP = getINodesInPath4Write(dst, false);
+    dstIIP.verifyFederationRename();
     if (dstIIP.getLastINode() != null) {
       NameNode.stateChangeLog.warn("DIR* FSDirectory.unprotectedRenameTo: "
                                    +"failed to rename "+src+" to "+dst+ 
@@ -653,6 +655,7 @@ public class FSDirectory implements Closeable {
 
     final String error;
     final INodesInPath srcIIP = getINodesInPath4Write(src, false);
+    srcIIP.verifyFederationRename();
     final INode srcInode = srcIIP.getLastINode();
     validateRenameSource(src, srcIIP);
 
@@ -664,6 +667,7 @@ public class FSDirectory implements Closeable {
     validateRenameDestination(src, dst, srcInode);
 
     INodesInPath dstIIP = getINodesInPath4Write(dst, false);
+    dstIIP.verifyFederationRename();
     if (dstIIP.getINodes().length == 1) {
       error = "rename destination cannot be the root";
       NameNode.stateChangeLog.warn("DIR* FSDirectory.unprotectedRenameTo: "
@@ -988,7 +992,7 @@ public class FSDirectory implements Closeable {
    */
   Block[] setReplication(String src, short replication, short[] blockRepls)
       throws QuotaExceededException, UnresolvedLinkException,
-      SnapshotAccessControlException {
+      SnapshotAccessControlException, IOException {
     writeLock();
     try {
       return unprotectedSetReplication(src, replication, blockRepls);
@@ -999,10 +1003,11 @@ public class FSDirectory implements Closeable {
 
   Block[] unprotectedSetReplication(String src, short replication,
       short[] blockRepls) throws QuotaExceededException,
-      UnresolvedLinkException, SnapshotAccessControlException {
+      UnresolvedLinkException, SnapshotAccessControlException, IOException {
     assert hasWriteLock();
 
     final INodesInPath iip = getINodesInPath4Write(src, true);
+    iip.verifyFederationRename();
     final INode inode = iip.getLastINode();
     if (inode == null || !inode.isFile()) {
       return null;
@@ -1049,6 +1054,7 @@ public class FSDirectory implements Closeable {
       throws IOException {
     assert hasWriteLock();
     final INodesInPath iip = getINodesInPath4Write(src, true);
+    iip.verifyFederationRename();
     final INode inode = iip.getLastINode();
     if (inode == null) {
       throw new FileNotFoundException("File/Directory does not exist: " + src);
@@ -1103,7 +1109,7 @@ public class FSDirectory implements Closeable {
 
   void setPermission(String src, FsPermission permission)
       throws FileNotFoundException, UnresolvedLinkException,
-      QuotaExceededException, SnapshotAccessControlException {
+      QuotaExceededException, SnapshotAccessControlException, IOException {
     writeLock();
     try {
       unprotectedSetPermission(src, permission);
@@ -1114,9 +1120,10 @@ public class FSDirectory implements Closeable {
   
   void unprotectedSetPermission(String src, FsPermission permissions)
       throws FileNotFoundException, UnresolvedLinkException,
-      QuotaExceededException, SnapshotAccessControlException {
+      QuotaExceededException, SnapshotAccessControlException, IOException {
     assert hasWriteLock();
     final INodesInPath inodesInPath = getINodesInPath4Write(src, true);
+    inodesInPath.verifyFederationRename();
     final INode inode = inodesInPath.getLastINode();
     if (inode == null) {
       throw new FileNotFoundException("File does not exist: " + src);
@@ -1127,7 +1134,7 @@ public class FSDirectory implements Closeable {
 
   void setOwner(String src, String username, String groupname)
       throws FileNotFoundException, UnresolvedLinkException,
-      QuotaExceededException, SnapshotAccessControlException {
+      QuotaExceededException, SnapshotAccessControlException, IOException {
     writeLock();
     try {
       unprotectedSetOwner(src, username, groupname);
@@ -1138,9 +1145,10 @@ public class FSDirectory implements Closeable {
 
   void unprotectedSetOwner(String src, String username, String groupname)
       throws FileNotFoundException, UnresolvedLinkException,
-      QuotaExceededException, SnapshotAccessControlException {
+      QuotaExceededException, SnapshotAccessControlException, IOException {
     assert hasWriteLock();
     final INodesInPath inodesInPath = getINodesInPath4Write(src, true);
+    inodesInPath.verifyFederationRename();
     INode inode = inodesInPath.getLastINode();
     if (inode == null) {
       throw new FileNotFoundException("File does not exist: " + src);
@@ -1237,7 +1245,8 @@ public class FSDirectory implements Closeable {
    * @return the number of files that have been removed
    */
   long delete(String src, BlocksMapUpdateInfo collectedBlocks,
-              List<INode> removedINodes, long mtime) throws IOException {
+      List<INode> removedINodes, long mtime, boolean skipFedCheck)
+      throws IOException {
     if (NameNode.stateChangeLog.isDebugEnabled()) {
       NameNode.stateChangeLog.debug("DIR* FSDirectory.delete: " + src);
     }
@@ -1246,6 +1255,9 @@ public class FSDirectory implements Closeable {
     try {
       final INodesInPath inodesInPath = getINodesInPath4Write(
           normalizePath(src), false);
+      if (!skipFedCheck) {
+        inodesInPath.verifyFederationRename();
+      }
       if (!deleteAllowed(inodesInPath, src) ) {
         filesRemoved = -1;
       } else {
@@ -1342,7 +1354,8 @@ public class FSDirectory implements Closeable {
    * @return the number of inodes deleted; 0 if no inodes are deleted.
    */ 
   long unprotectedDelete(INodesInPath iip, BlocksMapUpdateInfo collectedBlocks,
-      List<INode> removedINodes, long mtime) throws QuotaExceededException {
+      List<INode> removedINodes, long mtime) throws QuotaExceededException,
+      IOException {
     assert hasWriteLock();
 
     // check if target node exists
@@ -2299,7 +2312,7 @@ public class FSDirectory implements Closeable {
   INodeDirectory unprotectedSetQuota(String src, long nsQuota, long dsQuota)
       throws FileNotFoundException, PathIsNotDirectoryException,
       QuotaExceededException, UnresolvedLinkException,
-      SnapshotAccessControlException {
+      SnapshotAccessControlException, IOException {
     assert hasWriteLock();
     // sanity check
     if ((nsQuota < 0 && nsQuota != HdfsConstants.QUOTA_DONT_SET && 
@@ -2313,6 +2326,7 @@ public class FSDirectory implements Closeable {
     
     String srcs = normalizePath(src);
     final INodesInPath iip = getINodesInPath4Write(srcs, true);
+    iip.verifyFederationRename();
     INodeDirectory dirNode = INodeDirectory.valueOf(iip.getLastINode(), srcs);
     if (dirNode.isRoot() && nsQuota == HdfsConstants.QUOTA_RESET) {
       throw new IllegalArgumentException("Cannot clear namespace quota on root.");
@@ -2346,7 +2360,7 @@ public class FSDirectory implements Closeable {
   INodeDirectory setQuota(String src, long nsQuota, long dsQuota)
       throws FileNotFoundException, PathIsNotDirectoryException,
       QuotaExceededException, UnresolvedLinkException,
-      SnapshotAccessControlException {
+      SnapshotAccessControlException, IOException {
     writeLock();
     try {
       return unprotectedSetQuota(src, nsQuota, dsQuota);
@@ -2576,9 +2590,9 @@ public class FSDirectory implements Closeable {
   /**
    * Add the specified path into the namespace.
    */
-  INodeSymlink addSymlink(long id, String path, String target,
-                          long mtime, long atime, PermissionStatus perm)
-          throws UnresolvedLinkException, QuotaExceededException {
+  INodeSymlink addSymlink(long id, String path, String target, long mtime,
+      long atime, PermissionStatus perm) throws UnresolvedLinkException,
+      QuotaExceededException, IOException {
     writeLock();
     try {
       return unprotectedAddSymlink(id, path, target, mtime, atime, perm);
@@ -2589,8 +2603,10 @@ public class FSDirectory implements Closeable {
 
   INodeSymlink unprotectedAddSymlink(long id, String path, String target,
       long mtime, long atime, PermissionStatus perm)
-      throws UnresolvedLinkException, QuotaExceededException {
+      throws UnresolvedLinkException, QuotaExceededException, IOException {
     assert hasWriteLock();
+    getExistingPathINodes(INode.getPathComponents(path))
+        .verifyFederationRename();
     final INodeSymlink symlink = new INodeSymlink(id, null, perm, mtime, atime,
         target);
     return addINode(path, symlink) ? symlink : null;
@@ -2609,6 +2625,7 @@ public class FSDirectory implements Closeable {
       List<AclEntry> aclSpec) throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
+    iip.verifyFederationRename();
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(inode);
@@ -2631,6 +2648,7 @@ public class FSDirectory implements Closeable {
       List<AclEntry> aclSpec) throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
+    iip.verifyFederationRename();
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(inode);
@@ -2653,6 +2671,7 @@ public class FSDirectory implements Closeable {
       throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
+    iip.verifyFederationRename();
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(inode);
@@ -2674,6 +2693,7 @@ public class FSDirectory implements Closeable {
   private void unprotectedRemoveAcl(String src) throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
+    iip.verifyFederationRename();
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     AclStorage.removeINodeAcl(inode, snapshotId);
@@ -2698,6 +2718,7 @@ public class FSDirectory implements Closeable {
 
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
+    iip.verifyFederationRename();
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<AclEntry> newAcl = aclSpec;
@@ -2755,6 +2776,7 @@ public class FSDirectory implements Closeable {
       final List<XAttr> toRemove) throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
+    iip.verifyFederationRename();
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<XAttr> existingXAttrs = XAttrStorage.readINodeXAttrs(inode);
@@ -2967,6 +2989,7 @@ public class FSDirectory implements Closeable {
       throws QuotaExceededException, IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
+    iip.verifyFederationRename();
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<XAttr> existingXAttrs = XAttrStorage.readINodeXAttrs(inode);
@@ -3356,6 +3379,14 @@ public class FSDirectory implements Closeable {
           "The directory to be renamed between namenode contains too many files");
     }
     if (!node.isDirectory()) {
+      if (node.isSymlink()) {
+        throw new FederationRenameInvalidArgument(
+            "The directory to be renamed between namenodes contains symlink");
+      }
+      if (node.asFile().isUnderConstruction()) {
+        throw new FederationRenameInvalidArgument(
+            "The directory to be renamed between namenodes contains un-closed file");
+      }
       HdfsFileStatus fstatus =
           createFileStatus(node.getLocalNameBytes(), node, true,
               BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath, iip);
@@ -3429,6 +3460,7 @@ public class FSDirectory implements Closeable {
     writeLock();
     try {
       INodesInPath srcIIP = getINodesInPath4Write(src, false);
+      srcIIP.verifyFederationRename();
       final INode srcInode = srcIIP.getLastINode();
       try {
         validateRenameSource(src, srcIIP);
@@ -3520,11 +3552,15 @@ public class FSDirectory implements Closeable {
           blk = new Block(blkId, sz, genStamp);
         } else {
           long newId = namesystem.nextBlockIdWithoutLog();
-          blk = new Block(newId, sz, genStamp);
-          blks.addDupBlock(blkId, newId, sz, genStamp);
+          long newGs =
+              namesystem.nextGenerationStampWithoutLog(namesystem
+                  .isLegacyBlock(new Block(blkId, sz, genStamp)));
+          blk = new Block(newId, sz, newGs);
+          blks.addDupBlock(blkId, newId, sz, genStamp, newGs);
           // Change the original blkid so that the log replay will pick up the
           // new block Id
-          lb.getBlock().setBlockId(blkId);
+          lb.getBlock().setBlockId(newId);
+          lb.getBlock().setGenerationStamp(newGs);
         }
         BlockInfo bi = new BlockInfo(blk, fstatus.getReplication());
         namesystem.getBlockManager().addBlockCollection(bi, file);
@@ -3596,6 +3632,7 @@ public class FSDirectory implements Closeable {
     try {
       // Check fslimit, quota and permission
       INodesInPath dstIIP = getINodesInPath4Write(dst, false);
+      dstIIP.verifyFederationRename();
       if (dstIIP.getLastINode() != null) {
         NameNode.stateChangeLog
             .warn("DIR* FSDirectory.federationRenameDestPhase1: "

@@ -36,7 +36,8 @@ message DupBlockInfoProto {
   required int64 srcId = 1;
   required int64 dstId = 2;
   required int64 blkSize = 3;
-  required int64 genStamp = 4;
+  required int64 srcGenStamp = 4;
+  required int64 dstGenStamp = 5;
 }
 
 message BlocksToDupProto {

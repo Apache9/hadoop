@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import java.io.IOException;
 import java.util.Arrays;
 
 import org.apache.commons.logging.Log;
@@ -445,6 +446,27 @@ public class INodesInPath {
     if (i != n) {
       throw new AssertionError("i = " + i + " != " + n
           + ", this=" + toString(false));
+    }
+  }
+
+  private boolean containsFederationRenameItem() {
+    if (inodes == null) {
+      return false;
+    }
+    for (int i = 0; i < inodes.length; i++) {
+      if (inodes[i] != null) {
+        if (inodes[i].getFederationRenameFeature() != null) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  public void verifyFederationRename() throws IOException {
+    if (containsFederationRenameItem()) {
+      throw new IOException(
+          "The specifid path is in a federation rename directory or file");
     }
   }
 }

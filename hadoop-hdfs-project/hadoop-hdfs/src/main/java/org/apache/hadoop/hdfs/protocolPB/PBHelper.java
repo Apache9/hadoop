@@ -2977,7 +2977,7 @@ public class PBHelper {
     List<DupBlockInfoProto> dblks = btdp.getBlksList();
     for (DupBlockInfoProto dblk : dblks) {
       res.addDupBlock(dblk.getSrcId(), dblk.getDstId(), dblk.getBlkSize(),
-          dblk.getGenStamp());
+          dblk.getSrcGenStamp(), dblk.getDstGenStamp());
     }
     return res;
   }
@@ -2985,7 +2985,9 @@ public class PBHelper {
   public static DupBlockInfoProto convert(DupBlockInfo dbi) {
     DupBlockInfoProto.Builder builder = DupBlockInfoProto.newBuilder();
     builder.setSrcId(dbi.getSrcBlockId()).setDstId(dbi.getDstBlockId())
-        .setBlkSize(dbi.getBlockSize()).setGenStamp(dbi.getBlockGenStamp());
+        .setBlkSize(dbi.getBlockSize())
+        .setSrcGenStamp(dbi.getSrcBlockGenStamp())
+        .setDstGenStamp(dbi.getDstBlockGenStamp());
     return builder.build();
   }
 

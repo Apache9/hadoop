@@ -31,7 +31,8 @@ public class BlocksToDup {
     private long srcBlockId;
     private long dstBlockId;
     private long blkSize;
-    private long genStamp;
+    private long srcGenStamp;
+    private long dstGenStamp;
 
     public long getSrcBlockId() {
       return srcBlockId;
@@ -45,15 +46,21 @@ public class BlocksToDup {
       return blkSize;
     }
 
-    public long getBlockGenStamp() {
-      return genStamp;
+    public long getSrcBlockGenStamp() {
+      return srcGenStamp;
     }
 
-    public DupBlockInfo(long srcId, long dstId, long sz, long genNum) {
+    public long getDstBlockGenStamp() {
+      return dstGenStamp;
+    }
+
+    public DupBlockInfo(long srcId, long dstId, long sz, long srcGenNum,
+        long dstGenNum) {
       srcBlockId = srcId;
       dstBlockId = dstId;
       blkSize = sz;
-      genStamp = genNum;
+      srcGenStamp = srcGenNum;
+      dstGenStamp = dstGenNum;
     }
   }
 
@@ -62,8 +69,9 @@ public class BlocksToDup {
     blks = new LinkedList<DupBlockInfo>();
   }
 
-  public void addDupBlock(long srcId, long dstId, long sz, long genNum) {
-    blks.add(new DupBlockInfo(srcId, dstId, sz, genNum));
+  public void addDupBlock(long srcId, long dstId, long sz, long srcGenNum,
+      long dstGenNum) {
+    blks.add(new DupBlockInfo(srcId, dstId, sz, srcGenNum, dstGenNum));
   }
 
   public String getDstPoolId() {
@@ -115,13 +123,13 @@ public class BlocksToDup {
           long dstSz = dlblks.get(j).getBlockSize();
           long srcGen = slblks.get(j).getBlock().getGenerationStamp();
           long dstGen = dlblks.get(j).getBlock().getGenerationStamp();
-          if (srcSz != dstSz || srcGen != dstGen) {
+          if (srcSz != dstSz) {
             return null;
           }
           if (res == null) {
             res = new BlocksToDup(dblks.get(j).getBlock().getBlockPoolId());
           }
-          res.addDupBlock(srcId, dstId, srcSz, srcGen);
+          res.addDupBlock(srcId, dstId, srcSz, srcGen, dstGen);
         }
       }
     }

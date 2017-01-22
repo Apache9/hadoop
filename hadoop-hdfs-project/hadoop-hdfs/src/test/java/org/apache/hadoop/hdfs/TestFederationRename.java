@@ -15,12 +15,16 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
+import org.apache.hadoop.hdfs.server.namenode.FederationRenameInvalidArgument;
+import org.apache.hadoop.ipc.RemoteException;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -299,5 +303,160 @@ public class TestFederationRename {
         .toString(), dfs2.getUri().toString(), true));
     Assert.assertFalse(dfs2.renameRecordExist(sp2.getRenameId(), dfs1.getUri()
         .toString(), dfs2.getUri().toString(), false));
+  }
+
+  @Test
+  public void testRenameUnclosedFile() throws IOException {
+    String str = "Federation rename : testRenameUnclosedFile";
+    OutputStream out = fHdfs1.create(new Path("/testRenameUnclosedFile"));
+    out.write(str.getBytes());
+
+    try {
+      DistributedFileSystem dfs1 =
+          (DistributedFileSystem) fHdfs1.getDistributedFileSystem();
+      DistributedFileSystem dfs2 =
+          (DistributedFileSystem) fHdfs2.getDistributedFileSystem();
+      dfs1.renameSrcPhase1("/testRenameUnclosedFile", dfs1.getUri().toString(),
+          "/testRenameUnclosedFile", dfs2.getUri().toString());
+    } catch (RemoteException re) {
+      IOException ioe = re.unwrapRemoteException();
+      Assert.assertTrue(ioe instanceof FederationRenameInvalidArgument);
+      Assert.assertTrue(ioe.getCause().getMessage()
+          .contains("contains un-closed file"));
+      return;
+    }
+    Assert.assertTrue(false);
+  }
+
+  private void modificationTestEnvSetup(String str) throws IOException {
+    fHdfs1.mkdirs(new Path("/spmodify"), null);
+    OutputStream out = fHdfs1.create(new Path("/tmpfile"));
+    out.write(str.getBytes());
+    out.close();
+    out = fHdfs1.create(new Path("/spmodify/testfile"));
+    out.write(str.getBytes());
+    out.close();
+  }
+
+  @Test
+  public void testModifyRenamedPath() throws IOException {
+    String str = "testModifyRenamePath";
+    modificationTestEnvSetup(str);
+    DistributedFileSystem dfs1 =
+        (DistributedFileSystem) fHdfs1.getDistributedFileSystem();
+    DistributedFileSystem dfs2 =
+        (DistributedFileSystem) fHdfs2.getDistributedFileSystem();
+
+    // case1: make new directory in source of renamed path
+    // case2: append in source of renamed path
+    // case3: create new file in source of renamed path
+    DirectorySubTree ds =
+        dfs1.renameSrcPhase1("/spmodify", dfs1.getUri().toString(),
+            "/spmodify", dfs2.getUri().toString());
+    Assert.assertTrue(ds != null);
+    boolean ioexcepted = false;
+    try {
+      dfs1.mkdirs(new Path("/spmodify/testdir"));
+    } catch (RemoteException re) {
+      IOException ioe = re.unwrapRemoteException();
+      Assert.assertTrue(ioe.getMessage()
+          .contains("federation rename directory"));
+      ioexcepted = true;
+    }
+    Assert.assertTrue(ioexcepted);
+    ioexcepted = false;
+
+    try {
+      dfs1.append(new Path("/spmodify/testfile"));
+    } catch (RemoteException re) {
+      IOException ioe = re.unwrapRemoteException();
+      Assert.assertTrue(ioe.getMessage()
+          .contains("federation rename directory"));
+      ioexcepted = true;
+    }
+    Assert.assertTrue(ioexcepted);
+    ioexcepted = false;
+
+    try {
+      dfs1.create(new Path("/spmodify/newtestfile"));
+    } catch (RemoteException re) {
+      IOException ioe = re.unwrapRemoteException();
+      Assert.assertTrue(ioe.getMessage()
+          .contains("federation rename directory"));
+      ioexcepted = true;
+    }
+    Assert.assertTrue(ioexcepted);
+    ioexcepted = false;
+
+    // case4: make new directory in destination of renamed path
+    // case5: append in destination of renamed path
+    // case6: create new file in source of renamed path
+    BlocksToDup blksToDup =
+        dfs2.renameDestPhase1("/spmodify", dfs1.getUri().toString(),
+            "/spmodify", dfs2.getUri().toString(), ds);
+    Assert.assertTrue(blksToDup != null);
+    try {
+      dfs2.mkdirs(new Path("/spmodify/testdir"));
+    } catch (RemoteException re) {
+      IOException ioe = re.unwrapRemoteException();
+      Assert.assertTrue(ioe.getMessage()
+          .contains("federation rename directory"));
+      ioexcepted = true;
+    }
+    Assert.assertTrue(ioexcepted);
+    ioexcepted = false;
+
+    try {
+      dfs2.append(new Path("/spmodify/testfile"));
+    } catch (RemoteException re) {
+      IOException ioe = re.unwrapRemoteException();
+      Assert.assertTrue(ioe.getMessage()
+          .contains("federation rename directory"));
+      ioexcepted = true;
+    }
+    Assert.assertTrue(ioexcepted);
+    ioexcepted = false;
+
+    try {
+      dfs2.create(new Path("/spmodify/newtestfile"));
+    } catch (RemoteException re) {
+      IOException ioe = re.unwrapRemoteException();
+      Assert.assertTrue(ioe.getMessage()
+          .contains("federation rename directory"));
+      ioexcepted = true;
+    }
+    Assert.assertTrue(ioexcepted);
+    ioexcepted = false;
+
+    // case7: make new directory in successfully renamed path
+    // case8: append file in successfully renamed path
+    // case9: create new file in successfully renamed path
+    FederationRenameBlockCollector frbc =
+        new FederationRenameBlockCollector(ds, blksToDup, CONF);
+    frbc.linkBlocksToNewPool();
+    boolean sp2 = dfs1.renameSrcPhase2(ds.getRenameId(), false);
+    Assert.assertTrue(sp2);
+    boolean dp2 =
+        dfs2.renameDestPhase2(ds.getRenameId(), dfs1.getUri().toString());
+    Assert.assertTrue(dp2);
+    try {
+      dfs2.mkdirs(new Path("/spmodify/testdir"));
+    } catch (Exception e) {
+      Assert.assertTrue(false);
+    }
+
+    try {
+      FSDataOutputStream out = dfs2.append(new Path("/spmodify/testfile"));
+      out.close();
+    } catch (Exception e) {
+      Assert.assertTrue(false);
+    }
+
+    try {
+      FSDataOutputStream out = dfs2.create(new Path("/spmodify/newtestfile"));
+      out.close();
+    } catch (Exception e) {
+      Assert.assertTrue(false);
+    }
   }
 }
