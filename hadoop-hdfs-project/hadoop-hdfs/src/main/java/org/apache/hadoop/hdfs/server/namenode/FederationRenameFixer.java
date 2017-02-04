@@ -54,6 +54,7 @@ public class FederationRenameFixer {
         new Daemon(new RenameFixerMonitor(false, dstTimeout / 3));
     this.sourceFixerThread.start();
     this.destFixerThread.start();
+    LOG.info("fixer is started");
   }
 
   public void deactivate() {
@@ -75,6 +76,7 @@ public class FederationRenameFixer {
     }
     this.sourceFixerThread = null;
     this.destFixerThread = null;
+    LOG.info("fixer is stopped");
   }
 
   public boolean fixOneSourceItem(RenameRecord rr) throws IOException,
