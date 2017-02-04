@@ -209,6 +209,7 @@ import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
@@ -231,6 +232,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockCollection;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoUnderConstruction;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStatistics;
@@ -279,6 +281,7 @@ import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.StorageReceivedDeletedBlocks;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.hdfs.util.ChunkedArrayList;
+import org.apache.hadoop.hdfs.util.ReadOnlyList;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ipc.RetriableException;
@@ -602,6 +605,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private FederationInProgressRenameMap federationRenameMap = null;
   private long federationRenameId = 0;
   private FederationRenameFixer federationRenameFixer = null;
+  private int safeReplicaForInRenameBlks = 0;
 
   /**
    * Notify that loading of this FSDirectory is complete, and
@@ -968,6 +972,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
               DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_DEFAULT);
       this.federationRenameMap = new FederationInProgressRenameMap();
       this.federationRenameFixer = new FederationRenameFixer(conf, this);
+      this.safeReplicaForInRenameBlks =
+          conf.getInt(DFS_NAMENODE_REPLICATION_MIN_KEY,
+              DFS_NAMENODE_REPLICATION_MIN_DEFAULT);
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -6439,6 +6446,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private long getCompleteBlocksTotal() {
     // Calculate number of blocks under construction
     long numUCBlocks = 0;
+    long numUnfinishedRenameBlks = 0;
     readLock();
     try {
       for (Lease lease : leaseManager.getSortedLeases()) {
@@ -6460,7 +6468,18 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         }
       }
       LOG.info("Number of blocks under construction: " + numUCBlocks);
-      return getBlocksTotal() - numUCBlocks;
+      for (String path : federationRenameMap.getDestPathes()) {
+        try {
+          numUnfinishedRenameBlks += calcUnfinishedRenameBlocks(path);
+        } catch (UnresolvedLinkException e) {
+          throw new AssertionError(
+              "Unfinished rename dirs or files should reside on this FS");
+        }
+      }
+      LOG.info("Number of blocks under federation rename: "
+          + numUnfinishedRenameBlks);
+      assert (getBlocksTotal() >= (numUCBlocks + numUnfinishedRenameBlks));
+      return getBlocksTotal() - numUCBlocks - numUnfinishedRenameBlks;
     } finally {
       readUnlock();
     }
@@ -6989,7 +7008,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   }
 
   @VisibleForTesting
-  SequentialBlockIdGenerator getBlockIdGenerator() {
+  public SequentialBlockIdGenerator getBlockIdGenerator() {
     return blockIdGenerator;
   }
 
@@ -9961,5 +9980,60 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
   public DirectorySubTree getRenameDestSubTree(String dst) throws IOException {
     return federationRenameBuildSubTree(dst);
+  }
+
+  // This is for testing purpose only
+  @VisibleForTesting
+  public long getCurrentRenameId() {
+    return this.federationRenameId;
+  }
+
+  // This is for testing purpose only
+  @VisibleForTesting
+  public long getCurrentGenStamp(Block blk) {
+    if (isLegacyBlock(blk)) {
+      return this.generationStampV1.getCurrentValue();
+    } else {
+      return this.generationStampV2.getCurrentValue();
+    }
+  }
+
+  long calcUnfinishedRenameBlocksInternal(INode node) {
+    long res = 0;
+    if (!node.isDirectory()) {
+      if (node.isSymlink()) {
+        // this should not happen
+        return 0;
+      }
+      if (node.asFile().isUnderConstruction()) {
+        // this should not happen
+        return 0;
+      }
+      INodeFile fnode = node.asFile();
+      BlockInfo[] blocks = fnode.getBlocks();
+      for (BlockInfo b : blocks) {
+        int liveReplica = blockManager.countLiveNodes(b);
+        if (liveReplica < safeReplicaForInRenameBlks) {
+          res += 1;
+        }
+      }
+    } else {
+      final INodeDirectory dirInode = node.asDirectory();
+      final ReadOnlyList<INode> contents =
+          dirInode.getChildrenList(Snapshot.CURRENT_STATE_ID);
+      for (int i = 0; i < contents.size(); i++) {
+        INode cur = contents.get(i);
+        res += calcUnfinishedRenameBlocksInternal(cur);
+      }
+    }
+    return res;
+  }
+
+  long calcUnfinishedRenameBlocks(String path) throws UnresolvedLinkException {
+    final INode node = dir.getINode(path);
+    if (node == null) {
+      return 0;
+    }
+    return calcUnfinishedRenameBlocksInternal(node);
   }
 }

@@ -297,6 +297,7 @@ public final class FSImageFormatProtobuf {
       fsn.setGenerationStampV2(s.getGenstampV2());
       fsn.setGenerationStampV1Limit(s.getGenstampV1Limit());
       fsn.setLastAllocatedBlockId(s.getLastAllocatedBlockId());
+      fsn.setFederationRenameId(s.getLastRenameId());
       imgTxId = s.getTransactionId();
       if (s.hasRollingUpgradeStartTime()
           && fsn.getFSImage().hasRollbackFSImage()) {
@@ -536,6 +537,7 @@ public final class FSImageFormatProtobuf {
           .setGenstampV1Limit(fsn.getGenerationStampV1Limit())
           .setGenstampV2(fsn.getGenerationStampV2())
           .setLastAllocatedBlockId(fsn.getLastAllocatedBlockId())
+          .setLastRenameId(fsn.getCurrentRenameId())
           .setTransactionId(context.getTxId());
 
       // We use the non-locked version of getNamespaceInfo here since

@@ -445,6 +445,7 @@ public final class FSImageFormatPBINode {
       b.setSrcId(frf.getSrcId());
       b.setDst(frf.getDst());
       b.setDstId(frf.getDstId());
+      b.setStart(frf.getStart());
       return b;
     }
 

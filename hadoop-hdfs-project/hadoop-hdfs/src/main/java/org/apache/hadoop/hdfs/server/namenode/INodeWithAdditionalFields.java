@@ -387,7 +387,8 @@ public abstract class INodeWithAdditionalFields extends INode
   @Override
   public void addFederationRenameFeature(FederationRenameFeature frf) {
     FederationRenameFeature frf1 = getFederationRenameFeature();
-    Preconditions.checkState(frf1 == null, "Duplicated XAttrFeature");
+    Preconditions
+        .checkState(frf1 == null, "Duplicated FederationRenameFeature");
     addFeature(frf);
   }
 }

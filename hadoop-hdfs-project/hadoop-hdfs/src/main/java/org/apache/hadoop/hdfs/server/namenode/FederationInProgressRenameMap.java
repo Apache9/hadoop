@@ -134,4 +134,13 @@ public class FederationInProgressRenameMap {
     }
     return res;
   }
+
+  synchronized List<String> getDestPathes() {
+    List<String> res = new LinkedList<String>();
+    for (int idx = 0; idx < destInProgress.size(); idx++) {
+      RenameRecord rr = destInProgress.get(idx);
+      res.add(rr.getDst());
+    }
+    return res;
+  }
 }
