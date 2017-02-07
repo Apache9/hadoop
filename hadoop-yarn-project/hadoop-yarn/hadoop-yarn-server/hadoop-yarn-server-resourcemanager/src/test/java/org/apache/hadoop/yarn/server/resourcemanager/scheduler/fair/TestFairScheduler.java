@@ -1103,6 +1103,63 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     assertEquals("root.notdefault", rmApp2.getQueue());
   }
 
+  @Test (timeout = 500000)
+    public void testExclusiveAppName() throws Exception {
+      conf.set(FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_USERS, "user1, user2");
+      conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+      PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("<queue name=\"queue1\">");
+      out.println("<maxResources>8192mb,10vcores</maxResources>");
+      out.println("</queue>");
+      out.println("<queue name=\"queue2\">");
+      out.println("<maxResources>8192mb,10vcores</maxResources>");
+      out.println("</queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+      out.close();
+
+      scheduler.init(conf);
+      scheduler.start();
+      scheduler.reinitialize(conf, resourceManager.getRMContext());
+
+    RMNode node = MockNodes.newNodeInfo(1, BuilderUtils.newResource(8192, 7), 1, "127.0.0.1");
+    NodeAddedSchedulerEvent nodeEvent = new NodeAddedSchedulerEvent(node);
+    scheduler.handle(nodeEvent);
+
+    Set<String> exclusiveUsers = new HashSet<String>();
+    exclusiveUsers.add("user1");
+    exclusiveUsers.add("user2");
+    // Test for users that enabled exclusive app name
+    for (String user: exclusiveUsers) {
+      ApplicationAttemptId appAttId1 =
+          createSchedulingRequest(1024, 1, "queue1", user, 2, "app1");
+      assertNotNull(scheduler.getSchedulerApp(appAttId1));
+      ApplicationAttemptId appAttId2 =
+          createSchedulingRequest(1024, 1, "queue1", user, 2, "app1");
+      assertNull("App with the same name with the same user be rejected",
+          scheduler.getSchedulerApp(appAttId2));
+      ApplicationAttemptId appAttId3 =
+          createSchedulingRequest(1024, 1, "queue2", user, 2, "app1");
+      assertNull("App with the same name with the same user be rejected",
+          scheduler.getSchedulerApp(appAttId3));
+      ApplicationAttemptId appAttId4 =
+          createSchedulingRequest(1024, 1, "queue1", user, 2, "app2");
+      assertNotNull(scheduler.getSchedulerApp(appAttId4));
+    }
+
+    // Test for users that not enabled exclusive app name
+    ApplicationAttemptId appAttId1 = createSchedulingRequest(1024, 1, "queue1", "user3", 2, "app1");
+    assertNotNull(scheduler.getSchedulerApp(appAttId1));
+    ApplicationAttemptId appAttId2 = createSchedulingRequest(1024, 1, "queue1", "user3", 2, "app1");
+    assertNotNull("App with the same name with the same user be rejected",
+        scheduler.getSchedulerApp(appAttId2));
+    ApplicationAttemptId appAttId3 = createSchedulingRequest(1024, 1, "queue1", "user3", 2, "app2");
+    assertNotNull(scheduler.getSchedulerApp(appAttId3));
+  }
+
   @Test
   public void testAssignToNonLeafQueueReturnsNull() throws Exception {
     conf.set(FairSchedulerConfiguration.USER_AS_DEFAULT_QUEUE, "true");

@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate;
@@ -120,6 +121,8 @@ public class FairScheduler extends
   private volatile Clock clock;
   private boolean usePortForNodeName;
   private Set<String> aclProxyUsers;
+  private Set<String> exclusiveAppNameUsers;
+  private Set<Pair<String, String>> exclusiveUserApps;
 
   private static final Log LOG = LogFactory.getLog(FairScheduler.class);
   
@@ -198,6 +201,8 @@ public class FairScheduler extends
     queueMgr = new QueueManager(this);
     maxRunningEnforcer = new MaxRunningAppsEnforcer(this);
     aclProxyUsers = new HashSet<String>();
+    exclusiveAppNameUsers = new HashSet<String>();
+    exclusiveUserApps = new HashSet<Pair<String, String>>();
   }
 
   private void validateConf(Configuration conf) {
@@ -659,6 +664,19 @@ public class FairScheduler extends
       return;
     }
 
+    if (exclusiveAppNameUsers.contains(user)) {
+      if (exclusiveUserApps.contains(Pair.of(user, rmApp.getName()))) {
+        String message = "Reject application " + applicationId
+            + " with existing same user and name (" + user + ", " + rmApp.getName() + ")";
+        LOG.info(message);
+        rmContext.getDispatcher().getEventHandler()
+            .handle(new RMAppRejectedEvent(applicationId, message));
+        return;
+      } else {
+        exclusiveUserApps.add(Pair.of(user, rmApp.getName()));
+      }
+    }
+
     // Enforce ACLs
     UserGroupInformation userUgi = UserGroupInformation.createRemoteUser(realUser);
 
@@ -671,7 +689,7 @@ public class FairScheduler extends
           .handle(new RMAppRejectedEvent(applicationId, msg));
       return;
     }
-  
+
     SchedulerApplication<FSAppAttempt> application =
         new SchedulerApplication<FSAppAttempt>(queue, user);
     applications.put(applicationId, application);
@@ -798,6 +816,11 @@ public class FairScheduler extends
     }
     application.stop(finalState);
     applications.remove(applicationId);
+
+    if (exclusiveAppNameUsers.contains(application.getUser())) {
+      RMApp rmApp = rmContext.getRMApps().get(applicationId);
+      exclusiveUserApps.remove(Pair.of(rmApp.getUser(), rmApp.getName()));
+    }
   }
 
   private synchronized void removeApplicationAttempt(
@@ -1328,6 +1351,12 @@ public class FairScheduler extends
         aclProxyUsers.add(aclProxyUser);
       }
 
+      LOG.info("Exclusive name app users: " + conf.getTrimmedStrings
+          (FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_USERS));
+      for (String user : conf.getTrimmedStrings(FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_USERS)) {
+        exclusiveAppNameUsers.add(user);
+      }
+
       updateInterval = this.conf.getUpdateInterval();
       if (updateInterval < 0) {
         updateInterval = FairSchedulerConfiguration.DEFAULT_UPDATE_INTERVAL_MS;
@@ -1343,6 +1372,7 @@ public class FairScheduler extends
       // This stores per-application scheduling information
       this.applications = new ConcurrentHashMap<
           ApplicationId, SchedulerApplication<FSAppAttempt>>();
+
       this.eventLog = new FairSchedulerEventLog();
       eventLog.init(this.conf);
 
