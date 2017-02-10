@@ -17,6 +17,14 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.ha;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import com.google.common.base.Joiner;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -24,6 +32,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.AbstractFileSystem;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.*;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -63,7 +72,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 
-import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -373,7 +381,7 @@ public class TestDelegationTokensWithHA {
     token.renew(conf);
     token.cancel(conf);
   }
-  
+
   /**
    * Test if StandbyException can be thrown from StandbyNN, when it's requested for 
    * password. (HDFS-6475). With StandbyException, the client can failover to try
@@ -458,6 +466,39 @@ public class TestDelegationTokensWithHA {
     });
   }
 
+  @Test(timeout = 300000)
+  public void testCancelAndUpdateDelegationTokens() throws Exception {
+    // Create UGI with token1
+    String user = UserGroupInformation.getCurrentUser().getShortUserName();
+    UserGroupInformation ugi1 = UserGroupInformation.createRemoteUser(user);
+
+    ugi1.doAs(new PrivilegedExceptionAction<Void>() {
+      public Void run() throws Exception {
+        final Token<DelegationTokenIdentifier> token1 =
+            getDelegationToken(fs, "JobTracker");
+        UserGroupInformation.getCurrentUser()
+            .addToken(token1.getService(), token1);
+
+        FileSystem fs1 = HATestUtil.configureFailoverFs(cluster, conf);
+
+        String s = conf.get(DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + ".ha-nn-uri-0");
+
+        // Cancel token1
+        doRenewOrCancel(token1, conf, TokenTestAction.CANCEL);
+
+        // Update UGI with token2
+        final Token<DelegationTokenIdentifier> token2 =
+            getDelegationToken(fs, "JobTracker");
+        UserGroupInformation.getCurrentUser()
+            .addToken(token2.getService(), token2);
+
+        // Check whether token2 works
+        fs1.listFiles(new Path("/"), false);
+        return null;
+      }
+    });
+  }
+ 
   @SuppressWarnings("unchecked")
   private Token<DelegationTokenIdentifier> getDelegationToken(FileSystem fs,
       String renewer) throws IOException {
