@@ -44,7 +44,10 @@ public class HdfsFileStatus {
   private final FsPermission permission;
   private final String owner;
   private final String group;
-  private final long fileId;
+  // We would change fileId when doing rename between diff namenodes in a fed
+  // cluster.
+  // It's ugly whereas we want to change things as little as possible.
+  private long fileId;
 
   private final FileEncryptionInfo feInfo;
   
@@ -267,5 +270,9 @@ public class HdfsFileStatus {
         isSymlink() ? new Path(getSymlink()) : null,
         (getFullPath(path)).makeQualified(
             defaultUri, null)); // fully-qualify path
+  }
+
+  public final void setFileId(long newId) {
+    this.fileId = newId;
   }
 }

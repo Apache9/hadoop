@@ -30,7 +30,7 @@ import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class TestFederationRenameWithRebootAndFailover {
+public class TestFederationRenameWithReboot {
   private static MiniDFSCluster cluster;
   private static final Configuration CONF = new Configuration();
   private static FileSystem fHdfs1;
@@ -50,8 +50,6 @@ public class TestFederationRenameWithRebootAndFailover {
 
     fHdfs1 = cluster.getFileSystem(0);
     fHdfs2 = cluster.getFileSystem(1);
-    ConfigUtil.addLink(CONF, "/home", fHdfs1.getUri());
-    ConfigUtil.addLink(CONF, "/user", fHdfs2.getUri());
   }
 
   @After

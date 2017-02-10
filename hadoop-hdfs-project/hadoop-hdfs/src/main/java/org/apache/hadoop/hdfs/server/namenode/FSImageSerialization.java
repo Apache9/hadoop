@@ -761,6 +761,7 @@ public class FSImageSerialization {
       FsPermission permission = FsPermission.read(in);
       String owner = readString(in);
       String grp = readString(in);
+      long fileId = readLong(in);
       int childrenNum = readInt(in);
       byte storagePolicy = readByte(in);
       HdfsFileStatus fstatus;
@@ -779,13 +780,13 @@ public class FSImageSerialization {
                 true, null);
         fstatus =
             new HdfsLocatedFileStatus(length, isDir, replication, blkSize,
-                mtime, atime, permission, owner, grp, symLink, path, 0, lblks,
-                childrenNum, null, storagePolicy);
+                mtime, atime, permission, owner, grp, symLink, path, fileId,
+                lblks, childrenNum, null, storagePolicy);
       } else {
         fstatus =
             new HdfsFileStatus(length, isDir, replication, blkSize, mtime,
-                atime, permission, owner, grp, symLink, path, 0, childrenNum,
-                null, storagePolicy);
+                atime, permission, owner, grp, symLink, path, fileId,
+                childrenNum, null, storagePolicy);
       }
       String aowner = readString(in);
       String agroup = readString(in);
@@ -832,6 +833,7 @@ public class FSImageSerialization {
       status.getPermission().write(out);
       writeString(status.getOwner(), out);
       writeString(status.getGroup(), out);
+      writeLong(status.getFileId(), out);
       // TBD : Add file encryption info?
       writeInt(status.getChildrenNum(), out);
       writeByte(status.getStoragePolicy(), out);
@@ -840,7 +842,7 @@ public class FSImageSerialization {
         LocatedBlocks lblks =
             ((HdfsLocatedFileStatus) status).getBlockLocations();
         writeInt(lblks.locatedBlockCount(), out);
-        for (int j = 0; i < lblks.getLocatedBlocks().size(); j++) {
+        for (int j = 0; j < lblks.getLocatedBlocks().size(); j++) {
           LocatedBlock lblk = lblks.getLocatedBlocks().get(j);
           writeLong(lblk.getBlock().getBlockId(), out);
           writeLong(lblk.getBlock().getGenerationStamp(), out);

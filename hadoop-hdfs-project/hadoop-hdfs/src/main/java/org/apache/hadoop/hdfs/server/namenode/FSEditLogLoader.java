@@ -920,6 +920,9 @@ public class FSEditLogLoader {
           startTime);
       fsNamesys.addFederationRenameRecord(subTree.getRenameId(), src, srcId,
           dst, dstId, false, startTime);
+      long largestInode = subTree.getLargestInodeId();
+      assert (largestInode != INodeId.GRANDFATHER_INODE_ID);
+      inodeId = getAndUpdateLastInodeId(largestInode, logVersion, lastInodeId);
       if (dupBlks.size() > 0) {
         long lastBlkId = dupBlks.get(dupBlks.size() - 1).getDstBlockId();
         long lastBlkGen = dupBlks.get(dupBlks.size() - 1).getDstBlockGenStamp();

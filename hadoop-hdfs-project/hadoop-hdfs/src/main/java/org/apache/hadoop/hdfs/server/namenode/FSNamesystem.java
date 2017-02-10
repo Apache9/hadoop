@@ -9810,10 +9810,12 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     List<INode> removedINodes = new ChunkedArrayList<INode>();
     byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
     long mtime = now();
+    checkOperation(OperationCategory.WRITE);
     waitForLoadingFSImage();
     writeLock();
     try {
       checkNameNodeSafeMode("Cannot delete " + src);
+      checkOperation(OperationCategory.WRITE);
       src = resolvePath(src, pathComponents);
       if (toCancel == false) {
         // Unlink the target directory from directory tree
@@ -9825,6 +9827,10 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         incrDeletedFileCount(filesRemoved);
         // Blocks/INodes will be handled later
         removePathAndBlocks(src, null, removedINodes, true);
+        if (NameNode.stateChangeLog.isDebugEnabled()) {
+          NameNode.stateChangeLog.debug("DIR* Namesystem.renameSrcPhase2: "
+              + src + " is removed");
+        }
       } else {
         if (dir.federationRenameRemoveFeature(src, false) == false) {
           return false;
@@ -9840,10 +9846,6 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     getEditLog().logSync();
     removeBlocks(collectedBlocks); // Incremental deletion of blocks
     collectedBlocks.clear();
-    if (NameNode.stateChangeLog.isDebugEnabled()) {
-      NameNode.stateChangeLog.debug("DIR* Namesystem.renameSrcPhase2: " + src
-          + " is removed");
-    }
     return true;
   }
 
@@ -9962,8 +9964,10 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     String dstRecord = rr.getDst();
     byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(dstRecord);
     boolean res = false;
+    checkOperation(OperationCategory.WRITE);
     writeLock();
     try {
+      checkOperation(OperationCategory.WRITE);
       String dst = resolvePath(dstRecord, pathComponents);
       res = dir.federationRenameRemoveFeature(dst, false);
       if (res) {
