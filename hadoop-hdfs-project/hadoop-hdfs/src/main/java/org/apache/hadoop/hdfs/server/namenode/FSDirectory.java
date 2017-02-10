@@ -34,6 +34,7 @@ import java.util.ListIterator;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -99,7 +100,9 @@ import org.apache.hadoop.hdfs.util.ReadOnlyList;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+
 import org.apache.hadoop.security.AccessControlException;
+import org.mortbay.log.Log;
 
 /**
  * Both FSDirectory and FSNamesystem manage the state of the namespace.
@@ -3462,13 +3465,7 @@ public class FSDirectory implements Closeable {
       INodesInPath srcIIP = getINodesInPath4Write(src, false);
       srcIIP.verifyFederationRename();
       final INode srcInode = srcIIP.getLastINode();
-      try {
-        validateRenameSource(src, srcIIP);
-      } catch (SnapshotException e) {
-        throw e;
-      } catch (IOException ignored) {
-        return null;
-      }
+      validateRenameSource(src, srcIIP);
       final int snapshot = srcIIP.getPathSnapshotId();
       final boolean isRawPath = isReservedRawName(src);
       buildDirectorySubTree(res, srcInode, federationRenameBlocksLimit,
@@ -3510,23 +3507,34 @@ public class FSDirectory implements Closeable {
     verifyINodeName(child.getLocalNameBytes());
   }
 
+  // blks == null implies the caller is from log replay
   private INode graftToNameSpace(HdfsExtendedFileStatus status, INode parent,
       BlocksToDup blks, int snapshot) throws IOException {
     INode child;
     HdfsFileStatus fstatus = status.getFileStatus();
     AclStatus astatus = status.getAclStatus();
+    long inodeid;
+    if (blks == null) {
+      inodeid = fstatus.getFileId();
+      assert (inodeid != INodeId.GRANDFATHER_INODE_ID);
+      Log.info("Graft : Recorded inode is " + inodeid);
+    } else {
+      inodeid = namesystem.allocateNewInodeId();
+      fstatus.setFileId(inodeid);
+      Log.info("Graft : Allocated inode is " + inodeid);
+    }
     if (fstatus.isDir()) {
       NameNode.stateChangeLog.info("Graft dir " + fstatus.getLocalName());
       child =
-          new INodeDirectory(namesystem.allocateNewInodeId(),
-              fstatus.getLocalNameInBytes(), PermissionStatus.createImmutable(
-                  fstatus.getOwner(), fstatus.getGroup(),
-                  fstatus.getPermission()), fstatus.getModificationTime());
+          new INodeDirectory(inodeid, fstatus.getLocalNameInBytes(),
+              PermissionStatus.createImmutable(fstatus.getOwner(),
+                  fstatus.getGroup(), fstatus.getPermission()),
+              fstatus.getModificationTime());
     } else {
       NameNode.stateChangeLog.info("Graft file " + fstatus.getLocalName());
       child =
           newINodeFile(
-              namesystem.allocateNewInodeId(),
+              inodeid,
               PermissionStatus.createImmutable(fstatus.getOwner(),
                   fstatus.getGroup(), fstatus.getPermission()),
               fstatus.getModificationTime(), fstatus.getModificationTime(),

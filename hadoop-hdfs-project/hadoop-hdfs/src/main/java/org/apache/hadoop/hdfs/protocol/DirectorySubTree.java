@@ -114,4 +114,14 @@ public class DirectorySubTree {
       log.info(i + "th item is " + subTree[i]);
     }
   }
+
+  public long getLargestInodeId() {
+    long res = 0;
+    for (int i = 0; i < currentIdx; i++) {
+      if (subTree[i].fstatus.getFileId() > res) {
+        res = subTree[i].fstatus.getFileId();
+      }
+    }
+    return res;
+  }
 }
