@@ -1,0 +1,37 @@
+<assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0 http://maven.apache.org/xsd/assembly-1.1.0.xsd">
+    <id>clusterone</id>
+    <formats>
+        <format>tar.gz</format>
+    </formats>
+    <includeBaseDirectory>true</includeBaseDirectory>
+    <fileSets>
+        <fileSet>
+            <directory>target</directory>
+            <outputDirectory>/</outputDirectory>
+            <includes>
+                <include>${project.artifactId}-${project.version}.jar</include>
+            </includes>
+        </fileSet>
+    </fileSets>
+    <dependencySets>
+        <dependencySet>
+            <outputDirectory>/lib</outputDirectory>
+            <unpack>false</unpack>
+            <scope>runtime</scope>
+            <useProjectArtifact>false</useProjectArtifact>
+            <!-- Exclude hadoop artifacts. They will be found via HADOOP* env -->
+            <excludes>
+                <!--<exclude>org.apache.hadoop:hadoop-common</exclude>-->
+                <!--<exclude>org.apache.hadoop:hadoop-hdfs</exclude>-->
+                <exclude>org.apache.hadoop:hadoop-mapreduce</exclude>
+                <!-- pipes is native stuff, this just keeps pom from being package-->
+                <exclude>org.apache.hadoop:hadoop-pipes</exclude>
+                <!-- use slf4j from common to avoid multiple binding warnings -->
+                <!--<exclude>org.slf4j:slf4j-api</exclude>-->
+                <!--<exclude>org.slf4j:slf4j-log4j12</exclude>-->
+            </excludes>
+        </dependencySet>
+    </dependencySets>
+</assembly>
