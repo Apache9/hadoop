@@ -4230,7 +4230,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       Block blk = (Block) it.next();
       deleteSize += blk.getNumBytes();
     }
-   
+    
     logAuditEvent(ret, "delete", src + " size " + deleteSize);
     getEditLog().logSync(); 
     removeBlocks(collectedBlocks); // Incremental deletion of blocks
