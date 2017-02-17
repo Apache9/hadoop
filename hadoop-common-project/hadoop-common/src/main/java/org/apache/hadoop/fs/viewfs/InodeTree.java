@@ -31,6 +31,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -61,6 +62,7 @@ abstract class InodeTree<T> {
   static final Path SlashPath = new Path("/");
   
   final INodeDir<T> root; // the root of the mount table
+  private INodeLink<T> rootLink = null; // the mountpoint for paths not in mount table
   
   final String homedirPrefix; // the homedir config value for this mount table
   
@@ -199,6 +201,12 @@ abstract class InodeTree<T> {
     }
   }
 
+  private void createRootLink(final String target,
+      final UserGroupInformation aUgi) throws URISyntaxException, IOException {
+    rootLink = new INodeLink<T>("/", aUgi, getTargetFileSystem(new URI(target)),
+        new URI(target));
+    mountPoints.add(new MountPoint<T>("/", rootLink));
+  }
 
   private void createLink(final String src, final String target,
       final boolean isLinkMerge, final UserGroupInformation aUgi)
@@ -304,7 +312,7 @@ abstract class InodeTree<T> {
     root = new INodeDir<T>("/", UserGroupInformation.getCurrentUser());
     root.InodeDirFs = getTargetFileSystem(root);
     root.isRoot = true;
-    
+
     final String mtPrefix = Constants.CONFIG_VIEWFS_PREFIX + "." + 
                             vName + ".";
     final String linkPrefix = Constants.CONFIG_VIEWFS_LINK + ".";
@@ -322,6 +330,17 @@ abstract class InodeTree<T> {
         } else if (src.startsWith(linkMergePrefix)) { // A merge link
           isMergeLink = true;
           src = src.substring(linkMergePrefix.length());
+        } else if (src.startsWith(Constants.CONFIG_VIEWFS_ROOT_DEFAULT)) {
+          // This is a rootDefault entry. This entry should
+          // not have any additional source path.
+          if (!src.equals(Constants.CONFIG_VIEWFS_ROOT_DEFAULT)) {
+            throw new IOException("Mount points initialization error."
+                + " Invalid rootDefault entry in config: " + src);
+          }
+          if (rootLink != null) {
+            throw new IOException("Duplicate " + src + " entries found"
+                + " in mount table config");
+          }
         } else if (src.startsWith(Constants.CONFIG_VIEWFS_HOMEDIR)) {
           // ignore - we set home dir from config
           continue;
@@ -330,8 +349,13 @@ abstract class InodeTree<T> {
           "ViewFs: Cannot initialize: Invalid entry in Mount table in config: "+ 
           src);
         }
+
         final String target = si.getValue(); // link or merge link
-        createLink(src, target, isMergeLink, ugi); 
+        if (src.equals(Constants.CONFIG_VIEWFS_ROOT_DEFAULT)) {
+          createRootLink(target, ugi);
+        } else {
+          createLink(src, target, isMergeLink, ugi);
+        }
       }
     }
     if (!gotMountTableEntry) {
@@ -356,16 +380,23 @@ abstract class InodeTree<T> {
     final ResultKind kind;
     final T targetFileSystem;
     final String resolvedPath;
+    final String failedAtPath;  // for rootDefault, to record where does resolve failed
     final Path remainingPath;   // to resolve in the target FileSystem
     
     ResolveResult(final ResultKind k, final T targetFs, final String resolveP,
-        final Path remainingP) {
+        final Path remainingP, final String failedAt) {
       kind = k;
       targetFileSystem = targetFs;
       resolvedPath = resolveP;
-      remainingPath = remainingP;  
+      remainingPath = remainingP;
+      failedAtPath = failedAt;
     }
-    
+
+    ResolveResult(final ResultKind k, final T targetFs, final String resolveP,
+        final Path remainingP) {
+      this(k, targetFs, resolveP, remainingP, null);
+    }
+
     // isInternalDir of path resolution completed within the mount table 
     boolean isInternalDir() {
       return (kind == ResultKind.isInternalDir);
@@ -374,8 +405,15 @@ abstract class InodeTree<T> {
   
   /**
    * Resolve the pathname p relative to root InodeDir
+   * With rootDefault is configured, pathes in mount table should always resolve
+   * to internal node.
+   *
+   * e.g. /user/foo and /user/bar is two link of mount table, if user want to
+   * mkdir /user/x, should resolve to rootDefault. if user want to mkdir /user,
+   * will return internal node '/' as result
+   * 
    * @param p - inout path
-   * @param resolveLastComponent 
+   * @param resolveLastComponent
    * @return ResolveResult which allows further resolution of the remaining path
    * @throws FileNotFoundException
    */
@@ -384,13 +422,18 @@ abstract class InodeTree<T> {
     // TO DO: - more efficient to not split the path, but simply compare
     String[] path = breakIntoPathComponents(p); 
     if (path.length <= 1) { // special case for when path is "/"
-      ResolveResult<T> res = 
-        new ResolveResult<T>(ResultKind.isInternalDir, 
-              root.InodeDirFs, root.fullPath, SlashPath);
-      return res;
+      if (rootLink != null && mountPoints.isEmpty()) {
+        // only when mountable is empty and default mountpoint is configured,
+        // we use default mountpoint directly for path '/'
+        return new ResolveResult<T>(ResultKind.isExternalDir,
+            rootLink.targetFileSystem, rootLink.fullPath, SlashPath);
+      }
+      return new ResolveResult<T>(ResultKind.isInternalDir, root.InodeDirFs,
+          root.fullPath, SlashPath);
     }
     
     INodeDir<T> curInode = root;
+    String fileNotFound = null;
     int i;
     // ignore first slash
     for (i = 1; i < path.length - (resolveLastComponent ? 0 : 1); i++) {
@@ -400,7 +443,8 @@ abstract class InodeTree<T> {
         for ( int j = 1; j <=i; ++j) {
           failedAt.append('/').append(path[j]);
         }
-        throw (new FileNotFoundException(failedAt.toString()));      
+        fileNotFound = failedAt.toString();
+        break;
       }
 
       if (nextInode instanceof INodeLink) {
@@ -424,6 +468,23 @@ abstract class InodeTree<T> {
       }
     }
 
+    boolean useRootDefault = false;
+    if (fileNotFound != null) {
+      if (rootLink == null) {
+        throw new FileNotFoundException(fileNotFound);
+      } else {
+        useRootDefault = true;
+      }
+    } else if (!resolveLastComponent && rootLink != null) {
+      if (curInode.resolveInternal(path[i]) == null) {
+        useRootDefault = true;
+      }
+    }
+    if (useRootDefault) {
+      return new ResolveResult<T>(ResultKind.isExternalDir,
+          rootLink.targetFileSystem, rootLink.fullPath, new Path(p));
+    }
+
     // We have resolved to an internal dir in mount table.
     Path remainingPath;
     if (resolveLastComponent) {
@@ -434,19 +495,27 @@ abstract class InodeTree<T> {
       // that follows will do a children.get(remaningPath) and will have to
       // strip-out the initial /
       StringBuilder remainingPathStr = new StringBuilder("/" + path[i]);
-      for (int j = i+1; j< path.length; ++j) {
+      for (int j = i + 1; j < path.length; ++j) {
         remainingPathStr.append('/').append(path[j]);
       }
       remainingPath = new Path(remainingPathStr.toString());
     }
-    final ResolveResult<T> res = 
-       new ResolveResult<T>(ResultKind.isInternalDir,
-           curInode.InodeDirFs, curInode.fullPath, remainingPath); 
+
+    final ResolveResult<T> res = new ResolveResult<T>(ResultKind.isInternalDir,
+        curInode.InodeDirFs, curInode.fullPath, remainingPath);
     return res;
   }
   
   List<MountPoint<T>> getMountPoints() { 
     return mountPoints;
+  }
+
+  T getRootDefaultFs() {
+    if (rootLink != null) {
+      return rootLink.targetFileSystem;
+    } else {
+      return null;
+    }
   }
   
   /**

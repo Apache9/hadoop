@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
+import java.util.TreeMap;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -374,7 +375,7 @@ public class ViewFileSystem extends FileSystem {
       FileNotFoundException, IOException {
     InodeTree.ResolveResult<FileSystem> res =
       fsState.resolve(getUriPath(f), true);
-    
+
     FileStatus[] statusLst = res.targetFileSystem.listStatus(res.remainingPath);
     if (!res.isInternalDir()) {
       // We need to change the name in the FileStatus as described in
@@ -388,7 +389,31 @@ public class ViewFileSystem extends FileSystem {
               suffix.length() == 0 ? f : new Path(res.resolvedPath, suffix)));
       }
     }
-    return statusLst;
+    if (fsState.getRootDefaultFs() == null || (res.resolvedPath.equals("/")
+        && !res.isInternalDir())) {
+      return statusLst;
+    }
+
+    TreeMap<String, FileStatus> resMap = new TreeMap<String, FileStatus>(){};
+    FileStatus[] rootStatus;
+    try {
+      rootStatus =
+          fsState.getRootDefaultFs().listStatus(new Path(getUriPath(f)));
+    } catch (FileNotFoundException e) {
+      return statusLst;
+    }
+
+    int i = 0;
+    for (FileStatus status : rootStatus) {
+      String truePath = status.getPath().toUri().getPath();
+      rootStatus[i] =
+          new ViewFsFileStatus(status, this.makeQualified(new Path(truePath)));
+      resMap.put(truePath, rootStatus[i++]);
+    }
+    for (FileStatus status : statusLst) {
+      resMap.put(status.getPath().toUri().getPath(), status);
+    }
+    return resMap.values().toArray(new FileStatus[]{});
   }
 
   @Override
@@ -414,7 +439,7 @@ public class ViewFileSystem extends FileSystem {
     // passing resolveLastComponet as false to catch renaming a mount point to 
     // itself. We need to catch this as an internal operation and fail.
     InodeTree.ResolveResult<FileSystem> resSrc = 
-      fsState.resolve(getUriPath(src), false); 
+      fsState.resolve(getUriPath(src), false);
   
     if (resSrc.isInternalDir()) {
       throw readOnlyMountTable("rename", src);
@@ -444,14 +469,21 @@ public class ViewFileSystem extends FileSystem {
     if (resSrc.targetFileSystem !=resDst.targetFileSystem) {
       FileSystem srcFs = resSrc.targetFileSystem;
       FileSystem dstFs = resDst.targetFileSystem;
+      Path srcFullPath = resSrc.remainingPath;
+      Path dstFullPath = resDst.remainingPath;
       if (srcFs instanceof FilterFileSystem) {
+        String srcRoot = srcFs.getUri().getPath();
+        String pathStr = srcRoot.equals("/") ? "" : srcRoot + resSrc.remainingPath.toString();
+        srcFullPath = new Path(pathStr);
         srcFs = ((FilterFileSystem) srcFs).getRawFileSystem();
       }
       if (dstFs instanceof FilterFileSystem) {
+        String dstRoot = dstFs.getUri().getPath();
+        String pathStr = dstRoot.equals("/") ? "" : dstRoot + resDst.remainingPath.toString();
+        dstFullPath = new Path(pathStr);
         dstFs = ((FilterFileSystem) dstFs).getRawFileSystem();
       }
-      return srcFs.federationRename(srcFs, resSrc.remainingPath, dstFs,
-          resDst.remainingPath);
+      return srcFs.federationRename(srcFs, srcFullPath, dstFs, dstFullPath);
 
     }
     return resSrc.targetFileSystem.rename(resSrc.remainingPath,
@@ -616,7 +648,7 @@ public class ViewFileSystem extends FileSystem {
         fsState.resolve(getUriPath(f), true);
       return res.targetFileSystem.getDefaultBlockSize(res.remainingPath);
     } catch (FileNotFoundException e) {
-      throw new NotInMountpointException(f, "getDefaultBlockSize"); 
+      throw new NotInMountpointException(f, "getDefaultBlockSize");
     }
   }
 
@@ -791,7 +823,29 @@ public class ViewFileSystem extends FileSystem {
           new Path(theInternalDir.fullPath).makeQualified(
               myUri, ROOT_PATH));
     }
-    
+
+    /**
+     * Minor change of default implementation : Won't recursively call getContentSummary
+     * if some child is a directory.
+     */
+    @Override
+    public ContentSummary getContentSummary(Path f) throws IOException {
+      FileStatus status = getFileStatus(f);
+      if (status.isFile()) {
+        // f is a file
+        return new ContentSummary(status.getLen(), 1, 0);
+      }
+      // f is a directory
+      long[] summary = { 0, 0, 1 };
+      for (FileStatus s : listStatus(f)) {
+        int fileCount = s.isDirectory() ? 0 : 1;
+        ContentSummary c = new ContentSummary(s.getLen(), fileCount, 1 - fileCount);
+        summary[0] += c.getLength();
+        summary[1] += c.getFileCount();
+        summary[2] += c.getDirectoryCount();
+      }
+      return new ContentSummary(summary[0], summary[1], summary[2]);
+    }
 
     @Override
     public FileStatus[] listStatus(Path f) throws AccessControlException,

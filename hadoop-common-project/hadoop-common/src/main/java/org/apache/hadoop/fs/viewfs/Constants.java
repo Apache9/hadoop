@@ -64,6 +64,12 @@ public interface Constants {
    */
   public static final String CONFIG_VIEWFS_LINK_MERGE_SLASH = "linkMergeSlash";
 
+  /**
+   * Config variable for default mount point of root. The path not in mountTable
+   * will resolve to this mount point
+   */
+  public static final String CONFIG_VIEWFS_ROOT_DEFAULT = "root.default";
+
   static public final FsPermission PERMISSION_555 =
       new FsPermission((short) 0555);
 }

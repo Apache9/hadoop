@@ -395,8 +395,8 @@ public class ViewFileSystemBaseTest {
     } 
   }
   
-  
-  
+
+
   /**
    * Test "readOps" (e.g. list, listStatus) 
    * on internal dirs of mount table
