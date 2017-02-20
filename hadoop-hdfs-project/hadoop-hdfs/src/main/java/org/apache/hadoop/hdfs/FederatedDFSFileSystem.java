@@ -71,13 +71,17 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
 public class FederatedDFSFileSystem extends DistributedFileSystem {
   private ViewFileSystem viewFs = null;
   private URI uri;
+  private static final String TRASH_STRING = ".Trash";
+  private static final String TRASH_ROOT = "user";
 
   public FederatedDFSFileSystem() {
   }
@@ -216,7 +220,41 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public ContentSummary getContentSummary(Path f) throws IOException {
-    return viewFs.getContentSummary(convertToViewFsScheme(f));
+    if (!isTrashPath(f)) {
+      return viewFs.getContentSummary(convertToViewFsScheme(f));
+    } else {
+      Path noSchemaPath = Path.getPathWithoutSchemeAndAuthority(f);
+      FileSystem[] childrenFs = viewFs.getChildFileSystems();
+      long length = 0;
+      long fileCount = 0;
+      long directoryCount = 0;
+      long quota = 0;
+      long spaceConsumed = 0;
+      long spaceQuota = 0;
+      int excepted = 0;
+      IOException lastIoe = null;
+      for (FileSystem childFs : childrenFs) {
+        try {
+          ContentSummary oneCs = childFs.getContentSummary(noSchemaPath);
+          length += oneCs.getLength();
+          fileCount += oneCs.getFileCount();
+          directoryCount += oneCs.getDirectoryCount();
+          quota += oneCs.getQuota();
+          spaceConsumed += oneCs.getSpaceConsumed();
+          spaceQuota += oneCs.getSpaceQuota();
+        } catch (IOException ioe) {
+          // Ignore
+          lastIoe = ioe;
+          excepted++;
+        }
+      }
+      if (excepted == childrenFs.length) {
+        // all children fs excepted
+        throw lastIoe;
+      }
+      return new ContentSummary(length, fileCount, directoryCount, quota,
+          spaceConsumed, spaceQuota);
+    }
   }
 
   @Override
@@ -232,17 +270,53 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
         "this operation is not supported on" + " FederatedDFSFileSystem");
   }
 
+  private boolean isTrashPath(Path p) {
+    return p.toString().contains(TRASH_STRING)
+        && p.toString().contains(TRASH_ROOT);
+  }
+
   @Override
   public FileStatus[] listStatus(Path p)
       throws FileNotFoundException, IOException {
-    FileStatus[] fsList = viewFs.listStatus(convertToViewFsScheme(p));
-    FileStatus[] res = new FileStatus[fsList.length];
-    for (int i = 0; i < fsList.length; i++) {
-      ViewFsFileStatus vfs = (ViewFsFileStatus) fsList[i];
-      Path realPath = new Path(vfs.getPath().toUri().getPath());
-      res[i] = makeFileStatusQualified(vfs.getRawFileStatus(), realPath);
+    if (!isTrashPath(p)) {
+      FileStatus[] fsList = viewFs.listStatus(convertToViewFsScheme(p));
+      FileStatus[] res = new FileStatus[fsList.length];
+      for (int i = 0; i < fsList.length; i++) {
+        ViewFsFileStatus vfs = (ViewFsFileStatus) fsList[i];
+        Path realPath = new Path(vfs.getPath().toUri().getPath());
+        res[i] = makeFileStatusQualified(vfs.getRawFileStatus(), realPath);
+      }
+      return res;
+    } else {
+      Path noSchemaPath = Path.getPathWithoutSchemeAndAuthority(p);
+      FileSystem[] childrenFs = viewFs.getChildFileSystems();
+      List<FileStatus> fsList = new LinkedList<FileStatus>();
+      for (FileSystem childFs : childrenFs) {
+        FileStatus[] oneRes = null;
+        try {
+          oneRes = childFs.listStatus(noSchemaPath);
+        } catch (IOException ioe) {
+          // Ignore exception in one fs
+        }
+        if (oneRes != null && oneRes.length > 0) {
+          for (FileStatus s : oneRes) {
+            boolean exist = false;
+            for (FileStatus existItem : fsList) {
+              if (existItem.getPath().getName().equals(s.getPath().getName())) {
+                exist = true;
+                break;
+              }
+            }
+            if (!exist) {
+              fsList.add(s);
+            }
+          }
+        }
+      }
+      FileStatus[] res = fsList.toArray(new FileStatus[0]);
+      Arrays.sort(res);
+      return res;
     }
-    return res;
   }
 
   @Override
@@ -484,10 +558,27 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public FileStatus getFileStatus(Path f) throws IOException {
-    ViewFsFileStatus status =
-        (ViewFsFileStatus) viewFs.getFileStatus(convertToViewFsScheme(f));
-    Path realPath = new Path(status.getPath().toUri().getPath());
-    return makeFileStatusQualified(status.getRawFileStatus(), realPath);
+    if (!isTrashPath(f)) {
+      ViewFsFileStatus status =
+          (ViewFsFileStatus) viewFs.getFileStatus(convertToViewFsScheme(f));
+      Path realPath = new Path(status.getPath().toUri().getPath());
+      return makeFileStatusQualified(status.getRawFileStatus(), realPath);
+    } else {
+      FileSystem[] childrenFs = viewFs.getChildFileSystems();
+      Path noSchemaPath = Path.getPathWithoutSchemeAndAuthority(f);
+      IOException lastIoe = null;
+      for (FileSystem childFs : childrenFs) {
+        try {
+          // If any childfs contains the item, return it
+          FileStatus st = childFs.getFileStatus(noSchemaPath);
+          return st;
+        } catch (IOException ioe) {
+          // Ignore
+          lastIoe = ioe;
+        }
+      }
+      throw lastIoe;
+    }
   }
 
   private FileStatus makeFileStatusQualified(FileStatus status) {
@@ -897,5 +988,10 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
       return new Path("viewfs" + p.toString().substring(hdfsScheme.length()));
     }
     return p;
+  }
+
+  @Override
+  public FileSystem[] getChildFileSystems() {
+    return viewFs.getChildFileSystems();
   }
 }

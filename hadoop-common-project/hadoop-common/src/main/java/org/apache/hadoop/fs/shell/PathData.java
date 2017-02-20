@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
+import java.util.List;
+import java.util.LinkedList;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -307,22 +309,9 @@ public class PathData implements Comparable<PathData> {
   
   protected enum PathType { HAS_SCHEME, SCHEMELESS_ABSOLUTE, RELATIVE };
   
-  /**
-   * Expand the given path as a glob pattern.  Non-existent paths do not
-   * throw an exception because creation commands like touch and mkdir need
-   * to create them.  The "stat" field will be null if the path does not
-   * exist.
-   * @param pattern the pattern to expand as a glob
-   * @param conf the hadoop configuration
-   * @return list of {@link PathData} objects.  if the pattern is not a glob,
-   * and does not exist, the list will contain a single PathData with a null
-   * stat 
-   * @throws IOException anything else goes wrong...
-   */
-  public static PathData[] expandAsGlob(String pattern, Configuration conf)
-  throws IOException {
+  private static PathData[] expandAsGlob(String pattern, FileSystem fs)
+      throws IOException {
     Path globPath = new Path(pattern);
-    FileSystem fs = globPath.getFileSystem(conf);    
     FileStatus[] stats = fs.globStatus(globPath);
     PathData[] items = null;
     
@@ -371,6 +360,53 @@ public class PathData implements Comparable<PathData> {
     }
     Arrays.sort(items);
     return items;
+  }
+
+  /**
+   * Expand the given path as a glob pattern. Non-existent paths do not throw an
+   * exception because creation commands like touch and mkdir need to create
+   * them. The "stat" field will be null if the path does not exist.
+   * 
+   * @param pattern the pattern to expand as a glob
+   * @param conf the hadoop configuration
+   * @return list of {@link PathData} objects. if the pattern is not a glob, and
+   *         does not exist, the list will contain a single PathData with a null
+   *         stat
+   * @throws IOException anything else goes wrong...
+   */
+  public static PathData[] expandAsGlob(String pattern, Configuration conf)
+      throws IOException {
+    Path globPath = new Path(pattern);
+    FileSystem fs = globPath.getFileSystem(conf);
+    return expandAsGlob(pattern, fs);
+  }
+
+  public static PathData[] expandsAsGlobFromChildFs(String pattern,
+      Configuration conf) throws IOException {
+    Path globPath = new Path(pattern);
+    FileSystem fs = globPath.getFileSystem(conf);
+    FileSystem[] childrenFs = fs.getChildFileSystems();
+    if (childrenFs != null) {
+      List<PathData[]> childrenRes = new LinkedList<PathData[]>();
+      int size = 0;
+      for (FileSystem childFs : childrenFs) {
+        PathData[] oneRes = expandAsGlob(pattern, childFs);
+        if (oneRes != null) {
+          size += oneRes.length;
+          childrenRes.add(oneRes);
+        }
+      }
+      PathData[] res = new PathData[size];
+      int idx = 0;
+      for (PathData[] childRes : childrenRes) {
+        System.arraycopy(childRes, 0, res, idx, childRes.length);
+        idx += childRes.length;
+      }
+      Arrays.sort(res);
+      return res;
+    } else {
+      return expandAsGlob(pattern, fs);
+    }
   }
 
   private static URI removeAuthority(URI uri) {
