@@ -89,8 +89,9 @@ public class Trash extends Configured {
     Trash trash = new Trash(fullyResolvedFs, conf);
     boolean success = trash.moveToTrash(fullyResolvedPath);
     if (success) {
-      System.out.println("Moved: '" + p + "' to trash at: " +
-          trash.getCurrentTrashDir() );
+      System.out.println("Moved: '" + Path.getPathWithoutSchemeAndAuthority(p)
+          + "' to trash at: "
+          + Path.getPathWithoutSchemeAndAuthority(trash.getCurrentTrashDir()));
     }
     return success;
   }
