@@ -17,7 +17,7 @@ public class RestoreTrash extends FsCommand {
   }
 
   public static final String NAME = "restoreTrash";
-  public static final String USAGE = "<src> ... <dst>";
+  public static final String USAGE = "<src>";
   public static final String DESCRIPTION =
       "Move files in trash to their original locations ";
 
@@ -62,6 +62,9 @@ public class RestoreTrash extends FsCommand {
               // we have no way to know the actual error...
               throw new PathIOException("Cannot restore trash at "
                   + noSchemaSrc.toString());
+            } else {
+              out.println("Successfully restored " + src.path.toString());
+              return;
             }
           }
         }
