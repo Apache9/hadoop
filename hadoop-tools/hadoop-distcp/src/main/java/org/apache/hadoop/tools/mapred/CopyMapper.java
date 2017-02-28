@@ -31,6 +31,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -97,6 +98,8 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   private Pattern pIncluded = null;
   private Pattern pExcluded = null;
 
+  private boolean renameForCopy = false;
+
   /**
    * Implementation of the Mapper::setup() method. This extracts the DistCp-
    * options specified in the Job's configuration, to set up the Job.
@@ -144,6 +147,9 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
     if (conf.get(DistCpConstants.CONF_LABEL_SSL_CONF) != null) {
       initializeSSLConf(context);
     }
+
+    renameForCopy =
+        conf.getBoolean(DistCpConstants.DISTCP_RENAME_FOR_COPY, false);
   }
 
   /**
@@ -296,18 +302,41 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
       }
 
       FileAction action = checkUpdate(sourceFS, sourceCurrStatus, target);
+      boolean needPreserve = true;
       if (action == FileAction.SKIP) {
         LOG.info("Skipping copy of " + sourceCurrStatus.getPath()
                  + " to " + target);
         updateSkipCounters(context, sourceCurrStatus);
         context.write(null, new Text("SKIP: " + sourceCurrStatus.getPath()));
       } else {
-        copyFileWithRetry(description, sourceCurrStatus, target, context,
-            action, fileAttributes);
+        if (renameForCopy) {
+          needPreserve = false;
+          if (!sourceFS.getScheme().equals(targetFS.getScheme())
+              || !sourceFS.getUri().toString()
+                  .equals(targetFS.getUri().toString())) {
+            throw new IOException(
+                "Cannot use rename instead of copy since source and target are not in the same fs");
+          }
+          if (!targetFS.exists(target.getParent())) {
+            // Create target parent before rename
+            try {
+              createTargetDirsWithRetry(description, target.getParent(),
+                  context);
+            } catch (FileAlreadyExistsException fae) {
+              // Ignore
+            }
+          }
+          sourceFS.rename(sourcePath, target);
+        } else {
+          copyFileWithRetry(description, sourceCurrStatus, target, context,
+              action, fileAttributes);
+        }
       }
 
-      DistCpUtils.preserve(target.getFileSystem(conf), target, sourceCurrStatus,
-          fileAttributes, preserveRawXattrs);
+      if (needPreserve) {
+        DistCpUtils.preserve(target.getFileSystem(conf), target,
+            sourceCurrStatus, fileAttributes, preserveRawXattrs);
+      }
     } catch (IOException exception) {
       if (!(exception instanceof FileNotFoundException) || !ignoreDeleted) {
         // Ignore if file is deleted and ignoreDeleted is set
