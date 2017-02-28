@@ -143,4 +143,6 @@ public class DistCpConstants {
    * Value of reserved raw HDFS directory when copying raw.* xattrs.
    */
   static final String HDFS_RESERVED_RAW_DIRECTORY_NAME = "/.reserved/raw";
+
+  public static final String DISTCP_RENAME_FOR_COPY = "distcp.rename.for.copy";
 }

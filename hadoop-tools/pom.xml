@@ -33,6 +33,7 @@
   <modules>
     <module>hadoop-streaming</module>
     <module>hadoop-distcp</module>
+    <module>hadoop-fedmv</module>
     <module>hadoop-archives</module>
     <module>hadoop-rumen</module>
     <module>hadoop-gridmix</module>
