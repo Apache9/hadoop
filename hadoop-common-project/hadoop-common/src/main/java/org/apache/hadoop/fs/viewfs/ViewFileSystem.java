@@ -817,11 +817,21 @@ public class ViewFileSystem extends FileSystem {
     @Override
     public FileStatus getFileStatus(Path f) throws IOException {
       checkPathIsSlash(f);
+      // The mount point should not belong to any special user&group.
+      // Usually the group is resolved by the namenode from the group
+      // configuration files, we just use the user name as a workaround
+      // since we do not get to any namenode for internal directories.
+      String[] grps = ugi.getGroupNames();
+      String user = ugi.getShortUserName();
+      String grp;
+      if (grps.length != 0) {
+        grp = grps[0];
+      } else {
+        grp = user;
+      }
       return new FileStatus(0, true, 0, 0, creationTime, creationTime,
-          PERMISSION_555, ugi.getUserName(), ugi.getGroupNames()[0],
-
-          new Path(theInternalDir.fullPath).makeQualified(
-              myUri, ROOT_PATH));
+          PERMISSION_555, user, grp,
+          new Path(theInternalDir.fullPath).makeQualified(myUri, ROOT_PATH));
     }
 
     /**
@@ -853,24 +863,29 @@ public class ViewFileSystem extends FileSystem {
       checkPathIsSlash(f);
       FileStatus[] result = new FileStatus[theInternalDir.children.size()];
       int i = 0;
+      String[] grps = ugi.getGroupNames();
+      String user = ugi.getShortUserName();
+      String grp;
+      if (grps.length != 0) {
+        grp = grps[0];
+      } else {
+        grp = user;
+      }
       for (Entry<String, INode<FileSystem>> iEntry : 
                                           theInternalDir.children.entrySet()) {
         INode<FileSystem> inode = iEntry.getValue();
         if (inode instanceof INodeLink ) {
           INodeLink<FileSystem> link = (INodeLink<FileSystem>) inode;
 
-          result[i++] = new FileStatus(0, false, 0, 0,
-            creationTime, creationTime, PERMISSION_555,
-            ugi.getUserName(), ugi.getGroupNames()[0],
-            link.getTargetLink(),
-            new Path(inode.fullPath).makeQualified(
-                myUri, null));
+          result[i++] =
+              new FileStatus(0, false, 0, 0, creationTime, creationTime,
+                  PERMISSION_555, user, grp, link.getTargetLink(),
+                  new Path(inode.fullPath).makeQualified(myUri, null));
         } else {
-          result[i++] = new FileStatus(0, true, 0, 0,
-            creationTime, creationTime, PERMISSION_555,
-            ugi.getUserName(), ugi.getGroupNames()[0],
-            new Path(inode.fullPath).makeQualified(
-                myUri, null));
+          result[i++] =
+              new FileStatus(0, true, 0, 0, creationTime, creationTime,
+                  PERMISSION_555, user, grp,
+                  new Path(inode.fullPath).makeQualified(myUri, null));
         }
       }
       return result;
@@ -987,10 +1002,17 @@ public class ViewFileSystem extends FileSystem {
     @Override
     public AclStatus getAclStatus(Path path) throws IOException {
       checkPathIsSlash(path);
-      return new AclStatus.Builder().owner(ugi.getUserName())
-          .group(ugi.getGroupNames()[0])
-          .addEntries(AclUtil.getMinimalAcl(PERMISSION_555))
-          .stickyBit(false).build();
+      String[] grps = ugi.getGroupNames();
+      String user = ugi.getShortUserName();
+      String grp;
+      if (grps.length != 0) {
+        grp = grps[0];
+      } else {
+        grp = user;
+      }
+      return new AclStatus.Builder().owner(user).group(grp)
+          .addEntries(AclUtil.getMinimalAcl(PERMISSION_555)).stickyBit(false)
+          .build();
     }
 
     @Override
