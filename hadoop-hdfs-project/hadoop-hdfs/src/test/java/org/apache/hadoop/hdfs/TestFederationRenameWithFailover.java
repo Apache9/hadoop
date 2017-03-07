@@ -414,4 +414,44 @@ public class TestFederationRenameWithFailover {
       }
     });
   }
+
+  @Test
+  public void testRenameToDifferentDestPathWithFailover() throws Exception {
+    String src = "/user/foo";
+    String dst = "/user/bar";
+    fHdfs1 = getClientHdfs(0);
+    fHdfs2 = getClientHdfs(1);
+    DistributedFileSystem srcFs =
+        (DistributedFileSystem) fHdfs1.getDistributedFileSystem();
+    DistributedFileSystem dstFs =
+        (DistributedFileSystem) fHdfs2.getDistributedFileSystem();
+    srcFs.mkdirs(new Path(src));
+    dstFs.mkdirs(new Path(dst));
+    DirectorySubTree subTree = srcFs.renameSrcPhase1(src,
+        srcFs.getUri().toString(), dst, dstFs.getUri().toString());
+    if (subTree != null && subTree.getSize() > 0) {
+      BlocksToDup blksToDup = dstFs.renameDestPhase1(src,
+          srcFs.getUri().toString(), dst, dstFs.getUri().toString(), subTree);
+
+      cluster.transitionToStandby(2);
+      cluster.transitionToActive(3);
+      Thread.sleep(3000);
+      fHdfs2 = getClientHdfs(1);
+      dstFs = (DistributedFileSystem) fHdfs2.getDistributedFileSystem();
+
+      FederationRenameBlockCollector frbc = null;
+      if (blksToDup.size() != 0) {
+        frbc = new FederationRenameBlockCollector(subTree, blksToDup, CONF);
+      }
+      // ask DN to add new link
+      if (frbc != null) {
+        frbc.linkBlocksToNewPool();
+      }
+
+      // skip renameSrcPhase2
+      Assert.assertTrue(dstFs.renameDestPhase2(subTree.getRenameId(),
+          srcFs.getUri().toString()));
+    }
+    Assert.assertTrue(dstFs.exists(new Path(dst + "/foo")));
+  }
 }

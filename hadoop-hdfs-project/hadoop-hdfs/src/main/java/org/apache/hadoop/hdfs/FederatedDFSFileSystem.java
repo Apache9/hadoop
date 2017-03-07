@@ -71,17 +71,23 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 public class FederatedDFSFileSystem extends DistributedFileSystem {
   private ViewFileSystem viewFs = null;
   private URI uri;
   private static final String TRASH_STRING = ".Trash";
   private static final String TRASH_ROOT = "user";
+
+  public static String getMethodName() {
+    return Thread.currentThread().getStackTrace()[2].getMethodName();
+  }
 
   public FederatedDFSFileSystem() {
   }
@@ -106,17 +112,17 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public Path getWorkingDirectory() {
-    return viewFs.getWorkingDirectory();
+    return new Path(this.uri.toString(), viewFs.getWorkingDirectory().toUri().getPath());
   }
 
   @Override
   public void setWorkingDirectory(final Path new_dir) {
-    viewFs.setWorkingDirectory(new_dir);
+    viewFs.setWorkingDirectory(convertToViewFsScheme(new_dir));
   }
 
   @Override
   public Path getHomeDirectory() {
-    return viewFs.getHomeDirectory();
+    return new Path(this.uri.toString(), viewFs.getHomeDirectory().toUri().getPath());
   }
 
   @Override
@@ -142,19 +148,19 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public void setStoragePolicy(Path src, String policyName) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public BlockStoragePolicy[] getStoragePolicies() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void concat(Path trg, Path[] psrcs) throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    // not support
+    viewFs.concat(convertToViewFsScheme(trg), psrcs);
   }
 
   @Override
@@ -167,7 +173,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   public void rename(Path src, Path dst, Options.Rename... options)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -184,7 +190,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
       Progressable progress, InetSocketAddress[] favoredNodes)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -202,7 +208,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
       short replication, long blockSize, Progressable progress,
       Options.ChecksumOpt checksumOpt) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -215,7 +221,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   public boolean delete(Path f, boolean recursive, boolean skipTrash)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -259,15 +265,14 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public QuotaSummary getQuotaSummary(Path f) throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    return viewFs.getQuotaSummary(convertToViewFsScheme(f));
   }
 
   @Override
   public void setQuota(Path src, long namespaceQuota, long diskspaceQuota)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   private boolean isTrashPath(Path p) {
@@ -324,16 +329,36 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   }
 
   @Override
-  protected RemoteIterator<LocatedFileStatus> listLocatedStatus(Path p,
-      PathFilter filter) throws FileNotFoundException, IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+  protected RemoteIterator<LocatedFileStatus> listLocatedStatus(final Path f,
+      final PathFilter filter) throws FileNotFoundException, IOException {
+    // copy the default implementation of FileSystem class
+    return new RemoteIterator<LocatedFileStatus>() {
+      private final FileStatus[] stats = listStatus(f, filter);
+      private int i = 0;
+
+      @Override
+      public boolean hasNext() {
+        return i < stats.length;
+      }
+
+      @Override
+      public LocatedFileStatus next() throws IOException {
+        if (!hasNext()) {
+          throw new NoSuchElementException("No more entry in " + f);
+        }
+        FileStatus result = stats[i++];
+        BlockLocation[] locs = result.isFile()
+            ? getFileBlockLocations(result.getPath(), 0, result.getLen())
+            : null;
+        return new LocatedFileStatus(result, locs);
+      }
+    };
   }
 
   @Override
   public boolean mkdir(Path f, FsPermission permission) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -352,8 +377,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public BlockLocation[] getFileBlockLocations(Path p, long start, long len)
       throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    return viewFs.getFileBlockLocations(convertToViewFsScheme(p), start, len);
   }
 
   @Override
@@ -361,7 +385,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
       List<BlockLocation> blocks) throws IOException,
       UnsupportedOperationException, InvalidBlockTokenException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -373,7 +397,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public boolean recoverLease(Path f) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -389,8 +413,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public FSDataInputStream openEx(Path f, int bufferSize) throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    return viewFs.openEx(convertToViewFsScheme(f), bufferSize);
   }
 
   @Override
@@ -403,13 +426,12 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   protected boolean primitiveMkdir(Path f, FsPermission absolutePermission)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void close() throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+      viewFs.close();
   }
 
   @Override
@@ -419,128 +441,126 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public FsStatus getStatus(Path p) throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    return viewFs.getStatus(convertToViewFsScheme(p));
   }
 
   @Override
   public DiskStatus getDiskStatus() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public long getRawCapacity() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public long getRawUsed() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public long getMissingBlocksCount() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public long getUnderReplicatedBlocksCount() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public long getCorruptBlocksCount() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public RemoteIterator<Path> listCorruptFileBlocks(Path path)
       throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    return viewFs.listCorruptFileBlocks(convertToViewFsScheme(path));
   }
 
   @Override
   public DatanodeInfo[] getDataNodeStats() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public DatanodeInfo[] getDataNodeStats(HdfsConstants.DatanodeReportType type)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public boolean setSafeMode(HdfsConstants.SafeModeAction action)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public boolean setSafeMode(HdfsConstants.SafeModeAction action,
       boolean isChecked) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void saveNamespace() throws AccessControlException, IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public long rollEdits() throws AccessControlException, IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public boolean restoreFailedStorage(String arg)
       throws AccessControlException, IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void refreshNodes() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void refreshTopology() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void finalizeUpgrade() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public RollingUpgradeInfo rollingUpgrade(
       HdfsConstants.RollingUpgradeAction action) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void metaSave(String pathname) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -601,7 +621,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
       FileNotFoundException, ParentNotDirectoryException,
       UnsupportedFileSystemException, AccessControlException, IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -613,21 +633,19 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   public FileStatus getFileLinkStatus(Path f)
       throws AccessControlException, FileNotFoundException,
       UnsupportedFileSystemException, AccessControlException, IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    return getFileStatus(f);
   }
 
   @Override
   public Path getLinkTarget(Path f) throws AccessControlException,
       FileNotFoundException, UnsupportedFileSystemException, IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    return viewFs.getLinkTarget(convertToViewFsScheme(f));
   }
 
   @Override
   protected Path resolveLink(Path f) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -638,7 +656,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public FileChecksum getFileChecksum(Path f, long length) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -666,14 +684,13 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public Token<DelegationTokenIdentifier> getDelegationToken(String renewer)
       throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+    return null;
   }
 
   @Override
   public void setBalancerBandwidth(long bandwidth) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -689,123 +706,123 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public boolean isInSafeMode() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void allowSnapshot(Path path) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void disallowSnapshot(Path path) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public Path createSnapshot(Path path, String snapshotName)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void renameSnapshot(Path path, String snapshotOldName,
       String snapshotNewName) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public SnapshottableDirectoryStatus[] getSnapshottableDirListing()
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void deleteSnapshot(Path snapshotDir, String snapshotName)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public SnapshotDiffReport getSnapshotDiffReport(Path snapshotDir,
       String fromSnapshot, String toSnapshot) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public boolean isFileClosed(Path src) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public long addCacheDirective(CacheDirectiveInfo info) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public long addCacheDirective(CacheDirectiveInfo info,
       EnumSet<CacheFlag> flags) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void modifyCacheDirective(CacheDirectiveInfo info) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void modifyCacheDirective(CacheDirectiveInfo info,
       EnumSet<CacheFlag> flags) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void removeCacheDirective(long id) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public RemoteIterator<CacheDirectiveEntry> listCacheDirectives(
       CacheDirectiveInfo filter) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void addCachePool(CachePoolInfo info) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void modifyCachePool(CachePoolInfo info) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public void removeCachePool(String poolName) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public RemoteIterator<CachePoolEntry> listCachePools() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -844,20 +861,20 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   public void createEncryptionZone(Path path, String keyName)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public EncryptionZone getEZForPath(Path path) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public RemoteIterator<EncryptionZone> listEncryptionZones()
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -890,7 +907,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public void removeXAttr(Path path, String name) throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -908,14 +925,14 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public DFSInotifyEventInputStream getInotifyEventStream() throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
   public DFSInotifyEventInputStream getInotifyEventStream(long lastReadTxid)
       throws IOException {
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem");
+        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
   @Override
@@ -930,13 +947,17 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public FileSystem getDistributedFileSystem() {
-    return null;
+    return this;
   }
 
   @Override
   public long getDefaultBlockSize() {
-    // TODO:implement in the DFS logic
-    return viewFs.getDefaultBlockSize();
+    FileSystem[] fsList = viewFs.getChildFileSystems();
+    if (fsList.length > 0) {
+      return fsList[0].getDefaultBlockSize();
+    } else {
+      return viewFs.getDefaultBlockSize();
+    }
   }
 
   @Override
@@ -946,8 +967,12 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public short getDefaultReplication() {
-    // TODO:implement in the DFS logic
-    return viewFs.getDefaultReplication();
+    FileSystem[] fsList = viewFs.getChildFileSystems();
+    if (fsList.length > 0) {
+      return fsList[0].getDefaultReplication();
+    } else {
+      return viewFs.getDefaultReplication();
+    }
   }
 
   @Override
@@ -987,9 +1012,14 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   }
 
   Path convertToViewFsScheme(Path p) {
-    String hdfsScheme = "hdfs";
-    if (p.toString().startsWith(hdfsScheme)) {
-      return new Path("viewfs" + p.toString().substring(hdfsScheme.length()));
+    URI uri = p.toUri();
+    if (uri.getScheme() != null && uri.getScheme().equals("hdfs")) {
+      try {
+        return new Path(new URI("viewfs", uri.getUserInfo(), uri.getHost(),
+            uri.getPort(), uri.getPath(), uri.getQuery(), uri.getFragment()));
+      } catch (URISyntaxException e) {
+        // ignore
+      }
     }
     return p;
   }

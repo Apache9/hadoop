@@ -4,13 +4,30 @@ import junit.framework.Assert;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.*;
+import org.apache.hadoop.fs.AbstractFileSystem;
+import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.fs.CreateFlag;
+import org.apache.hadoop.fs.FederatedHdfs;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileSystemTestHelper;
+import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.FsShell;
+import org.apache.hadoop.fs.HdfsBlockLocation;
+import org.apache.hadoop.fs.LocatedFileStatus;
+import org.apache.hadoop.fs.Options;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
+import org.apache.hadoop.fs.viewfs.ViewFileSystem;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -115,6 +132,47 @@ public class TestFederatedDFSFileSystem {
       Assert.assertEquals(status.getPath().toUri().getAuthority(),
           "test-cluster");
     }
+
+    Assert.assertEquals(dfs.getHomeDirectory().toString(), "hdfs://test-cluster/user/chen");
+    Assert.assertEquals(dfs.getWorkingDirectory().toString(), "hdfs://test-cluster/user/chen");
+  }
+
+  @Test
+  public void testListLocatedFileStatus() throws Exception {
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
+    dfs.mkdirs(new Path("/user/foo"));
+    dfs.mkdirs(new Path("/user/bar"));
+    FileSystemTestHelper.createFile(dfs, new Path("/user/testFile"));
+    RemoteIterator<LocatedFileStatus> fileList = dfs.listLocatedStatus(new Path("/user"));
+    while (fileList.hasNext()) {
+      LocatedFileStatus status = fileList.next();
+      Assert.assertEquals(status.getPath().toUri().getScheme(), "hdfs");
+      if (status.isFile()) {
+        BlockLocation[] locations = status.getBlockLocations();
+        for (BlockLocation loc : locations) {
+          Assert.assertTrue(loc instanceof HdfsBlockLocation);
+        }
+      }
+    }
+  }
+
+  // This UT is for a very tricky bug about path with fragment
+  // Some user may submit request using URI with fragment(start with #, like /user/foo/bar#1, the URI 
+  // fragments usually used for browser, http request will ignore this part, only if using %23 instead
+  // of #. In the previous implementation of FederatedDFSFileSystem, before calling ViewFileSystem
+  // corresponding method with path, it always convert the path with hdfs scheme to viewfs scheme, the
+  // conversion first convert path to string, then replace hdfs with viewfs. But the conversion also
+  // convert # to %23 during path.toString(), this will cause fail in the subsequent process
+  @Test
+  public void testUriWithFragment() throws Exception {
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
+    Path xmlPath = new Path("/user/foo/test.xml");
+    FileSystemTestHelper.createFile(dfs, xmlPath);
+    URI uriWithFragment =
+        new URI("hdfs", "test-cluster", xmlPath.toString(), "test.xml");
+    Path pathWithFragment = new Path(uriWithFragment);
+    FileStatus status = dfs.getFileStatus(pathWithFragment);
+    Assert.assertEquals(status.getPath().toUri().getPath(), xmlPath.toString());
   }
 
   @Test

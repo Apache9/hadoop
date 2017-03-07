@@ -248,4 +248,48 @@ public class TestFederationRenameWithReboot {
         .getCurrentGenStamp(blk), btd[TEST_RENAME_COUNT - 1].get(lastBtdsz - 1)
         .getDstBlockGenStamp());
   }
+
+  @Test
+  public void testRenameToDifferentDestPathWithReboot() throws Exception {
+    String src = "/user/foo";
+    String dst = "/user/bar";
+    DistributedFileSystem srcFs =
+        (DistributedFileSystem) fHdfs1.getDistributedFileSystem();
+    DistributedFileSystem dstFs =
+        (DistributedFileSystem) fHdfs2.getDistributedFileSystem();
+    srcFs.mkdirs(new Path(src));
+    dstFs.mkdirs(new Path(dst));
+    DirectorySubTree subTree = srcFs.renameSrcPhase1(src,
+        srcFs.getUri().toString(), dst, dstFs.getUri().toString());
+    if (subTree != null && subTree.getSize() > 0) {
+      BlocksToDup blksToDup = dstFs.renameDestPhase1(src,
+          srcFs.getUri().toString(), dst, dstFs.getUri().toString(), subTree);
+
+      dstFs.dfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER, false);
+      dstFs.saveNamespace();
+      cluster.restartNameNode(1);
+
+      FederationRenameBlockCollector frbc = null;
+      if (blksToDup.size() != 0) {
+        frbc = new FederationRenameBlockCollector(subTree, blksToDup, CONF);
+      }
+      // ask DN to add new link
+      if (frbc != null) {
+        frbc.linkBlocksToNewPool();
+      }
+
+      // skip renameSrcPhase2
+      try {
+        // The name node is just restarted, the first RPC will get EOFexcpeiton.
+        // Simply ignore it.
+        dstFs.renameDestPhase2(subTree.getRenameId(),
+          srcFs.getUri().toString());
+      } catch (EOFException e) {
+        //ignore
+      }
+      Assert.assertTrue(dstFs.renameDestPhase2(subTree.getRenameId(),
+          srcFs.getUri().toString()));
+    }
+    Assert.assertTrue(dstFs.exists(new Path(dst + "/foo")));
+  }
 }

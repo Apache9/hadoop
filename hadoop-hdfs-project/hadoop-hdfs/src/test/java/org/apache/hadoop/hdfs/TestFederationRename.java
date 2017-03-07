@@ -16,6 +16,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystemTestHelper;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
@@ -457,6 +458,49 @@ public class TestFederationRename {
       out.close();
     } catch (Exception e) {
       Assert.assertTrue(false);
+    }
+  }
+
+  @Test
+  public void testRenameToDifferentDestPath() throws Exception {
+    basicTestEnvSetup();
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+      FileSystemTestHelper.createFile(dfs, new Path("/home/a/b/file"));
+      dfs.mkdirs(new Path("/user/c/b"));
+      dfs.rename(new Path("/home/a/b"), new Path("/user/c/b"));
+      Assert.assertTrue(dfs.exists(new Path("/user/c/b/b")));
+      Assert.assertTrue(dfs.exists(new Path("/user/c/b/b/file")));
+      Assert.assertFalse(dfs.exists(new Path("/home/a/b")));
+
+      FileSystemTestHelper.createFile(dfs, new Path("/home/a/c/file"));
+      dfs.rename(new Path("/home/a/c"), new Path("/user/c/newDir"));
+      Assert.assertTrue(dfs.exists(new Path("/user/c/newDir")));
+      Assert.assertTrue(dfs.exists(new Path("/user/c/newDir/file")));
+      Assert.assertFalse(dfs.exists(new Path("/home/a/c")));
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
+  }
+
+  @Test
+  public void testRenameOnSameNN() throws Exception {
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+      Configuration config = new Configuration(CONF);
+      ConfigUtil.addLink(config, "/x/y/z",
+          new URI(fHdfs2.getUri().toString() + "/x/y/z"));
+      ConfigUtil.addLink(config, "/x/y/x",
+          new URI(fHdfs2.getUri().toString() + "/x/y/x"));
+      fHdfs2.mkdirs(new Path("/x/y/z"));
+      fHdfs2.mkdirs(new Path("/x/y/x"));
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(config);
+      dfs.mkdirs(new Path("/x/y/z/dir/"));
+      FileSystemTestHelper.createFile(dfs, new Path("/x/y/z/dir/file"));
+      dfs.rename(new Path("/x/y/z/dir"), new Path("/x/y/x/dir"));
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
     }
   }
 }
