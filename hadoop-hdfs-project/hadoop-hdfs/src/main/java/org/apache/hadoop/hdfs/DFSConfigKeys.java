@@ -977,4 +977,8 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.federation.client.linkblocks.max.thread";
   public static final int DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD_DEFAULT =
       32;
+
+  public static final String DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED =
+          "dfs.namenode.getfileinfo.auditlog.enabled";
+  public static final boolean DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED_DEFAULT = true;
 }

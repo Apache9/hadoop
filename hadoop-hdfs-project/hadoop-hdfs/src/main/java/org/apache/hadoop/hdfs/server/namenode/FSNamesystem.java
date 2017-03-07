@@ -62,6 +62,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CAC
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_DURING_STARTUP_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LAZY_PERSIST_FILE_SCRUB_INTERVAL_SEC;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LAZY_PERSIST_FILE_SCRUB_INTERVAL_SEC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOG_LOCK_DURATION_THRESHOLD_DEFAULT;
@@ -606,6 +608,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private long federationRenameId = 0;
   private FederationRenameFixer federationRenameFixer = null;
   private int safeReplicaForInRenameBlks = 0;
+  private boolean enableGetfileinfoAuditlog = true;
 
   /**
    * Notify that loading of this FSDirectory is complete, and
@@ -975,6 +978,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       this.safeReplicaForInRenameBlks =
           conf.getInt(DFS_NAMENODE_REPLICATION_MIN_KEY,
               DFS_NAMENODE_REPLICATION_MIN_DEFAULT);
+      this.enableGetfileinfoAuditlog =
+          conf.getBoolean(DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED,
+              DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED_DEFAULT);
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -4319,9 +4325,11 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     } finally {
       readUnlock();
     }
-    // It would pop too many audit log with little (if any) useful audit 
-    // information. So simply disable this audit log entry.
-    // logAuditEvent(true, "getfileinfo", src);
+    // It would pop too many audit log with little (if any) useful audit
+    // information. So add a config to control this audit log entry.
+    if (this.enableGetfileinfoAuditlog) {
+      logAuditEvent(true, "getfileinfo", src);
+    }
     return stat;
   }
   
@@ -9908,6 +9916,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
           false);
     }
     long start = Time.now();
+    if (dir.isDir(dst)) {
+      dst += Path.SEPARATOR + new Path(src).getName();
+    }
     boolean res =
         dir.federationRenameDestPhase1(src, srcId, dst, dstId, subTree, blks,
             start);

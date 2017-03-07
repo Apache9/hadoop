@@ -3508,8 +3508,9 @@ public class FSDirectory implements Closeable {
   }
 
   // blks == null implies the caller is from log replay
-  private INode graftToNameSpace(HdfsExtendedFileStatus status, INode parent,
-      BlocksToDup blks, int snapshot) throws IOException {
+  private INode graftToNameSpace(HdfsExtendedFileStatus status,
+      byte[] destChildName, INode parent, BlocksToDup blks, int snapshot)
+      throws IOException {
     INode child;
     HdfsFileStatus fstatus = status.getFileStatus();
     AclStatus astatus = status.getAclStatus();
@@ -3524,14 +3525,14 @@ public class FSDirectory implements Closeable {
       Log.info("Graft : Allocated inode is " + inodeid);
     }
     if (fstatus.isDir()) {
-      NameNode.stateChangeLog.info("Graft dir " + fstatus.getLocalName());
+      NameNode.stateChangeLog.info("Graft dir " + new String(destChildName));
       child =
-          new INodeDirectory(inodeid, fstatus.getLocalNameInBytes(),
+          new INodeDirectory(inodeid, destChildName,
               PermissionStatus.createImmutable(fstatus.getOwner(),
                   fstatus.getGroup(), fstatus.getPermission()),
               fstatus.getModificationTime());
     } else {
-      NameNode.stateChangeLog.info("Graft file " + fstatus.getLocalName());
+      NameNode.stateChangeLog.info("Graft file " + new String(destChildName));
       child =
           newINodeFile(
               inodeid,
@@ -3539,7 +3540,7 @@ public class FSDirectory implements Closeable {
                   fstatus.getGroup(), fstatus.getPermission()),
               fstatus.getModificationTime(), fstatus.getModificationTime(),
               fstatus.getReplication(), fstatus.getBlockSize());
-      child.setLocalName(fstatus.getLocalNameInBytes());
+      child.setLocalName(destChildName);
     }
     graftSanityCheck(child, parent);
     if (((INodeDirectory) parent).addChild(child) == false) {
@@ -3586,32 +3587,36 @@ public class FSDirectory implements Closeable {
     return child;
   }
 
-  INode graftDirectorySubTree(INode parent, DirectorySubTree subTree,
+  INode graftDirectorySubTree(INode parent, byte[] destChildName, DirectorySubTree subTree,
       BlocksToDup blks, int snapshot)
       throws IOException {
     // TBD: Add MAX_PATH_LENGTH MAX_PATH_DEPTH check
     HdfsExtendedFileStatus status = subTree.consumeItem();
     if (status.getFileStatus().isDir()) {
-      INode addedNode = graftToNameSpace(status, parent, blks, snapshot);
+      INode addedNode = graftToNameSpace(status, destChildName, parent, blks, snapshot);
       if (addedNode == null) {
         return null;
       }
       for (int i = 0; i < status.getFileStatus().getChildrenNum(); i++) {
         HdfsExtendedFileStatus childStatus = subTree.nextItemToConsume();
         if (childStatus.getFileStatus().isDir()) {
-          if (graftDirectorySubTree(addedNode, subTree, blks, snapshot) == null) {
+          if (graftDirectorySubTree(addedNode,
+              childStatus.getFileStatus().getLocalNameInBytes(), subTree, blks,
+              snapshot) == null) {
             return null;
           }
         } else {
           childStatus = subTree.consumeItem();
-          if (graftToNameSpace(childStatus, addedNode, blks, snapshot) == null) {
+          if (graftToNameSpace(childStatus,
+              childStatus.getFileStatus().getLocalNameInBytes(), addedNode,
+              blks, snapshot) == null) {
             return null;
           }
         }
       }
       return addedNode;
     } else {
-      INode addedNode = graftToNameSpace(status, parent, blks, snapshot);
+      INode addedNode = graftToNameSpace(status, destChildName, parent, blks, snapshot);
       return addedNode;
     }
   }
@@ -3620,9 +3625,6 @@ public class FSDirectory implements Closeable {
       String dstId, DirectorySubTree subTree, BlocksToDup blks, long stTime)
       throws IOException {
     int snapshot;
-    if (isDir(dst)) {
-      dst += Path.SEPARATOR + new Path(src).getName();
-    }
     if (subTree.get(0).getFileStatus().isSymlink()
         && dst.equals(subTree.get(0).getFileStatus().getSymlink())) {
       throw new FileAlreadyExistsException("Cannot rename symlink " + src
@@ -3677,7 +3679,8 @@ public class FSDirectory implements Closeable {
       // TBD: Check ezManager
       // Graft the subtree to dest namespace
       try {
-        INode res = graftDirectorySubTree(dstParent, subTree, blks, snapshot);
+        INode res = graftDirectorySubTree(dstParent, dstIIP.getLastLocalName(),
+            subTree, blks, snapshot);
         assert (res != null);
         res.addFederationRenameFeature(new FederationRenameFeature(false,
             subTree.getRenameId(), src, srcId, dst, dstId, stTime));

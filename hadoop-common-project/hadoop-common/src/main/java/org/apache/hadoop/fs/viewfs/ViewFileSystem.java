@@ -466,7 +466,7 @@ public class ViewFileSystem extends FileSystem {
     //
     // Alternate 3 : renames ONLY within the the same mount links.
     //
-    if (resSrc.targetFileSystem !=resDst.targetFileSystem) {
+    if (shouldDoFederateRename(resSrc, resDst)) {
       FileSystem srcFs = resSrc.targetFileSystem;
       FileSystem dstFs = resDst.targetFileSystem;
       Path srcFullPath = resSrc.remainingPath;
@@ -488,6 +488,27 @@ public class ViewFileSystem extends FileSystem {
     }
     return resSrc.targetFileSystem.rename(resSrc.remainingPath,
         resDst.remainingPath);
+  }
+
+  private boolean shouldDoFederateRename(
+      InodeTree.ResolveResult<FileSystem> resSrc,
+      InodeTree.ResolveResult<FileSystem> resDst) {
+    if (resSrc.targetFileSystem == resDst.targetFileSystem)
+      return false;
+
+    URI srcFsUri = resSrc.targetFileSystem.getUri();
+    URI dstFsUri = resDst.targetFileSystem.getUri();
+
+    // judge if two different targetFileSystem instance actually
+    // mount on same NN
+    if (!srcFsUri.getAuthority().equals(dstFsUri.getAuthority()))
+      return true;
+
+    if (srcFsUri.getPath().equals(resSrc.resolvedPath)
+        && dstFsUri.getPath().equals(resDst.resolvedPath))
+      return false;
+
+    return true;
   }
   
   @Override
