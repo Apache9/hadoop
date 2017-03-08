@@ -25,7 +25,10 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.fs.viewfs.ViewFs;
 import org.apache.hadoop.fs.viewfs.ViewFsFileStatus;
+import org.apache.hadoop.hdfs.FederationConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.MountPointRenewer;
+import org.apache.hadoop.hdfs.MountPointRenewer.RenewMpt;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.security.AccessControlException;
@@ -39,6 +42,7 @@ import java.net.URISyntaxException;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 /**
  * Support federation directly on hdfs scheme It's an federation version of
@@ -67,6 +71,18 @@ public class FederatedHdfs extends AbstractFileSystem {
     }
     myUri = theUri;
     URI viewFsUri = convertToViewFsScheme(theUri);
+    MountPointRenewer mpr =
+        new MountPointRenewer(theUri.getAuthority(), conf, new RenewMpt() {
+          public void renewMpt(String viewName, Configuration conf)
+              throws IOException {
+            try {
+              viewFs.renewFsState(conf, viewName);
+            } catch (URISyntaxException ue) {
+              throw new IOException(ue);
+            }
+          }
+        });
+    mpr.initMptFromZkAndKickoffRenewer();
     viewFs = AbstractFileSystem.newInstance(ViewFs.class, viewFsUri, conf);
   }
 
