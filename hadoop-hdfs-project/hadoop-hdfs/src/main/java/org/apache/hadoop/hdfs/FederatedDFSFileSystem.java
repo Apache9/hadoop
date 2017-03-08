@@ -48,6 +48,8 @@ import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
 import org.apache.hadoop.fs.viewfs.ViewFsFileStatus;
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
+import org.apache.hadoop.hdfs.MountPointRenewer;
+import org.apache.hadoop.hdfs.MountPointRenewer.RenewMpt;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
@@ -105,6 +107,14 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
+    MountPointRenewer mpr =
+        new MountPointRenewer(uri.getAuthority(), conf, new RenewMpt() {
+          public void renewMpt(String viewName, Configuration conf)
+              throws IOException {
+            viewFs.renewFsState(conf, viewName);
+          }
+        });
+    mpr.initMptFromZkAndKickoffRenewer();
     viewFs = ReflectionUtils.newInstance(ViewFileSystem.class, conf);
     viewFs.initialize(uri, conf);
     this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());

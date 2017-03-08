@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import java.util.Map;
 import java.util.TreeSet;
 
 import com.google.common.base.Optional;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -53,9 +55,13 @@ import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.FederatedDFSFileSystem;
+import org.apache.hadoop.hdfs.FederationConfigKeys;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.MountPointRenewer;
 import org.apache.hadoop.hdfs.NameNodeProxies;
+import org.apache.hadoop.hdfs.MountPointRenewer.RenewMpt;
 import org.apache.hadoop.hdfs.NameNodeProxies.ProxyAndInfo;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
@@ -86,6 +92,18 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.util.ZKUtil;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.KeeperException.Code;
+import org.apache.zookeeper.KeeperException.NoNodeException;
+import org.apache.zookeeper.KeeperException.NodeExistsException;
+import org.apache.zookeeper.ZooDefs.Ids;
+import org.apache.zookeeper.data.ACL;
+import org.apache.zookeeper.data.Stat;
+import org.apache.zookeeper.ZooKeeper;
 
 import com.google.common.base.Preconditions;
 
@@ -435,6 +453,7 @@ public class DFSAdmin extends FsShell {
     "\t[-metasave filename]\n" +
     "\t[-setStoragePolicy path policyName]\n" +
     "\t[-getStoragePolicy path]\n" +
+    "\t[-updateMptOnZk\n" +
     "\t[-help [cmd]]\n";
 
   /**
@@ -1024,6 +1043,11 @@ public class DFSAdmin extends FsShell {
     String getStoragePolicy = "-getStoragePolicy path\n"
         + "\tGet the storage policy for a file/directory.\n";
 
+    String updateMptOnZk = "-updateMptOnZk\n"
+        + "\tWrite the mount point table configurations onto the zookeeper.\n"
+        + "\tThis is used when a new mount point is added. After that the new\n"
+        + "\twill be picked up by other clients from zookeeper.";
+
     String help = "-help [cmd]: \tDisplays help for the given command or all commands if none\n" +
       "\t\tis specified.\n";
 
@@ -1089,6 +1113,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(setStoragePolicy);
     } else if ("getStoragePolicy".equalsIgnoreCase(cmd))  {
       System.out.println(getStoragePolicy);
+    } else if ("updateMptOnZk".equalsIgnoreCase(cmd)) {
+      System.out.println(updateMptOnZk);
     } else if ("help".equals(cmd)) {
       System.out.println(help);
     } else {
@@ -1123,6 +1149,7 @@ public class DFSAdmin extends FsShell {
       System.out.println(getDatanodeInfo);
       System.out.println(setStoragePolicy);
       System.out.println(getStoragePolicy);
+      System.out.println(updateMptOnZk);
       System.out.println(help);
       System.out.println();
       ToolRunner.printGenericCommandUsage(System.out);
@@ -1657,6 +1684,8 @@ public class DFSAdmin extends FsShell {
     } else if ("-getDatanodeInfo".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-getDatanodeInfo <datanode_host:ipc_port>]");
+    } else if ("-updateMptOnZk".equals(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin" + "[-updateMptOnZk]");
     } else {
       System.err.println("Usage: hdfs dfsadmin");
       System.err.println("Note: Administrative commands can only be run as the HDFS superuser.");
@@ -1891,6 +1920,8 @@ public class DFSAdmin extends FsShell {
         exitCode = setStoragePolicy(argv);
       } else if ("-getStoragePolicy".equals(cmd)) {
         exitCode = getStoragePolicy(argv);
+      } else if ("-updateMptOnZk".equals(cmd)) {
+        exitCode = updateMptOnZk();
       } else if ("-help".equals(cmd)) {
         if (i < argv.length) {
           printHelp(argv[i]);
@@ -2002,6 +2033,114 @@ public class DFSAdmin extends FsShell {
       return -1;
     }
     return 0;
+  }
+
+  private int updateMptOnZk() throws IOException, KeeperException,
+      InterruptedException {
+    getConf().setBoolean(FederationConfigKeys.FEDFS_SKIP_MOUNT_TABLE_RENEW,
+        true);
+    FileSystem fs = getFS();
+    // We will verify following conditions before really change znode:
+    // 1. The fs is a FederatedDFSFileSystem
+    // 2. Current user is hdfs_admin (hard-coded super user)
+    // 3. The new configuration is a superset of the original ones (or the
+    // original is empty)
+    if (!(fs instanceof FederatedDFSFileSystem)) {
+      throw new IOException(
+          "Operation is not supported for non-federated file system");
+    }
+    FederatedDFSFileSystem fdfs = (FederatedDFSFileSystem) fs;
+    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+    String superUser =
+        fs.getConf().get(DFSConfigKeys.DFS_PERMISSIONS_SUPERUSER_KEY,
+            DFSConfigKeys.DFS_PERMISSIONS_SUPERUSER_DEFAULT);
+    if (!ugi.getShortUserName().equals(superUser)) {
+      throw new IOException("Operation is not permitted for user "
+          + ugi.getUserName());
+    }
+    MountPointRenewer mpr =
+        new MountPointRenewer(fs.getUri().getAuthority(), fs.getConf(),
+            new RenewMpt() {
+              public void renewMpt(String viewName, Configuration conf)
+                  throws IOException {
+              }
+            });
+    boolean noNode = false;
+    String oldConf = null;
+    String znode = mpr.getMptZnodePath();
+    ZooKeeper zkClient = mpr.getZkClient();
+    Stat st = new Stat();
+    try {
+      byte[] data = zkClient.getData(znode, null, st);
+      oldConf = new String(data);
+    } catch (NoNodeException nne) {
+      noNode = true;
+    }
+    String newConf =
+        mpr.getMountPointConfig(fs.getConf(), fs.getUri().getAuthority());
+
+    System.out.println("UpdateMptOnZk: Old mount points are " + oldConf
+        + ". New mount points are "
+        + newConf);
+
+    if (noNode) {
+      // Create node and write the the new conf
+      updateZk(true, newConf, fdfs, znode, zkClient, 0);
+    } else {
+      String[] oldKvs = oldConf.split(";");
+      String[] newKvs = newConf.split(";");
+      for (String okv : oldKvs) {
+        boolean containedInNewConf = false;
+        for (String nkv : newKvs) {
+          if (nkv.equals(okv)) {
+            containedInNewConf = true;
+            break;
+          }
+        }
+        if (!containedInNewConf) {
+          throw new IOException(
+              "The new mount point configuration is not a superset of the orignal one");
+        }
+      }
+      // write new conf to the znode
+      updateZk(false, newConf, fdfs, znode, zkClient, st.getVersion());
+    }
+    return 0;
+  }
+
+  private void updateZk(boolean create, String val, FederatedDFSFileSystem fs,
+      String znode, ZooKeeper zkClient, int version)
+      throws KeeperException, IOException, InterruptedException {
+
+    String zkAclConf =
+        fs.getConf().get(CommonConfigurationKeys.ZK_ACL_KEY,
+            CommonConfigurationKeys.ZK_ACL_DEFAULT);
+    zkAclConf = ZKUtil.resolveConfIndirection(zkAclConf);
+    List<ACL> zkAcls = ZKUtil.parseACLs(zkAclConf);
+    if (zkAcls.isEmpty()) {
+      zkAcls = Ids.CREATOR_ALL_ACL;
+    }
+    if (create) {
+      // Create all parents first
+      String pathParts[] = znode.split("/");
+      Preconditions.checkArgument(pathParts.length >= 2 && pathParts[0].isEmpty(), "Invalid path: %s", znode);
+      
+      StringBuilder sb = new StringBuilder();
+      for (int i = 1; i < pathParts.length - 1; i++) {
+        sb.append("/").append(pathParts[i]);
+        String prefixPath = sb.toString();
+        LOG.debug("Ensuring existence of " + prefixPath);
+        try {
+          zkClient.create(prefixPath, new byte[]{}, zkAcls, CreateMode.PERSISTENT);
+        } catch (NodeExistsException e) {
+            // This is OK - just ensuring existence.
+        }
+      }
+      // create the node
+      zkClient.create(znode, val.getBytes(), zkAcls, CreateMode.PERSISTENT);
+    } else {
+      zkClient.setData(znode, val.getBytes(), version);
+    }
   }
 
   /**

@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.TreeMap;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -106,6 +107,7 @@ public class ViewFileSystem extends FileSystem {
   Configuration config;
   InodeTree<FileSystem> fsState;  // the fs state; ie the mount table
   Path homeDir = null;
+  private ReentrantReadWriteLock fsStateLock = new ReentrantReadWriteLock();
   
   /**
    * Make the path Absolute and get the path-part of a pathname.
@@ -164,19 +166,31 @@ public class ViewFileSystem extends FileSystem {
     final String authority = theUri.getAuthority();
     try {
       myUri = new URI(FsConstants.VIEWFS_SCHEME, authority, "/", null, null);
+      renewFsState(conf, authority);
+      workingDir = this.getHomeDirectory();
+    } catch (URISyntaxException e) {
+      throw new IOException("URISyntax exception: " + theUri);
+    }
+
+  }
+
+  public void renewFsState(final Configuration conf, final String authority)
+      throws IOException {
+    try {
+      fsStateLock.writeLock().lock();
       fsState = new InodeTree<FileSystem>(conf, authority) {
 
         @Override
         protected
         FileSystem getTargetFileSystem(final URI uri)
-          throws URISyntaxException, IOException {
+            throws URISyntaxException, IOException {
             return new ChRootedFileSystem(uri, config);
         }
 
         @Override
         protected
         FileSystem getTargetFileSystem(final INodeDir<FileSystem> dir)
-          throws URISyntaxException {
+            throws URISyntaxException {
           return new InternalDirOfViewFs(dir, creationTime, ugi, myUri);
         }
 
@@ -188,13 +202,12 @@ public class ViewFileSystem extends FileSystem {
           // return MergeFs.createMergeFs(mergeFsURIList, config);
         }
       };
-      workingDir = this.getHomeDirectory();
     } catch (URISyntaxException e) {
-      throw new IOException("URISyntax exception: " + theUri);
+      throw new IOException("URISyntax exception: " + authority);
+    } finally {
+      fsStateLock.writeLock().unlock();
     }
-
   }
-  
   
   /**
    * Convenience Constructor for apps to call directly
@@ -218,8 +231,8 @@ public class ViewFileSystem extends FileSystem {
   }
   
   public Path getTrashCanLocation(final Path f) throws FileNotFoundException {
-    final InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    final InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     return res.isInternalDir() ? null : res.targetFileSystem.getHomeDirectory();
   }
   
@@ -232,7 +245,7 @@ public class ViewFileSystem extends FileSystem {
   public Path resolvePath(final Path f)
       throws IOException {
     final InodeTree.ResolveResult<FileSystem> res;
-      res = fsState.resolve(getUriPath(f), true);
+    res = fsStateResolve(getUriPath(f), true);
     if (res.isInternalDir()) {
       return f;
     }
@@ -242,7 +255,7 @@ public class ViewFileSystem extends FileSystem {
   @Override
   public Path getHomeDirectory() {
     if (homeDir == null) {
-      String base = fsState.getHomeDirPrefixValue();
+      String base = fsStateGetHomeDirPrefixValue();
       if (base == null) {
         base = "/user";
       }
@@ -267,8 +280,8 @@ public class ViewFileSystem extends FileSystem {
   @Override
   public FSDataOutputStream append(final Path f, final int bufferSize,
       final Progressable progress) throws IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.append(res.remainingPath, bufferSize, progress);
   }
   
@@ -278,7 +291,7 @@ public class ViewFileSystem extends FileSystem {
       Progressable progress) throws IOException {
     InodeTree.ResolveResult<FileSystem> res;
     try {
-      res = fsState.resolve(getUriPath(f), false);
+      res = fsStateResolve(getUriPath(f), false);
     } catch (FileNotFoundException e) {
         throw readOnlyMountTable("create", f);
     }
@@ -293,7 +306,7 @@ public class ViewFileSystem extends FileSystem {
       final long blockSize, final Progressable progress) throws IOException {
     InodeTree.ResolveResult<FileSystem> res;
     try {
-      res = fsState.resolve(getUriPath(f), false);
+      res = fsStateResolve(getUriPath(f), false);
     } catch (FileNotFoundException e) {
         throw readOnlyMountTable("create", f);
     }
@@ -307,8 +320,8 @@ public class ViewFileSystem extends FileSystem {
   public boolean delete(final Path f, final boolean recursive)
       throws AccessControlException, FileNotFoundException,
       IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     // If internal dir or target is a mount link (ie remainingPath is Slash)
     if (res.isInternalDir() || res.remainingPath == InodeTree.SlashPath) {
       throw readOnlyMountTable("delete", f);
@@ -327,8 +340,8 @@ public class ViewFileSystem extends FileSystem {
   @Override
   public BlockLocation[] getFileBlockLocations(FileStatus fs, 
       long start, long len) throws IOException {
-    final InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(fs.getPath()), true);
+    final InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(fs.getPath()), true);
     return res.targetFileSystem.getFileBlockLocations(
           new ViewFsFileStatus(fs, res.remainingPath), start, len);
   }
@@ -337,16 +350,16 @@ public class ViewFileSystem extends FileSystem {
   public FileChecksum getFileChecksum(final Path f)
       throws AccessControlException, FileNotFoundException,
       IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.getFileChecksum(res.remainingPath);
   }
 
   @Override
   public FileStatus getFileStatus(final Path f) throws AccessControlException,
       FileNotFoundException, IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     
     // FileStatus#getPath is a fully qualified path relative to the root of 
     // target file system.
@@ -366,7 +379,7 @@ public class ViewFileSystem extends FileSystem {
   public void access(Path path, FsAction mode) throws AccessControlException,
       FileNotFoundException, IOException {
     InodeTree.ResolveResult<FileSystem> res =
-      fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.access(res.remainingPath, mode);
   }
 
@@ -374,7 +387,7 @@ public class ViewFileSystem extends FileSystem {
   public FileStatus[] listStatus(final Path f) throws AccessControlException,
       FileNotFoundException, IOException {
     InodeTree.ResolveResult<FileSystem> res =
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
 
     FileStatus[] statusLst = res.targetFileSystem.listStatus(res.remainingPath);
     if (!res.isInternalDir()) {
@@ -389,7 +402,8 @@ public class ViewFileSystem extends FileSystem {
               suffix.length() == 0 ? f : new Path(res.resolvedPath, suffix)));
       }
     }
-    if (fsState.getRootDefaultFs() == null || (res.resolvedPath.equals("/")
+    if (fsStateGetRootDefaultFs() == null
+        || (res.resolvedPath.equals("/")
         && !res.isInternalDir())) {
       return statusLst;
     }
@@ -398,7 +412,7 @@ public class ViewFileSystem extends FileSystem {
     FileStatus[] rootStatus;
     try {
       rootStatus =
-          fsState.getRootDefaultFs().listStatus(new Path(getUriPath(f)));
+          fsStateGetRootDefaultFs().listStatus(new Path(getUriPath(f)));
     } catch (FileNotFoundException e) {
       return statusLst;
     }
@@ -419,8 +433,8 @@ public class ViewFileSystem extends FileSystem {
   @Override
   public boolean mkdirs(final Path dir, final FsPermission permission)
       throws IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(dir), false);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(dir), false);
    return  res.targetFileSystem.mkdirs(res.remainingPath, permission);
   }
 
@@ -428,8 +442,8 @@ public class ViewFileSystem extends FileSystem {
   public FSDataInputStream open(final Path f, final int bufferSize)
       throws AccessControlException, FileNotFoundException,
       IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-        fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.open(res.remainingPath, bufferSize);
   }
 
@@ -438,15 +452,15 @@ public class ViewFileSystem extends FileSystem {
   public boolean rename(final Path src, final Path dst) throws IOException {
     // passing resolveLastComponet as false to catch renaming a mount point to 
     // itself. We need to catch this as an internal operation and fail.
-    InodeTree.ResolveResult<FileSystem> resSrc = 
-      fsState.resolve(getUriPath(src), false);
+    InodeTree.ResolveResult<FileSystem> resSrc =
+        fsStateResolve(getUriPath(src), false);
   
     if (resSrc.isInternalDir()) {
       throw readOnlyMountTable("rename", src);
     }
       
-    InodeTree.ResolveResult<FileSystem> resDst = 
-      fsState.resolve(getUriPath(dst), false);
+    InodeTree.ResolveResult<FileSystem> resDst =
+        fsStateResolve(getUriPath(dst), false);
     if (resDst.isInternalDir()) {
           throw readOnlyMountTable("rename", dst);
     }
@@ -516,8 +530,8 @@ public class ViewFileSystem extends FileSystem {
       final String groupname) throws AccessControlException,
       FileNotFoundException,
       IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     res.targetFileSystem.setOwner(res.remainingPath, username, groupname); 
   }
 
@@ -525,8 +539,8 @@ public class ViewFileSystem extends FileSystem {
   public void setPermission(final Path f, final FsPermission permission)
       throws AccessControlException, FileNotFoundException,
       IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     res.targetFileSystem.setPermission(res.remainingPath, permission); 
   }
 
@@ -534,8 +548,8 @@ public class ViewFileSystem extends FileSystem {
   public boolean setReplication(final Path f, final short replication)
       throws AccessControlException, FileNotFoundException,
       IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.setReplication(res.remainingPath, replication);
   }
 
@@ -543,24 +557,24 @@ public class ViewFileSystem extends FileSystem {
   public void setTimes(final Path f, final long mtime, final long atime)
       throws AccessControlException, FileNotFoundException,
       IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     res.targetFileSystem.setTimes(res.remainingPath, mtime, atime); 
   }
 
   @Override
   public void modifyAclEntries(Path path, List<AclEntry> aclSpec)
       throws IOException {
-    InodeTree.ResolveResult<FileSystem> res = fsState.resolve(getUriPath(path),
-        true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.modifyAclEntries(res.remainingPath, aclSpec);
   }
 
   @Override
   public void removeAclEntries(Path path, List<AclEntry> aclSpec)
       throws IOException {
-    InodeTree.ResolveResult<FileSystem> res = fsState.resolve(getUriPath(path),
-        true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.removeAclEntries(res.remainingPath, aclSpec);
   }
 
@@ -568,7 +582,7 @@ public class ViewFileSystem extends FileSystem {
   public void removeDefaultAcl(Path path)
       throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-      fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.removeDefaultAcl(res.remainingPath);
   }
 
@@ -576,21 +590,21 @@ public class ViewFileSystem extends FileSystem {
   public void removeAcl(Path path)
       throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-      fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.removeAcl(res.remainingPath);
   }
 
   @Override
   public void setAcl(Path path, List<AclEntry> aclSpec) throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-      fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.setAcl(res.remainingPath, aclSpec);
   }
 
   @Override
   public AclStatus getAclStatus(Path path) throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-      fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.getAclStatus(res.remainingPath);
   }
 
@@ -598,21 +612,21 @@ public class ViewFileSystem extends FileSystem {
   public void setXAttr(Path path, String name, byte[] value,
       EnumSet<XAttrSetFlag> flag) throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.setXAttr(res.remainingPath, name, value, flag);
   }
 
   @Override
   public byte[] getXAttr(Path path, String name) throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.getXAttr(res.remainingPath, name);
   }
 
   @Override
   public Map<String, byte[]> getXAttrs(Path path) throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.getXAttrs(res.remainingPath);
   }
 
@@ -620,28 +634,29 @@ public class ViewFileSystem extends FileSystem {
   public Map<String, byte[]> getXAttrs(Path path, List<String> names)
       throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.getXAttrs(res.remainingPath, names);
   }
 
   @Override
   public List<String> listXAttrs(Path path) throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-      fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.listXAttrs(res.remainingPath);
   }
 
   @Override
   public void removeXAttr(Path path, String name) throws IOException {
-    InodeTree.ResolveResult<FileSystem> res = fsState.resolve(getUriPath(path),
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(path),
         true);
     res.targetFileSystem.removeXAttr(res.remainingPath, name);
   }
 
   @Override
   public void setVerifyChecksum(final boolean verifyChecksum) { 
-    List<InodeTree.MountPoint<FileSystem>> mountPoints = 
-        fsState.getMountPoints();
+    List<InodeTree.MountPoint<FileSystem>> mountPoints =
+        fsStateGetMountPoints();
     for (InodeTree.MountPoint<FileSystem> mount : mountPoints) {
       mount.target.targetFileSystem.setVerifyChecksum(verifyChecksum);
     }
@@ -666,7 +681,7 @@ public class ViewFileSystem extends FileSystem {
   public long getDefaultBlockSize(Path f) {
     try {
       InodeTree.ResolveResult<FileSystem> res =
-        fsState.resolve(getUriPath(f), true);
+          fsStateResolve(getUriPath(f), true);
       return res.targetFileSystem.getDefaultBlockSize(res.remainingPath);
     } catch (FileNotFoundException e) {
       throw new NotInMountpointException(f, "getDefaultBlockSize");
@@ -677,7 +692,7 @@ public class ViewFileSystem extends FileSystem {
   public short getDefaultReplication(Path f) {
     try {
       InodeTree.ResolveResult<FileSystem> res =
-        fsState.resolve(getUriPath(f), true);
+          fsStateResolve(getUriPath(f), true);
       return res.targetFileSystem.getDefaultReplication(res.remainingPath);
     } catch (FileNotFoundException e) {
       throw new NotInMountpointException(f, "getDefaultReplication"); 
@@ -687,21 +702,21 @@ public class ViewFileSystem extends FileSystem {
   @Override
   public FsServerDefaults getServerDefaults(Path f) throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.getServerDefaults(res.remainingPath);    
   }
 
   @Override
   public ContentSummary getContentSummary(Path f) throws IOException {
-    InodeTree.ResolveResult<FileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.getContentSummary(res.remainingPath);
   }
 
   @Override
   public void setWriteChecksum(final boolean writeChecksum) { 
-    List<InodeTree.MountPoint<FileSystem>> mountPoints = 
-        fsState.getMountPoints();
+    List<InodeTree.MountPoint<FileSystem>> mountPoints =
+        fsStateGetMountPoints();
     for (InodeTree.MountPoint<FileSystem> mount : mountPoints) {
       mount.target.targetFileSystem.setWriteChecksum(writeChecksum);
     }
@@ -710,7 +725,7 @@ public class ViewFileSystem extends FileSystem {
   @Override
   public FileSystem[] getChildFileSystems() {
     List<InodeTree.MountPoint<FileSystem>> mountPoints =
-        fsState.getMountPoints();
+        fsStateGetMountPoints();
     Set<FileSystem> children = new HashSet<FileSystem>();
     for (InodeTree.MountPoint<FileSystem> mountPoint : mountPoints) {
       FileSystem targetFs = mountPoint.target.targetFileSystem;
@@ -720,8 +735,8 @@ public class ViewFileSystem extends FileSystem {
   }
   
   public MountPoint[] getMountPoints() {
-    List<InodeTree.MountPoint<FileSystem>> mountPoints = 
-                  fsState.getMountPoints();
+    List<InodeTree.MountPoint<FileSystem>> mountPoints =
+        fsStateGetMountPoints();
     
     MountPoint[] result = new MountPoint[mountPoints.size()];
     for ( int i = 0; i < mountPoints.size(); ++i ) {
@@ -733,7 +748,7 @@ public class ViewFileSystem extends FileSystem {
 
   public FileSystem getTargetFileSystem(Path path) throws IOException {
     InodeTree.ResolveResult<FileSystem> res =
-            fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem;
   }
   
@@ -1068,6 +1083,43 @@ public class ViewFileSystem extends FileSystem {
     public void removeXAttr(Path path, String name) throws IOException {
       checkPathIsSlash(path);
       throw readOnlyMountTable("removeXAttr", path);
+    }
+  }
+
+  private InodeTree.ResolveResult<FileSystem> fsStateResolve(final String p,
+      final boolean resolveLastComponent) throws FileNotFoundException {
+    fsStateLock.readLock().lock();
+    try {
+      return fsState.resolve(p, resolveLastComponent);
+    } finally {
+      fsStateLock.readLock().unlock();
+    }
+  }
+
+  private List<InodeTree.MountPoint<FileSystem>> fsStateGetMountPoints() {
+    fsStateLock.readLock().lock();
+    try {
+      return fsState.getMountPoints();
+    } finally {
+      fsStateLock.readLock().unlock();
+    }
+  }
+
+  private String fsStateGetHomeDirPrefixValue() {
+    fsStateLock.readLock().lock();
+    try {
+      return fsState.getHomeDirPrefixValue();
+    } finally {
+      fsStateLock.readLock().unlock();
+    }
+  }
+
+  private FileSystem fsStateGetRootDefaultFs() {
+    fsStateLock.readLock().lock();
+    try {
+      return fsState.getRootDefaultFs();
+    } finally {
+      fsStateLock.readLock().unlock();
     }
   }
 }

@@ -28,6 +28,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -40,6 +41,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsConstants;
 import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.FsStatus;
@@ -155,6 +157,7 @@ public class ViewFs extends AbstractFileSystem {
   final Configuration config;
   InodeTree<AbstractFileSystem> fsState;  // the fs state; ie the mount table
   Path homeDir = null;
+  private ReentrantReadWriteLock fsStateLock = new ReentrantReadWriteLock();
   
   static AccessControlException readOnlyMountTable(final String operation,
       final String p) {
@@ -205,36 +208,45 @@ public class ViewFs extends AbstractFileSystem {
     config = conf;
     // Now build  client side view (i.e. client side mount table) from config.
     String authority = theUri.getAuthority();
-    fsState = new InodeTree<AbstractFileSystem>(conf, authority) {
+    renewFsState(conf, authority);
+  }
 
-      @Override
-      protected
-      AbstractFileSystem getTargetFileSystem(final URI uri)
-        throws URISyntaxException, UnsupportedFileSystemException {
+  public void renewFsState(final Configuration conf, final String authority)
+      throws IOException, URISyntaxException {
+    try {
+      fsStateLock.writeLock().lock();
+      fsState = new InodeTree<AbstractFileSystem>(conf, authority) {
+
+        @Override
+        protected AbstractFileSystem getTargetFileSystem(final URI uri)
+            throws URISyntaxException, UnsupportedFileSystemException {
           String pathString = uri.getPath();
           if (pathString.isEmpty()) {
             pathString = "/";
           }
           return new ChRootedFs(
-              AbstractFileSystem.createFileSystem(uri, config),
-              new Path(pathString));
-      }
+              AbstractFileSystem.createFileSystem(uri, config), new Path(
+                  pathString));
+        }
 
-      @Override
-      protected
-      AbstractFileSystem getTargetFileSystem(
-          final INodeDir<AbstractFileSystem> dir) throws URISyntaxException {
-        return new InternalDirOfViewFs(dir, creationTime, ugi, getUri());
-      }
+        @Override
+        protected AbstractFileSystem getTargetFileSystem(
+            final INodeDir<AbstractFileSystem> dir) throws URISyntaxException {
+          return new InternalDirOfViewFs(dir, creationTime, ugi, getUri());
+        }
 
-      @Override
-      protected
-      AbstractFileSystem getTargetFileSystem(URI[] mergeFsURIList)
-          throws URISyntaxException, UnsupportedFileSystemException {
-        throw new UnsupportedFileSystemException("mergefs not implemented yet");
-        // return MergeFs.createMergeFs(mergeFsURIList, config);
-      }
-    };
+        @Override
+        protected AbstractFileSystem getTargetFileSystem(URI[] mergeFsURIList)
+            throws URISyntaxException, UnsupportedFileSystemException {
+          throw new UnsupportedFileSystemException(
+              "mergefs not implemented yet");
+          // return MergeFs.createMergeFs(mergeFsURIList, config);
+        }
+      };
+
+    } finally {
+      fsStateLock.writeLock().unlock();
+    }
   }
 
   @Override
@@ -250,7 +262,7 @@ public class ViewFs extends AbstractFileSystem {
   @Override
   public Path getHomeDirectory() {
     if (homeDir == null) {
-      String base = fsState.getHomeDirPrefixValue();
+      String base = fsStateGetHomeDirPrefixValue();
       if (base == null) {
         base = "/user";
       }
@@ -265,7 +277,7 @@ public class ViewFs extends AbstractFileSystem {
   public Path resolvePath(final Path f) throws FileNotFoundException,
           AccessControlException, UnresolvedLinkException, IOException {
     final InodeTree.ResolveResult<AbstractFileSystem> res;
-      res = fsState.resolve(getUriPath(f), true);
+    res = fsStateResolve(getUriPath(f), true);
     if (res.isInternalDir()) {
       return f;
     }
@@ -284,7 +296,7 @@ public class ViewFs extends AbstractFileSystem {
       UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res;
     try {
-      res = fsState.resolve(getUriPath(f), false);
+      res = fsStateResolve(getUriPath(f), false);
     } catch (FileNotFoundException e) {
       if (createParent) {
         throw readOnlyMountTable("create", f);
@@ -304,7 +316,7 @@ public class ViewFs extends AbstractFileSystem {
       throws AccessControlException, FileNotFoundException,
       UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     // If internal dir or target is a mount link (ie remainingPath is Slash)
     if (res.isInternalDir() || res.remainingPath == InodeTree.SlashPath) {
       throw new AccessControlException(
@@ -318,7 +330,7 @@ public class ViewFs extends AbstractFileSystem {
       final long len) throws AccessControlException, FileNotFoundException,
       UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     return
       res.targetFileSystem.getFileBlockLocations(res.remainingPath, start, len);
   }
@@ -328,7 +340,7 @@ public class ViewFs extends AbstractFileSystem {
       throws AccessControlException, FileNotFoundException,
       UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.getFileChecksum(res.remainingPath);
   }
 
@@ -336,7 +348,7 @@ public class ViewFs extends AbstractFileSystem {
   public FileStatus getFileStatus(final Path f) throws AccessControlException,
       FileNotFoundException, UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
 
     //  FileStatus#getPath is a fully qualified path relative to the root of 
     // target file system.
@@ -357,7 +369,7 @@ public class ViewFs extends AbstractFileSystem {
   public void access(Path path, FsAction mode) throws AccessControlException,
       FileNotFoundException, UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-      fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.access(res.remainingPath, mode);
   }
 
@@ -366,7 +378,7 @@ public class ViewFs extends AbstractFileSystem {
      throws AccessControlException, FileNotFoundException,
      UnsupportedFileSystemException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), false); // do not follow mount link
+        fsStateResolve(getUriPath(f), false); // do not follow mount link
     return res.targetFileSystem.getFileLinkStatus(res.remainingPath);
   }
   
@@ -381,7 +393,7 @@ public class ViewFs extends AbstractFileSystem {
     throws AccessControlException, FileNotFoundException,
     UnresolvedLinkException, IOException {
     final InodeTree.ResolveResult<AbstractFileSystem> res =
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     final RemoteIterator<FileStatus> fsIter =
       res.targetFileSystem.listStatusIterator(res.remainingPath);
     if (res.isInternalDir()) {
@@ -415,7 +427,7 @@ public class ViewFs extends AbstractFileSystem {
   public FileStatus[] listStatus(final Path f) throws AccessControlException,
       FileNotFoundException, UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     
     FileStatus[] statusLst = res.targetFileSystem.listStatus(res.remainingPath);
     if (!res.isInternalDir()) {
@@ -439,7 +451,7 @@ public class ViewFs extends AbstractFileSystem {
       FileAlreadyExistsException,
       FileNotFoundException, UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(dir), false);
+        fsStateResolve(getUriPath(dir), false);
     res.targetFileSystem.mkdir(res.remainingPath, permission, createParent);
   }
 
@@ -448,7 +460,7 @@ public class ViewFs extends AbstractFileSystem {
       throws AccessControlException, FileNotFoundException,
       UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-        fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.open(res.remainingPath, bufferSize);
   }
 
@@ -459,7 +471,7 @@ public class ViewFs extends AbstractFileSystem {
     // passing resolveLastComponet as false to catch renaming a mount point 
     // itself we need to catch this as an internal operation and fail.
     InodeTree.ResolveResult<AbstractFileSystem> resSrc = 
-      fsState.resolve(getUriPath(src), false); 
+        fsStateResolve(getUriPath(src), false);
   
     if (resSrc.isInternalDir()) {
       throw new AccessControlException(
@@ -467,7 +479,7 @@ public class ViewFs extends AbstractFileSystem {
     }
       
     InodeTree.ResolveResult<AbstractFileSystem> resDst = 
-                                fsState.resolve(getUriPath(dst), false);
+        fsStateResolve(getUriPath(dst), false);
     if (resDst.isInternalDir()) {
       throw new AccessControlException(
           "Cannot Rename within internal dirs of mount table: it is readOnly");
@@ -516,7 +528,7 @@ public class ViewFs extends AbstractFileSystem {
       final boolean createParent) throws IOException, UnresolvedLinkException {
     InodeTree.ResolveResult<AbstractFileSystem> res;
     try {
-      res = fsState.resolve(getUriPath(link), false);
+      res = fsStateResolve(getUriPath(link), false);
     } catch (FileNotFoundException e) {
       if (createParent) {
         throw readOnlyMountTable("createSymlink", link);
@@ -532,7 +544,7 @@ public class ViewFs extends AbstractFileSystem {
   @Override
   public Path getLinkTarget(final Path f) throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), false); // do not follow mount link
+        fsStateResolve(getUriPath(f), false); // do not follow mount link
     return res.targetFileSystem.getLinkTarget(res.remainingPath);
   }
 
@@ -541,7 +553,7 @@ public class ViewFs extends AbstractFileSystem {
       final String groupname) throws AccessControlException,
       FileNotFoundException, UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     res.targetFileSystem.setOwner(res.remainingPath, username, groupname); 
   }
 
@@ -550,7 +562,7 @@ public class ViewFs extends AbstractFileSystem {
       throws AccessControlException, FileNotFoundException,
       UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     res.targetFileSystem.setPermission(res.remainingPath, permission); 
     
   }
@@ -560,7 +572,7 @@ public class ViewFs extends AbstractFileSystem {
       throws AccessControlException, FileNotFoundException,
       UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     return res.targetFileSystem.setReplication(res.remainingPath, replication);
   }
 
@@ -569,7 +581,7 @@ public class ViewFs extends AbstractFileSystem {
       throws AccessControlException, FileNotFoundException,
       UnresolvedLinkException, IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
-      fsState.resolve(getUriPath(f), true);
+        fsStateResolve(getUriPath(f), true);
     res.targetFileSystem.setTimes(res.remainingPath, mtime, atime); 
   }
 
@@ -582,7 +594,7 @@ public class ViewFs extends AbstractFileSystem {
   
   public MountPoint[] getMountPoints() {
     List<InodeTree.MountPoint<AbstractFileSystem>> mountPoints = 
-                  fsState.getMountPoints();
+        fsStateGetMountPoints();
     
     MountPoint[] result = new MountPoint[mountPoints.size()];
     for ( int i = 0; i < mountPoints.size(); ++i ) {
@@ -595,7 +607,7 @@ public class ViewFs extends AbstractFileSystem {
   @Override
   public List<Token<?>> getDelegationTokens(String renewer) throws IOException {
     List<InodeTree.MountPoint<AbstractFileSystem>> mountPoints = 
-                fsState.getMountPoints();
+        fsStateGetMountPoints();
     int initialListSize  = 0;
     for (InodeTree.MountPoint<AbstractFileSystem> im : mountPoints) {
       initialListSize += im.target.targetDirLinkList.length; 
@@ -621,7 +633,7 @@ public class ViewFs extends AbstractFileSystem {
   public void modifyAclEntries(Path path, List<AclEntry> aclSpec)
       throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.modifyAclEntries(res.remainingPath, aclSpec);
   }
 
@@ -629,7 +641,7 @@ public class ViewFs extends AbstractFileSystem {
   public void removeAclEntries(Path path, List<AclEntry> aclSpec)
       throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.removeAclEntries(res.remainingPath, aclSpec);
   }
 
@@ -637,7 +649,7 @@ public class ViewFs extends AbstractFileSystem {
   public void removeDefaultAcl(Path path)
       throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.removeDefaultAcl(res.remainingPath);
   }
 
@@ -645,21 +657,21 @@ public class ViewFs extends AbstractFileSystem {
   public void removeAcl(Path path)
       throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.removeAcl(res.remainingPath);
   }
 
   @Override
   public void setAcl(Path path, List<AclEntry> aclSpec) throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.setAcl(res.remainingPath, aclSpec);
   }
 
   @Override
   public AclStatus getAclStatus(Path path) throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.getAclStatus(res.remainingPath);
   }
 
@@ -667,21 +679,21 @@ public class ViewFs extends AbstractFileSystem {
   public void setXAttr(Path path, String name, byte[] value,
                        EnumSet<XAttrSetFlag> flag) throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.setXAttr(res.remainingPath, name, value, flag);
   }
 
   @Override
   public byte[] getXAttr(Path path, String name) throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.getXAttr(res.remainingPath, name);
   }
 
   @Override
   public Map<String, byte[]> getXAttrs(Path path) throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.getXAttrs(res.remainingPath);
   }
 
@@ -689,21 +701,21 @@ public class ViewFs extends AbstractFileSystem {
   public Map<String, byte[]> getXAttrs(Path path, List<String> names)
       throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.getXAttrs(res.remainingPath, names);
   }
 
   @Override
   public List<String> listXAttrs(Path path) throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     return res.targetFileSystem.listXAttrs(res.remainingPath);
   }
 
   @Override
   public void removeXAttr(Path path, String name) throws IOException {
     InodeTree.ResolveResult<AbstractFileSystem> res =
-        fsState.resolve(getUriPath(path), true);
+        fsStateResolve(getUriPath(path), true);
     res.targetFileSystem.removeXAttr(res.remainingPath, name);
   }
   
@@ -1009,6 +1021,35 @@ public class ViewFs extends AbstractFileSystem {
     public void removeXAttr(Path path, String name) throws IOException {
       checkPathIsSlash(path);
       throw readOnlyMountTable("removeXAttr", path);
+    }
+  }
+
+  private String fsStateGetHomeDirPrefixValue() {
+    fsStateLock.readLock().lock();
+    try {
+      return fsState.getHomeDirPrefixValue();
+    } finally {
+      fsStateLock.readLock().unlock();
+    }
+  }
+
+  private InodeTree.ResolveResult<AbstractFileSystem> fsStateResolve(
+      final String p, final boolean resolveLastComponent)
+      throws FileNotFoundException {
+    fsStateLock.readLock().lock();
+    try {
+      return fsState.resolve(p, resolveLastComponent);
+    } finally {
+      fsStateLock.readLock().unlock();
+    }
+  }
+
+  private List<InodeTree.MountPoint<AbstractFileSystem>> fsStateGetMountPoints() {
+    fsStateLock.readLock().lock();
+    try {
+      return fsState.getMountPoints();
+    } finally {
+      fsStateLock.readLock().unlock();
     }
   }
 }
