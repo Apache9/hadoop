@@ -66,55 +66,6 @@ public class FederationClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
-  public boolean rename(String src, String dst, String dstId) throws UnresolvedLinkException,
-      IOException {
-    FederationRenameRequestProto req = FederationRenameRequestProto.newBuilder()
-        .setSrc(src)
-        .setDst(dst).build();
-    long startTime = System.currentTimeMillis();
-    try {
-      return rpcProxy.rename(null, req).getResult();
-    } catch (ServiceException e) {
-      HdfsPerfCounter.countFail("rename", 1);
-      throw ProtobufHelper.getRemoteException(e);
-    } finally {
-      HdfsPerfCounter
-          .count("rename", 1, System.currentTimeMillis() - startTime);
-    }
-  }
-  
-
-  @Override
-  public void rename2(String src, String dst, String dstId, Rename... options)
-      throws AccessControlException, DSQuotaExceededException,
-      FileAlreadyExistsException, FileNotFoundException,
-      NSQuotaExceededException, ParentNotDirectoryException, SafeModeException,
-      UnresolvedLinkException, IOException {
-    boolean overwrite = false;
-    if (options != null) {
-      for (Rename option : options) {
-        if (option == Rename.OVERWRITE) {
-          overwrite = true;
-        }
-      }
-    }
-    FederationRename2RequestProto req = FederationRename2RequestProto.newBuilder().
-        setSrc(src).
-        setDst(dst).setOverwriteDest(overwrite).
-        build();
-    long startTime = System.currentTimeMillis();
-    try {
-      rpcProxy.rename2(null, req);
-    } catch (ServiceException e) {
-      HdfsPerfCounter.countFail("rename2", 1);
-      throw ProtobufHelper.getRemoteException(e);
-    } finally {
-      HdfsPerfCounter
-          .count("rename2", 1, System.currentTimeMillis() - startTime);
-    }
-  }
-
-  @Override
   public DirectorySubTree renameSrcPhase1(String src, String srcId, String dst, String dstId) 
       throws IOException {
     FederationRenameSrcPhase1RequestProto req =

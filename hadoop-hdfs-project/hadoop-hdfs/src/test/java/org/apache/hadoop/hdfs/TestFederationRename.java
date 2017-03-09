@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
-import org.apache.hadoop.hdfs.server.namenode.FederationRenameInvalidArgument;
+import org.apache.hadoop.hdfs.server.namenode.FederationRenameException;
 import org.apache.hadoop.ipc.RemoteException;
 
 import org.junit.After;
@@ -120,6 +120,28 @@ public class TestFederationRename {
       Assert.assertTrue(sFstatus.getOwner().equals(dFstatus.getOwner()));
       Assert.assertTrue(sFstatus.getGroup().equals(dFstatus.getGroup()));
       Assert.assertTrue(sAclStatus.equals(dAclStatus));
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
+  }
+
+  @Test
+  public void testDestException() throws IOException {
+    fHdfs1.mkdirs(new Path("/neg1/neg2"), null);
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+      Assert.assertTrue(dfs instanceof DistributedFileSystem);
+      Assert.assertTrue(dfs instanceof FederatedDFSFileSystem);
+      try {
+        boolean rename =
+            dfs.rename(new Path("/home/neg1"), new Path(
+                "/user/notexist1/notexist2/notexist3"));
+      } catch (IOException ioe) {
+        Assert.assertTrue(dfs.delete(new Path("/home/neg1/neg2")));
+        return;
+      }
+      Assert.assertTrue(false);
     } finally {
       CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
     }
@@ -321,9 +343,7 @@ public class TestFederationRename {
           "/testRenameUnclosedFile", dfs2.getUri().toString());
     } catch (RemoteException re) {
       IOException ioe = re.unwrapRemoteException();
-      Assert.assertTrue(ioe instanceof FederationRenameInvalidArgument);
-      Assert.assertTrue(ioe.getCause().getMessage()
-          .contains("contains un-closed file"));
+      Assert.assertTrue(ioe instanceof FederationRenameException);
       return;
     }
     Assert.assertTrue(false);
@@ -487,6 +507,7 @@ public class TestFederationRename {
   @Test
   public void testRenameOnSameNN() throws Exception {
     CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    CONF.setBoolean("fs.hdfs.impl.disable.cache", true);
     try {
       Configuration config = new Configuration(CONF);
       ConfigUtil.addLink(config, "/x/y/z",

@@ -75,7 +75,6 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
         2000);
     CONF.setLong(FederationConfigKeys.FEDFS_MOUT_TABLE_RENEW_RETRY_INTERVAL,
         1000);
-
   }
 
   private static String runUpdateMptOnZk(final DFSAdmin shell)

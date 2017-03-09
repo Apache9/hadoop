@@ -51,26 +51,6 @@ message DirectorySubTreeProto {
   repeated HdfsExtendedFileStatusProto dentry = 2;
 }
 
-message FederationRenameRequestProto {
-  required string src = 1;
-  required string dst = 2;
-  required string dstId = 3;
-}
-
-message FederationRenameResponseProto {
-  required bool result = 1;
-}
-
-message FederationRename2RequestProto {
-  required string src = 1;
-  required string dst = 2;
-  required string dstId = 3;
-  required bool overwriteDest = 4;
-}
-
-message FederationRename2ResponseProto {
-}
-
 message FederationRenameSrcPhase1RequestProto {
   required string src = 1;
   required string srcId = 2;
@@ -139,8 +119,6 @@ message GetRenameDestSubTreeResponseProto {
 }
 
 service FederationClientNamenodeProtocol {
-  rpc rename(FederationRenameRequestProto) returns(FederationRenameResponseProto);
-  rpc rename2(FederationRename2RequestProto) returns(FederationRename2ResponseProto);
   rpc renameSrcPhase1(FederationRenameSrcPhase1RequestProto) returns(FederationRenameSrcPhase1ResponseProto);
   rpc renameSrcPhase2(FederationRenameSrcPhase2RequestProto) returns(FederationRenameSrcPhase2ResponseProto);
   rpc renameDestPhase1(FederationRenameDestPhase1RequestProto) returns(FederationRenameDestPhase1ResponseProto);
