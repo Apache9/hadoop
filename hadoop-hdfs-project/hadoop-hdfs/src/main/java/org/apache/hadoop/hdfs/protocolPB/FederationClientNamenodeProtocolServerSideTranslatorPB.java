@@ -44,9 +44,6 @@ public class FederationClientNamenodeProtocolServerSideTranslatorPB implements
     FederationClientNamenodeProtocolPB {
   final private FederationClientProtocol server;
 
-  private static final FederationRename2ResponseProto VOID_RENAME2_RESPONSE = 
-  FederationRename2ResponseProto.newBuilder().build();
-
   /**
    * Constructor
    * 
@@ -56,30 +53,6 @@ public class FederationClientNamenodeProtocolServerSideTranslatorPB implements
   public FederationClientNamenodeProtocolServerSideTranslatorPB(FederationClientProtocol server)
       throws IOException {
     this.server = server;
-  }
-
-  @Override
-  public FederationRenameResponseProto rename(RpcController controller,
-      FederationRenameRequestProto req) throws ServiceException {
-    try {
-      boolean result = server.rename(req.getSrc(), req.getDst(), req.getDstId());
-      return FederationRenameResponseProto.newBuilder().setResult(result).build();
-    } catch (IOException e) {
-      throw new ServiceException(e);
-    }
-  }
-
-  @Override
-  public FederationRename2ResponseProto rename2(RpcController controller,
-      FederationRename2RequestProto req) throws ServiceException {
-
-    try {
-      server.rename2(req.getSrc(), req.getDst(), req.getDstId(), 
-          req.getOverwriteDest() ? Rename.OVERWRITE : Rename.NONE);
-    } catch (IOException e) {
-      throw new ServiceException(e);
-    }   
-    return VOID_RENAME2_RESPONSE;
   }
 
   @Override

@@ -92,8 +92,10 @@ import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
 import org.apache.hadoop.hdfs.protocolPB.FederationClientDatanodeProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+import org.apache.hadoop.hdfs.server.namenode.FederationRenameException;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.Credentials;
@@ -2227,9 +2229,17 @@ public class DistributedFileSystem extends FileSystem {
         dsrcFs.renameSrcPhase1(src, dsrcFs.getUri().toString(), dst, ddstFs
             .getUri().toString());
     if (subTree != null && subTree.getSize() > 0) {
-      blksToDup =
-          ddstFs.renameDestPhase1(src, dsrcFs.getUri().toString(), dst, ddstFs
-              .getUri().toString(), subTree);
+      try {
+        blksToDup =
+            ddstFs.renameDestPhase1(src, dsrcFs.getUri().toString(), dst,
+                ddstFs.getUri().toString(), subTree);
+      } catch (RemoteException re) {
+        IOException ioe = re.unwrapRemoteException();
+        if (ioe instanceof FederationRenameException) {
+          dsrcFs.renameSrcPhase2(subTree.getRenameId(), true);
+        }
+        throw ioe;
+      }
       FederationRenameBlockCollector frbc = null;
       if (blksToDup.size() != 0) {
         frbc =

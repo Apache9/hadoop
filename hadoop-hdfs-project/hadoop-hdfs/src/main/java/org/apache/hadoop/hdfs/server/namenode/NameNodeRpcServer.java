@@ -131,6 +131,7 @@ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifie
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
 import org.apache.hadoop.hdfs.server.common.IncorrectVersionException;
+import org.apache.hadoop.hdfs.server.namenode.FederationRenameException;
 import org.apache.hadoop.hdfs.server.namenode.NameNode.OperationCategory;
 import org.apache.hadoop.hdfs.server.namenode.metrics.NameNodeMetrics;
 import org.apache.hadoop.hdfs.server.namenode.web.resources.NamenodeWebHdfsMethods;
@@ -1773,47 +1774,52 @@ class NameNodeRpcServer implements NamenodeProtocols {
   }
 
   @Override
-  public boolean rename(String src, String dst, String dstId) {
-    return false;
-  }
-
-  @Override
-  public void rename2(String src, String dst, String dstId,
-      Options.Rename... options) {
-
-  }
-
-  @Override
   public DirectorySubTree renameSrcPhase1(String src, String srcId, String dst,
       String dstId) throws IOException {
     if (stateChangeLog.isDebugEnabled()) {
       stateChangeLog.debug("*DIR* NameNode.rename: " + src + " to " + dst);
     }
     if (!checkPathLength(dst)) {
-      throw new IOException("rename: Pathname too long.  Limit "
+      throw new FederationRenameException("rename: Pathname too long.  Limit "
           + MAX_PATH_LENGTH + " characters, " + MAX_PATH_DEPTH + " levels.");
     }
-    return namesystem.federationRenameSrcPhase1(src, srcId, dst, dstId);
+    try {
+      return namesystem.federationRenameSrcPhase1(src, srcId, dst, dstId);
+    } catch (Exception e) {
+      throw new FederationRenameException(e);
+    }
   }
 
   @Override
   public boolean renameSrcPhase2(long renameId, boolean toCancel)
       throws IOException {
-    return namesystem.federationRenameSrcPhase2(renameId, toCancel);
+    try {
+      return namesystem.federationRenameSrcPhase2(renameId, toCancel);
+    } catch (Exception e) {
+      throw new FederationRenameException(e);
+    }
   }
 
   @Override
   public BlocksToDup renameDestPhase1(String src, String srcId, String dst,
       String dstId, DirectorySubTree subTree)
  throws IOException {
-    return namesystem.federationRenameDestPhase1(src, srcId, dst, dstId,
-        subTree);
+    try {
+      return namesystem.federationRenameDestPhase1(src, srcId, dst, dstId,
+          subTree);
+    } catch (Exception e) {
+      throw new FederationRenameException(e);
+    }
   }
 
   @Override
   public boolean renameDestPhase2(long renameId, String srcId)
       throws IOException {
-    return namesystem.federationRenameDestPhase2(renameId, srcId);
+    try {
+      return namesystem.federationRenameDestPhase2(renameId, srcId);
+    } catch (Exception e) {
+      throw new FederationRenameException(e);
+    }
   }
 
   @Override
