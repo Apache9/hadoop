@@ -20,12 +20,12 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
+    <version>2.6.0-mdh3.10-jre8-fed-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-mapreduce-client</artifactId>
-  <version>2.6.0-mdh3.10-jre8-SNAPSHOT</version>
+  <version>2.6.0-mdh3.10-jre8-fed-SNAPSHOT</version>
   <name>hadoop-mapreduce-client</name>
   <packaging>pom</packaging>
 
