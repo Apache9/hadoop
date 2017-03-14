@@ -2611,7 +2611,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   // for federation feature
   // if the fs support federation, but uri host-specific, return false
   // other case, return true
-  public boolean isUriCompatible(URI uri) {
+  public boolean isUriCompatible(URI uri, Configuration conf) {
     return true;
   }
 
@@ -2663,7 +2663,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     }
 
     if (uri.getScheme().equals("hdfs") && fs.supportFederation()) {
-      if (!fs.isUriCompatible(uri)) {
+      if (!fs.isUriCompatible(uri, conf)) {
         // get the default filesystem
         clazz = (Class<? extends FileSystem>) SERVICE_FILE_SYSTEMS.get("hdfs");
         if (clazz == null) {

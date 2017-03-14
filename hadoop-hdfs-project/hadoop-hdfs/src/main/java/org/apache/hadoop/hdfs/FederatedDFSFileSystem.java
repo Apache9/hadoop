@@ -76,10 +76,12 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 public class FederatedDFSFileSystem extends DistributedFileSystem {
   private ViewFileSystem viewFs = null;
@@ -1000,22 +1002,29 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   }
 
   @Override
-  public boolean isUriCompatible(URI uri) {
-    if (uri.getAuthority() == null) {
-      return true;
+  public boolean isUriCompatible(URI uri, Configuration conf) {
+    String authority = uri.getAuthority();
+    if (authority == null) {
+      // use authority in defaultFs
+      authority = getDefaultUri(conf).getAuthority();
+    }
+    if (authority == null) {
+      return false;
     }
 
-    String mountTable = null;
+    Set<String> mountTables = new HashSet<>();
     for (Map.Entry<String, String> si : getConf()) {
       final String key = si.getKey();
       if (key.startsWith(Constants.CONFIG_VIEWFS_PREFIX)) {
         String substr =
             key.substring(Constants.CONFIG_VIEWFS_PREFIX.length() + 1);
-        mountTable = substr.substring(0, substr.indexOf('.'));
-        break;
+        String tableName = substr.substring(0, substr.indexOf('.'));
+        if (!mountTables.contains(tableName)) {
+          mountTables.add(tableName);
+        }
       }
     }
-    if (mountTable != null && uri.getAuthority().equals(mountTable)) {
+    if (mountTables.contains(authority)) {
       return true;
     }
     return false;
