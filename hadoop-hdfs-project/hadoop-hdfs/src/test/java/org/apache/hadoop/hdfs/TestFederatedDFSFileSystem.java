@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
+import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -135,6 +136,58 @@ public class TestFederatedDFSFileSystem {
 
     Assert.assertEquals(dfs.getHomeDirectory().toString(), "hdfs://test-cluster/user/chen");
     Assert.assertEquals(dfs.getWorkingDirectory().toString(), "hdfs://test-cluster/user/chen");
+  }
+
+  private void addClusterToConf(Configuration config, String clusterName,
+      String address) {
+    config.set(DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "."
+        + clusterName, ConfiguredFailoverProxyProvider.class.getName());
+    config.set(DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX + "." + clusterName,
+        "host0");
+    config.set(DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY + "." + clusterName
+        + ".host0", address);
+  }
+
+  @Test
+  public void testClustersMixConfigureation() throws Exception{
+    // test get fs instance with Federation Cluster as defaultFs
+    FileSystem fs =
+        (DistributedFileSystem) FileSystem.get(new URI("/user/foo"), conf);
+    Assert.assertTrue(fs instanceof FederatedDFSFileSystem);
+
+    // test configuration with non-federation cluster
+    Configuration config = new Configuration(conf);
+    config.set(DFSConfigKeys.DFS_NAMESERVICES, "dfs-cluster-a, dfs-cluster-b");
+    addClusterToConf(config, "dfs-cluster-a",
+        cluster1.getNameNode().getHostAndPort());
+    addClusterToConf(config, "dfs-cluster-b",
+        cluster2.getNameNode().getHostAndPort());
+    fs = FileSystem.get(new URI("/user/foo"), config);
+    Assert.assertTrue(fs instanceof FederatedDFSFileSystem);
+    fs = FileSystem.get(new URI("hdfs://dfs-cluster-a/user/foo"), config);
+    Assert.assertTrue(fs instanceof DistributedFileSystem);
+    Assert.assertFalse(fs instanceof FederatedDFSFileSystem);
+
+    // set defaultFs as a non-federation cluster
+    config.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
+            "hdfs://dfs-cluster-a/");
+    fs = FileSystem.get(new URI("/user/foo"), config);
+    Assert.assertTrue(fs instanceof DistributedFileSystem);
+    Assert.assertFalse(fs instanceof FederatedDFSFileSystem);
+    fs = FileSystem.get(new URI("hdfs://test-cluster/user/foo"), config);
+    Assert.assertTrue(fs instanceof FederatedDFSFileSystem);
+    // mkdir without scheme
+    fs.mkdirs(new Path("/user/test"));
+    Assert.assertTrue(cluster2.getFileSystem().exists(new Path("/user/test")));
+
+    // add more federation cluster
+    ConfigUtil.addLink(config, "fed-cluster", "/data",
+            new URI("hdfs://" + cluster1.getNameNode().getHostAndPort()  + "/data"));
+    cluster1.getFileSystem().mkdirs(new Path("/data"));
+    fs = FileSystem.get(new URI("hdfs://fed-cluster/user/foo"), config);
+    Assert.assertTrue(fs instanceof FederatedDFSFileSystem);
+    FileSystemTestHelper.createFile(fs, new Path("/data/file"));
+    Assert.assertTrue(cluster1.getFileSystem().exists(new Path("/data/file")));
   }
 
   @Test
