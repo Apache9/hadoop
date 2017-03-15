@@ -9911,9 +9911,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
               subTree, blks, logRetryCache);
 
       resultingStat = getAuditFileInfo(dst, false);
-    } catch (Throwable t) {
+    } catch (AccessControlException e) {
       logAuditEvent(false, "renameDestPhase1", src, dst, resultingStat);
-      throw t;
+      throw e;
     } finally {
       writeUnlock();
     }

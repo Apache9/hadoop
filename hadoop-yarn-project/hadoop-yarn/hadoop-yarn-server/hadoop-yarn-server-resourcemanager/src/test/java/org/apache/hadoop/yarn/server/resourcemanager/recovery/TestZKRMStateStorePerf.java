@@ -152,11 +152,11 @@ public class TestZKRMStateStorePerf extends RMStateStoreTestBase
     long submitTime = System.currentTimeMillis();
     long startTime = System.currentTimeMillis() + 1234;
 
-    ArrayList<ApplicationId> applicationIds = new ArrayList<>();
-    ArrayList<RMApp> rmApps = new ArrayList<>();
-    ArrayList<ApplicationAttemptId> attemptIds = new ArrayList<>();
+    ArrayList<ApplicationId> applicationIds = new ArrayList<ApplicationId>();
+    ArrayList<RMApp> rmApps = new ArrayList<RMApp>();
+    ArrayList<ApplicationAttemptId> attemptIds = new ArrayList<ApplicationAttemptId>();
     HashMap<ApplicationId, Set<ApplicationAttemptId>> appIdsToAttemptId =
-        new HashMap<>();
+        new HashMap<ApplicationId, Set<ApplicationAttemptId>>();
     TestDispatcher dispatcher = new TestDispatcher();
     store.setRMDispatcher(dispatcher);
 
@@ -164,7 +164,7 @@ public class TestZKRMStateStorePerf extends RMStateStoreTestBase
       ApplicationId appId = ApplicationId.newInstance(clusterTimeStamp, i);
       applicationIds.add(appId);
       ArrayList<ApplicationAttemptId> attemptIdsForThisApp =
-          new ArrayList<>();
+          new ArrayList<ApplicationAttemptId>();
       for (int j = 0; j < numAppAttemptPerApp; j++) {
         ApplicationAttemptId attemptId =
             ApplicationAttemptId.newInstance(appId, j);

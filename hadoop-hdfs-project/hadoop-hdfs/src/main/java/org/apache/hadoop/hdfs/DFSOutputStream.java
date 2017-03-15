@@ -161,7 +161,7 @@ public class DFSOutputStream extends FSOutputSummer
 
   // both dataQueue and ackQueue are protected by dataQueue lock
   private final LinkedList<Packet> dataQueue = new LinkedList<Packet>();
-  private final Map<Long, Long> packetSendTime = new HashMap<>();
+  private final Map<Long, Long> packetSendTime = new HashMap<Long, Long>();
   private final LinkedList<Packet> ackQueue = new LinkedList<Packet>();
   private Packet currentPacket = null;
   private DataStreamer streamer;

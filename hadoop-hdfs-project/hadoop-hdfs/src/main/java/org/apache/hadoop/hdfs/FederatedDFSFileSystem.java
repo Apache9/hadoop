@@ -1012,7 +1012,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
       return false;
     }
 
-    Set<String> mountTables = new HashSet<>();
+    Set<String> mountTables = new HashSet<String>();
     for (Map.Entry<String, String> si : getConf()) {
       final String key = si.getKey();
       if (key.startsWith(Constants.CONFIG_VIEWFS_PREFIX)) {

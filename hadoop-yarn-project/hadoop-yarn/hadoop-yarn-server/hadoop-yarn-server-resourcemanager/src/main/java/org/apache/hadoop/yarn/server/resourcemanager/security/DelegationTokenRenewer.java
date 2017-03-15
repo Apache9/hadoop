@@ -599,7 +599,7 @@ public class DelegationTokenRenewer extends AbstractService {
 
       final Collection<ApplicationId> applicationIds;
       synchronized (dttr.referringAppIds) {
-        applicationIds = new HashSet<>(dttr.referringAppIds);
+        applicationIds = new HashSet<ApplicationId>(dttr.referringAppIds);
         dttr.referringAppIds.clear();
       }
       // remove all old expiring hdfs tokens for this application.
