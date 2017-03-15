@@ -50,7 +50,7 @@ public class FSParentQueue extends FSQueue {
   private static final Log LOG = LogFactory.getLog(
       FSParentQueue.class.getName());
 
-  private final List<FSQueue> childQueues = new ArrayList<>();
+  private final List<FSQueue> childQueues = new ArrayList<FSQueue>();
   private Resource demand = Resources.createResource(0);
   private int runnableApps;
 
@@ -183,7 +183,7 @@ public class FSParentQueue extends FSQueue {
   }
   
   private QueueUserACLInfo getUserAclInfo(UserGroupInformation user) {
-    List<QueueACL> operations = new ArrayList<>();
+    List<QueueACL> operations = new ArrayList<QueueACL>();
     for (QueueACL operation : QueueACL.values()) {
       if (hasAccess(operation, user)) {
         operations.add(operation);
