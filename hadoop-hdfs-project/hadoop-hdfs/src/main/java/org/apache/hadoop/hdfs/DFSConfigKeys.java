@@ -300,6 +300,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.namenode.max.concurrent.incremental.blockreport";
   public static final int DFS_NAMENODE_MAX_CONCURRENT_INCREMENTAL_BLOCKREPORT_DEFAULT =
       1024;
+  public static final String DFS_NAMENODE_INCREMENTAL_BLOCKREPORT_SLOW_LOG_THRESHOLD_MS =
+      "dfs.namenode.incremental.blockreport.slow.log.threshold.ms";
+  public static final long DFS_NAMENODE_INCREMENTAL_BLOCKREPORT_SLOW_LOG_THRESHOLD_MS_DEFAULT = 1000;
 
   public static final String  DFS_LIST_LIMIT = "dfs.ls.limit";
   public static final int     DFS_LIST_LIMIT_DEFAULT = 1000;
