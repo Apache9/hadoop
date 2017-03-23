@@ -256,6 +256,10 @@ public class BlockManager {
    */
   private int numReportBlocksPerIteration;
   /**
+   * slow log threshold for processing incremental block report
+   */
+  private long ibrSlowLogThreshold;
+  /**
    * Progress of the Replication queues initialisation.
    */
   private double replicationQueuesInitProgress = 0.0;
@@ -351,6 +355,9 @@ public class BlockManager {
         conf.getInt(
             DFSConfigKeys.DFS_NAMENODE_POSTPONED_RESCAN_RANDOM_RATIO,
             DFSConfigKeys.DFS_NAMENODE_POSTPONED_RESCAN_RANDOM_RATIO_DEFAULT);
+    this.ibrSlowLogThreshold = conf.getLong(
+        DFSConfigKeys.DFS_NAMENODE_INCREMENTAL_BLOCKREPORT_SLOW_LOG_THRESHOLD_MS,
+        DFSConfigKeys.DFS_NAMENODE_INCREMENTAL_BLOCKREPORT_SLOW_LOG_THRESHOLD_MS_DEFAULT);
    
     LOG.info("defaultReplication         = " + defaultReplication);
     LOG.info("maxReplication             = " + maxReplication);
@@ -2993,6 +3000,7 @@ public class BlockManager {
     int deleted = 0;
     int receiving = 0;
     namesystem.writeLock();
+    long startTime = Time.now();
     try {
       node = datanodeManager.getDatanode(nodeID);
       if (node == null || !node.isAlive) {
@@ -3007,6 +3015,7 @@ public class BlockManager {
       node.reportLock();
       reportLocked = true;
       namesystem.writeLock();
+      startTime = Time.now();
       if (node.getStorageInfo(srdb.getStorage().getStorageID()) == null) {
         // The DataNode is reporting an unknown storage. Usually the NN learns
         // about new storages from heartbeats but during NN restart we may
@@ -3046,6 +3055,12 @@ public class BlockManager {
       }
     } finally {
       namesystem.writeUnlock();
+      long processTime = Time.now() - startTime;
+      if (processTime > ibrSlowLogThreshold) {
+        blockLog.debug("*BLOCK* NameNode.processIncrementalBlockReport: " + "from "
+                + nodeID + " receiving: " + receiving + ", " + " received: " + received
+                + ", " + " deleted: " + deleted + " cost: " + processTime);
+      }
       if (reportLocked) {
         assert (node != null);
         node.reportUnlock();
