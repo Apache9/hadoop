@@ -229,11 +229,12 @@ public class ViewFs extends AbstractFileSystem {
                   pathString));
         }
 
-        @Override
-        protected AbstractFileSystem getTargetFileSystem(
-            final INodeDir<AbstractFileSystem> dir) throws URISyntaxException {
-          return new InternalDirOfViewFs(dir, creationTime, ugi, getUri());
-        }
+      @Override
+      protected
+      AbstractFileSystem getTargetFileSystem(
+          final AbstractINodeDir<AbstractFileSystem> dir) throws URISyntaxException {
+        return new InternalDirOfViewFs(dir, creationTime, ugi, getUri());
+      }
 
         @Override
         protected AbstractFileSystem getTargetFileSystem(URI[] mergeFsURIList)
@@ -318,7 +319,7 @@ public class ViewFs extends AbstractFileSystem {
     InodeTree.ResolveResult<AbstractFileSystem> res = 
         fsStateResolve(getUriPath(f), true);
     // If internal dir or target is a mount link (ie remainingPath is Slash)
-    if (res.isInternalDir() || res.remainingPath == InodeTree.SlashPath) {
+    if (res.isInternalDir() || res.remainingPath.equals(InodeTree.SlashPath)) {
       throw new AccessControlException(
           "Cannot delete internal mount table directory: " + f);
     }
@@ -591,31 +592,29 @@ public class ViewFs extends AbstractFileSystem {
     // This is a file system level operations, however ViewFs 
     // points to many file systems. Noop for ViewFs. 
   }
-  
-  public MountPoint[] getMountPoints() {
-    List<InodeTree.MountPoint<AbstractFileSystem>> mountPoints = 
-        fsStateGetMountPoints();
-    
-    MountPoint[] result = new MountPoint[mountPoints.size()];
-    for ( int i = 0; i < mountPoints.size(); ++i ) {
-      result[i] = new MountPoint(new Path(mountPoints.get(i).src), 
-                              mountPoints.get(i).target.targetDirLinkList);
-    }
-    return result;
-  }
+
+//  remove temporary, this method is useless now
+//
+//  public MountPoint[] getMountPoints() {
+//    List<InodeTree.MountPoint<AbstractFileSystem>> mountPoints =
+//                  fsState.getMountPoints();
+//
+//    MountPoint[] result = new MountPoint[mountPoints.size()];
+//    for ( int i = 0; i < mountPoints.size(); ++i ) {
+//      result[i] = new MountPoint(new Path(mountPoints.get(i).src),
+//                              mountPoints.get(i).target.targetDirLinkList);
+//    }
+//    return result;
+//  }
   
   @Override
   public List<Token<?>> getDelegationTokens(String renewer) throws IOException {
     List<InodeTree.MountPoint<AbstractFileSystem>> mountPoints = 
-        fsStateGetMountPoints();
-    int initialListSize  = 0;
-    for (InodeTree.MountPoint<AbstractFileSystem> im : mountPoints) {
-      initialListSize += im.target.targetDirLinkList.length; 
-    }
-    List<Token<?>> result = new ArrayList<Token<?>>(initialListSize);
+                fsState.getMountPoints();
+    List<Token<?>> result = new ArrayList<Token<?>>(mountPoints.size());
     for ( int i = 0; i < mountPoints.size(); ++i ) {
       List<Token<?>> tokens = 
-        mountPoints.get(i).target.targetFileSystem.getDelegationTokens(renewer);
+        mountPoints.get(i).target.getFileSystem().getDelegationTokens(renewer);
       if (tokens != null) {
         result.addAll(tokens);
       }
@@ -733,12 +732,12 @@ public class ViewFs extends AbstractFileSystem {
    */
   static class InternalDirOfViewFs extends AbstractFileSystem {
     
-    final InodeTree.INodeDir<AbstractFileSystem>  theInternalDir;
+    final InodeTree.AbstractINodeDir<AbstractFileSystem>  theInternalDir;
     final long creationTime; // of the the mount table
     final UserGroupInformation ugi; // the user/group of user who created mtable
     final URI myUri; // the URI of the outer ViewFs
     
-    public InternalDirOfViewFs(final InodeTree.INodeDir<AbstractFileSystem> dir,
+    public InternalDirOfViewFs(final InodeTree.AbstractINodeDir<AbstractFileSystem> dir,
         final long cTime, final UserGroupInformation ugi, final URI uri)
       throws URISyntaxException {
       super(FsConstants.VIEWFS_URI, FsConstants.VIEWFS_SCHEME, false, -1);
@@ -749,7 +748,7 @@ public class ViewFs extends AbstractFileSystem {
     }
 
     static private void checkPathIsSlash(final Path f) throws IOException {
-      if (f != InodeTree.SlashPath) {
+      if (f.equals(InodeTree.SlashPath)) {
         throw new IOException (
         "Internal implementation error: expected file name to be /" );
       }
@@ -802,7 +801,7 @@ public class ViewFs extends AbstractFileSystem {
         throws FileNotFoundException {
       // look up i internalDirs children - ignore first Slash
       INode<AbstractFileSystem> inode =
-        theInternalDir.children.get(f.toUri().toString().substring(1)); 
+        theInternalDir.getChildren().get(f.toUri().toString().substring(1));
       if (inode == null) {
         throw new FileNotFoundException(
             "viewFs internal mount table - missing entry:" + f);
@@ -844,10 +843,10 @@ public class ViewFs extends AbstractFileSystem {
     public FileStatus[] listStatus(final Path f) throws AccessControlException,
         IOException {
       checkPathIsSlash(f);
-      FileStatus[] result = new FileStatus[theInternalDir.children.size()];
+      FileStatus[] result = new FileStatus[theInternalDir.getChildren().size()];
       int i = 0;
       for (Entry<String, INode<AbstractFileSystem>> iEntry : 
-                                          theInternalDir.children.entrySet()) {
+                                          theInternalDir.getChildren().entrySet()) {
         INode<AbstractFileSystem> inode = iEntry.getValue();
 
         
@@ -876,7 +875,7 @@ public class ViewFs extends AbstractFileSystem {
     public void mkdir(final Path dir, final FsPermission permission,
         final boolean createParent) throws AccessControlException,
         FileAlreadyExistsException {
-      if (theInternalDir.isRoot && dir == null) {
+      if (theInternalDir.isRoot() && dir == null) {
         throw new FileAlreadyExistsException("/ already exits");
       }
       throw readOnlyMountTable("mkdir", dir);

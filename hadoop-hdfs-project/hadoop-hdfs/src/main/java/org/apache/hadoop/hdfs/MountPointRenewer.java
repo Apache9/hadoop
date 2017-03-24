@@ -83,13 +83,6 @@ public class MountPointRenewer {
         } else if (src.startsWith(linkMergePrefix)) { // A merge link
           isMergeLink = true;
           src = src.substring(linkMergePrefix.length());
-        } else if (src.startsWith(Constants.CONFIG_VIEWFS_ROOT_DEFAULT)) {
-          // This is a rootDefault entry. This entry should
-          // not have any additional source path.
-          if (!src.equals(Constants.CONFIG_VIEWFS_ROOT_DEFAULT)) {
-            throw new IOException(" Invalid rootDefault entry in config: "
-                + src);
-          }
         } else if (src.startsWith(Constants.CONFIG_VIEWFS_HOMEDIR)) {
           // ignore - we set home dir from config
           continue;

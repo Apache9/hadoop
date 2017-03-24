@@ -69,29 +69,6 @@ public class ConfigUtil {
   }
   
   /**
-   * Add a default rootlink to the config
-   * @param conf - add the link to this conf
-   * @param mountTableName
-   * @param target - the target URI link
-   */
-  public static void addRootDefault(final Configuration conf,
-      final String mountTableName, final URI target) {
-    conf.set(getConfigViewFsPrefix(mountTableName) + "."
-        + Constants.CONFIG_VIEWFS_ROOT_DEFAULT, target.toString());
-  }
-  
-  /**
-   * Add a default rootlink to the config
-   * 
-   * @param conf - add the link to this conf
-   * @param target - the target URI link
-   */
-  public static void addRootDefault(final Configuration conf,
-      final URI target) {
-    addRootDefault(conf, Constants.CONFIG_VIEWFS_DEFAULT_MOUNT_TABLE, target);
-  }
-
-  /**
    * Add config variable for homedir for default mount table
    * @param conf - add to this conf
    * @param homedir - the home dir path starting with slash

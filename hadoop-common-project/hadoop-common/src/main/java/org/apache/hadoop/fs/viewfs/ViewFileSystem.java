@@ -23,6 +23,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -178,7 +179,11 @@ public class ViewFileSystem extends FileSystem {
       throws IOException {
     try {
       fsStateLock.writeLock().lock();
-      fsState = new InodeTree<FileSystem>(conf, authority) {
+      // It's not convenient to create anonymous subclass instance using java
+      // reflection, so here we don't use configuration to control the implementation
+      // class of InodeTree
+      fsState = new MergedInodeTree<FileSystem>(conf, authority) {
+      // fsState = new InodeTree<FileSystem>(conf, authority) {
 
         @Override
         protected
@@ -189,8 +194,8 @@ public class ViewFileSystem extends FileSystem {
 
         @Override
         protected
-        FileSystem getTargetFileSystem(final INodeDir<FileSystem> dir)
-            throws URISyntaxException {
+        FileSystem getTargetFileSystem(final AbstractINodeDir<FileSystem> dir)
+          throws URISyntaxException {
           return new InternalDirOfViewFs(dir, creationTime, ugi, myUri);
         }
 
@@ -323,7 +328,7 @@ public class ViewFileSystem extends FileSystem {
     InodeTree.ResolveResult<FileSystem> res =
         fsStateResolve(getUriPath(f), true);
     // If internal dir or target is a mount link (ie remainingPath is Slash)
-    if (res.isInternalDir() || res.remainingPath == InodeTree.SlashPath) {
+    if (res.isInternalDir() || res.remainingPath.equals(InodeTree.SlashPath)) {
       throw readOnlyMountTable("delete", f);
     }
     return res.targetFileSystem.delete(res.remainingPath, recursive);
@@ -402,32 +407,56 @@ public class ViewFileSystem extends FileSystem {
               suffix.length() == 0 ? f : new Path(res.resolvedPath, suffix)));
       }
     }
-    if (fsStateGetRootDefaultFs() == null
-        || (res.resolvedPath.equals("/")
-        && !res.isInternalDir())) {
+    if (!(fsState instanceof MergedInodeTree))
       return statusLst;
+
+    List<FileStatus> mergedList = new ArrayList<FileStatus>();
+    InodeTree.MountPoint<FileSystem> currentNode = null;
+    InodeTree.MountPoint<FileSystem> nearestAncestorNode = null;
+    TreeMap<String, FileStatus> resMap = new TreeMap<String, FileStatus>() {};
+    for (InodeTree.MountPoint<FileSystem> pt : fsState.getMountPoints()) {
+      if (!res.resolvedPath.startsWith(pt.src))
+        continue;
+      if (res.resolvedPath.equals(pt.src)) {
+        currentNode = pt;
+      } else {
+        if (nearestAncestorNode == null || pt.src.startsWith(nearestAncestorNode.src))
+          nearestAncestorNode = pt;
+      }
     }
 
-    TreeMap<String, FileStatus> resMap = new TreeMap<String, FileStatus>(){};
-    FileStatus[] rootStatus;
-    try {
-      rootStatus =
-          fsStateGetRootDefaultFs().listStatus(new Path(getUriPath(f)));
-    } catch (FileNotFoundException e) {
-      return statusLst;
+    if (currentNode != null) {
+      // first check whether the current inode is a mountpoint
+      // if it is, we don't need to check ancestor mountpoints
+      if (currentNode.target instanceof InodeTree.AbstractINodeDir
+          && res.remainingPath.equals(InodeTree.SlashPath)) {
+        // only when current point is an internode mountpoint, we need to add the childrens
+        // in mount table to list result
+        InternalDirOfViewFs interFs = new InternalDirOfViewFs(
+                (InodeTree.AbstractINodeDir<FileSystem>) currentNode.target, creationTime,
+                ugi, myUri);
+        mergedList.addAll(Arrays.asList(interFs.listStatus(res.remainingPath)));
+      }
+    } else if (nearestAncestorNode != null) {
+      String pathDiff = res.resolvedPath.substring(nearestAncestorNode.src.length());
+      if (!pathDiff.startsWith("/"))
+        pathDiff = "/" + pathDiff;
+      if (pathDiff.endsWith("/"))
+        pathDiff = pathDiff.substring(0, pathDiff.length() - 1);
+
+      mergedList.addAll(Arrays.asList(nearestAncestorNode.target.getFileSystem()
+              .listStatus(new Path(pathDiff + res.remainingPath))));
     }
 
-    int i = 0;
-    for (FileStatus status : rootStatus) {
+    for (FileStatus status : mergedList) {
       String truePath = status.getPath().toUri().getPath();
-      rootStatus[i] =
-          new ViewFsFileStatus(status, this.makeQualified(new Path(truePath)));
-      resMap.put(truePath, rootStatus[i++]);
+      resMap.put(truePath, new ViewFsFileStatus(status,
+              this.makeQualified(new Path(truePath))));
     }
     for (FileStatus status : statusLst) {
       resMap.put(status.getPath().toUri().getPath(), status);
     }
-    return resMap.values().toArray(new FileStatus[]{});
+    return resMap.values().toArray(new FileStatus[] {});
   }
 
   @Override
@@ -515,7 +544,8 @@ public class ViewFileSystem extends FileSystem {
 
     // judge if two different targetFileSystem instance actually
     // mount on same NN
-    if (!srcFsUri.getAuthority().equals(dstFsUri.getAuthority()))
+    if (srcFsUri.getAuthority() == null || dstFsUri.getAuthority() == null
+        || !srcFsUri.getAuthority().equals(dstFsUri.getAuthority()))
       return true;
 
     if (srcFsUri.getPath().equals(resSrc.resolvedPath)
@@ -658,7 +688,7 @@ public class ViewFileSystem extends FileSystem {
     List<InodeTree.MountPoint<FileSystem>> mountPoints =
         fsStateGetMountPoints();
     for (InodeTree.MountPoint<FileSystem> mount : mountPoints) {
-      mount.target.targetFileSystem.setVerifyChecksum(verifyChecksum);
+      mount.target.getFileSystem().setVerifyChecksum(verifyChecksum);
     }
   }
   
@@ -718,7 +748,7 @@ public class ViewFileSystem extends FileSystem {
     List<InodeTree.MountPoint<FileSystem>> mountPoints =
         fsStateGetMountPoints();
     for (InodeTree.MountPoint<FileSystem> mount : mountPoints) {
-      mount.target.targetFileSystem.setWriteChecksum(writeChecksum);
+      mount.target.getFileSystem().setWriteChecksum(writeChecksum);
     }
   }
 
@@ -728,22 +758,10 @@ public class ViewFileSystem extends FileSystem {
         fsStateGetMountPoints();
     Set<FileSystem> children = new HashSet<FileSystem>();
     for (InodeTree.MountPoint<FileSystem> mountPoint : mountPoints) {
-      FileSystem targetFs = mountPoint.target.targetFileSystem;
+      FileSystem targetFs = mountPoint.target.getFileSystem();
       children.addAll(Arrays.asList(targetFs.getChildFileSystems()));
     }
     return children.toArray(new FileSystem[]{});
-  }
-  
-  public MountPoint[] getMountPoints() {
-    List<InodeTree.MountPoint<FileSystem>> mountPoints =
-        fsStateGetMountPoints();
-    
-    MountPoint[] result = new MountPoint[mountPoints.size()];
-    for ( int i = 0; i < mountPoints.size(); ++i ) {
-      result[i] = new MountPoint(new Path(mountPoints.get(i).src), 
-                              mountPoints.get(i).target.targetDirLinkList);
-    }
-    return result;
   }
 
   public FileSystem getTargetFileSystem(Path path) throws IOException {
@@ -764,14 +782,13 @@ public class ViewFileSystem extends FileSystem {
    * the path name passed in is null. 
    */
   static class InternalDirOfViewFs extends FileSystem {
-    final InodeTree.INodeDir<FileSystem>  theInternalDir;
+    final InodeTree.AbstractINodeDir<FileSystem>  theInternalDir;
     final long creationTime; // of the the mount table
     final UserGroupInformation ugi; // the user/group of user who created mtable
     final URI myUri;
     
-    public InternalDirOfViewFs(final InodeTree.INodeDir<FileSystem> dir,
-        final long cTime, final UserGroupInformation ugi, URI uri)
-      throws URISyntaxException {
+    public InternalDirOfViewFs(final InodeTree.AbstractINodeDir<FileSystem> dir,
+        final long cTime, final UserGroupInformation ugi, URI uri) {
       myUri = uri;
       try {
         initialize(myUri, new Configuration());
@@ -784,7 +801,7 @@ public class ViewFileSystem extends FileSystem {
     }
 
     static private void checkPathIsSlash(final Path f) throws IOException {
-      if (f != InodeTree.SlashPath) {
+      if (!f.equals(InodeTree.SlashPath)) {
         throw new IOException (
         "Internal implementation error: expected file name to be /" );
       }
@@ -897,7 +914,7 @@ public class ViewFileSystem extends FileSystem {
     public FileStatus[] listStatus(Path f) throws AccessControlException,
         FileNotFoundException, IOException {
       checkPathIsSlash(f);
-      FileStatus[] result = new FileStatus[theInternalDir.children.size()];
+      FileStatus[] result = new FileStatus[theInternalDir.getChildren().size()];
       int i = 0;
       String[] grps = ugi.getGroupNames();
       String user = ugi.getShortUserName();
@@ -908,7 +925,7 @@ public class ViewFileSystem extends FileSystem {
         grp = user;
       }
       for (Entry<String, INode<FileSystem>> iEntry : 
-                                          theInternalDir.children.entrySet()) {
+                                          theInternalDir.getChildren().entrySet()) {
         INode<FileSystem> inode = iEntry.getValue();
         if (inode instanceof INodeLink ) {
           INodeLink<FileSystem> link = (INodeLink<FileSystem>) inode;
@@ -917,6 +934,14 @@ public class ViewFileSystem extends FileSystem {
               new FileStatus(0, false, 0, 0, creationTime, creationTime,
                   PERMISSION_555, user, grp, link.getTargetLink(),
                   new Path(inode.fullPath).makeQualified(myUri, null));
+        } else if (inode instanceof MergedInodeTree.INodeMerge
+            && ((MergedInodeTree.INodeMerge) inode).getChildren().isEmpty()) {
+          MergedInodeTree.INodeMerge<FileSystem> curNode =
+              (MergedInodeTree.INodeMerge<FileSystem>) inode;
+          result[i++] = new FileStatus(0, false, 0, 0, creationTime,
+              creationTime, PERMISSION_555, user, grp,
+              curNode.getTargetUri() == null ? null : new Path(curNode.getTargetUri()),
+              new Path(inode.fullPath).makeQualified(myUri, null));
         } else {
           result[i++] =
               new FileStatus(0, true, 0, 0, creationTime, creationTime,
@@ -930,11 +955,11 @@ public class ViewFileSystem extends FileSystem {
     @Override
     public boolean mkdirs(Path dir, FsPermission permission)
         throws AccessControlException, FileAlreadyExistsException {
-      if (theInternalDir.isRoot && dir == null) {
+      if (theInternalDir.isRoot() && dir == null) {
         throw new FileAlreadyExistsException("/ already exits");
       }
       // Note dir starts with /
-      if (theInternalDir.children.containsKey(dir.toString().substring(1))) {
+      if (theInternalDir.getChildren().containsKey(dir.toString().substring(1))) {
         return true; // this is the stupid semantics of FileSystem
       }
       throw readOnlyMountTable("mkdirs",  dir);
@@ -1109,15 +1134,6 @@ public class ViewFileSystem extends FileSystem {
     fsStateLock.readLock().lock();
     try {
       return fsState.getHomeDirPrefixValue();
-    } finally {
-      fsStateLock.readLock().unlock();
-    }
-  }
-
-  private FileSystem fsStateGetRootDefaultFs() {
-    fsStateLock.readLock().lock();
-    try {
-      return fsState.getRootDefaultFs();
     } finally {
       fsStateLock.readLock().unlock();
     }

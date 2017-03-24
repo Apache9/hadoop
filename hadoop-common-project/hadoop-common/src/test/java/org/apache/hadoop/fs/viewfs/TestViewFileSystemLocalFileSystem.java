@@ -22,9 +22,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileSystemTestHelper;
 
+import org.apache.hadoop.fs.Path;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Test;
 
+import javax.naming.OperationNotSupportedException;
+import java.io.IOException;
 
 
 /**
@@ -53,4 +57,13 @@ public class TestViewFileSystemLocalFileSystem extends ViewFileSystemBaseTest {
     fsTarget.delete(fileSystemTestHelper.getTestRootPath(fsTarget), true);
     super.tearDown();
   }
+
+  // LocalFileSystem not support federation rename
+  @Override
+  @Test(expected=IOException.class)
+  public void testRenameAcrossMounts1() throws IOException{
+    fileSystemTestHelper.createFile(fsView, "/user/foo");
+    fsView.rename(new Path("/user/foo"), new Path("/user2/fooBarBar"));
+  }
+
 }

@@ -56,7 +56,7 @@ public class TestViewFsConfig {
       @Override
       protected
       Foo getTargetFileSystem(
-          org.apache.hadoop.fs.viewfs.InodeTree.INodeDir<Foo>
+          org.apache.hadoop.fs.viewfs.InodeTree.AbstractINodeDir<Foo>
                                           dir)
         throws URISyntaxException {
         return null;

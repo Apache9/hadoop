@@ -18,6 +18,7 @@
 package org.apache.hadoop.fs.viewfs;
 
 
+import java.io.IOException;
 import java.net.URI;
 
 import org.apache.hadoop.conf.Configuration;
@@ -77,5 +78,13 @@ public class TestViewFileSystemWithAuthorityLocalFileSystem extends ViewFileSyst
     Assert.assertEquals(
         new Path("/foo/bar").makeQualified(schemeWithAuthority, null),
         fsView.makeQualified(new Path("/foo/bar")));
+  }
+
+  // LocalFileSystem not support federation rename
+  @Override
+  @Test(expected=IOException.class)
+  public void testRenameAcrossMounts1() throws IOException {
+    fileSystemTestHelper.createFile(fsView, "/user/foo");
+    fsView.rename(new Path("/user/foo"), new Path("/user2/fooBarBar"));
   }
 }
