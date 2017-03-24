@@ -37,9 +37,11 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
+import org.apache.hadoop.hdfs.FederatedDFSFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.StorageType;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode;
@@ -57,6 +59,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.base.Preconditions;
@@ -671,6 +674,16 @@ public class Balancer {
         checkReplicationPolicyCompatibility(conf);
 
         final Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+        FileSystem fs = FileSystem.get(conf);
+        if ((fs instanceof FederatedDFSFileSystem)) {
+          URI defaultUri = FileSystem.getDefaultUri(conf);
+          for (URI nn : namenodes) {
+            if (nn.equals(defaultUri)) {
+              namenodes.remove(nn);
+              break;
+            }
+          }
+        }
         return Balancer.run(namenodes, parse(args), conf);
       } catch (IOException e) {
         System.out.println(e + ".  Exiting ...");
