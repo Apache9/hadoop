@@ -3976,9 +3976,6 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       NameNode.stateChangeLog.debug("DIR* NameSystem.delete: " + src);
     }
     boolean status = deleteInternal(src, recursive, true, logRetryCache);
-    if (status) {
-      logAuditEvent(true, "delete", src);
-    }
     return status;
   }
     
@@ -4043,6 +4040,19 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     } finally {
       writeUnlock();
     }
+    long deleteSize = 0;
+
+    Iterator<Block> it = null;
+    if (collectedBlocks != null && collectedBlocks.getToDeleteList() != null) {
+      it = collectedBlocks.getToDeleteList().iterator();
+    }
+
+    while (it != null && it.hasNext()) {
+      Block blk = (Block) it.next();
+      deleteSize += blk.getNumBytes();
+    }
+   
+    logAuditEvent(ret, "delete", src + " size " + deleteSize);
     getEditLog().logSync(); 
     removeBlocks(collectedBlocks); // Incremental deletion of blocks
     collectedBlocks.clear();
