@@ -40,16 +40,22 @@ import org.apache.hadoop.hdfs.CorruptFileBlockIterator;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSInputStream;
 import org.apache.hadoop.hdfs.DFSOutputStream;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.FederationRenameBlockCollector;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.client.HdfsDataInputStream;
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
+import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+import org.apache.hadoop.hdfs.server.namenode.FederationRenameException;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
@@ -61,6 +67,7 @@ import org.apache.hadoop.util.Progressable;
 public class Hdfs extends AbstractFileSystem {
 
   DFSClient dfs;
+  Configuration conf;
   final CryptoCodec factory;
   private boolean verifyChecksum = true;
 
@@ -73,11 +80,12 @@ public class Hdfs extends AbstractFileSystem {
    * {@link AbstractFileSystem#createFileSystem(URI, Configuration)}
    * 
    * @param theUri which must be that of Hdfs
-   * @param conf configuration
+   * @param config configuration
    * @throws IOException
    */
-  Hdfs(final URI theUri, final Configuration conf) throws IOException, URISyntaxException {
+  Hdfs(final URI theUri, final Configuration config) throws IOException, URISyntaxException {
     super(theUri, HdfsConstants.HDFS_URI_SCHEME, true, NameNode.DEFAULT_PORT);
+    conf = new Configuration(config);
 
     if (!theUri.getScheme().equalsIgnoreCase(HdfsConstants.HDFS_URI_SCHEME)) {
       throw new IllegalArgumentException("Passed URI's scheme is not for Hdfs");
@@ -491,5 +499,100 @@ public class Hdfs extends AbstractFileSystem {
       Token<? extends AbstractDelegationTokenIdentifier> token)
       throws InvalidToken, IOException {
     dfs.cancelDelegationToken((Token<DelegationTokenIdentifier>) token);
+  }
+
+
+  public DirectorySubTree renameSrcPhase1(String src, String srcId,
+      final String dst, final String dstId) throws IOException {
+    statistics.incrementWriteOps(1);
+    // Try the rename without resolving first
+    try {
+      return dfs.renameSrcPhase1(src, srcId, dst, dstId);
+    } catch (UnresolvedLinkException e) {
+      // Fully resolve the source
+      final Path source = getFileLinkStatus(new Path(src)).getPath();
+      return dfs.renameSrcPhase1(source.toUri().getPath(), srcId, dst, dstId);
+    }
+  }
+
+  public boolean renameSrcPhase2(long renameId, boolean toCancel)
+      throws IOException {
+    return dfs.renameSrcPhase2(renameId, toCancel);
+  }
+
+  public BlocksToDup renameDestPhase1(final String src, final String srcId,
+      String dst, String dstId, final DirectorySubTree subTree)
+      throws IOException {
+    try {
+      return dfs.renameDestPhase1(src, srcId, dst, dstId, subTree);
+    } catch (UnresolvedLinkException e) {
+      // Fully resolve the dest
+      final Path dest = getFileLinkStatus(new Path(dst)).getPath();
+      return dfs
+          .renameDestPhase1(src, srcId, dest.toUri().getPath(), dstId, subTree);
+    }
+  }
+
+  public boolean renameDestPhase2(long renameId, String srcId)
+      throws IOException {
+    return dfs.renameDestPhase2(renameId, srcId);
+  }
+
+  @Override
+  public boolean federationRename(AbstractFileSystem srcFs, Path srcArg,
+      AbstractFileSystem dstFs, Path dstArg) throws IOException {
+    if (!srcFs.isDistributedFileSystem() || !dstFs.isDistributedFileSystem()) {
+      throw new IOException("Operation is not supported");
+    }
+
+    final Path absSrc = FileContext.getFileContext(srcFs.getUri()).fixRelativePart(srcArg);
+    final Path absDst = FileContext.getFileContext(dstFs.getUri()).fixRelativePart(dstArg);
+    String src = absSrc.toUri().getPath();
+    String dst = absDst.toUri().getPath();
+    String srcPool = null;
+    BlocksToDup blksToDup = null;
+
+    Hdfs dsrcFs = (Hdfs)srcFs;
+    Hdfs ddstFs = (Hdfs) dstFs;
+    DirectorySubTree subTree =
+        dsrcFs.renameSrcPhase1(src, dsrcFs.getUri().toString(), dst, ddstFs
+            .getUri().toString());
+    if (subTree != null && subTree.getSize() > 0) {
+      try {
+        blksToDup =
+            ddstFs.renameDestPhase1(src, dsrcFs.getUri().toString(), dst,
+                ddstFs.getUri().toString(), subTree);
+      } catch (RemoteException re) {
+        IOException ioe = re.unwrapRemoteException();
+        if (ioe instanceof FederationRenameException) {
+          dsrcFs.renameSrcPhase2(subTree.getRenameId(), true);
+        }
+        throw ioe;
+      }
+      FederationRenameBlockCollector frbc = null;
+      if (blksToDup.size() != 0) {
+        frbc =
+            new FederationRenameBlockCollector(subTree, blksToDup, conf);
+        }
+        // ask DN to add new link
+      if (frbc != null) {
+        frbc.linkBlocksToNewPool();
+      }
+      if (dsrcFs.renameSrcPhase2(subTree.getRenameId(), false)) {
+        return ddstFs.renameDestPhase2(subTree.getRenameId(), dsrcFs.getUri()
+            .toString());
+      } else {
+          // It should not hadppen, let cleaner handle left things
+        }
+      } else {
+      // TBD: Cancel rename src phase1. Add param to src phase2 to indicating
+      // going ahead or cancel
+      }
+    return false;
+  }
+
+  @Override
+  public boolean isDistributedFileSystem() {
+      return true;
   }
 }

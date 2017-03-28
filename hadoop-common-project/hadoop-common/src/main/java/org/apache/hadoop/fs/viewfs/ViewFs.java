@@ -24,10 +24,12 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -42,6 +44,7 @@ import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FilterFileSystem;
 import org.apache.hadoop.fs.FsConstants;
 import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.FsStatus;
@@ -157,7 +160,7 @@ public class ViewFs extends AbstractFileSystem {
   final Configuration config;
   InodeTree<AbstractFileSystem> fsState;  // the fs state; ie the mount table
   Path homeDir = null;
-  private ReentrantReadWriteLock fsStateLock = new ReentrantReadWriteLock();
+  ReentrantReadWriteLock fsStateLock = new ReentrantReadWriteLock();
   
   static AccessControlException readOnlyMountTable(final String operation,
       final String p) {
@@ -215,7 +218,7 @@ public class ViewFs extends AbstractFileSystem {
       throws IOException, URISyntaxException {
     try {
       fsStateLock.writeLock().lock();
-      fsState = new InodeTree<AbstractFileSystem>(conf, authority) {
+      fsState = new MergedInodeTree<AbstractFileSystem>(conf, authority) {
 
         @Override
         protected AbstractFileSystem getTargetFileSystem(final URI uri)
@@ -443,7 +446,60 @@ public class ViewFs extends AbstractFileSystem {
               suffix.length() == 0 ? f : new Path(res.resolvedPath, suffix)));
       }
     }
-    return statusLst;
+    if (!(fsState instanceof MergedInodeTree))
+      return statusLst;
+
+    List<FileStatus> mergedList = new ArrayList<FileStatus>();
+    InodeTree.MountPoint<AbstractFileSystem> currentNode = null;
+    InodeTree.MountPoint<AbstractFileSystem> nearestAncestorNode = null;
+    TreeMap<String, FileStatus> resMap = new TreeMap<String, FileStatus>() {};
+    for (InodeTree.MountPoint<AbstractFileSystem> pt : fsState.getMountPoints()) {
+      if (!res.resolvedPath.startsWith(pt.src))
+        continue;
+      if (res.resolvedPath.equals(pt.src)) {
+        currentNode = pt;
+      } else {
+        if (nearestAncestorNode == null || pt.src.startsWith(nearestAncestorNode.src))
+          nearestAncestorNode = pt;
+      }
+    }
+
+    if (currentNode != null) {
+      // first check whether the current inode is a mountpoint
+      // if it is, we don't need to check ancestor mountpoints
+      if (currentNode.target instanceof InodeTree.AbstractINodeDir
+          && res.remainingPath.equals(InodeTree.SlashPath)) {
+        // only when current point is an internode mountpoint, we need to add the childrens
+        // in mount table to list result
+        try {
+          InternalDirOfViewFs interFs = new InternalDirOfViewFs(
+                  (InodeTree.AbstractINodeDir<AbstractFileSystem>) currentNode.target, creationTime,
+                  ugi, getUri());
+          mergedList.addAll(Arrays.asList(interFs.listStatus(res.remainingPath)));
+        } catch (URISyntaxException e) {
+          throw new IOException(e);
+        }
+      }
+    } else if (nearestAncestorNode != null) {
+      String pathDiff = res.resolvedPath.substring(nearestAncestorNode.src.length());
+      if (!pathDiff.startsWith("/"))
+        pathDiff = "/" + pathDiff;
+      if (pathDiff.endsWith("/"))
+        pathDiff = pathDiff.substring(0, pathDiff.length() - 1);
+
+      mergedList.addAll(Arrays.asList(nearestAncestorNode.target.getFileSystem()
+              .listStatus(new Path(pathDiff + res.remainingPath))));
+    }
+
+    for (FileStatus status : mergedList) {
+      String truePath = status.getPath().toUri().getPath();
+      resMap.put(truePath, new ViewFsFileStatus(status,
+              this.makeQualified(new Path(truePath))));
+    }
+    for (FileStatus status : statusLst) {
+      resMap.put(status.getPath().toUri().getPath(), status);
+    }
+    return resMap.values().toArray(new FileStatus[] {});
   }
 
   @Override
@@ -502,13 +558,50 @@ public class ViewFs extends AbstractFileSystem {
     //
     // Alternate 3 : renames ONLY within the the same mount links.
     //
+    if (shouldDoFederateRename(resSrc, resDst)) {
+      AbstractFileSystem srcFs = resSrc.targetFileSystem;
+      AbstractFileSystem dstFs = resDst.targetFileSystem;
+      Path srcFullPath = resSrc.remainingPath;
+      Path dstFullPath = resDst.remainingPath;
+      if (srcFs instanceof ChRootedFs) {
+        String srcRoot = srcFs.getUri().getPath();
+        String pathStr = srcRoot.equals("/") ? "" : srcRoot + resSrc.remainingPath.toString();
+        srcFullPath = new Path(pathStr);
+        srcFs = ((ChRootedFs) srcFs).getMyFs();
+      }
+      if (dstFs instanceof ChRootedFs) {
+        String dstRoot = dstFs.getUri().getPath();
+        String pathStr = dstRoot.equals("/") ? "" : dstRoot + resDst.remainingPath.toString();
+        dstFullPath = new Path(pathStr);
+        dstFs = ((ChRootedFs) dstFs).getMyFs();
+      }
+      srcFs.federationRename(srcFs, srcFullPath, dstFs, dstFullPath);
 
-    if (resSrc.targetFileSystem !=resDst.targetFileSystem) {
-      throw new IOException("Renames across Mount points not supported");
     }
-    
-    resSrc.targetFileSystem.renameInternal(resSrc.remainingPath,
-      resDst.remainingPath, overwrite);
+    resSrc.targetFileSystem.rename(resSrc.remainingPath,
+        resDst.remainingPath);
+  }
+
+  private boolean shouldDoFederateRename(
+      InodeTree.ResolveResult<AbstractFileSystem> resSrc,
+      InodeTree.ResolveResult<AbstractFileSystem> resDst) {
+    if (resSrc.targetFileSystem == resDst.targetFileSystem)
+      return false;
+
+    URI srcFsUri = resSrc.targetFileSystem.getUri();
+    URI dstFsUri = resDst.targetFileSystem.getUri();
+
+    // judge if two different targetFileSystem instance actually
+    // mount on same NN
+    if (srcFsUri.getAuthority() == null || dstFsUri.getAuthority() == null
+        || !srcFsUri.getAuthority().equals(dstFsUri.getAuthority()))
+      return true;
+
+    if (srcFsUri.getPath().equals(resSrc.resolvedPath)
+        && dstFsUri.getPath().equals(resDst.resolvedPath))
+      return false;
+
+    return true;
   }
 
   @Override
@@ -748,7 +841,7 @@ public class ViewFs extends AbstractFileSystem {
     }
 
     static private void checkPathIsSlash(final Path f) throws IOException {
-      if (f.equals(InodeTree.SlashPath)) {
+      if (!f.equals(InodeTree.SlashPath)) {
         throw new IOException (
         "Internal implementation error: expected file name to be /" );
       }
@@ -808,18 +901,25 @@ public class ViewFs extends AbstractFileSystem {
       }
       FileStatus result;
       if (inode instanceof INodeLink) {
-        INodeLink<AbstractFileSystem> inodelink = 
-          (INodeLink<AbstractFileSystem>) inode;
+        INodeLink<AbstractFileSystem> inodelink =
+            (INodeLink<AbstractFileSystem>) inode;
         result = new FileStatus(0, false, 0, 0, creationTime, creationTime,
             PERMISSION_555, ugi.getUserName(), ugi.getGroupNames()[0],
             inodelink.getTargetLink(),
-            new Path(inode.fullPath).makeQualified(
-                myUri, null));
+            new Path(inode.fullPath).makeQualified(myUri, null));
+      } else if (inode instanceof MergedInodeTree.INodeMerge
+          && ((MergedInodeTree.INodeMerge) inode).getChildren().isEmpty()) {
+        MergedInodeTree.INodeMerge<AbstractFileSystem> curNode =
+            (MergedInodeTree.INodeMerge<AbstractFileSystem>) inode;
+        result = new FileStatus(0, false, 0, 0, creationTime, creationTime,
+            PERMISSION_555, ugi.getUserName(), ugi.getGroupNames()[0],
+            curNode.getTargetUri() == null ? null
+                : new Path(curNode.getTargetUri()),
+            new Path(inode.fullPath).makeQualified(myUri, null));
       } else {
         result = new FileStatus(0, true, 0, 0, creationTime, creationTime,
-          PERMISSION_555, ugi.getUserName(), ugi.getGroupNames()[0],
-          new Path(inode.fullPath).makeQualified(
-              myUri, null));
+            PERMISSION_555, ugi.getUserName(), ugi.getGroupNames()[0],
+            new Path(inode.fullPath).makeQualified(myUri, null));
       }
       return result;
     }
@@ -860,6 +960,16 @@ public class ViewFs extends AbstractFileSystem {
             link.getTargetLink(),
             new Path(inode.fullPath).makeQualified(
                 myUri, null));
+        } else if (inode instanceof MergedInodeTree.INodeMerge
+            && ((MergedInodeTree.INodeMerge) inode).getChildren().isEmpty()) {
+          MergedInodeTree.INodeMerge<AbstractFileSystem> curNode =
+              (MergedInodeTree.INodeMerge<AbstractFileSystem>) inode;
+          result[i++] =
+              new FileStatus(0, false, 0, 0, creationTime, creationTime,
+                  PERMISSION_555, ugi.getUserName(), ugi.getGroupNames()[0],
+                  curNode.getTargetUri() == null ? null
+                      : new Path(curNode.getTargetUri()),
+                  new Path(inode.fullPath).makeQualified(myUri, null));
         } else {
           result[i++] = new FileStatus(0, true, 0, 0,
             creationTime, creationTime,

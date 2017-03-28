@@ -1208,4 +1208,13 @@ public abstract class AbstractFileSystem {
     }
     return myUri.equals(((AbstractFileSystem) other).myUri);
   }
+
+  public boolean federationRename(AbstractFileSystem srcFs, Path src,
+      AbstractFileSystem dstFs, Path dst) throws IOException {
+    throw new IOException("Operation is not supported");
+  }
+
+  public boolean isDistributedFileSystem() {
+    return false;
+  }
 }

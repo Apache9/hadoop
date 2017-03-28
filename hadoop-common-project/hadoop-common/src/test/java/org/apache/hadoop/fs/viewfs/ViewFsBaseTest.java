@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.AbstractFileSystem;
@@ -340,10 +341,15 @@ public class ViewFsBaseTest {
   // rename across mount points fail if the mount link targets are different
   // even if the targets are part of the same target FS
 
-  @Test(expected=IOException.class) 
   public void testRenameAcrossMounts2() throws IOException {
     fileContextTestHelper.createFile(fcView, "/user/foo");
     fcView.rename(new Path("/user/foo"), new Path("/data/fooBar"));
+    try {
+      fcTarget.getFileStatus(new Path("/user/foo"));
+      Assert.fail("/user/foo should not exists");
+    } catch (FileNotFoundException e) {}
+    FileStatus status = fcTarget.getFileStatus(new Path("/data/fooBar"));
+    Assert.assertTrue(status.isFile());
   }
   
   
@@ -462,6 +468,7 @@ public class ViewFsBaseTest {
       , Mockito.anyBoolean())).thenReturn(res);
     ViewFs vfs = Mockito.mock(ViewFs.class);
     vfs.fsState = fsState;
+    vfs.fsStateLock = new ReentrantReadWriteLock();
 
     Mockito.when(vfs.getFileChecksum(new Path("/tmp/someFile")))
       .thenCallRealMethod();

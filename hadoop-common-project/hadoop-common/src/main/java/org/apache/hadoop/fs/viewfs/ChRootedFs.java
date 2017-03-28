@@ -75,7 +75,7 @@ class ChRootedFs extends AbstractFileSystem {
   private final Path chRootPathPart; // the root below the root of the base
   private final String chRootPathPartString;
   
-  protected AbstractFileSystem getMyFs() {
+  AbstractFileSystem getMyFs() {
     return myFs;
   }
   
