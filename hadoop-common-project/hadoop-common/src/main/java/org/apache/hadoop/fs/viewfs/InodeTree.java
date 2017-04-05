@@ -55,7 +55,7 @@ import org.apache.hadoop.util.StringUtils;
 
 @InterfaceAudience.Private
 @InterfaceStability.Unstable 
-abstract class InodeTree<T> {
+public abstract class InodeTree<T> {
   static enum ResultKind {isInternalDir, isExternalDir;};
   static final Path SlashPath = new Path("/");
   
@@ -97,7 +97,7 @@ abstract class InodeTree<T> {
     public abstract T getFileSystem();
   };
 
-  abstract static class AbstractINodeDir<T> extends INode<T> {
+  public abstract static class AbstractINodeDir<T> extends INode<T> {
     public AbstractINodeDir(String pathToNode, UserGroupInformation aUgi){
       super(pathToNode, aUgi);
     }
@@ -382,7 +382,7 @@ abstract class InodeTree<T> {
    * If the input pathname leads to an internal mount-table entry then
    * the target file system is one that represents the internal inode.
    */
-  static class ResolveResult<T> {
+  public static class ResolveResult<T> {
     final ResultKind kind;
     final T targetFileSystem;
     final String resolvedPath;
@@ -397,8 +397,16 @@ abstract class InodeTree<T> {
     }
 
     // isInternalDir of path resolution completed within the mount table
-    boolean isInternalDir() {
+    public boolean isInternalDir() {
       return (kind == ResultKind.isInternalDir);
+    }
+
+    public T getTargetFileSystem() {
+      return targetFileSystem;
+    }
+
+    public Path getRemainingPath() {
+      return remainingPath;
     }
   }
   
@@ -409,7 +417,8 @@ abstract class InodeTree<T> {
    * @return ResolveResult which allows further resolution of the remaining path
    * @throws FileNotFoundException
    */
-  ResolveResult<T> resolve(final String p, final boolean resolveLastComponent)
+  public ResolveResult<T> resolve(final String p,
+      final boolean resolveLastComponent)
     throws FileNotFoundException {
     // TO DO: - more efficient to not split the path, but simply compare
     String[] path = breakIntoPathComponents(p);

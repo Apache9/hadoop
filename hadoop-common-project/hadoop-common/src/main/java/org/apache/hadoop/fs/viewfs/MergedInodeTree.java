@@ -169,7 +169,7 @@ public abstract class MergedInodeTree<T> extends InodeTree<T> {
   }
 
   @Override
-  ResolveResult<T> resolve(final String p, final boolean resolveLastComponent)
+  public ResolveResult<T> resolve(final String p, final boolean resolveLastComponent)
       throws FileNotFoundException {
     String[] path = breakIntoPathComponents(p);
     assert (root instanceof INodeMerge);

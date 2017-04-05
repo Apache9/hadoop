@@ -1068,7 +1068,10 @@ public class MiniDFSCluster {
     String key = DFSUtil.addKeySuffixes(
         DFS_NAMENODE_HTTP_ADDRESS_KEY, nameserviceId,
         nnConf.getNnId());
-    conf.set(key, "127.0.0.1:" + nnConf.getHttpPort());
+    if (conf.get(key) == null) {
+      conf.set(key, "127.0.0.1:" + nnConf.getHttpPort());
+    }
+    LOG.info("key is " + key + " http address is " + conf.get(key));
 
     key = DFSUtil.addKeySuffixes(
         DFS_NAMENODE_RPC_ADDRESS_KEY, nameserviceId,

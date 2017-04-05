@@ -781,7 +781,7 @@ public class ViewFileSystem extends FileSystem {
    * Otherwise this target is the end point of the path and hence
    * the path name passed in is null. 
    */
-  static class InternalDirOfViewFs extends FileSystem {
+  public static class InternalDirOfViewFs extends FileSystem {
     final InodeTree.AbstractINodeDir<FileSystem>  theInternalDir;
     final long creationTime; // of the the mount table
     final UserGroupInformation ugi; // the user/group of user who created mtable
