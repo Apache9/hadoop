@@ -2662,25 +2662,13 @@ public abstract class FileSystem extends Configured implements Closeable {
       }
     }
 
-    if (uri.getScheme().equals("hdfs") && fs.supportFederation()) {
+    if ((uri.getScheme().equals("hdfs") || uri.getScheme().equals("webhdfs"))  && fs.supportFederation()) {
       if (!fs.isUriCompatible(uri, conf)) {
         // get the default filesystem
-        clazz = (Class<? extends FileSystem>) SERVICE_FILE_SYSTEMS.get("hdfs");
+        clazz = (Class<? extends FileSystem>) SERVICE_FILE_SYSTEMS.get(uri.getScheme());
         if (clazz == null) {
           throw new IOException(
                   fs.getClass().getName() + " no supoort uri with authority");
-        }
-        fs = (FileSystem) ReflectionUtils.newInstance(clazz, conf);
-      }
-    }
-    if (uri.getScheme().equals("webhdfs") && fs.supportFederation()) {
-      if (!fs.isUriCompatible(uri, conf)) {
-        // get the default filesystem
-        clazz =
-            (Class<? extends FileSystem>) SERVICE_FILE_SYSTEMS.get("webhdfs");
-        if (clazz == null) {
-          throw new IOException(fs.getClass().getName()
-              + " no supoort uri with authority");
         }
         fs = (FileSystem) ReflectionUtils.newInstance(clazz, conf);
       }
