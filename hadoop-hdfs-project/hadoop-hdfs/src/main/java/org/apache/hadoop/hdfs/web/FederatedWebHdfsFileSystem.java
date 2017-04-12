@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.InodeTree;
 import org.apache.hadoop.fs.viewfs.InodeTree.AbstractINodeDir;
+import org.apache.hadoop.fs.viewfs.ChRootedFileSystem;
 import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.fs.viewfs.MergedInodeTree;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
@@ -108,10 +109,12 @@ public class FederatedWebHdfsFileSystem extends WebHdfsFileSystem {
 
         private URI getWebHDFSUri(URI hdfsUri) throws URISyntaxException {
           if (hdfsUri.getScheme().equals("hdfs")) {
+            String uriPath = hdfsUri.getPath();
             if (HAUtil.isLogicalUri(conf, hdfsUri)) {
               URI myUri =
                   new URI(WebHdfsFileSystem.SCHEME + "://"
-                      + hdfsUri.getAuthority());
+                      + hdfsUri.getAuthority()
+                      + (uriPath == null ? "" : uriPath));
               return myUri;
             } else {
               String rpcAddrKey = null;
@@ -127,7 +130,8 @@ public class FederatedWebHdfsFileSystem extends WebHdfsFileSystem {
                 if (conf.get(httpKey) != null) {
                   URI myUri =
                       new URI(WebHdfsFileSystem.SCHEME + "://"
-                          + conf.get(httpKey));
+                          + conf.get(httpKey)
+                          + (uriPath == null ? "" : uriPath));
                   return myUri;
                 }
               }
@@ -141,10 +145,9 @@ public class FederatedWebHdfsFileSystem extends WebHdfsFileSystem {
             throws URISyntaxException, IOException {
           URI myUri = getWebHDFSUri(uri);
           if (myUri != null) {
-            WebHdfsFileSystem webFs =
-                ReflectionUtils.newInstance(WebHdfsFileSystem.class, conf);
-            webFs.initialize(myUri, conf);
-            return webFs;
+            ChRootedFileSystem chrootedWebFs =
+                new ChRootedFileSystem(myUri, conf);
+            return chrootedWebFs;
           }
           return null;
         }

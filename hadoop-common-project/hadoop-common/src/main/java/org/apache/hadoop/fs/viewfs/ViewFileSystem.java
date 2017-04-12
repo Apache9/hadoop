@@ -770,6 +770,20 @@ public class ViewFileSystem extends FileSystem {
     return res.targetFileSystem;
   }
   
+  public Path getTargetPath(Path path) throws IOException {
+    InodeTree.ResolveResult<FileSystem> res =
+        fsStateResolve(getUriPath(path), true);
+    if (res.targetFileSystem instanceof FilterFileSystem) {
+      String targetRoot = res.targetFileSystem.getUri().getPath();
+      if (targetRoot == null || targetRoot.isEmpty()) {
+        targetRoot = "/";
+      }
+      return new Path(targetRoot, res.remainingPath);
+    } else {
+      return path;
+    }
+  }
+
   /*
    * An instance of this class represents an internal dir of the viewFs 
    * that is internal dir of the mount table.

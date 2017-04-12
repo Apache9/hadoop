@@ -32,8 +32,11 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FilterFileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.FederatedDFSFileSystem;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.namenode.NamenodeFsck;
@@ -224,7 +227,14 @@ public class DFSck extends Configured implements Tool {
    * @return Returns http address or null if failure.
    * @throws IOException if we can't determine the active NN address
    */
-  private URI getCurrentNamenodeAddress() throws IOException {
+
+  class PathResolveResult {
+    URI targetURI;
+    String remainingPath;
+  }
+
+  private PathResolveResult getCurrentNamenodeAddressAndPath(String path)
+      throws IOException {
     //String nnAddress = null;
     Configuration conf = getConf();
 
@@ -241,40 +251,67 @@ public class DFSck extends Configured implements Tool {
       System.err.println("FileSystem is " + fs.getUri());
       return null;
     }
+    String remaingPath = path;
+    if (fs.supportFederation()) {
+      Path targetPath =
+          ((FederatedDFSFileSystem) fs).getTargetPath(new Path(path));
+      remaingPath =
+          Path.getPathWithoutSchemeAndAuthority(targetPath).toString();
+      fs = ((FederatedDFSFileSystem) fs).getTargetFileSystem(new Path(path));
+      if (!(fs instanceof FilterFileSystem)) {
+        System.err
+            .println("Cannot check mount point of a federated file system");
+        return null;
+      }
+      fs = ((FilterFileSystem) fs).getRawFileSystem();
+      if (!fs.isDistributedFileSystem()) {
+        System.err
+            .println("Target file system is not a distributed file system");
+        return null;
+      }
+    }
     
-    return DFSUtil.getInfoServer(HAUtil.getAddressOfActive(fs), conf,
-        DFSUtil.getHttpClientScheme(conf));
+    PathResolveResult res = new PathResolveResult();
+    res.targetURI =
+        DFSUtil.getInfoServer(HAUtil.getAddressOfActive(fs), conf,
+            DFSUtil.getHttpClientScheme(conf));
+    res.remainingPath = remaingPath;
+    return res;
   }
 
   private int doWork(final String[] args) throws IOException {
     final StringBuilder url = new StringBuilder();
-    
-    URI namenodeAddress = getCurrentNamenodeAddress();
-    if (namenodeAddress == null) {
-      //Error message already output in {@link #getCurrentNamenodeAddress()}
-      System.err.println("DFSck exiting.");
-      return 0;
-    }
 
-    url.append(namenodeAddress.toString());
-    System.err.println("Connecting to namenode via " + url.toString());
-    
-    url.append("/fsck?ugi=").append(ugi.getShortUserName());
     String dir = null;
     boolean doListCorruptFileBlocks = false;
+    boolean move = false;
+    boolean delete = false;
+    boolean files = false;
+    boolean openforwrite = false;
+    boolean blocks = false;
+    boolean locations = false;
+    boolean racks = false;
+    boolean includeSnapshots = false;
     for (int idx = 0; idx < args.length; idx++) {
-      if (args[idx].equals("-move")) { url.append("&move=1"); }
-      else if (args[idx].equals("-delete")) { url.append("&delete=1"); }
-      else if (args[idx].equals("-files")) { url.append("&files=1"); }
-      else if (args[idx].equals("-openforwrite")) { url.append("&openforwrite=1"); }
-      else if (args[idx].equals("-blocks")) { url.append("&blocks=1"); }
-      else if (args[idx].equals("-locations")) { url.append("&locations=1"); }
-      else if (args[idx].equals("-racks")) { url.append("&racks=1"); }
+      if (args[idx].equals("-move")) {
+        move = true;
+      } else if (args[idx].equals("-delete")) {
+        delete = true;
+      } else if (args[idx].equals("-files")) {
+        files = true;
+      } else if (args[idx].equals("-openforwrite")) {
+        openforwrite = true;
+      } else if (args[idx].equals("-blocks")) {
+        blocks = true;
+      } else if (args[idx].equals("-locations")) {
+        locations = true;
+      } else if (args[idx].equals("-racks")) {
+        racks = true;
+      }
       else if (args[idx].equals("-list-corruptfileblocks")) {
-        url.append("&listcorruptfileblocks=1");
         doListCorruptFileBlocks = true;
       } else if (args[idx].equals("-includeSnapshots")) {
-        url.append("&includeSnapshots=1");
+        includeSnapshots = true;
       } else if (!args[idx].startsWith("-")) {
         if (null == dir) {
           dir = args[idx];
@@ -290,9 +327,52 @@ public class DFSck extends Configured implements Tool {
         return -1;
       }
     }
+
     if (null == dir) {
       dir = "/";
     }
+
+    PathResolveResult nnAndPath = getCurrentNamenodeAddressAndPath(dir);
+    if (nnAndPath == null) {
+      // Error message already output in {@link #getCurrentNamenodeAddress()}
+      System.err.println("DFSck exiting.");
+      return 0;
+    }
+
+    url.append(nnAndPath.targetURI.toString());
+    System.err.println("Connecting to namenode via " + url.toString());
+    dir = nnAndPath.remainingPath;
+
+    url.append("/fsck?ugi=").append(ugi.getShortUserName());
+
+    if (move) {
+      url.append("&move=1");
+    }
+    if (delete) {
+      url.append("&delete=1");
+    }
+    if (files) {
+      url.append("&files=1");
+    }
+    if (openforwrite) {
+      url.append("&openforwrite=1");
+    }
+    if (blocks) {
+      url.append("&blocks=1");
+    }
+    if (locations) {
+      url.append("&locations=1");
+    }
+    if (racks) {
+      url.append("&racks=1");
+    }
+    if (doListCorruptFileBlocks) {
+      url.append("&listcorruptfileblocks=1");
+    }
+    if (includeSnapshots) {
+      url.append("&includeSnapshots=1");
+    }
+
     url.append("&path=").append(URLEncoder.encode(dir, "UTF-8"));
     if (doListCorruptFileBlocks) {
       return listCorruptFileBlocks(dir, url.toString());

@@ -383,7 +383,9 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public BlockLocation[] getFileBlockLocations(FileStatus fs, long start,
       long len) throws IOException {
-    return viewFs.getFileBlockLocations(fs, start, len);
+    FileStatus vStatus = new FileStatus(fs);
+    vStatus.setPath(convertToViewFsScheme(fs.getPath()));
+    return viewFs.getFileBlockLocations(vStatus, start, len);
   }
 
   @Override
@@ -994,6 +996,10 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   public FileSystem getTargetFileSystem(Path path) throws IOException {
     return viewFs.getTargetFileSystem(convertToViewFsScheme(path));
+  }
+
+  public Path getTargetPath(Path path) throws IOException {
+    return viewFs.getTargetPath(convertToViewFsScheme(path));
   }
 
   @Override
