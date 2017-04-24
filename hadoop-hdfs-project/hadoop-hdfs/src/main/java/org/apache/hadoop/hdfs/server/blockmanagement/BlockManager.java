@@ -3057,7 +3057,7 @@ public class BlockManager {
       namesystem.writeUnlock();
       long processTime = Time.now() - startTime;
       if (processTime > ibrSlowLogThreshold) {
-        blockLog.debug("*BLOCK* NameNode.processIncrementalBlockReport: " + "from "
+        blockLog.info("*BLOCK* NameNode.processIncrementalBlockReport too slow: " + "from "
                 + nodeID + " receiving: " + receiving + ", " + " received: " + received
                 + ", " + " deleted: " + deleted + " cost: " + processTime);
       }
