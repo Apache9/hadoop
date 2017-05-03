@@ -509,28 +509,38 @@ public class ViewFileSystem extends FileSystem {
     //
     // Alternate 3 : renames ONLY within the the same mount links.
     //
-    if (shouldDoFederateRename(resSrc, resDst)) {
-      FileSystem srcFs = resSrc.targetFileSystem;
-      FileSystem dstFs = resDst.targetFileSystem;
-      Path srcFullPath = resSrc.remainingPath;
-      Path dstFullPath = resDst.remainingPath;
-      if (srcFs instanceof FilterFileSystem) {
-        String srcRoot = srcFs.getUri().getPath();
-        String pathStr = srcRoot.equals("/") ? "" : srcRoot + resSrc.remainingPath.toString();
-        srcFullPath = new Path(pathStr);
-        srcFs = ((FilterFileSystem) srcFs).getRawFileSystem();
+    FileSystem srcFs = resSrc.targetFileSystem;
+    FileSystem dstFs = resDst.targetFileSystem;
+    Path srcFullPath = resSrc.remainingPath;
+    Path dstFullPath = resDst.remainingPath;
+    if (srcFs instanceof FilterFileSystem) {
+      String srcRoot = srcFs.getUri().getPath();
+      if (srcRoot == null || srcRoot.isEmpty()) {
+        srcRoot = "";
       }
-      if (dstFs instanceof FilterFileSystem) {
-        String dstRoot = dstFs.getUri().getPath();
-        String pathStr = dstRoot.equals("/") ? "" : dstRoot + resDst.remainingPath.toString();
-        dstFullPath = new Path(pathStr);
-        dstFs = ((FilterFileSystem) dstFs).getRawFileSystem();
+      if (srcRoot.endsWith("/")) {
+        srcFullPath = new Path(srcRoot.substring(0, srcRoot.length()-1) + resSrc.remainingPath.toString());
+      } else {
+        srcFullPath = new Path(srcRoot + resSrc.remainingPath.toString());
       }
-      return srcFs.federationRename(srcFs, srcFullPath, dstFs, dstFullPath);
-
+      srcFs = ((FilterFileSystem) srcFs).getRawFileSystem();
     }
-    return resSrc.targetFileSystem.rename(resSrc.remainingPath,
-        resDst.remainingPath);
+    if (dstFs instanceof FilterFileSystem) {
+        String dstRoot = dstFs.getUri().getPath();
+        if (dstRoot == null || dstRoot.isEmpty()) {
+          dstRoot = "";
+        }
+        if (dstRoot.endsWith("/")) {
+          dstFullPath = new Path(dstRoot.substring(0, dstRoot.length()-1) + resDst.remainingPath.toString());
+        } else {
+          dstFullPath = new Path(dstRoot + resDst.remainingPath.toString());
+        }
+        dstFs = ((FilterFileSystem) dstFs).getRawFileSystem();
+    }
+    if (shouldDoFederateRename(resSrc, resDst)) {
+      return srcFs.federationRename(srcFs, srcFullPath, dstFs, dstFullPath);
+    }
+    return srcFs.rename(srcFullPath, dstFullPath);
   }
 
   private boolean shouldDoFederateRename(
@@ -547,12 +557,8 @@ public class ViewFileSystem extends FileSystem {
     if (srcFsUri.getAuthority() == null || dstFsUri.getAuthority() == null
         || !srcFsUri.getAuthority().equals(dstFsUri.getAuthority()))
       return true;
-
-    if (srcFsUri.getPath().equals(resSrc.resolvedPath)
-        && dstFsUri.getPath().equals(resDst.resolvedPath))
-      return false;
-
-    return true;
+    
+    return false;
   }
   
   @Override
@@ -776,9 +782,13 @@ public class ViewFileSystem extends FileSystem {
     if (res.targetFileSystem instanceof FilterFileSystem) {
       String targetRoot = res.targetFileSystem.getUri().getPath();
       if (targetRoot == null || targetRoot.isEmpty()) {
-        targetRoot = "/";
+        targetRoot = "";
       }
-      return new Path(targetRoot, res.remainingPath);
+      if (targetRoot.endsWith("/")) {
+        return new Path(targetRoot.substring(0, targetRoot.length()-1) + res.remainingPath.toString());
+      } else {
+        return new Path(targetRoot + res.remainingPath.toString());
+      }
     } else {
       return path;
     }
