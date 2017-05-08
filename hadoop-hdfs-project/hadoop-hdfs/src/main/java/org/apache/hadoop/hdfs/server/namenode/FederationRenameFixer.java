@@ -22,6 +22,7 @@ import org.apache.hadoop.hdfs.protocol.FederationClientProtocol;
 import org.apache.hadoop.hdfs.server.namenode.FederationInProgressRenameMap;
 import org.apache.hadoop.hdfs.server.namenode.FederationInProgressRenameMap.RenameRecord;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+import org.apache.hadoop.hdfs.server.namenode.ha.ZkConfiguredFailoverProxyProvider;
 import org.apache.hadoop.util.Daemon;
 
 public class FederationRenameFixer {
@@ -84,6 +85,12 @@ public class FederationRenameFixer {
     // Step1 : Check if the dest record exist
     FederationClientProtocol fcp = fedNNMap.get(rr.getDstId());
     if (fcp == null) {
+      conf.setBoolean(
+          DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR,
+          true);
+      conf.set(DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX
+          + "." + rr.getDstId(),
+          ZkConfiguredFailoverProxyProvider.class.getName());
       AtomicBoolean nnFallbackToSimpleAuth = new AtomicBoolean(false);
       NameNodeProxies.ProxyAndInfo<FederationClientProtocol> fedProxyInfo =
           NameNodeProxies.createProxy(conf, new URI(rr.getDstId()),
@@ -140,6 +147,12 @@ public class FederationRenameFixer {
     // Step1 : Check if the source record exist
     FederationClientProtocol fcp = fedNNMap.get(rr.getSrcId());
     if (fcp == null) {
+      conf.setBoolean(
+          DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR,
+          true);
+      conf.set(DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX
+          + "." + rr.getSrcId(),
+          ZkConfiguredFailoverProxyProvider.class.getName());
       AtomicBoolean nnFallbackToSimpleAuth = new AtomicBoolean(false);
       NameNodeProxies.ProxyAndInfo<FederationClientProtocol> fedProxyInfo =
           NameNodeProxies.createProxy(conf, new URI(rr.getSrcId()),

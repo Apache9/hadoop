@@ -102,20 +102,28 @@ public class ConfiguredFailoverProxyProvider<T> extends
         DFSUtil.getHaNnRpcAddresses(conf);
     Map<String, InetSocketAddress> addressesInNN = map.get(uri.getHost());
 
-    if (addressesInNN == null || addressesInNN.size() == 0) {
+    boolean tolerateNoNn =
+        this.conf
+            .getBoolean(
+                DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR,
+                DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR_DEFAULT);
+
+    if ((addressesInNN == null || addressesInNN.size() == 0) && !tolerateNoNn) {
       throw new RuntimeException("Could not find any configured addresses "
           + "for URI " + uri);
     }
 
-    Collection<InetSocketAddress> addressesOfNns = addressesInNN.values();
-    for (InetSocketAddress address : addressesOfNns) {
-      proxies.add(new AddressRpcProxyPair<T>(address));
-    }
+    if (addressesInNN != null && addressesInNN.size() != 0) {
+      Collection<InetSocketAddress> addressesOfNns = addressesInNN.values();
+      for (InetSocketAddress address : addressesOfNns) {
+        proxies.add(new AddressRpcProxyPair<T>(address));
+      }
 
-    // The client may have a delegation token set for the logical
-    // URI of the cluster. Clone this token to apply to each of the
-    // underlying IPC addresses so that the IPC code can find it.
-    HAUtil.cloneDelegationTokenForLogicalUri(ugi, uri, addressesOfNns);
+      // The client may have a delegation token set for the logical
+      // URI of the cluster. Clone this token to apply to each of the
+      // underlying IPC addresses so that the IPC code can find it.
+      HAUtil.cloneDelegationTokenForLogicalUri(ugi, uri, addressesOfNns);
+    }
   }
 
   /**

@@ -55,6 +55,7 @@ public class TestFederationRename {
     fHdfs2 = cluster.getFileSystem(1);
     ConfigUtil.addLink(CONF, "/home", fHdfs1.getUri());
     ConfigUtil.addLink(CONF, "/user", fHdfs2.getUri());
+    CONF.set("fs.defaultFS", "hdfs://default");
   }
 
   @After

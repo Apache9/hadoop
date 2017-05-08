@@ -2818,35 +2818,39 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   
   synchronized private boolean addOneBlockToNewPool(String srcPool,
       String dstPool, DupBlockInfo dbi) throws IOException {
-    ReplicaInfo srcReplica = volumeMap.get(srcPool, dbi.getSrcBlockId());
-    if (srcReplica == null) {
-      LOG.warn("Block " + dbi.getSrcBlockId() + " does not exist in " + srcPool
-          + " when trying to add to " + dstPool);
-      throw new ReplicaNotFoundException("Block " + dbi.getSrcBlockId()
-          + " does not exists in " + srcPool);
+    ReplicaInfo dstReplica = null;
+    synchronized (this) {
+      ReplicaInfo srcReplica = volumeMap.get(srcPool, dbi.getSrcBlockId());
+      if (srcReplica == null) {
+        LOG.warn("Block " + dbi.getSrcBlockId() + " does not exist in " + srcPool
+            + " when trying to add to " + dstPool);
+        throw new ReplicaNotFoundException("Block " + dbi.getSrcBlockId()
+            + " does not exists in " + srcPool);
+      }
+      dstReplica = volumeMap.get(dstPool, dbi.getDstBlockId());
+      if (dstReplica != null) {
+        LOG.warn("Block " + dbi.getDstBlockId() + " already exist in " + dstPool
+            + " when trying to add from " + srcPool);
+        return true;
+      }
+      Block blk =
+          new Block(dbi.getDstBlockId(), dbi.getBlockSize(),
+              dbi.getDstBlockGenStamp());
+      FsVolumeImpl v = (FsVolumeImpl) srcReplica.getVolume();
+      File srcFile = srcReplica.getBlockFile();
+      File srcMetaFile = srcReplica.getMetaFile();
+      File destDir = v.getBlockPoolSlice(dstPool).getFinalizedDirForBlock(blk);
+      File dstFile = new File(destDir, blk.getBlockName());
+      File dstMetaFile =
+          new File(destDir, DatanodeUtil.getMetaName(blk.getBlockName(),
+              blk.getGenerationStamp()));
+      HardLink.createHardLink(srcFile, dstFile);
+      HardLink.createHardLink(srcMetaFile, dstMetaFile);
+      dstReplica = new FinalizedReplica(blk, v, destDir);
+      volumeMap.add(dstPool, dstReplica);
     }
-    ReplicaInfo dstReplica = volumeMap.get(dstPool, dbi.getDstBlockId());
-    if (dstReplica != null) {
-      LOG.warn("Block " + dbi.getDstBlockId() + " already exist in " + dstPool
-          + " when trying to add from " + srcPool);
-      return true;
-    }
-    Block blk =
-        new Block(dbi.getDstBlockId(), dbi.getBlockSize(),
-            dbi.getDstBlockGenStamp());
-    FsVolumeImpl v = (FsVolumeImpl) srcReplica.getVolume();
-    File srcFile = srcReplica.getBlockFile();
-    File srcMetaFile = srcReplica.getMetaFile();
-    File destDir = v.getBlockPoolSlice(dstPool).getFinalizedDirForBlock(blk);
-    File dstFile = new File(destDir, blk.getBlockName());
-    File dstMetaFile =
-        new File(destDir, DatanodeUtil.getMetaName(blk.getBlockName(),
-            blk.getGenerationStamp()));
-    HardLink.createHardLink(srcFile, dstFile);
-    HardLink.createHardLink(srcMetaFile, dstMetaFile);
-    dstReplica = new FinalizedReplica(blk, v, destDir);
-    volumeMap.add(dstPool, dstReplica);
     ExtendedBlock extendedBlock = new ExtendedBlock(dstPool, dstReplica);
+    // notifyNamenodeReceivedBlock does not need to be protected by FsDatasetImpl lock
     datanode.notifyNamenodeReceivedBlock(extendedBlock, null,
         dstReplica.getStorageUuid());
     return true;

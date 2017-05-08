@@ -32,6 +32,7 @@ import org.apache.hadoop.hdfs.protocolPB.FederationClientDatanodeProtocolTransla
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Daemon;
+import org.apache.hadoop.util.Time;
 
 public class FederationRenameBlockCollector {
 
@@ -110,6 +111,16 @@ public class FederationRenameBlockCollector {
             });
   }
 
+  class BlkReplicaInfo {
+    int total;
+    int linked;
+
+    BlkReplicaInfo(int inTotal, int inLinked) {
+      total = inTotal;
+      linked = inLinked;
+    }
+  }
+
   public void linkBlocksToNewPool() throws IOException {
     boolean connectViaHostName =
         conf.getBoolean(DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME,
@@ -120,11 +131,21 @@ public class FederationRenameBlockCollector {
         conf.getInt(DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD,
             DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD_DEFAULT);
     int numThreads = (numDns > maxThreads) ? maxThreads : numDns;
-    List<Long> notFinishedBlks = new LinkedList<Long>();
+    long linkTimeout =
+        conf.getLong(
+            DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_TIMEOUT_MS,
+            DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_TIMEOUT_MS_DEFAULT);
+    int minLinks =
+        conf.getInt(DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOKCS_MINIMAL,
+            DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MINIMAL_DEFAULT);
+    
+    Map<Long, BlkReplicaInfo> notFinishedBlks = new HashMap<Long, BlkReplicaInfo>();
     for (Map.Entry<DatanodeInfo, BlocksToDup> item : dnBlkMap.entrySet()) {
       for (BlocksToDup.DupBlockInfo dbi : item.getValue().getDupBlocksInfo()) {
-        if (!notFinishedBlks.contains(dbi.getSrcBlockId())) {
-          notFinishedBlks.add(dbi.getSrcBlockId());
+        if (!notFinishedBlks.containsKey(dbi.getSrcBlockId())) {
+          notFinishedBlks.put(dbi.getSrcBlockId(), new BlkReplicaInfo(1, 0));
+        } else {
+          notFinishedBlks.get(dbi.getSrcBlockId()).total += 1;
         }
       }
     }
@@ -140,14 +161,26 @@ public class FederationRenameBlockCollector {
       Future<Block[]> tskFuture = linkService.submit(oneDnTsk);
       futures.add(tskFuture);
     }
-    while (!futures.isEmpty()) {
+    long leftTimeout = linkTimeout;
+    while (!futures.isEmpty() && (leftTimeout > 0)) {
       Future<Block[]> finishedTsk = null;
       try {
-        finishedTsk = linkService.take();
+        long start = Time.monotonicNow();
+        finishedTsk = linkService.poll(leftTimeout, TimeUnit.MILLISECONDS);
+        if (finishedTsk == null) {
+          // Timed out
+          for (Future<Block[]> f : futures) {
+            if (!f.isDone()) {
+              f.cancel(true);
+            }
+          }
+          break;
+        }
+        leftTimeout -= (Time.monotonicNow() - start);
         Block[] blks = finishedTsk.get();
         futures.remove(finishedTsk);
         for (Block b : blks) {
-          notFinishedBlks.remove(b.getBlockId());
+          notFinishedBlks.get(b.getBlockId()).linked += 1;
         }
       } catch (Exception e) {
         if (finishedTsk != null) {
@@ -156,7 +189,16 @@ public class FederationRenameBlockCollector {
         lastExp = e;
       }
     }
-    if (!notFinishedBlks.isEmpty()) {
+    boolean allDone = true;
+    for (Long blkId : notFinishedBlks.keySet()) {
+      int total = notFinishedBlks.get(blkId).total;
+      int linked = notFinishedBlks.get(blkId).linked;
+      if (linked < total && linked < minLinks) {
+        allDone = false;
+        break;
+      }
+    }
+    if (!allDone) {
       if (lastExp != null) {
         throw new IOException(lastExp);
       } else {

@@ -141,25 +141,32 @@ public class MountPointRenewer {
   private String getMptConfFromZookeeper(String viewName, Configuration conf)
       throws IOException,
       IllegalArgumentException, KeeperException, InterruptedException {
-    String znode =
-        conf.get(CommonConfigurationKeys.ZK_PARENT_ZNODE_KEY,
-            CommonConfigurationKeys.ZK_PARENT_ZNODE_DEFAULT)
-            + "/"
-            + viewName
-            + "/"
-            + conf.get(FederationConfigKeys.FEDFS_ZK_MPT_NODE_KEY,
-                FederationConfigKeys.FEDFS_ZK_MPT_NODE_DEFAULT);
-    ZooKeeper zkClient =
-        new ZooKeeper(conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY),
-            conf.getInt(CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
-                CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT),
-            new Watcher() {
-              public void process(WatchedEvent event) {
-                // Empty watcher handler
-              }
-            });
-    byte[] activeData = zkClient.getData(znode, false, null);
-    return new String(activeData);
+    ZooKeeper zkClient = null;
+    try {
+      String znode =
+          conf.get(CommonConfigurationKeys.ZK_PARENT_ZNODE_KEY,
+              CommonConfigurationKeys.ZK_PARENT_ZNODE_DEFAULT)
+              + "/"
+              + viewName
+              + "/"
+              + conf.get(FederationConfigKeys.FEDFS_ZK_MPT_NODE_KEY,
+                  FederationConfigKeys.FEDFS_ZK_MPT_NODE_DEFAULT);
+      zkClient =
+          new ZooKeeper(conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY),
+              conf.getInt(CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
+                  CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT),
+              new Watcher() {
+                public void process(WatchedEvent event) {
+                  // Empty watcher handler
+                }
+              });
+      byte[] activeData = zkClient.getData(znode, false, null);
+      return new String(activeData);
+    } finally {
+      if (zkClient != null) {
+        zkClient.close();
+      }
+    }
   }
 
   public String getMptZnodePath() {

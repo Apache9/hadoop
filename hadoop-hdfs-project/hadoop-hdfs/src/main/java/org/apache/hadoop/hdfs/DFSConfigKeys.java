@@ -1017,4 +1017,19 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED =
           "dfs.namenode.getfileinfo.auditlog.enabled";
   public static final boolean DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED_DEFAULT = true;
+
+  public static final String DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR =
+      "dfs.client.failover.provider.tolerate.empty.nnaddr";
+  public static final boolean DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR_DEFAULT =
+      false;
+
+  public static final String DFS_FEDERATION_CLIENT_LINK_BLOCKS_TIMEOUT_MS =
+      "dfs.federation.client.link.blocks.timeout.ms";
+  public static final long DFS_FEDERATION_CLIENT_LINK_BLOCKS_TIMEOUT_MS_DEFAULT =
+      10000; // 10 ms
+
+  public static final String DFS_FEDERATION_CLIENT_LINK_BLOKCS_MINIMAL =
+      "dfs.federation.client.link.blocks.minimal";
+  public static final int DFS_FEDERATION_CLIENT_LINK_BLOCKS_MINIMAL_DEFAULT =
+      2;
 }
