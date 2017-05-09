@@ -76,9 +76,11 @@ public class FederationInProgressRenameMap {
   synchronized void addRenameRecord(long txid, String src, String srcId,
       String dst, String dstId, boolean isSource, long start) {
     if (isSource) {
+      NameNode.getNameNodeMetrics().incrInProgressFedRenameSrc();
       sourceInProgress
           .add(new RenameRecord(src, srcId, dst, dstId, txid, start));
     } else {
+      NameNode.getNameNodeMetrics().incrInProgressFedRenameDest();
       destInProgress.add(new RenameRecord(src, srcId, dst, dstId, txid, start));
     }
   }
@@ -90,8 +92,10 @@ public class FederationInProgressRenameMap {
       return;
     }
     if (isSource) {
+      NameNode.getNameNodeMetrics().decrInProgressFedRenameSrc();
       sourceInProgress.remove(rr);
     } else {
+      NameNode.getNameNodeMetrics().decrInProgressFedRenameDest();
       destInProgress.remove(rr);
     }
   }

@@ -1026,7 +1026,7 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_FEDERATION_CLIENT_LINK_BLOCKS_TIMEOUT_MS =
       "dfs.federation.client.link.blocks.timeout.ms";
   public static final long DFS_FEDERATION_CLIENT_LINK_BLOCKS_TIMEOUT_MS_DEFAULT =
-      10000; // 10 ms
+      30000; // 30 sec
 
   public static final String DFS_FEDERATION_CLIENT_LINK_BLOKCS_MINIMAL =
       "dfs.federation.client.link.blocks.minimal";

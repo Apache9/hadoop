@@ -125,6 +125,11 @@ public class NameNodeMetrics {
   @Metric("GetImageServlet putImage")
   MutableRate putImage;
 
+  @Metric("Items in src list of FederationInProgressRenameMap")
+  MutableGaugeInt inProgressFedRenameSrc;
+  @Metric("Items in dest list of FederationInProgressRenameMap")
+  MutableGaugeInt inProgressFedRenameDest;
+
   JvmMetrics jvmMetrics = null;
   
   NameNodeMetrics(String processName, String sessionId, int[] intervals,
@@ -366,5 +371,22 @@ public class NameNodeMetrics {
 
   public void incrChooseRandomInNT() {
     chooseRandomInNT.incr();
+  }
+
+  public void incrInProgressFedRenameSrc() {
+    inProgressFedRenameSrc.incr();
+  }
+
+  public void decrInProgressFedRenameSrc() {
+    inProgressFedRenameSrc.decr();
+    ;
+  }
+
+  public void incrInProgressFedRenameDest() {
+    inProgressFedRenameDest.incr();
+  }
+
+  public void decrInProgressFedRenameDest() {
+    inProgressFedRenameDest.decr();
   }
 }

@@ -2816,7 +2816,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
   }
   
-  synchronized private boolean addOneBlockToNewPool(String srcPool,
+  private boolean addOneBlockToNewPool(String srcPool,
       String dstPool, DupBlockInfo dbi) throws IOException {
     ReplicaInfo dstReplica = null;
     synchronized (this) {

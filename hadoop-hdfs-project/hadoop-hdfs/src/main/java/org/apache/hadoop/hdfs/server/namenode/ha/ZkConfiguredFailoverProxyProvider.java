@@ -99,17 +99,7 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
     lastUseZkTime = -1;
     Collection<String> nsIds = DFSUtil.getNameServiceIds(conf);
 
-    if (nsIds.size() == 1) {
-      nsId = (String) (nsIds.toArray()[0]);
-    } else {
-      for (String str : nsIds) {
-        if (str.equals(uri.getHost())) {
-          nsId = str;
-          break;
-        }
-      }
-    }
-
+    nsId = uri.getAuthority();
     if (nsId == null) {
       throw new RuntimeException("No nameservices is configured");
     }

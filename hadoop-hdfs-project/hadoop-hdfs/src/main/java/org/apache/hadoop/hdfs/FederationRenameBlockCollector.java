@@ -41,7 +41,7 @@ public class FederationRenameBlockCollector {
   private Configuration conf = null;
 
   public FederationRenameBlockCollector(DirectorySubTree subTree,
-      BlocksToDup blksToDup, Configuration inConf) {
+      BlocksToDup blksToDup, Configuration inConf) throws IOException {
     this.conf = inConf;
     this.dnBlkMap = new HashMap<DatanodeInfo, BlocksToDup>();
     int blksIdx = 0;
@@ -59,6 +59,10 @@ public class FederationRenameBlockCollector {
           long srcGs = blksToDup.get(blksIdx).getSrcBlockGenStamp();
           long dstGs = blksToDup.get(blksIdx).getDstBlockGenStamp();
           blksIdx++;
+          if (lblk.isCorrupt()) {
+            throw new IOException(
+                "There are corrupt blocks in source directory, cannot rename to another namespace.");
+          }
           for (DatanodeInfo datanode : lblk.getLocations()) {
             if (dnBlkMap.containsKey(datanode)) {
               BlocksToDup dnBlkToDup = dnBlkMap.get(datanode);

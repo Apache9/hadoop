@@ -5,6 +5,7 @@ import static org.apache.hadoop.util.ExitUtil.terminate;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.PrivilegedExceptionAction;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.HashMap;
 import java.util.List;
@@ -23,6 +24,7 @@ import org.apache.hadoop.hdfs.server.namenode.FederationInProgressRenameMap;
 import org.apache.hadoop.hdfs.server.namenode.FederationInProgressRenameMap.RenameRecord;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.ha.ZkConfiguredFailoverProxyProvider;
+import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.util.Daemon;
 
 public class FederationRenameFixer {
@@ -88,8 +90,9 @@ public class FederationRenameFixer {
       conf.setBoolean(
           DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR,
           true);
+      URI dst = new URI(rr.getDstId());
       conf.set(DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX
-          + "." + rr.getDstId(),
+          + "." + dst.getAuthority(),
           ZkConfiguredFailoverProxyProvider.class.getName());
       AtomicBoolean nnFallbackToSimpleAuth = new AtomicBoolean(false);
       NameNodeProxies.ProxyAndInfo<FederationClientProtocol> fedProxyInfo =
@@ -114,9 +117,11 @@ public class FederationRenameFixer {
       BlocksToDup blksToDup =
           BlocksToDup.buildFromSubTrees(srcSubTree, dstSubTree);
       // Ask datanodes to add new links
-      FederationRenameBlockCollector frbc = null;
-      frbc = new FederationRenameBlockCollector(srcSubTree, blksToDup, conf);
-      frbc.linkBlocksToNewPool();
+      if (blksToDup.size() != 0) {
+        FederationRenameBlockCollector frbc = null;
+        frbc = new FederationRenameBlockCollector(srcSubTree, blksToDup, conf);
+        frbc.linkBlocksToNewPool();
+      }
       // Commit source
       fsNameSys.federationRenameSrcPhase2(rr.getRenameId(), false);
       // Commit dest
@@ -131,10 +136,16 @@ public class FederationRenameFixer {
     List<RenameRecord> items =
         fsNameSys.getFederationRenameMap().getTimeoutItems(timeout, true);
     for (int i = 0; i < items.size(); i++) {
-      RenameRecord rr = items.get(i);
+      final RenameRecord rr = items.get(i);
       try {
-        fixOneSourceItem(rr);
-        LOG.info("Fixed source item " + rr);
+        SecurityUtil.doAsLoginUser(new PrivilegedExceptionAction<Boolean>() {
+          @Override
+          public Boolean run() throws Exception {
+            boolean res = fixOneSourceItem(rr);
+            LOG.info("Fixed source item " + rr);
+            return res;
+          }
+        });
       } catch (Throwable t) {
         // Ignore
         LOG.warn("Fix rename item " + rr + " failed", t);
@@ -150,8 +161,9 @@ public class FederationRenameFixer {
       conf.setBoolean(
           DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR,
           true);
+      URI src = new URI(rr.getSrcId());
       conf.set(DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX
-          + "." + rr.getSrcId(),
+          + "." + src.getAuthority(),
           ZkConfiguredFailoverProxyProvider.class.getName());
       AtomicBoolean nnFallbackToSimpleAuth = new AtomicBoolean(false);
       NameNodeProxies.ProxyAndInfo<FederationClientProtocol> fedProxyInfo =
@@ -178,10 +190,16 @@ public class FederationRenameFixer {
     List<RenameRecord> items =
         fsNameSys.getFederationRenameMap().getTimeoutItems(timeout, false);
     for (int i = 0; i < items.size(); i++) {
-      RenameRecord rr = items.get(i);
+      final RenameRecord rr = items.get(i);
       try {
-        fixOneDestItem(rr);
-        LOG.info("Fixed dest item " + rr);
+        SecurityUtil.doAsLoginUser(new PrivilegedExceptionAction<Boolean>() {
+          @Override
+          public Boolean run() throws Exception {
+            boolean res = fixOneDestItem(rr);
+            LOG.info("Fixed dest item " + rr);
+            return res;
+          }
+        });
       } catch (Throwable t) {
         // Ignore
         LOG.warn("Fix rename item " + rr + " failed", t);
