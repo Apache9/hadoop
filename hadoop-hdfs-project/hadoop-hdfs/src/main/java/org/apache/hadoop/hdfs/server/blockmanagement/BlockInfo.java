@@ -371,6 +371,15 @@ public class BlockInfo extends Block implements LightWeightGSet.LinkedElement {
   }
 
   /**
+   * Is this block committed?
+   * 
+   * @return true if the state of the block is {@link BlockUCState#COMMITTED}
+   */
+  public boolean isCommitted() {
+    return getBlockUCState().equals(BlockUCState.COMMITTED);
+  }
+
+  /**
    * Convert a complete block to an under construction block.
    * @return BlockInfoUnderConstruction -  an under construction block.
    */
