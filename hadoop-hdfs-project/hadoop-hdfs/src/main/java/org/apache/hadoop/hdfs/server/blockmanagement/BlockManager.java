@@ -1308,6 +1308,17 @@ public class BlockManager {
     return computeReplicationWorkForBlocks(blocksToReplicate);
   }
 
+  private boolean shouldReplicateLastBlock(BlockInfo bi, Block b) {
+    NumberReplicas num = countNodes(b);
+    int curReplicas = num.liveReplicas();
+    if ((bi.isComplete() || bi.isCommitted())) {
+      if (curReplicas > 0 || num.decommissionedReplicas() > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Replicate a set of blocks
    *
    * @param blocksToReplicate blocks to be replicated, for each priority
@@ -1332,12 +1343,13 @@ public class BlockManager {
             // block should belong to a file
             bc = blocksMap.getBlockCollection(block);
             // abandoned block or block reopened for append
-            if(bc == null || (bc.isUnderConstruction() && block.equals(bc.getLastBlock()))) {
+            if (bc == null
+                || (bc.isUnderConstruction() && block.equals(bc.getLastBlock()) && !shouldReplicateLastBlock(
+                    bc.getLastBlock(), block))) {
               neededReplications.remove(block, priority); // remove from neededReplications
               neededReplications.decrementReplicationIndex(priority);
               continue;
             }
-
             requiredReplication = bc.getBlockReplication();
 
             // get a source data-node
@@ -1370,7 +1382,6 @@ public class BlockManager {
                 continue;
               }
             }
-
             if (numReplicas.liveReplicas() < requiredReplication) {
               additionalReplRequired = requiredReplication
                   - numEffectiveReplicas;
@@ -1418,7 +1429,9 @@ public class BlockManager {
           // block should belong to a file
           bc = blocksMap.getBlockCollection(block);
           // abandoned block or block reopened for append
-          if(bc == null || (bc.isUnderConstruction() && block.equals(bc.getLastBlock()))) {
+          if (bc == null
+              || (bc.isUnderConstruction() && block.equals(bc.getLastBlock()) && !shouldReplicateLastBlock(
+                  bc.getLastBlock(), block))) {
             neededReplications.remove(block, priority); // remove from neededReplications
             rw.targets = null;
             neededReplications.decrementReplicationIndex(priority);

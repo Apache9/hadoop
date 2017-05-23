@@ -4799,6 +4799,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     checkOperation(OperationCategory.WRITE);
     String src = "";
     waitForLoadingFSImage();
+    boolean needSync = false;
     writeLock();
     try {
       checkOperation(OperationCategory.WRITE);
@@ -4916,16 +4917,36 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       }
 
       if (closeFile) {
-        src = closeFileCommitBlocks(iFile, storedBlock);
+        try {
+          src = closeFileCommitBlocks(iFile, storedBlock);
+        } catch (Exception e) {
+          // The block state in this Namenode's memory has been changed, need to
+          // sync it to standby namenode by edit log.
+          // Should we terminate if persistBlocks throws exception since the
+          // in-memory state cannot be synced in active/standby nn in any way?
+          src = iFile.getFullPathName();
+          persistBlocks(src, iFile, false);
+          needSync = true;
+          if (e instanceof IOException) {
+            throw (IOException) e;
+          } else {
+            throw new IOException(e);
+          }
+        }
       } else {
         // If this commit does not want to close the file, persist blocks
+        // Should we terminate if persistBlocks throws exception since the
+        // in-memory state cannot be synced in active/standby nn in any way?
         src = iFile.getFullPathName();
         persistBlocks(src, iFile, false);
       }
+      needSync = true;
     } finally {
       writeUnlock();
+      if (needSync) {
+        getEditLog().logSync();
+      }
     }
-    getEditLog().logSync();
     if (closeFile) {
       LOG.info("commitBlockSynchronization(newblock=" + lastblock
           + ", file=" + src
