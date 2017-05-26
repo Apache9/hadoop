@@ -92,6 +92,7 @@ public class TestNamenodeRetryCache {
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BlockSize);
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ENABLE_RETRY_CACHE_KEY, true);
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY, true);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_KEY, "true");
     cluster = new MiniDFSCluster.Builder(conf).build();
     cluster.waitActive();
     namesystem = cluster.getNamesystem();
@@ -297,6 +298,40 @@ public class TestNamenodeRetryCache {
     newCall();
     try {
       namesystem.renameTo(src, target, Rename.NONE);
+      Assert.fail("testRename 2 expected exception is not thrown");
+    } catch (IOException e) {
+      // expected
+    }
+  }
+
+  /**
+   * Test for rename2
+   */
+  @Test
+  public void testRename2WithOverwrite() throws Exception {
+    String src = "/testNamenodeRetryCache/testRename2/src/data";
+    String target = "/testNamenodeRetryCache/testRename2/target/data";
+    resetCall();
+    namesystem.mkdirs(src, perm, true);
+    namesystem.mkdirs(target, perm, true);
+
+    // Retried renames succeed
+    newCall();
+    try {
+      namesystem.renameTo(src, target, Rename.OVERWRITE);
+    } catch (IOException ioe) {
+      //expected
+    }
+    try {
+      namesystem.renameTo(src, target, Rename.OVERWRITE);
+    } catch (IOException ioe) {
+      //expected
+    }
+
+    // A non-retried request fails
+    newCall();
+    try {
+      namesystem.renameTo(src, target, Rename.OVERWRITE);
       Assert.fail("testRename 2 expected exception is not thrown");
     } catch (IOException e) {
       // expected

@@ -851,4 +851,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_CLIENT_PERFCOUNTER_ENABLED_KEY =
       "dfs.client.perfcounter.enabled";
   public static final boolean DFS_CLIENT_PERFCOUNTER_ENABLED_DEFAULT = false;
+
+  public static final String  DFS_NAMENODE_FORCE_TO_TRASH_KEY = "dfs.namenode.forceToTrash";
+  public static final boolean DFS_NAMENODE_FORCE_TO_TRASH_DEFAULT = false;
+  public static final String  DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_KEY = "dfs.namenode.trashPathConfRefreshInterval";
+  public static final long DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_DEFAULT = 600000; //ms
 }

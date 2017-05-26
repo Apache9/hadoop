@@ -2901,4 +2901,114 @@ public class TestDFSShell {
   public void testNoTrashConfig() throws Exception {
     deleteFileUsingTrash(false, false);
   }
+
+  /**
+   * Test that file is moved to trash with ordinary user when deleting it.
+   */
+  @Test (timeout = 30000)
+  public void testDeleteTheTrashFileOnNNWithOrdinaryUser() throws Exception {
+    // Run a cluster, optionally with trash enabled on the server
+    Configuration serverConf = new HdfsConfiguration();
+    serverConf.set(DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_KEY, "true");
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(serverConf)
+        .numDataNodes(1).format(true).build();
+    Configuration clientConf = new Configuration(serverConf);
+
+    FsShell shell = new FsShell(clientConf);
+    FileSystem fs = null;
+
+    try {
+      // Create and delete a file
+      fs = cluster.getFileSystem();
+
+      // Use a separate tmp dir for each invocation.
+      final String testdir = "/tmp/TestDFSShell-deleteFileUsingTrash-" +
+          counter.getAndIncrement();
+
+      writeFile(fs, new Path(testdir, "foo"));
+      final String testFile = testdir + "/foo";
+      final String trashFile = shell.getCurrentTrashDir() + "/" + testFile;
+      String[] argv = new String[] { "-rm", testFile };
+      int res = ToolRunner.run(shell, argv);
+      assertEquals("rm failed", 0, res);
+      assertTrue("File not removed in trash", fs.exists(new Path(trashFile)));
+      assertFalse("File was not removed", fs.exists(new Path(testFile)));
+
+      // remove the trash file witout skipTrash
+      argv = new String[] { "-rm", trashFile };
+      try {
+        ToolRunner.run(shell, argv);
+      } catch (IOException ioe) {
+        LOG.info(ioe);
+      }
+
+      assertTrue("Trash file doesn't exist", fs.exists(new Path(trashFile)));
+
+      argv = new String[] { "-rm", "-skipTrash", trashFile };
+      try {
+        ToolRunner.run(shell, argv);
+      } catch (IOException ioe) {
+        LOG.info(ioe);
+      }
+      assertTrue("Trash file doesn't exist when skipTrash", fs.exists(new Path(trashFile)));
+
+    } finally {
+      if (fs != null) {
+        fs.close();
+      }
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  /**
+   * Test that file is moved to trash with super user when deleting it.
+   */
+  @Test (timeout = 30000)
+  public void testDeleteTheTrashFileOnNNWithSuperUser() throws Exception {
+    // Run a cluster, optionally with trash enabled on the server
+    String currentUser = System.getProperty("user.name");
+    Configuration serverConf = new HdfsConfiguration();
+    serverConf.set("dfs.permissions.superuser", currentUser);
+    serverConf.set(DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_KEY, "true");
+
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(serverConf)
+        .numDataNodes(1).format(true).build();
+    Configuration clientConf = new Configuration(serverConf);
+
+    FsShell shell = new FsShell(clientConf);
+    FileSystem fs = null;
+
+    try {
+      // Create and delete a file
+      fs = cluster.getFileSystem();
+
+      // Use a separate tmp dir for each invocation.
+      final String testdir = "/tmp/TestDFSShell-deleteFileUsingTrash-" +
+          counter.getAndIncrement();
+
+      writeFile(fs, new Path(testdir, "foo"));
+      final String testFile = testdir + "/foo";
+      final String trashFile = shell.getCurrentTrashDir() + "/" + testFile;
+      String[] argv = new String[] { "-rm", testFile };
+      int res = ToolRunner.run(shell, argv);
+      assertEquals("rm failed", 0, res);
+      assertTrue("File not removed in trash", fs.exists(new Path(trashFile)));
+      assertFalse("File was not removed", fs.exists(new Path(testFile)));
+
+      argv = new String[] { "-rm", trashFile };
+      res = ToolRunner.run(shell, argv);
+      assertEquals("rm trash file failed", 0, res);
+      assertFalse("Trash file is not deleted", fs.exists(new Path(trashFile)));
+
+    } finally {
+      if (fs != null) {
+        fs.close();
+      }
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
 }
