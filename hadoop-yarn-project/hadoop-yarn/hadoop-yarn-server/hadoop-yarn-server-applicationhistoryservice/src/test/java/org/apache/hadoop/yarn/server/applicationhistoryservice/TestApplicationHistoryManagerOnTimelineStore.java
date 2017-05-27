@@ -128,9 +128,11 @@ public class TestApplicationHistoryManagerOnTimelineStore {
       TimelineEntities entities = new TimelineEntities();
       ApplicationId appId = ApplicationId.newInstance(0, i);
       if (i == 2) {
-        entities.addEntity(createApplicationTimelineEntity(appId, true));
+        entities.addEntity(createApplicationTimelineEntity(
+            appId, true, false, false));
       } else {
-        entities.addEntity(createApplicationTimelineEntity(appId, false));
+        entities.addEntity(createApplicationTimelineEntity(
+            appId, false, false, false));
       }
       store.put(entities);
       for (int j = 1; j <= scale; ++j) {
@@ -302,6 +304,10 @@ public class TestApplicationHistoryManagerOnTimelineStore {
         historyManager.getAllApplications().values();
     Assert.assertNotNull(apps);
     Assert.assertEquals(SCALE, apps.size());
+    ApplicationId ignoredAppId = ApplicationId.newInstance(0, SCALE + 2);
+    for (ApplicationReport app : apps) {
+      Assert.assertNotEquals(ignoredAppId, app.getApplicationId());
+    }
   }
 
   @Test
@@ -401,10 +407,15 @@ public class TestApplicationHistoryManagerOnTimelineStore {
   }
 
   private static TimelineEntity createApplicationTimelineEntity(
-      ApplicationId appId, boolean emptyACLs) {
+      ApplicationId appId, boolean emptyACLs, boolean noAttemptId,
+      boolean wrongAppId) {
     TimelineEntity entity = new TimelineEntity();
     entity.setEntityType(ApplicationMetricsConstants.ENTITY_TYPE);
-    entity.setEntityId(appId.toString());
+    if (wrongAppId) {
+      entity.setEntityId("wrong_app_id");
+    } else {
+      entity.setEntityId(appId.toString());
+    }
     entity.setDomainId(TimelineDataManager.DEFAULT_DOMAIN_ID);
     entity.addPrimaryFilter(
         TimelineStore.SystemFilter.ENTITY_OWNER.toString(), "yarn");
