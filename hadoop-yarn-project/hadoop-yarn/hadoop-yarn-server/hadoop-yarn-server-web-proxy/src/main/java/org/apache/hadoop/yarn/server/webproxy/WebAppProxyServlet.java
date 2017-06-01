@@ -52,6 +52,8 @@ import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.server.webproxy.AppReportFetcher.AppReportSource;
+import org.apache.hadoop.yarn.server.webproxy.AppReportFetcher.FetchedAppReport;
 import org.apache.hadoop.yarn.util.Apps;
 import org.apache.hadoop.yarn.util.StringHelper;
 import org.apache.hadoop.yarn.util.TrackingUriPlugin;
@@ -70,7 +72,13 @@ public class WebAppProxyServlet extends HttpServlet {
 
   private final List<TrackingUriPlugin> trackingUriPlugins;
   private final String rmAppPageUrlBase;
-  private final transient YarnConfiguration conf;
+  private final String ahsAppPageUrlBase;
+  private transient YarnConfiguration conf;
+
+  /**
+   * HTTP methods.
+   */
+  private enum HTTP { GET, POST, HEAD, PUT, DELETE };
 
   private static class _ implements Hamlet._ {
     //Empty
@@ -98,6 +106,9 @@ public class WebAppProxyServlet extends HttpServlet {
             TrackingUriPlugin.class);
     this.rmAppPageUrlBase = StringHelper.pjoin(
         WebAppUtils.getResolvedRMWebAppURLWithScheme(conf), "cluster", "app");
+    this.ahsAppPageUrlBase = StringHelper.pjoin(
+        WebAppUtils.getHttpSchemePrefix(conf) + WebAppUtils
+        .getAHSWebAppURLWithoutScheme(conf), "applicationhistory", "apps");
   }
 
   /**
@@ -219,7 +230,7 @@ public class WebAppProxyServlet extends HttpServlet {
     return false;
   }
   
-  private ApplicationReport getApplicationReport(ApplicationId id)
+  private FetchedAppReport getApplicationReport(ApplicationId id)
       throws IOException, YarnException {
     return ((AppReportFetcher) getServletContext()
         .getAttribute(WebAppProxy.FETCHER_ATTRIBUTE)).getApplicationReport(id);
@@ -276,9 +287,18 @@ public class WebAppProxyServlet extends HttpServlet {
       
       boolean checkUser = securityEnabled && (!userWasWarned || !userApproved);
 
+      FetchedAppReport fetchedAppReport = null;
       ApplicationReport applicationReport = null;
       try {
-        applicationReport = getApplicationReport(id);
+        fetchedAppReport = getApplicationReport(id);
+        if (fetchedAppReport != null) {
+          if (fetchedAppReport.getAppReportSource() != AppReportSource.RM &&
+              fetchedAppReport.getAppReportSource() != AppReportSource.AHS) {
+            throw new UnsupportedOperationException("Application report not "
+                + "fetched from RM or history server.");
+          }
+          applicationReport = fetchedAppReport.getApplicationReport();
+        }
       } catch (ApplicationNotFoundException e) {
         applicationReport = null;
       }
@@ -295,16 +315,29 @@ public class WebAppProxyServlet extends HttpServlet {
           return;
         }
 
-        notFound(resp, "Application "+appId+" could not be found, " +
-        		"please try the history server");
+        notFound(resp, "Application " + appId + " could not be found " +
+            "in RM or history server");
         return;
       }
       String original = applicationReport.getOriginalTrackingUrl();
-      URI trackingUri = null;
-      // fallback to ResourceManager's app page if no tracking URI provided
-      if(original == null || original.equals("N/A")) {
-        resp.sendRedirect(resp.encodeRedirectURL(
-            StringHelper.pjoin(rmAppPageUrlBase, id.toString())));
+      URI trackingUri;
+      if (original == null || original.equals("N/A") || original.equals("")) {
+        if (fetchedAppReport.getAppReportSource() == AppReportSource.RM) {
+          // fallback to ResourceManager's app page if no tracking URI provided
+          // and Application Report was fetched from RM
+          LOG.debug("Original tracking url is " + original == null? "NULL" : original
+              + ". Redirecting to RM app page");
+          resp.sendRedirect(resp.encodeRedirectURL(
+              StringHelper.pjoin(rmAppPageUrlBase, id.toString())));
+        } else if (fetchedAppReport.getAppReportSource()
+              == AppReportSource.AHS) {
+          // fallback to Application History Server app page if the application
+          // report was fetched from AHS
+          LOG.debug("Original tracking url is " + original == null? "NULL" : original
+              + ". Redirecting to AHS app page");
+          resp.sendRedirect(resp.encodeRedirectURL(
+              StringHelper.pjoin(ahsAppPageUrlBase, id.toString())));
+        }
         return;
       } else {
         if (ProxyUriUtils.getSchemeFromUrl(original).isEmpty()) {
