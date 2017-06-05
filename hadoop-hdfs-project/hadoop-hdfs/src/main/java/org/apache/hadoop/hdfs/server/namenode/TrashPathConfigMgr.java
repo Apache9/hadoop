@@ -57,6 +57,24 @@ public class TrashPathConfigMgr implements Runnable {
     trashPathList = list;
   }
 
+  private boolean hasCommonPrefix(String[] path1, String[] path2 ) {
+    if (path1 == null || path2 == null) {
+      return false;
+    }
+    int i = 0;
+    while (i < path1.length && i < path2.length) {
+      if (path1[i].equals(path2[i])) {
+        i++;
+        continue;
+      } else {
+        return false;
+      }
+
+    }
+    return true;
+
+  }
+
   public synchronized boolean needMoveToTrash (String pathStr) {
     if (pathStr == null || trashPathList == null) {
       return false;
@@ -71,16 +89,11 @@ public class TrashPathConfigMgr implements Runnable {
       if (trashPathNodes == null) {
         continue;
       }
-      int i = 0;
-      while (i < pathNodes.length && i < trashPathNodes.length) {
-        if (pathNodes[i].equals(trashPathNodes[i])) {
-          i++;
-          continue;
-        }
-        return false;
+      if (hasCommonPrefix(pathNodes, trashPathNodes)) {
+        return true;
       }
     }
-    return true;
+    return false;
   }
 
   @Override
