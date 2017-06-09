@@ -337,13 +337,14 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     while (retriesForLastBlockLength > 0) {
       int replicaNotFoundCount = locatedblock.getLocations().length;
       for (DatanodeInfo datanode : locatedblock.getLocations()) {
-        ClientDatanodeProtocol cdp = null;
+        ClientDatanodeProtocol cdp = getClientDatanodeProtocol(datanode);
         try {
           cdp =
               DFSUtil.createClientDatanodeProtocolProxy(datanode,
                   dfsClient.getConfiguration(),
                   dfsClient.getConf().socketTimeout,
                   dfsClient.getConf().connectToDnViaHostname, locatedblock);
+          saveClientDatanodeProtocol(datanode, cdp);
         
           if (dfsClient.getConfiguration().getBoolean(
               DFSConfigKeys.DFS_CLIENT_READBLOCKLENGTH_EXCEPTION, false)) {
@@ -368,9 +369,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
                     + " for block " + locatedblock.getBlock(), ioe);
           }
         } finally {
-          if (cdp != null) {
-            RPC.stopProxy(cdp);
-          }
+          releaseClientDatanodeProtocol(cdp);
         }
       }
 
@@ -677,6 +676,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     if (closed) {
       return;
     }
+    clearClientDatanodeProtocol();
     dfsClient.checkOpen();
 
     if (!extendedReadBuffers.isEmpty()) {
@@ -1819,15 +1819,17 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       int retries = 3;
       long lastBlockLength = 0;
       while (retries > 0) {
-        final LocatedBlocks newInfo = dfsClient.getLocatedBlocks(src, 0);
-        if (DFSClient.LOG.isDebugEnabled()) {
-          DFSClient.LOG.debug("newInfo = " + newInfo);
+        if (needRefreshLocatedBlocks()) {
+          final LocatedBlocks newInfo = dfsClient.getLocatedBlocks(src, 0);
+          if (DFSClient.LOG.isDebugEnabled()) {
+            DFSClient.LOG.debug("newInfo = " + newInfo);
+          }
+          if (newInfo == null) {
+            throw new IOException("Cannot open filename " + src);
+          }
+          locatedBlocks = newInfo;
+          setRefreshLocatedBlocks(false);
         }
-        if (newInfo == null) {
-          throw new IOException("Cannot open filename " + src);
-        }
-
-        locatedBlocks = newInfo;
 
         if (!locatedBlocks.isLastBlockComplete()) {
           final LocatedBlock last = locatedBlocks.getLastLocatedBlock();
@@ -1841,10 +1843,23 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
               --retries;
               continue;
             }
-            lastBlockLength = readBlockLength(last);
-            last.getBlock().setNumBytes(lastBlockLength);
+            try {
+              lastBlockLength = readBlockLength(last);
+              last.getBlock().setNumBytes(lastBlockLength);
+
+              if (lastBlockLength >= getBlockSize()) {
+                clearClientDatanodeProtocol();
+                setRefreshLocatedBlocks(true);
+              }
+            } catch (IOException e) {
+              clearClientDatanodeProtocol();
+              setRefreshLocatedBlocks(true);
+            }
+
             break;
           } else {
+            clearClientDatanodeProtocol();
+            setRefreshLocatedBlocks(true);
             lastBlockLength = 0;
             break;
           }
@@ -1867,7 +1882,35 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     } finally {
     } 
   }
-  
+
+  protected ClientDatanodeProtocol getClientDatanodeProtocol(DatanodeInfo datanodeInfo) {
+    return null;
+  }
+
+  protected void saveClientDatanodeProtocol(DatanodeInfo datanodeInfo, ClientDatanodeProtocol cdp) {
+  }
+
+  protected void releaseClientDatanodeProtocol(ClientDatanodeProtocol cdp) {
+    if (cdp != null) {
+      RPC.stopProxy(cdp);
+    }
+  }
+
+  protected void clearClientDatanodeProtocol()
+  {
+  }
+
+  protected boolean needRefreshLocatedBlocks() {
+    return true;
+  }
+
+  protected void setRefreshLocatedBlocks(boolean val) {
+  }
+
+  protected long getBlockSize() {
+    return 0;
+  }
+
   protected boolean isDFSStreamClosed() {
     return closed;
   }

@@ -99,6 +99,24 @@ public class TestDFSOutputStream {
     }
   }
 
+  /**
+   * hflush should always throw exception if connection is down.
+   */
+  @Test(expected=IOException.class)
+  public void testFlushException() throws IOException {
+    String testStr = "Test exception in flush";
+    DistributedFileSystem fs = cluster.getFileSystem();
+    Path testFile = new Path("/flushexception");
+    FSDataOutputStream os = fs.create(testFile);
+    DFSOutputStream dos =
+      (DFSOutputStream) Whitebox.getInternalState(os, "wrappedStream");
+    os.write(testStr.getBytes());
+
+    cluster.stopDataNode(0);
+    os.hflush();
+    cluster.restartDataNode(0);
+  }
+
   @AfterClass
   public static void tearDown() {
     cluster.shutdown();
