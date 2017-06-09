@@ -2223,6 +2223,10 @@ public class DFSOutputStream extends FSOutputSummer
           + " ms (threshold=" + dfsclientSlowLogThresholdMs + " ms)"
           + " pipeline: " + ((nodes == null) ? "[]" : Arrays.asList(nodes)));
     }
+    if (lastAckedSeqno < seqno) {
+      throw new IOException("Failed to flush data! lastAckedSeqno: "
+        +lastAckedSeqno + " seqno: " + seqno);
+    }
   }
 
   private synchronized void start() {
