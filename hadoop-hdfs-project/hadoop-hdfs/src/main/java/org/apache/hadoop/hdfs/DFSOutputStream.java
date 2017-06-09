@@ -2105,6 +2105,11 @@ public class DFSOutputStream extends FSOutputSummer
       checkClosed();
     } catch (ClosedChannelException e) {
     }
+
+    if (lastAckedSeqno < seqno) {
+      throw new IOException("Failed to flush data! lastAckedSeqno: "
+        +lastAckedSeqno + " seqno: " + seqno);
+    }
   }
 
   private synchronized void start() {

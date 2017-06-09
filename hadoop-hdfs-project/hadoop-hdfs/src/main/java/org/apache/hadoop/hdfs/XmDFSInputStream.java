@@ -20,9 +20,14 @@ package org.apache.hadoop.hdfs;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.TreeMap;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.UnresolvedLinkException;
+import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.util.Time;
 import org.mortbay.log.Log;
 
@@ -37,6 +42,15 @@ public class XmDFSInputStream extends DFSInputStream {
   private String srcFile;
   private DFSClient dfsClient;
   private long sleepBeforeRetry;
+  private boolean needRefreshLocatedBlocks = false;
+  private Map<DatanodeInfo, ClientDatanodeProtocol> cachedCDP;
+
+  // CacheStatus
+  private long requestRefreshLocatedBlocks = 0;
+  private long doRefreshLocatedBlocks = 0;
+  private long requestNewCDP = 0;
+  private long doNewCDP = 0;
+  private long blockSize = 0;
 
   XmDFSInputStream(DFSClient dfsClient, String src, int buffersize,
       boolean verifyChecksum) throws IOException, UnresolvedLinkException {
@@ -49,6 +63,12 @@ public class XmDFSInputStream extends DFSInputStream {
             .getLong(
                 DFSConfigKeys.DFS_CLIENT_XIAOMI_INPUT_SLEEP_BEFORE_RETRY_MS,
                 DFSConfigKeys.DFS_CLIENT_XIAOMI_INPUT_SLEEP_BEFORE_RETRY_MS_DEFAULT);
+    this.blockSize = dfsClient.getFileInfo(src).getBlockSize();
+  }
+
+  public String getCacheStatus(){
+    return "RefreshLocatedBlocks(" + requestRefreshLocatedBlocks + "," + doRefreshLocatedBlocks + ");" +
+           "NewCDP("+ requestNewCDP + "," + doNewCDP + ")";
   }
 
   @Override
@@ -185,5 +205,61 @@ public class XmDFSInputStream extends DFSInputStream {
     } catch(Throwable e) {
       throw new IOException("Error when seek file", e);
     }
+  }
+
+  @Override
+  protected ClientDatanodeProtocol getClientDatanodeProtocol(DatanodeInfo datanodeInfo)
+  {
+    ++requestNewCDP;
+    if (null != cachedCDP && cachedCDP.containsKey(datanodeInfo)) {
+      return cachedCDP.get(datanodeInfo);
+    }
+    ++doNewCDP;
+    return null;
+  }
+
+  @Override
+  protected void saveClientDatanodeProtocol(DatanodeInfo datanodeInfo, ClientDatanodeProtocol cdp)
+  {
+    if (null == cachedCDP) {
+      cachedCDP = new TreeMap<DatanodeInfo, ClientDatanodeProtocol> ();
+    }
+    cachedCDP.put(datanodeInfo, cdp);
+  }
+
+  @Override
+  protected void releaseClientDatanodeProtocol(ClientDatanodeProtocol cdp) {
+  }
+
+  @Override
+  protected void clearClientDatanodeProtocol()
+  {
+    if (null != cachedCDP) {
+      for (ClientDatanodeProtocol cdp : cachedCDP.values()) {
+        if (null != cdp) {
+          RPC.stopProxy(cdp);
+        }
+      }
+      cachedCDP.clear();
+    }
+  }
+
+  @Override
+  protected boolean needRefreshLocatedBlocks() {
+    ++requestRefreshLocatedBlocks;
+    if (needRefreshLocatedBlocks) {
+      ++doRefreshLocatedBlocks;
+    }
+    return needRefreshLocatedBlocks;
+  }
+
+  @Override
+  protected void setRefreshLocatedBlocks(boolean val) {
+    needRefreshLocatedBlocks = val;
+  }
+
+  @Override
+  protected long getBlockSize() {
+    return blockSize;
   }
 }
