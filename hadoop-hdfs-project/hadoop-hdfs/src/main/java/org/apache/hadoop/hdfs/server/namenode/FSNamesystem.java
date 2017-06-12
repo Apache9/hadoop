@@ -93,6 +93,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SUPPORT_APPEND_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SUPPORT_APPEND_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_DEFAULT;
 import static org.apache.hadoop.util.Time.now;
 
 import java.io.BufferedWriter;
@@ -299,6 +301,12 @@ import com.google.common.collect.Lists;
 public class FSNamesystem implements Namesystem, FSClusterStats,
     FSNamesystemMBean, NameNodeMXBean {
   public static final Log LOG = LogFactory.getLog(FSNamesystem.class);
+
+  private static final Path CURRENT = new Path("Current");
+  private static final Path TRASH = new Path(".Trash/");
+  private static final FsPermission PERMISSION =
+      new FsPermission(FsAction.ALL, FsAction.READ_EXECUTE, FsAction.EXECUTE);
+  public static boolean forceToTrash = false;
 
   private static final ThreadLocal<StringBuilder> auditBuffer =
     new ThreadLocal<StringBuilder>() {
@@ -533,6 +541,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private long logLockDurationThreshold;
   private long logLockMinInterval;
 
+  private TrashPathConfigMgr trashPathConfigMgr;
+
   /**
    * Set the last allocated inode id when fsimage or editlog is loaded. 
    */
@@ -698,6 +708,13 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       LOG.info("Enabling async auditlog");
       enableAsyncAuditLog();
     }
+
+    if (conf.getBoolean(DFS_NAMENODE_FORCE_TO_TRASH_KEY,
+        DFS_NAMENODE_FORCE_TO_TRASH_DEFAULT)) {
+      LOG.info("Enabling force to trash");
+      forceToTrash = true;
+    }
+
     boolean fair = conf.getBoolean("dfs.namenode.fslock.fair", true);
     LOG.info("fsLock is fair:" + fair);
     fsLock = new FSNamesystemLock(fair);
@@ -814,6 +831,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
           conf.getLong(DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC,
               DFS_NAMENODE_LOG_LOCK_MININTERVAL_SEC_DEFAULT);
       this.aclConfigFlag = new AclConfigFlag(conf);
+      trashPathConfigMgr = new TrashPathConfigMgr(conf);
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -3431,6 +3449,81 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
     dir.renameTo(src, dst, logRetryCache, options);
   }
+
+  boolean isInTrash (Path path) { return path.toUri().toString().contains(".Trash"); }
+
+  private boolean moveToTrash(String src, boolean recursive) throws AccessControlException, SafeModeException,
+      UnresolvedLinkException, IOException {
+    byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
+    // do the same check as deleting
+    writeLock();
+    try {
+      checkOperation(OperationCategory.WRITE);
+      checkNameNodeSafeMode("Cannot move to trash " + src);
+      src = FSDirectory.resolvePath(src, pathComponents, dir);
+      if (!recursive && dir.isNonEmptyDirectory(src)) {
+        throw new IOException(src + " is non empty");
+      }
+      if (isPermissionEnabled) {
+        checkPermission(getPermissionChecker(), src, false, null, FsAction.WRITE, null,
+            FsAction.ALL, false);
+      }
+    } finally {
+      writeUnlock();
+    }
+
+    Path path = new Path(src);
+
+
+    if (!dir.exists(path.toUri().toString())) {
+      LOG.warn("path doesn't exist " + path.toUri().toString());
+      return false;
+    }
+
+    if (isInTrash(path)) {
+      LOG.error("path already in trash" + path.toUri().toString());
+      return false;                               // already in trash
+    }
+
+    Path trashPath = new Path("/user/" + getRemoteUser().getShortUserName() + "/" + TRASH);
+    Path trashCurrentPath = new Path (trashPath, CURRENT);
+
+    Path baseTrashPath = Path.mergePaths(trashCurrentPath, path.getParent());
+    Path targetTrashPath = Path.mergePaths(trashCurrentPath, path);
+
+    IOException cause = null;
+
+    PermissionStatus permissionStatus = new PermissionStatus(getRemoteUser().getShortUserName(), supergroup, PERMISSION);
+    // try twice, in case checkpoint between the mkdirs() & rename()
+    for (int i = 0; i < 2; i++) {
+      try {
+        if (!mkdirs(baseTrashPath.toUri().toString(), permissionStatus, true)) {      // create current
+          LOG.warn("Can't create(mkdir) trash directory: "+baseTrashPath);
+          return false;
+        }
+      } catch (IOException e) {
+        LOG.warn("Can't create trash directory: "+baseTrashPath);
+        cause = e;
+        break;
+      }
+      try {
+        // if the target path in Trash already exists, then append with
+        // a current time in millisecs.
+        String orig = targetTrashPath.toUri().toString();
+
+        while(dir.exists(targetTrashPath.toUri().toString())) {
+          targetTrashPath = new Path(orig + Time.now());
+        }
+
+        if (renameTo(path.toUri().toString(), targetTrashPath.toUri().toString()))           // move to current trash
+          return true;
+      } catch (IOException e) {
+        cause = e;
+      }
+    }
+    throw (IOException)
+        new IOException("Failed to move to trash: "+path).initCause(cause);
+  }
   
   /**
    * Remove the indicated file from namespace.
@@ -3441,6 +3534,19 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   boolean delete(String src, boolean recursive)
       throws AccessControlException, SafeModeException,
       UnresolvedLinkException, IOException {
+
+    Path path = new Path(src);
+    if (forceToTrash || trashPathConfigMgr.needMoveToTrash(src)) {
+      if (!isInTrash(path)) {
+        return moveToTrash(src, recursive);
+      } else {
+        if (!superuser.equals(getRemoteUser().getShortUserName()) &&
+            !fsOwner.getShortUserName().equals(getRemoteUser().getShortUserName())) {
+          throw new IOException("Only super user could delete the trash file");
+        }
+      }
+    }
+
     CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);
     if (cacheEntry != null && cacheEntry.isSuccess()) {
       return true; // Return previous response
@@ -3498,6 +3604,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     checkOperation(OperationCategory.WRITE);
     byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
     boolean ret = false;
+
     writeLock();
     try {
       checkOperation(OperationCategory.WRITE);
@@ -6717,7 +6824,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   
   // optimize ugi lookup for RPC operations to avoid a trip through
   // UGI.getCurrentUser which is synch'ed
-  private static UserGroupInformation getRemoteUser() throws IOException {
+  public static UserGroupInformation getRemoteUser() throws IOException {
     return NameNode.getRemoteUser();
   }
   

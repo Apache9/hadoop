@@ -860,6 +860,13 @@ public class FSDirectory implements Closeable {
         new ArrayList<INodeDirectorySnapshottable>();
     if (dstInode != null) { // Destination exists
       // It's OK to rename a file to a symlink and vice versa
+      if (FSNamesystem.forceToTrash && overwrite) {
+        error = "rename to existing file or dir is not allowed. src: "
+            + src + " dst: " + dst;
+        NameNode.LOG.warn(error);
+        throw new FileAlreadyExistsException(error);
+      }
+
       if (dstInode.isDirectory() != srcInode.isDirectory()) {
         error = "Source " + src + " and destination " + dst
             + " must both be directories";

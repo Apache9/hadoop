@@ -366,6 +366,10 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final boolean DFS_NAMENODE_AUDIT_LOG_TOKEN_TRACKING_ID_DEFAULT = false;
   public static final String  DFS_NAMENODE_AUDIT_LOG_ASYNC_KEY = "dfs.namenode.audit.log.async";
   public static final boolean DFS_NAMENODE_AUDIT_LOG_ASYNC_DEFAULT = false;
+  public static final String  DFS_NAMENODE_FORCE_TO_TRASH_KEY = "dfs.namenode.forceToTrash";
+  public static final boolean DFS_NAMENODE_FORCE_TO_TRASH_DEFAULT = false;
+  public static final String  DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_KEY = "dfs.namenode.trashPathConfRefreshInterval";
+  public static final long DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_DEFAULT = 600000; //ms
 
   // Much code in hdfs is not yet updated to use these keys.
   public static final String  DFS_CLIENT_BLOCK_WRITE_LOCATEFOLLOWINGBLOCK_RETRIES_KEY = "dfs.client.block.write.locateFollowingBlock.retries";
