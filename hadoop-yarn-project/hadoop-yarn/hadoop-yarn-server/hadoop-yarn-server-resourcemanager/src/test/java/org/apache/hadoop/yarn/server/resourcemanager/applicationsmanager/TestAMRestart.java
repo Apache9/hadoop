@@ -81,22 +81,7 @@ public class TestAMRestart {
     nm2.registerNode();
 
     MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
-    int NUM_CONTAINERS = 3;
-    // allocate NUM_CONTAINERS containers
-    am1.allocate("127.0.0.1", 1024, NUM_CONTAINERS,
-      new ArrayList<ContainerId>());
-    nm1.nodeHeartbeat(true);
-
-    // wait for containers to be allocated.
-    List<Container> containers =
-        am1.allocate(new ArrayList<ResourceRequest>(),
-          new ArrayList<ContainerId>()).getAllocatedContainers();
-    while (containers.size() != NUM_CONTAINERS) {
-      nm1.nodeHeartbeat(true);
-      containers.addAll(am1.allocate(new ArrayList<ResourceRequest>(),
-        new ArrayList<ContainerId>()).getAllocatedContainers());
-      Thread.sleep(200);
-    }
+    allocateContainers(nm1, am1, 3);
 
     // launch the 2nd container, for testing running container transferred.
     nm1.nodeHeartbeat(am1.getApplicationAttemptId(), 2, ContainerState.RUNNING);
@@ -242,6 +227,29 @@ public class TestAMRestart {
         + newAttempt.getJustFinishedContainers());
     waitForContainersToFinish(5, newAttempt);
     rm1.stop();
+  }
+
+  public static List<Container> allocateContainers(MockNM nm1, MockAM am1,
+      int NUM_CONTAINERS) throws Exception {
+    // allocate NUM_CONTAINERS containers
+    am1.allocate("127.0.0.1", 1024, NUM_CONTAINERS,
+      new ArrayList<ContainerId>());
+    nm1.nodeHeartbeat(true);
+
+    // wait for containers to be allocated.
+    List<Container> containers =
+        am1.allocate(new ArrayList<ResourceRequest>(),
+          new ArrayList<ContainerId>()).getAllocatedContainers();
+    while (containers.size() != NUM_CONTAINERS) {
+      nm1.nodeHeartbeat(true);
+      containers.addAll(am1.allocate(new ArrayList<ResourceRequest>(),
+        new ArrayList<ContainerId>()).getAllocatedContainers());
+      Thread.sleep(200);
+    }
+
+    Assert.assertEquals("Did not get all containers allocated",
+        NUM_CONTAINERS, containers.size());
+    return containers;
   }
 
   private void waitForContainersToFinish(int expectedNum, RMAppAttempt attempt)
@@ -716,5 +724,112 @@ public class TestAMRestart {
     rm2.waitForState(app1.getApplicationId(), RMAppState.FAILED);
     rm1.stop();
     rm2.stop();
+  }
+
+  private boolean isContainerIdInContainerStatus(
+      List<ContainerStatus> containerStatuses, ContainerId containerId) {
+    for (ContainerStatus status : containerStatuses) {
+      if (status.getContainerId().equals(containerId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Test(timeout = 30000)
+  public void testAMRestartNotLostContainerCompleteMsg() throws Exception {
+    YarnConfiguration conf = new YarnConfiguration();
+    conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 2);
+
+    MockRM rm1 = new MockRM(conf);
+    rm1.start();
+    RMApp app1 =
+        rm1.submitApp(200, "name", "user",
+            new HashMap<ApplicationAccessType, String>(), false, "default", -1,
+            null, "MAPREDUCE", false, true);
+    MockNM nm1 =
+        new MockNM("127.0.0.1:1234", 10240, rm1.getResourceTrackerService());
+    nm1.registerNode();
+
+    MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
+    allocateContainers(nm1, am1, 1);
+
+    nm1.nodeHeartbeat(
+        am1.getApplicationAttemptId(), 2, ContainerState.RUNNING);
+    ContainerId containerId2 =
+        ContainerId.newContainerId(am1.getApplicationAttemptId(), 2);
+    rm1.waitForState(nm1, containerId2, RMContainerState.RUNNING);
+
+    // container complete
+    nm1.nodeHeartbeat(
+        am1.getApplicationAttemptId(), 2, ContainerState.COMPLETE);
+    rm1.waitForState(nm1, containerId2, RMContainerState.COMPLETED);
+
+    // make sure allocate() get complete container,
+    // before this msg pass to AM, AM may crash
+    while (true) {
+      AllocateResponse response = am1.allocate(
+          new ArrayList<ResourceRequest>(), new ArrayList<ContainerId>());
+      List<ContainerStatus> containerStatuses =
+          response.getCompletedContainersStatuses();
+      if (isContainerIdInContainerStatus(
+          containerStatuses, containerId2) == false) {
+        Thread.sleep(100);
+        continue;
+      }
+
+      // is containerId still in justFinishedContainer?
+      containerStatuses =
+          app1.getCurrentAppAttempt().getJustFinishedContainers();
+      if (isContainerIdInContainerStatus(containerStatuses,
+          containerId2)) {
+        Assert.fail();
+      }
+      break;
+    }
+
+    // fail the AM by sending CONTAINER_FINISHED event without registering.
+    nm1.nodeHeartbeat(
+        am1.getApplicationAttemptId(), 1, ContainerState.COMPLETE);
+    am1.waitForState(RMAppAttemptState.FAILED);
+
+    // wait for app to start a new attempt.
+    rm1.waitForState(app1.getApplicationId(), RMAppState.ACCEPTED);
+    // assert this is a new AM.
+    ApplicationAttemptId newAttemptId =
+        app1.getCurrentAppAttempt().getAppAttemptId();
+    Assert.assertFalse(newAttemptId.equals(am1.getApplicationAttemptId()));
+
+    // launch the new AM
+    RMAppAttempt attempt2 = app1.getCurrentAppAttempt();
+    nm1.nodeHeartbeat(true);
+    MockAM am2 = rm1.sendAMLaunched(attempt2.getAppAttemptId());
+    am2.registerAppAttempt();
+    rm1.waitForState(app1.getApplicationId(), RMAppState.RUNNING);
+
+    // whether new AM could get container complete msg
+    AllocateResponse allocateResponse = am2.allocate(
+        new ArrayList<ResourceRequest>(), new ArrayList<ContainerId>());
+    List<ContainerStatus> containerStatuses =
+        allocateResponse.getCompletedContainersStatuses();
+    if (isContainerIdInContainerStatus(containerStatuses,
+        containerId2) == false) {
+      Assert.fail();
+    }
+    containerStatuses = attempt2.getJustFinishedContainers();
+    if (isContainerIdInContainerStatus(containerStatuses, containerId2)) {
+      Assert.fail();
+    }
+
+    // the second allocate should not get container complete msg
+    allocateResponse = am2.allocate(
+        new ArrayList<ResourceRequest>(), new ArrayList<ContainerId>());
+    containerStatuses =
+        allocateResponse.getCompletedContainersStatuses();
+    if (isContainerIdInContainerStatus(containerStatuses, containerId2)) {
+      Assert.fail();
+    }
+
+    rm1.stop();
   }
 }
