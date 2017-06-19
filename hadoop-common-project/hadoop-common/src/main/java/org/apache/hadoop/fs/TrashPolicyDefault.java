@@ -22,12 +22,17 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKP
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.FileInputStream;
+import java.io.BufferedReader;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -55,7 +60,9 @@ public class TrashPolicyDefault extends TrashPolicy {
     LogFactory.getLog(TrashPolicyDefault.class);
 
   private static final Path CURRENT = new Path("Current");
-  private static final Path TRASH = new Path(".Trash/");  
+  private static final Path TRASH = new Path(".Trash/");
+
+  private static final String TRASH_CONF_FILE = "TrashTTL.conf";
 
   private static final FsPermission PERMISSION =
     new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE);
@@ -65,7 +72,6 @@ public class TrashPolicyDefault extends TrashPolicy {
   private static final DateFormat OLD_CHECKPOINT =
       new SimpleDateFormat("yyMMddHHmm");
   private static final int MSECS_PER_MINUTE = 60*1000;
-
   private Path current;
   private Path homesParent;
   private long emptierInterval;
@@ -191,38 +197,7 @@ public class TrashPolicyDefault extends TrashPolicy {
 
   @Override
   public void deleteCheckpoint() throws IOException {
-    FileStatus[] dirs = null;
-    
-    try {
-      dirs = fs.listStatus(trash);            // scan trash sub-directories
-    } catch (FileNotFoundException fnfe) {
-      return;
-    }
-
-    long now = Time.now();
-    for (int i = 0; i < dirs.length; i++) {
-      Path path = dirs[i].getPath();
-      String dir = path.toUri().getPath();
-      String name = path.getName();
-      if (name.equals(CURRENT.getName()))         // skip current
-        continue;
-
-      long time;
-      try {
-        time = getTimeFromCheckpoint(name);
-      } catch (ParseException e) {
-        LOG.warn("Unexpected item in trash: "+dir+". Ignoring.");
-        continue;
-      }
-
-      if ((now - deletionInterval) > time) {
-        if (fs.delete(path, true)) {
-          LOG.info("Deleted trash checkpoint: "+dir);
-        } else {
-          LOG.warn("Couldn't delete checkpoint: "+dir+" Ignoring.");
-        }
-      }
-    }
+    deleteCheckpointInternal(deletionInterval);
   }
 
   @Override
@@ -239,6 +214,7 @@ public class TrashPolicyDefault extends TrashPolicy {
 
     private Configuration conf;
     private long emptierInterval;
+    private HashMap <String, Long> trashTTLConfig = null;
 
     Emptier(Configuration conf, long emptierInterval) throws IOException {
       this.conf = conf;
@@ -251,6 +227,65 @@ public class TrashPolicyDefault extends TrashPolicy {
                  " minutes that is used for deletion instead");
         this.emptierInterval = deletionInterval;
       }
+    }
+
+    private void loadTrashConf() {
+
+      // check if the rack config file is updated and OK
+      File trashConfFile = new File(TRASH_CONF_FILE);
+      if (!trashConfFile.exists()) {
+        LOG.warn("the trash config file doesn't exist: " + trashConfFile);
+        return;
+      }
+
+      HashMap <String, Long> tempConfig = new HashMap<String, Long>();
+
+      BufferedReader br = null;
+      try {
+        br = new BufferedReader(new InputStreamReader(new FileInputStream(trashConfFile)));
+        String line = null;
+        while ((line = br.readLine()) != null) {
+          String[] columns = line.split(",");
+          if (columns == null || columns.length != 2) {
+            continue;
+          }
+          String user = columns[0];
+          try {
+            Long interval = Long.parseLong(columns[1]) * MSECS_PER_MINUTE;
+            tempConfig.put(user, interval);
+          } catch (Throwable e) {
+            LOG.error("error to parse trash config: " + line + " " + e);
+          }
+        }
+      } catch (Exception e) {
+        LOG.error("failed to load trash config " + e);
+      } finally {
+        if (br != null) {
+          try {
+            br.close();
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
+      }
+
+      trashTTLConfig = tempConfig;
+      return;
+
+    }
+
+    private String getUserFromHome (FileStatus home) {
+      String homePath = home.getPath().toUri().toString();
+      String[] pathNodes = homePath.substring(homePath.indexOf("/user")).split("/");
+      if (pathNodes == null || pathNodes.length < 3) {
+        return null;
+      }
+      if (!pathNodes[1].equalsIgnoreCase("user")) {
+        return null;
+      }
+
+      LOG.info("get user " + pathNodes[2]);
+      return pathNodes[2];
     }
 
     @Override
@@ -279,13 +314,23 @@ public class TrashPolicyDefault extends TrashPolicy {
               continue;
             }
 
+            loadTrashConf();
+
             for (FileStatus home : homes) {         // dump each trash
               if (!home.isDirectory())
                 continue;
               try {
                 TrashPolicyDefault trash = new TrashPolicyDefault(
                     fs, home.getPath(), conf);
-                trash.deleteCheckpoint();
+                long userSpecifiedDeletionInterval = deletionInterval;
+                String user = getUserFromHome(home);
+                if (trashTTLConfig != null && user != null && trashTTLConfig.containsKey(user)) {
+                  userSpecifiedDeletionInterval = trashTTLConfig.get(user);
+                  if (userSpecifiedDeletionInterval <= 0) {
+                    userSpecifiedDeletionInterval = deletionInterval;
+                  }
+                }
+                trash.deleteCheckpoint(userSpecifiedDeletionInterval);
                 trash.createCheckpoint();
               } catch (IOException e) {
                 LOG.warn("Trash caught: "+e+". Skipping "+home.getPath()+".");
@@ -327,5 +372,47 @@ public class TrashPolicyDefault extends TrashPolicy {
     }
 
     return time;
+  }
+
+  /**
+   * Delete old trash checkpoint(s) with user-specified deletion interval.
+   */
+  public void deleteCheckpoint(long userDeletionInterval) throws IOException {
+    deleteCheckpointInternal(userDeletionInterval);
+  }
+
+  private void deleteCheckpointInternal(long userDeletionInterval) throws IOException {
+    FileStatus[] dirs = null;
+
+    try {
+      dirs = fs.listStatus(trash);            // scan trash sub-directories
+    } catch (FileNotFoundException fnfe) {
+      return;
+    }
+
+    long now = Time.now();
+    for (int i = 0; i < dirs.length; i++) {
+      Path path = dirs[i].getPath();
+      String dir = path.toUri().getPath();
+      String name = path.getName();
+      if (name.equals(CURRENT.getName()))         // skip current
+        continue;
+
+      long time;
+      try {
+        time = getTimeFromCheckpoint(name);
+      } catch (ParseException e) {
+        LOG.warn("Unexpected item in trash: "+dir+". Ignoring.");
+        continue;
+      }
+
+      if ((now - userDeletionInterval) > time) {
+        if (fs.delete(path, true)) {
+          LOG.info("Deleted trash checkpoint: "+dir);
+        } else {
+          LOG.warn("Couldn't delete checkpoint: "+dir+" Ignoring.");
+        }
+      }
+    }
   }
 }

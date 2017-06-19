@@ -93,4 +93,11 @@ public abstract class TrashPolicy extends Configured {
     trash.initialize(conf, fs, home); // initialize TrashPolicy
     return trash;
   }
+
+  /**
+   * Delete old trash checkpoint(s) with user-specified deletion interval.
+   */
+  public void deleteCheckpoint(long userDeletionInterval) throws IOException {
+    throw new IOException("not supported");
+  }
 }
