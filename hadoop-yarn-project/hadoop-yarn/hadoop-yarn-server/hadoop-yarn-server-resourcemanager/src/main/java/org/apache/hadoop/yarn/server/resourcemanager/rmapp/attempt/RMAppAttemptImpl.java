@@ -27,6 +27,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -135,14 +137,12 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
   private SecretKey clientTokenMasterKey = null;
 
   private ConcurrentMap<NodeId, List<ContainerStatus>>
-      justFinishedContainers =
-      new ConcurrentHashMap<NodeId, List<ContainerStatus>>();
+      justFinishedContainers = new ConcurrentHashMap<>();
   // Tracks the previous finished containers that are waiting to be
   // verified as received by the AM. If the AM sends the next allocate
   // request it implicitly acks this list.
   private ConcurrentMap<NodeId, List<ContainerStatus>>
-      finishedContainersSentToAM =
-      new ConcurrentHashMap<NodeId, List<ContainerStatus>>();
+      finishedContainersSentToAM = new ConcurrentHashMap<>();
   private Container masterContainer;
 
   private float progress = 0;
@@ -649,7 +649,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
   public List<ContainerStatus> getJustFinishedContainers() {
     this.readLock.lock();
     try {
-      List<ContainerStatus> returnList = new ArrayList<ContainerStatus>();
+      List<ContainerStatus> returnList = new ArrayList<>();
       for (Collection<ContainerStatus> containerStatusList :
           justFinishedContainers.values()) {
         returnList.addAll(containerStatusList);
@@ -688,7 +688,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     this.writeLock.lock();
 
     try {
-      List<ContainerStatus> returnList = new ArrayList<ContainerStatus>();
+      List<ContainerStatus> returnList = new ArrayList<>();
 
       // A new allocate means the AM received the previously sent
       // finishedContainers. We can ack this to NM now
@@ -696,15 +696,17 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
 
       // Mark every containerStatus as being sent to AM though we may return
       // only the ones that belong to the current attempt
-      boolean keepContainersAcressAttempts = this.submissionContext
+      boolean keepContainersAcrossAppAttempts = this.submissionContext
           .getKeepContainersAcrossApplicationAttempts();
-      for (NodeId nodeId:justFinishedContainers.keySet()) {
+      for (Map.Entry<NodeId, List<ContainerStatus>> entry :
+          justFinishedContainers.entrySet()) {
+        NodeId nodeId = entry.getKey();
+        List<ContainerStatus> finishedContainers = entry.getValue();
+        if (finishedContainers.isEmpty()) {
+          continue;
+        }
 
-        // Clear and get current values
-        List<ContainerStatus> finishedContainers = justFinishedContainers.put
-            (nodeId, new ArrayList<ContainerStatus>());
-
-        if (keepContainersAcressAttempts) {
+        if (keepContainersAcrossAppAttempts) {
           returnList.addAll(finishedContainers);
         } else {
           // Filter out containers from previous attempt
@@ -716,12 +718,10 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
           }
         }
 
-        if (!finishedContainers.isEmpty()) {
-          finishedContainersSentToAM.putIfAbsent(nodeId,
-              new ArrayList<ContainerStatus>());
-          finishedContainersSentToAM.get(nodeId).addAll(finishedContainers);
-        }
+        finishedContainersSentToAM.putIfAbsent(nodeId, new ArrayList<ContainerStatus>());
+        finishedContainersSentToAM.get(nodeId).addAll(finishedContainers);
       }
+      justFinishedContainers.clear();
 
       return returnList;
     } finally {
@@ -833,8 +833,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
       for (NodeId nodeId : this.finishedContainersSentToAM.keySet()) {
         List<ContainerStatus> containerStatuses =
             this.finishedContainersSentToAM.get(nodeId);
-        this.justFinishedContainers.putIfAbsent(nodeId,
-            new ArrayList<ContainerStatus>());
+        this.justFinishedContainers.putIfAbsent(nodeId, new ArrayList<ContainerStatus>());
         this.justFinishedContainers.get(nodeId).addAll(containerStatuses);
       }
       this.finishedContainersSentToAM.clear();
@@ -1672,10 +1671,9 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
 
       // Clear and get current values
       List<ContainerStatus> currentSentContainers =
-          finishedContainersSentToAM.put(nodeId,
-            new ArrayList<ContainerStatus>());
+          finishedContainersSentToAM.put(nodeId, new ArrayList<ContainerStatus>());
       List<ContainerId> containerIdList =
-          new ArrayList<ContainerId>(currentSentContainers.size());
+          new ArrayList<>(currentSentContainers.size());
       for (ContainerStatus containerStatus : currentSentContainers) {
         containerIdList.add(containerStatus.getContainerId());
       }
@@ -1692,7 +1690,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     NodeId nodeId = containerFinishedEvent.getNodeId();
     if (!appAttempt.getSubmissionContext()
         .getKeepContainersAcrossApplicationAttempts()) {
-      finishedContainersSentToAM.putIfAbsent(nodeId,
+      appAttempt.finishedContainersSentToAM.putIfAbsent(nodeId,
           new ArrayList<ContainerStatus>());
       appAttempt.finishedContainersSentToAM.get(nodeId).add(
           containerFinishedEvent.getContainerStatus());
