@@ -52,6 +52,7 @@ import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NodeType;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
 import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.DataStorage;
 import org.apache.hadoop.hdfs.server.datanode.TestTransferRbw;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
@@ -922,35 +923,55 @@ public class DFSTestUtil {
 
   public static DatanodeStorageInfo createDatanodeStorageInfo(
       String storageID, String ip) {
-    return createDatanodeStorageInfo(storageID, ip, "defaultRack");
+    return createDatanodeStorageInfo(storageID, ip, "defaultRack", 1).get(0);
   }
-  public static DatanodeStorageInfo[] createDatanodeStorageInfos(String[] racks) {
+
+  public static DatanodeStorageInfo[] createDatanodeStorageInfos(
+      String[] racks) {
     return createDatanodeStorageInfos(racks.length, racks);
   }
-  public static DatanodeStorageInfo[] createDatanodeStorageInfos(int n, String... racks) {
-    DatanodeStorageInfo[] storages = new DatanodeStorageInfo[n];
-    for(int i = storages.length; i > 0; ) {
+
+  public static DatanodeStorageInfo[] createDatanodeStorageInfos(String[] racks,
+      int storageNumPerNode) {
+    return createDatanodeStorageInfos(racks.length, storageNumPerNode, racks);
+  }
+
+  public static DatanodeStorageInfo[] createDatanodeStorageInfos(int n,
+      String... racks) {
+    return createDatanodeStorageInfos(n, 1, racks);
+  }
+
+  public static DatanodeStorageInfo[] createDatanodeStorageInfos(int n,
+      int storageNumPerNode, String... racks) {
+    ArrayList<DatanodeStorageInfo> storages = new ArrayList<DatanodeStorageInfo>();
+    for (int i = n; i > 0;) {
       final String storageID = "s" + i;
       final String ip = i + "." + i + "." + i + "." + i;
       i--;
-      final String rack = i < racks.length? racks[i]: "defaultRack";
-      storages[i] = createDatanodeStorageInfo(storageID, ip, rack);
+      final String rack = i < racks.length ? racks[i] : "defaultRack";
+      storages.addAll(0, createDatanodeStorageInfo(storageID, ip, rack, storageNumPerNode));
     }
-    return storages;
+    return storages.toArray(new DatanodeStorageInfo[storages.size()]);
   }
-  public static DatanodeStorageInfo createDatanodeStorageInfo(
-      String storageID, String ip, String rack) {
-    final DatanodeStorage storage = new DatanodeStorage(storageID);
-    final DatanodeDescriptor dn = BlockManagerTestUtil.getDatanodeDescriptor(ip, rack, storage);
-    return BlockManagerTestUtil.newDatanodeStorageInfo(dn, storage);
+
+  public static ArrayList<DatanodeStorageInfo> createDatanodeStorageInfo(
+      String storageID, String ip, String rack, int storageNumPerNode) {
+    final DatanodeDescriptor dn = BlockManagerTestUtil.getDatanodeDescriptor(ip, rack, false);
+    ArrayList<DatanodeStorageInfo> res = new ArrayList<DatanodeStorageInfo>();
+    for (int i = 0; i < storageNumPerNode; i++) {
+      DatanodeStorage storage = new DatanodeStorage(storageID + "-" + i);
+      BlockManagerTestUtil.updateStorage(dn, storage);
+      res.add(BlockManagerTestUtil.newDatanodeStorageInfo(dn, storage));
+    }
+    return res;
   }
   public static DatanodeDescriptor[] toDatanodeDescriptor(
       DatanodeStorageInfo[] storages) {
-    DatanodeDescriptor[] datanodes = new DatanodeDescriptor[storages.length];
-    for(int i = 0; i < datanodes.length; i++) {
-      datanodes[i] = storages[i].getDatanodeDescriptor();
+    Set<DatanodeDescriptor> datanodeSets = new LinkedHashSet<DatanodeDescriptor>();
+    for(int i = 0; i < storages.length; i++) {
+      datanodeSets.add(storages[i].getDatanodeDescriptor());
     }
-    return datanodes;
+    return datanodeSets.toArray(new DatanodeDescriptor[datanodeSets.size()]);
   }
 
   public static DatanodeDescriptor getDatanodeDescriptor(String ipAddr,

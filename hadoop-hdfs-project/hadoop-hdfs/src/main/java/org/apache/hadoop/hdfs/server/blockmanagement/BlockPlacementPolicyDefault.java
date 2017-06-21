@@ -643,8 +643,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   }
 
   private static void logNodeIsNotChosen(DatanodeStorageInfo storage, String reason) {
+    final DatanodeDescriptor node = storage.getDatanodeDescriptor();
     if (LOG.isDebugEnabled()) {
-      final DatanodeDescriptor node = storage.getDatanodeDescriptor();
       // build the error message for later use.
       debugLoggingBuilder.get()
           .append(node).append(": ")
@@ -652,6 +652,10 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
           .append("at node ").append(NodeBase.getPath(node))
           .append(" is not chosen because ")
           .append(reason);
+    }
+    // for trouble shooting convenience
+    if (new Random().nextInt(1000) == 0) {
+      LOG.info(NodeBase.getPath(node) + " is not chosen because " + reason);
     }
   }
 
@@ -735,8 +739,13 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       scheduledBlocks = maxScheduled;
     }
     final long scheduledSize = blockSize * scheduledBlocks;
-    if (requiredSize > storage.getRemaining() - scheduledSize) {
-      logNodeIsNotChosen(storage, "the node does not have enough space ");
+    final long remaining = node.getRemaining(storage.getStorageType());
+    if (requiredSize > remaining - scheduledSize) {
+      logNodeIsNotChosen(storage, "the node does not have enough "
+              + storage.getStorageType() + " space"
+              + " (required=" + requiredSize
+              + ", scheduled=" + scheduledSize
+              + ", remaining=" + remaining + ")");
       stats.incrOverScheduled();
       return false;
     }

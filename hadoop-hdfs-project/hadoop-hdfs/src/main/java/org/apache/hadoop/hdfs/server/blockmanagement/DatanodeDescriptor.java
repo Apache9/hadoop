@@ -35,6 +35,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.hdfs.StorageType;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -562,6 +563,19 @@ public class DatanodeDescriptor extends DatanodeInfo {
           invalidateBlocks.size(), maxblocks)]);
       return deleteList.length == 0 ? null : deleteList;
     }
+  }
+
+  /**
+   * @return Approximate number of blocks currently scheduled to be written
+   */
+  public long getRemaining(StorageType t) {
+    long remaining = 0;
+    for(DatanodeStorageInfo s : getStorageInfos()) {
+      if (s.getStorageType() == t) {
+        remaining += s.getRemaining();
+      }
+    }
+    return remaining;
   }
 
   /**
