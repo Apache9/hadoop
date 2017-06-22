@@ -363,6 +363,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
       org.apache.hadoop.yarn.api.records.ContainerStatus containerStatus =
           container.cloneAndGetContainerStatus();
       containerStatuses.add(containerStatus);
+      if (containerStatus.getDiagnostics().length() > 1000) {
+        LOG.info("Large container status: " + containerStatus);
+      }
       if (containerStatus.getState() == ContainerState.COMPLETE) {
         if (isApplicationStopped(applicationId)) {
           if (LOG.isDebugEnabled()) {

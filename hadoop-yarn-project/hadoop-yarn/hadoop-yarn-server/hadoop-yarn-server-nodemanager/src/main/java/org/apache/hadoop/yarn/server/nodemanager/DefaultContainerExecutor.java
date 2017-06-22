@@ -244,7 +244,7 @@ public class DefaultContainerExecutor extends ContainerExecutor {
         String diagnostics = builder.toString();
         logOutput(diagnostics);
         container.handle(new ContainerDiagnosticsUpdateEvent(containerId,
-            diagnostics));
+            "container-launch with exit code: " + exitCode));
       } else {
         container.handle(new ContainerDiagnosticsUpdateEvent(containerId,
             "Container killed on request. Exit code is " + exitCode));
