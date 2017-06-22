@@ -1330,14 +1330,18 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
     // rerun previously successful map tasks
     List<TaskAttemptId> taskAttemptIdList = nodesToSucceededTaskAttempts.get(nodeId);
     if(taskAttemptIdList != null) {
-      String mesg = "TaskAttempt killed because it ran on unusable node "
-          + nodeId;
-      for(TaskAttemptId id : taskAttemptIdList) {
-        if(TaskType.MAP == id.getTaskId().getTaskType()) {
-          // reschedule only map tasks because their outputs maybe unusable
-          LOG.info(mesg + ". AttemptId:" + id);
-          eventHandler.handle(new TaskAttemptKillEvent(id, mesg));
+      if (conf.getBoolean("hadoop.mapreduce.kill.unusable.node.tasks", true)) {
+        String mesg = "TaskAttempt killed because it ran on unusable node "
+            + nodeId;
+        for(TaskAttemptId id : taskAttemptIdList) {
+          if(TaskType.MAP == id.getTaskId().getTaskType()) {
+            // reschedule only map tasks because their outputs maybe unusable
+            LOG.info(mesg + ". AttemptId:" + id);
+            eventHandler.handle(new TaskAttemptKillEvent(id, mesg));
+          }
         }
+      } else {
+        LOG.info("Skiping killing succeeded taskAttempts which run on the unusable node: " + nodeId);
       }
     }
     // currently running task attempts on unusable nodes are handled in

@@ -853,12 +853,17 @@ public class RMContainerAllocator extends RMContainerRequestor
           TaskAttemptId tid = entry.getKey();
           NodeId taskAttemptNodeId = entry.getValue().getNodeId();
           if (unusableNodes.contains(taskAttemptNodeId)) {
-            LOG.info("Killing taskAttempt:" + tid
-                + " because it is running on unusable node:"
-                + taskAttemptNodeId);
-            eventHandler.handle(new TaskAttemptKillEvent(tid,
-                "TaskAttempt killed because it ran on unusable node"
-                    + taskAttemptNodeId));
+            if (getConfig().getBoolean("hadoop.mapreduce.kill.unusable.node.tasks", true)) {
+              LOG.info("Killing taskAttempt:" + tid
+                  + " because it is running on unusable node:"
+                  + taskAttemptNodeId);
+              eventHandler.handle(new TaskAttemptKillEvent(tid,
+                  "TaskAttempt killed because it ran on unusable node"
+                      + taskAttemptNodeId));
+            } else {
+              LOG.info("Skiping killing taskAttempt:" + tid +
+                  " which is running on the unusable node: " + taskAttemptNodeId);
+            }
           }
         }
       }
