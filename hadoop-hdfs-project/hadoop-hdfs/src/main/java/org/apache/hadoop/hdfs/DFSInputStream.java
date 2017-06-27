@@ -368,6 +368,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
                 "Failed to getReplicaVisibleLength from datanode " + datanode
                     + " for block " + locatedblock.getBlock(), ioe);
           }
+          clearClientDatanodeProtocol();
         } finally {
           releaseClientDatanodeProtocol(cdp);
         }
