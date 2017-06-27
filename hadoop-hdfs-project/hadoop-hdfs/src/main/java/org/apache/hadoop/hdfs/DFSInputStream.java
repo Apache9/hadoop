@@ -350,6 +350,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           DFSClient.LOG.debug("Failed to getReplicaVisibleLength from datanode "
               + datanode + " for block " + locatedblock.getBlock(), ioe);
         }
+        clearClientDatanodeProtocol();
       } finally {
         releaseClientDatanodeProtocol(cdp);
       }
