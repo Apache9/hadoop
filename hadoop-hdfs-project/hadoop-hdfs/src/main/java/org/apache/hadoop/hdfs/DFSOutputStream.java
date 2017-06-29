@@ -97,6 +97,7 @@ import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
+import org.apache.htrace.Trace;
 
 
 /****************************************************************
@@ -804,19 +805,6 @@ public class DFSOutputStream extends FSOutputSummer
           try {
             // read an ack from the pipeline
             ack.readFields(blockReplyStream);
-            if (ack.getSeqno() != Packet.HEART_BEAT_SEQNO) {
-              Long begin = packetSendTime.get(ack.getSeqno());
-              if (begin != null) {
-                long duration = Time.monotonicNow() - begin;
-                HdfsPerfCounter.count("sendPacket", 1, duration);
-                if (duration > dfsClient.getConf().slowLogThresholdMs) {
-                  DFSClient.LOG.info("Slow ReadProcessor read fields for block " + block
-                      + " took " + duration + "ms (threshold="
-                      + dfsClient.getConf().slowLogThresholdMs + "ms); ack: " + ack
-                      + ", targets: " + Arrays.asList(targets));
-                }
-              }
-            }
 
             if (DFSClient.LOG.isDebugEnabled()) {
               DFSClient.LOG.debug("DFSClient " + ack);
@@ -864,6 +852,19 @@ public class DFSOutputStream extends FSOutputSummer
                                     one.seqno + " but received " + seqno);
             }
             isLastPacketInBlock = one.lastPacketInBlock;
+
+            Long begin = packetSendTime.get(ack.getSeqno());
+            if (begin != null) {
+              long duration = Time.monotonicNow() - begin;
+              HdfsPerfCounter.count("sendPacket", 1, duration);
+              if (duration > dfsClient.getConf().slowLogThresholdMs) {
+                DFSClient.LOG.info("Slow sendPacket for block " + block
+                    + " " + one
+                    + " took " + duration + "ms (threshold="
+                    + dfsClient.getConf().slowLogThresholdMs + "ms); ack: " + ack
+                    + ", targets: " + Arrays.asList(targets));
+              }
+            }
 
             // Fail the packet write for testing in order to force a
             // pipeline recovery.
@@ -2026,6 +2027,9 @@ public class DFSOutputStream extends FSOutputSummer
       }
       throw e;
     }
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("HDFS: flush done. block offset=" + lastFlushOffset + " src=" + src);
+    }
   }
 
   /**
@@ -2269,6 +2273,9 @@ public class DFSOutputStream extends FSOutputSummer
     } catch (ClosedChannelException e) {
     } finally {
       closed = true;
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("HDFS: closed file: " + src);
+      }
     }
   }
 

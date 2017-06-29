@@ -75,6 +75,7 @@ import org.apache.hadoop.util.IdentityHashStore;
 import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.htrace.Trace;
 
 /****************************************************************
  * DFSInputStream provides bytes from a named file.  It handles 
@@ -678,6 +679,10 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
               setUserGroupInformation(dfsClient.ugi).
               setConfiguration(dfsClient.getConfiguration()).
               build();
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("HDFS: created Reader, chosenNode=" + chosenNode +
+              " blockID=" + blk.getBlockId());
+          }
           if(connectFailedOnce) {
             DFSClient.LOG.info("Successfully connected to " + targetAddr +
                                " for " + blk);
@@ -856,6 +861,10 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           if (cost > dfsClient.getConf().slowLogThresholdMs) {
             DFSClient.LOG.info("Slow readBuffer. Cost: " + cost + " ms from "
                 + currentNode);
+          }
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("HDFS: read done, offset=" + off +
+              " length=" + len + " read length=" + nread);
           }
           return nread;
         } catch ( ChecksumException ce ) {
@@ -1173,10 +1182,17 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             setUserGroupInformation(dfsClient.ugi).
             setConfiguration(dfsClient.getConfiguration()).
             build();
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("HDFS: created Reader, chosenNode=" + chosenNode +
+                                      " blockID=" + block.getBlock().getBlockId());
+        }
         long startTS = Time.monotonicNow();
         int nread = reader.readAll(buf, offset, len);
         updateReadStatistics(readStatistics, nread, reader);
-
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("HDFS: read done, offset=" + offset +
+            " length=" + nread + " read length=" + nread);
+        }
         if (nread != len) {
           throw new IOException("truncated return from reader.read(): " +
                                 "excpected " + len + ", got " + nread);

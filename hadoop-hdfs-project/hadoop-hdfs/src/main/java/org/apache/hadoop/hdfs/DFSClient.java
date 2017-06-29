@@ -193,6 +193,7 @@ import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DataChecksum.Type;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
+import org.apache.htrace.Trace;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -1511,6 +1512,9 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
         src, masked, flag, createParent, replication, blockSize, progress,
         buffersize, dfsClientConf.createChecksum(checksumOpt), favoredNodeStrs);
     beginFileLease(result.getFileId(), result);
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("HDFS: created file: " + src);
+    }
     return result;
   }
   

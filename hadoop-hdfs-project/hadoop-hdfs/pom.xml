@@ -186,6 +186,10 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
       <artifactId>netty</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.htrace</groupId>
+      <artifactId>htrace-core</artifactId>
+    </dependency>
 	<dependency>
 	  <groupId>com.xiaomi.common.perfcounter</groupId>
 	  <artifactId>xiaomi-common-perfcounter</artifactId>

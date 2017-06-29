@@ -36,6 +36,7 @@ import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.apache.htrace.Trace;
 
 /**
  * BlockReaderLocal enables local short circuited reads. If the DFS client is on
@@ -448,6 +449,11 @@ class BlockReaderLocal implements BlockReader {
     if (LOG.isTraceEnabled()) {
       LOG.trace("loaded " + dataBuf.remaining() + " bytes into bounce " +
           "buffer from offset " + oldDataPos + " of " + block);
+    }
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("HDFS: fill data buffer done, loaded " +
+          dataBuf.remaining() + " bytes into buffer from offset " +
+          oldDataPos + " of block " + block.getBlockId());
     }
     return dataBuf.limit() != maxReadaheadLength;
   }
