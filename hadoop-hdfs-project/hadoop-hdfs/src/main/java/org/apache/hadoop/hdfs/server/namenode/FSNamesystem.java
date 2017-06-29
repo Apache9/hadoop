@@ -3452,6 +3452,43 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
   boolean isInTrash (Path path) { return path.toUri().toString().contains(".Trash"); }
 
+  private String mkdirForTrash (String src, PermissionStatus permissions) throws IOException, UnresolvedLinkException {
+    src = FSDirectory.normalizePath(src);
+    String[] names = INode.getPathNames(src);
+    byte[][] components = INode.getPathComponents(names);
+    StringBuilder pathbuilder = null;
+
+    dir.writeLock();
+    try {
+      INodesInPath iip = dir.getExistingPathINodes(components);
+
+      INode[] inodes = iip.getINodes();
+
+      pathbuilder = new StringBuilder();
+
+      for (int i = 1; i < names.length; i++) {
+        if (i < inodes.length && inodes[i] != null && inodes[i].isFile()) {
+          // if there is file with the same as the dir in the path,
+          // we append the TS to the dir to avoid conflicting.
+          pathbuilder.append(Path.SEPARATOR).append(names[i]+Time.now());
+        } else {
+          pathbuilder.append(Path.SEPARATOR).append(names[i]);
+        }
+      }
+
+    } finally {
+      dir.writeUnlock();
+    }
+    String trashPath = pathbuilder.toString();
+    boolean result = mkdirs(trashPath, permissions, true);
+
+    if (!result) {
+      return null;
+    }
+
+    return trashPath;
+  }
+
   private boolean moveToTrash(String src, boolean recursive) throws AccessControlException, SafeModeException,
       UnresolvedLinkException, IOException {
     byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
@@ -3496,16 +3533,22 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     PermissionStatus permissionStatus = new PermissionStatus(getRemoteUser().getShortUserName(), supergroup, PERMISSION);
     // try twice, in case checkpoint between the mkdirs() & rename()
     for (int i = 0; i < 2; i++) {
+      String newBaseTrashPath = null;
       try {
-        if (!mkdirs(baseTrashPath.toUri().toString(), permissionStatus, true)) {      // create current
+        if ((newBaseTrashPath = mkdirForTrash(baseTrashPath.toUri().toString(), permissionStatus)) == null) {      // create current
           LOG.warn("Can't create(mkdir) trash directory: "+baseTrashPath);
           return false;
         }
       } catch (IOException e) {
-        LOG.warn("Can't create trash directory: "+baseTrashPath);
+        LOG.warn("Can't create trash directory: " + baseTrashPath);
         cause = e;
         break;
       }
+
+      if (!baseTrashPath.equals(newBaseTrashPath)) {
+        targetTrashPath = new Path(newBaseTrashPath, path.getName());
+      }
+
       try {
         // if the target path in Trash already exists, then append with
         // a current time in millisecs.
