@@ -490,9 +490,9 @@ public class ContainersMonitorImpl extends AbstractService implements
         "Current usage: " +
         formatUsageString(currentVmemUsage, vmemLimit,
                           currentPmemUsage, pmemLimit) +
-        ". Killing container.\n" +
-        "Dump of the process-tree for " + containerId + " :\n" +
-        pTree.getProcessTreeDump();
+        ". Killing container.\n";
+        // "Dump of the process-tree for " + containerId + " :\n" +
+        // pTree.getProcessTreeDump();
     }
 
     private String formatUsageString(long currentVmemUsage, long vmemLimit,
