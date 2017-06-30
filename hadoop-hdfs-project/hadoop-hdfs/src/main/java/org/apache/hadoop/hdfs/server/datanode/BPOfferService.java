@@ -31,9 +31,11 @@ import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
 import org.apache.hadoop.hdfs.server.protocol.*;
 import org.apache.hadoop.hdfs.server.protocol.ReceivedDeletedBlockInfo.BlockStatus;
+import org.apache.hadoop.security.UserGroupInformation;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -108,11 +110,37 @@ class BPOfferService {
     }
     Set<InetSocketAddress> newAddrs = Sets.newHashSet(addrs);
     
-    if (!Sets.symmetricDifference(oldAddrs, newAddrs).isEmpty()) {
-      // Keep things simple for now -- we can implement this at a later date.
-      throw new IOException(
-          "HA does not currently support adding a new standby to a running DN. " +
-          "Please do a rolling restart of DNs to reconfigure the list of NNs.");
+    // Process added NNs
+    Set<InetSocketAddress> addedNNs = Sets.difference(newAddrs, oldAddrs);
+    for (InetSocketAddress addedNN : addedNNs) {
+      final BPServiceActor actor = new BPServiceActor(addedNN, this);
+      bpServices.add(actor);
+
+      // start actor with login user
+      try {
+        UserGroupInformation.getLoginUser()
+            .doAs(new PrivilegedExceptionAction<Object>() {
+              @Override
+              public Void run() throws Exception {
+                actor.start();
+                return null;
+              }
+            });
+      } catch (InterruptedException e) {
+          throw new IOException(e);
+      }
+    }
+
+    // Process removed NNs
+    Set<InetSocketAddress> removedNNs = Sets.difference(oldAddrs, newAddrs);
+    for (InetSocketAddress removedNN : removedNNs) {
+      for (BPServiceActor actor : bpServices) {
+        if (actor.getNNSocketAddress().equals(removedNN)) {
+          actor.stop();
+          shutdownActor(actor);
+          break;
+        }
+      }
     }
   }
 
