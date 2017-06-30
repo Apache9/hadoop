@@ -3453,7 +3453,10 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   boolean isInTrash (Path path) { return path.toUri().toString().contains(".Trash"); }
 
   private String mkdirForTrash (String src, PermissionStatus permissions) throws IOException, UnresolvedLinkException {
-    src = FSDirectory.normalizePath(src);
+    // normalizePath
+    if (src.length() > 1 && src.endsWith("/")) {
+      src = src.substring(0, src.length() - 1);
+    }
     String[] names = INode.getPathNames(src);
     byte[][] components = INode.getPathComponents(names);
     StringBuilder pathbuilder = null;
