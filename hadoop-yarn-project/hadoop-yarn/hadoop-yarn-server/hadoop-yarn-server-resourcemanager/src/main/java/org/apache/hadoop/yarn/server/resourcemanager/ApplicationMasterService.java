@@ -58,6 +58,7 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.NMToken;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeReport;
+import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.PreemptionContainer;
 import org.apache.hadoop.yarn.api.records.PreemptionContract;
 import org.apache.hadoop.yarn.api.records.PreemptionMessage;
@@ -565,8 +566,12 @@ public class ApplicationMasterService extends AbstractService implements
                   rmNode.getTotalCapability(), numContainers,
                   rmNode.getHealthReport(), rmNode.getLastHealthReportTime(),
                   rmNode.getNodeLabels());
-
-          updatedNodeReports.add(report);
+          if ((!getConfig().getBoolean("yarn.resourcemanager.unhealth.node.notify", true))
+              && report.getNodeState() == NodeState.UNHEALTHY) {
+            LOG.debug("Skipping notify unhealth node: " + report);
+          } else {
+            updatedNodeReports.add(report);
+          }
         }
         allocateResponse.setUpdatedNodes(updatedNodeReports);
       }

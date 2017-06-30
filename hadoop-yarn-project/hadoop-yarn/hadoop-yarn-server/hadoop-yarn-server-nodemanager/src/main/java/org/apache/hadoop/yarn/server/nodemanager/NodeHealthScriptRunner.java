@@ -105,6 +105,12 @@ public class NodeHealthScriptRunner extends AbstractService {
 
     @Override
     public void run() {
+      File file = new File(nodeHealthScript);
+      if (!file.canExecute()) {
+        LOG.info("Add execute permision to file: " + nodeHealthScript);
+        file.setExecutable(true);
+      }
+
       HealthCheckerExitStatus status = HealthCheckerExitStatus.SUCCESS;
       try {
         shexec.execute();
