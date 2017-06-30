@@ -123,6 +123,10 @@ class BPServiceActor implements Runnable {
     this.dnConf = dn.getDnConf();
   }
 
+  public DatanodeRegistration getBpRegistration() {
+    return bpRegistration;
+  }
+
   boolean isAlive() {
     if (!shouldServiceRun || !bpThread.isAlive()) {
       return false;
