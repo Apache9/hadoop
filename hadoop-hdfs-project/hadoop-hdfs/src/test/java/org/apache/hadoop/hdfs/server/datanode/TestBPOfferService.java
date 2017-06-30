@@ -25,6 +25,7 @@ import static org.junit.Assert.assertSame;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -81,8 +82,8 @@ public class TestBPOfferService {
 
   private DatanodeProtocolClientSideTranslatorPB mockNN1;
   private DatanodeProtocolClientSideTranslatorPB mockNN2;
-  private final NNHAStatusHeartbeat[] mockHaStatuses = new NNHAStatusHeartbeat[2];
-  private final int[] heartbeatCounts = new int[2];
+  private final NNHAStatusHeartbeat[] mockHaStatuses = new NNHAStatusHeartbeat[3];
+  private final int[] heartbeatCounts = new int[3];
   private DataNode mockDn;
   private FsDatasetSpi<?> mockFSDataset;
   
@@ -167,7 +168,7 @@ public class TestBPOfferService {
     BPOfferService bpos = setupBPOSForNNs(mockNN1, mockNN2);
     bpos.start();
     try {
-      waitForInitialization(bpos);
+      waitForBothActors(bpos);
       
       // The DN should have register to both NNs.
       Mockito.verify(mockNN1).registerDatanode(
@@ -192,6 +193,7 @@ public class TestBPOfferService {
 
     } finally {
       bpos.stop();
+      bpos.join();
     }
   }
 
@@ -221,6 +223,7 @@ public class TestBPOfferService {
 
     } finally {
       bpos.stop();
+      bpos.join();
     }
     
     // Should ignore the delete command from the standby
@@ -246,6 +249,7 @@ public class TestBPOfferService {
       waitForOneToFail(bpos);
     } finally {
       bpos.stop();
+      bpos.join();
     }
   }
   
@@ -293,6 +297,7 @@ public class TestBPOfferService {
 
     } finally {
       bpos.stop();
+      bpos.join();
     }
   }
 
@@ -335,6 +340,7 @@ public class TestBPOfferService {
       waitForBlockReport(mockNN1, mockNN2);
     } finally {
       bpos.stop();
+      bpos.join();
     }
   }
 
@@ -386,6 +392,27 @@ public class TestBPOfferService {
       @Override
       public Boolean get() {
         return bpos.isAlive() && bpos.isInitialized();
+      }
+    }, 100, 10000);
+  }
+
+  private void waitForBothActors(final BPOfferService bpos)
+      throws Exception {
+    GenericTestUtils.waitFor(new Supplier<Boolean>() {
+      @Override
+      public Boolean get() {
+        List<BPServiceActor> actors = bpos.getBPServiceActors();
+
+        return bpos.isAlive() && getRegisteredActors(actors) == 2;
+      }
+      private int getRegisteredActors(List<BPServiceActor> actors) {
+        int regActors = 0;
+        for (BPServiceActor actor : actors) {
+          if (actor.getBpRegistration() != null) {
+            regActors++;
+          }
+        }
+        return regActors;
       }
     }, 100, 10000);
   }
@@ -457,5 +484,72 @@ public class TestBPOfferService {
     }, 100, 10000);
     return captor.getValue()[0].getBlocks();
   }
+ 
+  @Test
+  public void testRefreshNameNodes() throws Exception {
+
+    BPOfferService bpos = setupBPOSForNNs(mockDn, mockNN1, mockNN2);
+
+    bpos.start();
+    try {
+      waitForBothActors(bpos);
+
+      // The DN should have register to both NNs.
+      Mockito.verify(mockNN1)
+          .registerDatanode(Mockito.any(DatanodeRegistration.class));
+      Mockito.verify(mockNN2)
+          .registerDatanode(Mockito.any(DatanodeRegistration.class));
+
+      // Should get block reports from both NNs
+      waitForBlockReport(mockNN1);
+      waitForBlockReport(mockNN2);
+
+      // When we receive a block, it should report it to both NNs
+      bpos.notifyNamenodeReceivedBlock(FAKE_BLOCK, "", "");
+
+      ReceivedDeletedBlockInfo[] ret = waitForBlockReceived(FAKE_BLOCK,
+          mockNN1);
+      assertEquals(1, ret.length);
+      assertEquals(FAKE_BLOCK.getLocalBlock(), ret[0].getBlock());
+
+      ret = waitForBlockReceived(FAKE_BLOCK, mockNN2);
+      assertEquals(1, ret.length);
+      assertEquals(FAKE_BLOCK.getLocalBlock(), ret[0].getBlock());
+
+      // add new standby
+      DatanodeProtocolClientSideTranslatorPB mockNN3 = setupNNMock(2);
+      Mockito.doReturn(mockNN3).when(mockDn)
+          .connectToNN(Mockito.eq(new InetSocketAddress(2)));
+
+      ArrayList<InetSocketAddress> addrs = new ArrayList<InetSocketAddress>();
+      // mockNN1
+      addrs.add(new InetSocketAddress(0));
+      // mockNN3
+      addrs.add(new InetSocketAddress(2));
+
+      bpos.refreshNNList(addrs);
+
+      assertEquals(2, bpos.getBPServiceActors().size());
+      // wait for handshake to run
+      Thread.sleep(1000);
+
+      // verify new NN registered
+      Mockito.verify(mockNN3)
+          .registerDatanode(Mockito.any(DatanodeRegistration.class));
+
+      // When we receive a block, it should report it to both NNs
+      bpos.notifyNamenodeReceivedBlock(FAKE_BLOCK, "", "");
+
+      // veridfy new NN recieved block report
+      ret = waitForBlockReceived(FAKE_BLOCK, mockNN3);
+      assertEquals(1, ret.length);
+      assertEquals(FAKE_BLOCK.getLocalBlock(), ret[0].getBlock());
+
+    } finally {
+      bpos.stop();
+      bpos.join();
+    }
+  }
+
 
 }
