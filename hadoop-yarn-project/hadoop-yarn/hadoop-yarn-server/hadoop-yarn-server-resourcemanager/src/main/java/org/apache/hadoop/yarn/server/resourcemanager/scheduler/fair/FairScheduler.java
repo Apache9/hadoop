@@ -1130,6 +1130,7 @@ public class FairScheduler extends
 
   @VisibleForTesting
   synchronized void attemptScheduling(FSSchedulerNode node) {
+    long start = System.currentTimeMillis();
     if (rmContext.isWorkPreservingRecoveryEnabled()
         && !rmContext.isSchedulerReadyForAllocatingContainers()) {
       return;
@@ -1169,6 +1170,10 @@ public class FairScheduler extends
       }
     }
     updateRootQueueMetrics();
+    long cost =System.currentTimeMillis() - start;
+    if (cost > 100) {
+      LOG.info("Attempt scheduling node: " + node + " cost: " + cost + " ms");
+    }
   }
 
   public FSAppAttempt getSchedulerApp(ApplicationAttemptId appAttemptId) {

@@ -295,8 +295,8 @@ public class ClientRMService extends AbstractService implements
     response.setApplicationId(getNewApplicationId());
     // Pick up min/max resource from scheduler...
     response.setMaximumResourceCapability(scheduler
-        .getMaximumResourceCapability());       
-    
+        .getMaximumResourceCapability());
+
     return response;
   }
   
@@ -309,13 +309,7 @@ public class ClientRMService extends AbstractService implements
       GetApplicationReportRequest request) throws YarnException {
     ApplicationId applicationId = request.getApplicationId();
 
-    UserGroupInformation callerUGI;
-    try {
-      callerUGI = UserGroupInformation.getCurrentUser();
-    } catch (IOException ie) {
-      LOG.info("Error getting UGI ", ie);
-      throw RPCUtil.getRemoteException(ie);
-    }
+    UserGroupInformation callerUGI = getCallerUGI();
 
     RMApp application = this.rmContext.getRMApps().get(applicationId);
     if (application == null) {
@@ -334,6 +328,8 @@ public class ClientRMService extends AbstractService implements
     GetApplicationReportResponse response = recordFactory
         .newRecordInstance(GetApplicationReportResponse.class);
     response.setApplicationReport(report);
+
+    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getApplicationReport", "ClientRMService");
     return response;
   }
 
@@ -342,13 +338,7 @@ public class ClientRMService extends AbstractService implements
       GetApplicationAttemptReportRequest request) throws YarnException,
       IOException {
     ApplicationAttemptId appAttemptId = request.getApplicationAttemptId();
-    UserGroupInformation callerUGI;
-    try {
-      callerUGI = UserGroupInformation.getCurrentUser();
-    } catch (IOException ie) {
-      LOG.info("Error getting UGI ", ie);
-      throw RPCUtil.getRemoteException(ie);
-    }
+    UserGroupInformation callerUGI = getCallerUGI();
     RMApp application = this.rmContext.getRMApps().get(
         appAttemptId.getApplicationId());
     if (application == null) {
@@ -375,6 +365,7 @@ public class ClientRMService extends AbstractService implements
       throw new YarnException("User " + callerUGI.getShortUserName()
           + " does not have privilage to see this attempt " + appAttemptId);
     }
+    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getApplicationAttemptReport", "ClientRMService");
     return response;
   }
   
@@ -382,13 +373,7 @@ public class ClientRMService extends AbstractService implements
   public GetApplicationAttemptsResponse getApplicationAttempts(
       GetApplicationAttemptsRequest request) throws YarnException, IOException {
     ApplicationId appId = request.getApplicationId();
-    UserGroupInformation callerUGI;
-    try {
-      callerUGI = UserGroupInformation.getCurrentUser();
-    } catch (IOException ie) {
-      LOG.info("Error getting UGI ", ie);
-      throw RPCUtil.getRemoteException(ie);
-    }
+    UserGroupInformation callerUGI = getCallerUGI();
     RMApp application = this.rmContext.getRMApps().get(appId);
     if (application == null) {
       // If the RM doesn't have the application, throw
@@ -415,6 +400,7 @@ public class ClientRMService extends AbstractService implements
       throw new YarnException("User " + callerUGI.getShortUserName()
           + " does not have privilage to see this aplication " + appId);
     }
+    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getApplicationAttempts", "ClientRMService");
     return response;
   }
   
@@ -430,13 +416,7 @@ public class ClientRMService extends AbstractService implements
     ContainerId containerId = request.getContainerId();
     ApplicationAttemptId appAttemptId = containerId.getApplicationAttemptId();
     ApplicationId appId = appAttemptId.getApplicationId();
-    UserGroupInformation callerUGI;
-    try {
-      callerUGI = UserGroupInformation.getCurrentUser();
-    } catch (IOException ie) {
-      LOG.info("Error getting UGI ", ie);
-      throw RPCUtil.getRemoteException(ie);
-    }
+    UserGroupInformation callerUGI = getCallerUGI();
     RMApp application = this.rmContext.getRMApps().get(appId);
     if (application == null) {
       // If the RM doesn't have the application, throw
@@ -465,6 +445,7 @@ public class ClientRMService extends AbstractService implements
       throw new YarnException("User " + callerUGI.getShortUserName()
           + " does not have privilage to see this aplication " + appId);
     }
+    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getContainerReport", "ClientRMService");
     return response;
   }
   
@@ -479,13 +460,7 @@ public class ClientRMService extends AbstractService implements
       throws YarnException, IOException {
     ApplicationAttemptId appAttemptId = request.getApplicationAttemptId();
     ApplicationId appId = appAttemptId.getApplicationId();
-    UserGroupInformation callerUGI;
-    try {
-      callerUGI = UserGroupInformation.getCurrentUser();
-    } catch (IOException ie) {
-      LOG.info("Error getting UGI ", ie);
-      throw RPCUtil.getRemoteException(ie);
-    }
+    UserGroupInformation callerUGI = getCallerUGI();
     RMApp application = this.rmContext.getRMApps().get(appId);
     if (application == null) {
       // If the RM doesn't have the application, throw
@@ -517,6 +492,7 @@ public class ClientRMService extends AbstractService implements
       throw new YarnException("User " + callerUGI.getShortUserName()
           + " does not have privilage to see this aplication " + appId);
     }
+    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getContainers", "ClientRMService");
     return response;
   }
 
@@ -586,7 +562,6 @@ public class ClientRMService extends AbstractService implements
           "Exception in submitting application", applicationId);
       throw e;
     }
-
     SubmitApplicationResponse response = recordFactory
         .newRecordInstance(SubmitApplicationResponse.class);
     return response;
@@ -672,13 +647,7 @@ public class ClientRMService extends AbstractService implements
   public GetApplicationsResponse getApplications(
       GetApplicationsRequest request, boolean caseSensitive)
       throws YarnException {
-    UserGroupInformation callerUGI;
-    try {
-      callerUGI = UserGroupInformation.getCurrentUser();
-    } catch (IOException ie) {
-      LOG.info("Error getting UGI ", ie);
-      throw RPCUtil.getRemoteException(ie);
-    }
+    UserGroupInformation callerUGI = getCallerUGI();
 
     Set<String> applicationTypes = request.getApplicationTypes();
     EnumSet<YarnApplicationState> applicationStates =
@@ -800,16 +769,20 @@ public class ClientRMService extends AbstractService implements
           callerUGI.getUserName(), allowAccess));
     }
 
+    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getApplications", "ClientRMService");
     GetApplicationsResponse response =
       recordFactory.newRecordInstance(GetApplicationsResponse.class);
     response.setApplicationList(reports);
     return response;
   }
 
+
   @Override
   public GetClusterNodesResponse getClusterNodes(GetClusterNodesRequest request)
       throws YarnException {
-    GetClusterNodesResponse response = 
+    UserGroupInformation callerUGI = getCallerUGI();
+
+    GetClusterNodesResponse response =
       recordFactory.newRecordInstance(GetClusterNodesResponse.class);
     EnumSet<NodeState> nodeStates = request.getNodeStates();
     if (nodeStates == null || nodeStates.isEmpty()) {
@@ -823,12 +796,15 @@ public class ClientRMService extends AbstractService implements
       nodeReports.add(createNodeReports(nodeInfo));
     }
     response.setNodeReports(nodeReports);
+    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getClusterNodes", "ClientRMService");
     return response;
   }
 
   @Override
   public GetQueueInfoResponse getQueueInfo(GetQueueInfoRequest request)
       throws YarnException {
+    UserGroupInformation callerUGI = getCallerUGI();
+
     GetQueueInfoResponse response =
       recordFactory.newRecordInstance(GetQueueInfoResponse.class);
     try {
@@ -851,7 +827,7 @@ public class ClientRMService extends AbstractService implements
     } catch (IOException ioe) {
       LOG.info("Failed to getQueueInfo for " + request.getQueueName(), ioe);
     }
-    
+    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getQueueInfo", "ClientRMService");
     return response;
   }
 
@@ -1259,5 +1235,13 @@ public class ClientRMService extends AbstractService implements
           + QueueACL.SUBMIT_APPLICATIONS.name() + " on queue" + queueName));
     }
     return callerUGI.getShortUserName();
+  }
+
+  private UserGroupInformation getCallerUGI() throws YarnException {
+    try {
+      return UserGroupInformation.getCurrentUser();
+    } catch (IOException ie) {
+      throw RPCUtil.getRemoteException(ie);
+    }
   }
 }

@@ -52,6 +52,17 @@ class AppsBlock extends HtmlBlock {
     this.conf = conf;
   }
 
+  private String getFullQueueName(String appQueue) {
+    String actucalQueueName = appQueue;
+    if (actucalQueueName.indexOf('@') != -1) {
+      actucalQueueName = actucalQueueName.substring(actucalQueueName.indexOf('@') + 1);
+    }
+    if (!actucalQueueName.startsWith("root.")) {
+      actucalQueueName = "root." + actucalQueueName;
+    }
+    return actucalQueueName;
+  }
+
   @Override public void render(Block html) {
     TBODY<TABLE<Hamlet>> tbody = html.
       table("#apps").
@@ -87,6 +98,9 @@ class AppsBlock extends HtmlBlock {
       }
       AppInfo appInfo = new AppInfo(app, true, WebAppUtils.getHttpSchemePrefix(conf));
       String percent = String.format("%.1f", appInfo.getProgress());
+
+      String queue = getFullQueueName(app.getQueue());
+
       //AppID numerical value parsed by parseHadoopID in yarn.dt.plugins.js
       appsTableData.append("[\"<a href='")
       .append(url("app", appInfo.getAppId())).append("'>")
@@ -97,8 +111,8 @@ class AppsBlock extends HtmlBlock {
         appInfo.getName()))).append("\",\"")
       .append(StringEscapeUtils.escapeJavaScript(StringEscapeUtils.escapeHtml(
         appInfo.getApplicationType()))).append("\",\"")
-      .append(StringEscapeUtils.escapeJavaScript(StringEscapeUtils.escapeHtml(
-        appInfo.getQueue()))).append("\",\"")
+      .append("<a href='" + url("scheduler?openQueues=" + queue) + "'>"
+          + StringEscapeUtils.escapeJavaScript(StringEscapeUtils.escapeHtml(appInfo.getQueue())) + "</a>").append("\",\"")
       .append(appInfo.getStartTime()).append("\",\"")
       .append(appInfo.getFinishTime()).append("\",\"")
       .append(appInfo.getState()).append("\",\"")

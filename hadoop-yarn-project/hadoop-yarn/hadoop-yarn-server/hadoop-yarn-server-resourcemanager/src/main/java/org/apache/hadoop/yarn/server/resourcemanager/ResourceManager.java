@@ -647,6 +647,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
     private final Thread eventProcessor;
     private volatile boolean stopped = false;
     private boolean shouldExitOnError = false;
+    private long maxlatency = 100;
 
     public SchedulerEventDispatcher(ResourceScheduler scheduler) {
       super(SchedulerEventDispatcher.class.getName());
@@ -660,6 +661,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       this.shouldExitOnError =
           conf.getBoolean(Dispatcher.DISPATCHER_EXIT_ON_ERROR_KEY,
             Dispatcher.DEFAULT_DISPATCHER_EXIT_ON_ERROR);
+      this.maxlatency = conf.getInt("yarn.resourcemanager.schedule.latency.max", 300);
       super.serviceInit(conf);
     }
 
@@ -682,7 +684,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
             LOG.error("Returning, interrupted : " + e);
             return; // TODO: Kill RM.
           }
-
+          long start = System.currentTimeMillis();
           try {
             scheduler.handle(event);
           } catch (Throwable t) {
@@ -700,6 +702,10 @@ public class ResourceManager extends CompositeService implements Recoverable {
               LOG.info("Exiting, bbye..");
               System.exit(-1);
             }
+          }
+          long latency = System.currentTimeMillis() - start;
+          if (latency > maxlatency) {
+            LOG.info("Schedule hand event: " + event.getType() + " cost " + latency + "ms");
           }
         }
       }
