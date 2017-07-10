@@ -367,7 +367,16 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
                 "Failed to getReplicaVisibleLength from datanode " + datanode
                     + " for block " + locatedblock.getBlock(), ioe);
           }
-          clearClientDatanodeProtocol();
+
+          if (isNeedToRetry(ioe)) {
+            // special case : clean the CDP cache and refresh located blocks for XmDFSInputStream
+            if (DFSClient.LOG.isInfoEnabled()) {
+              DFSClient.LOG.info("Retry is needed for this exception. "
+                  + "datanode=" + datanode, ioe);
+            }
+            throw ioe;
+          }
+
         } finally {
           releaseClientDatanodeProtocol(cdp);
         }
@@ -1951,6 +1960,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             } catch (IOException e) {
               clearClientDatanodeProtocol();
               setRefreshLocatedBlocks(true);
+              if (isNeedToRetry(e)) {
+                throw e;
+              }
             }
 
             break;
@@ -2011,5 +2023,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
   protected boolean isDFSStreamClosed() {
     return closed;
+  }
+
+  protected boolean isNeedToRetry(IOException ioe) {
+    return false;
   }
 }

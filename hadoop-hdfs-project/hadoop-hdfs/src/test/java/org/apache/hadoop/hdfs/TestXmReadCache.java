@@ -34,10 +34,10 @@ import org.apache.commons.logging.LogFactory;
 public class TestXmReadCache {
   private static final Log LOG = LogFactory
     .getLog(TestXmReadCache.class);
-  private static final int blockSize = 1*1024*1024;
-  private static final int numBlksToWrite = 5;
-  private static final int sizePerWrite = 4098;
-  private static final int sizePerRead = 4098;
+  private static final int blockSize = 4*1024*1024;
+  private static final int numBlksToWrite = 1;
+  private static final int sizePerWrite = 4;
+  private static final int sizePerRead = 4;
   private Configuration conf;
   private MiniDFSCluster cluster;
   private FileSystem fs;
@@ -50,6 +50,9 @@ public class TestXmReadCache {
   public void setUp() throws IOException {
     conf = new Configuration();
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_ACCESS_TOKEN_LIFETIME_KEY, 1);
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_ACCESS_KEY_UPDATE_INTERVAL_KEY, 1);
+    conf.setBoolean(DFSConfigKeys.DFS_BLOCK_ACCESS_TOKEN_ENABLE_KEY, true);
     cluster = new MiniDFSCluster.Builder(conf).build();
     cluster.waitClusterUp();
     fs = cluster.getFileSystem();
@@ -60,9 +63,9 @@ public class TestXmReadCache {
     cluster.shutdown();
   }
 
-  class XmTestWriterThread extends Thread {
+  class XmWriterThread extends Thread {
     String src;
-    XmTestWriterThread(String file) {
+    XmWriterThread(String file) {
       src = file;
     }
 
@@ -80,26 +83,34 @@ public class TestXmReadCache {
     public void run() {
       long sizeToWrite = blockSize * numBlksToWrite;
       int numToWrite = (int) (sizeToWrite / sizePerWrite);
-      final byte[] writeBuf = new byte[sizePerWrite];
       totalWriteSize = 0;
       try {
         FSDataOutputStream out = createFile(fs, new Path(src), 1);
 
         // flush the first data to make sure the first block is generated
-        out.write(writeBuf);
-        out.hflush();
-        totalWriteSize  += sizePerWrite;
+        int step = 100;
+        int numStop = numToWrite/step;
+        int curNum = 0;
+        boolean firstHit = true;
 
-        for (int i = 1; i < numToWrite; i++) {
-          out.write(writeBuf);
-          totalWriteSize  += sizePerWrite;
-          try {
-            Thread.sleep(1);
-          } catch (InterruptedException ie) {
-            // Ignore
+        for (int i = 0; i < numToWrite; i++) {
+          curNum ++;
+          if (curNum== numStop) {
+            if (firstHit) {
+              out.hflush();
+              firstHit = false;
+            }
+            try {
+              Thread.sleep(1000);
+            } catch (InterruptedException ie) {
+              // Ignore
+            }
+            curNum = 0;
           }
+          out.writeInt(i);
+          totalWriteSize += sizePerWrite;
         }
-        out.close();
+
       } catch (IOException ioe) {
         LOG.warn("Fail to write file ", ioe);
         Assert.assertTrue(false);
@@ -114,16 +125,17 @@ public class TestXmReadCache {
     private String src;
     @Override
     public void run() {
+      int value;
       long fileSize = blockSize * numBlksToWrite;
       int numToRead = (int) (fileSize / sizePerRead);
-      final byte[] readBuf = new byte[blockSize * numBlksToWrite];
       totalReadSize = 0;
 
       try {
         FSDataInputStream in = fs.openEx(new Path(src));
         for (int i = 0; i < numToRead; i++) {
-          in.read(readBuf, i*sizePerRead, sizePerRead);
+          value = in.readInt();
           totalReadSize += sizePerRead;
+          LOG.warn("Read Time =" + i + " value=" + value);
         }
         XmDFSInputStream xmin =(XmDFSInputStream)in.getWrappedStream();
         cacheStatus = xmin.getCacheStatus();
@@ -138,12 +150,12 @@ public class TestXmReadCache {
   @Test
   public void testRefreshLocatedBlocks() {
 
-    String file = "/readRefreshLocatedBlocks";
-    XmTestWriterThread writer = new XmTestWriterThread(file);
+    String file = "/readRefreshLocatedBlocks.test2";
+    XmWriterThread writer = new XmWriterThread(file);
     writer.start();
 
     try {
-      Thread.sleep(5);
+      Thread.sleep(1000);
     } catch (InterruptedException ie) {
       // Ignore
     }
