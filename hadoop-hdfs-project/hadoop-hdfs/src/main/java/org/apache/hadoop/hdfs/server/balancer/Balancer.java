@@ -182,7 +182,7 @@ import org.apache.hadoop.util.ToolRunner;
 @InterfaceAudience.Private
 public class Balancer {
   static final Log LOG = LogFactory.getLog(Balancer.class);
-  final private static long MAX_BLOCKS_SIZE_TO_FETCH = 2*1024*1024*1024L; //2GB
+  private long maxBlocksSizeToFetch = 2*1024*1024*1024L; //2GB
   private static long WIN_WIDTH = 5400*1000L; // 1.5 hour
 
   /** The maximum number of concurrent blocks moves for 
@@ -677,7 +677,7 @@ public class Balancer {
      */
     private long getBlockList() throws IOException {
       BlockWithLocations[] newBlocks = nnc.namenode.getBlocks(datanode, 
-        Math.min(MAX_BLOCKS_SIZE_TO_FETCH, blocksToReceive)).getBlocks();
+        Math.min(maxBlocksSizeToFetch, blocksToReceive)).getBlocks();
       long bytesReceived = 0;
       for (BlockWithLocations blk : newBlocks) {
         bytesReceived += blk.getBlock().getNumBytes();
@@ -868,6 +868,8 @@ public class Balancer {
     this.dispatcherExecutor = Executors.newFixedThreadPool(
             conf.getInt(DFSConfigKeys.DFS_BALANCER_DISPATCHERTHREADS_KEY,
                         DFSConfigKeys.DFS_BALANCER_DISPATCHERTHREADS_DEFAULT));
+    this.maxBlocksSizeToFetch = conf.getLong(DFSConfigKeys.DFS_BALANCER_MAX_BLOCK_SIZE_TO_FETCH_KEY,
+        DFSConfigKeys.DFS_BALANCER_MAX_BLOCK_SIZE_TO_FETCH_DEFAULT);
   }
   
   /* Given a data node set, build a network topology and decide
