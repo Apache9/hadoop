@@ -28,6 +28,8 @@ import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.util.Time;
 import org.mortbay.log.Log;
 
@@ -91,7 +93,15 @@ public class XmDFSInputStream extends DFSInputStream {
     while (readLen == -1) {
       boolean fileClosed = dfsClient.isFileClosed(srcFile);
       long origLen = getFileLength();
-      updateFileLength();
+      try {
+        updateFileLength();
+      } catch (IOException ioe) {
+        if (isNeedToRetry(ioe)) {
+          updateFileLength();
+        } else {
+          throw ioe;
+        }
+      }
       long newLen = getFileLength();
       if (origLen == newLen) {
         if (fileClosed) {
@@ -207,6 +217,9 @@ public class XmDFSInputStream extends DFSInputStream {
       return cachedCDP.get(datanodeInfo);
     }
     ++doNewCDP;
+    if (requestNewCDP%100 == 0) {
+      DFSClient.LOG.info("getClientDatanodeProtocol: cache status: " + getCacheStatus());
+    }
     return null;
   }
 
@@ -227,6 +240,7 @@ public class XmDFSInputStream extends DFSInputStream {
   protected void clearClientDatanodeProtocol()
   {
     if (null != cachedCDP) {
+      DFSClient.LOG.info("clearClientDatanodeProtocol: cache status: " + getCacheStatus());
       for (ClientDatanodeProtocol cdp : cachedCDP.values()) {
         if (null != cdp) {
           RPC.stopProxy(cdp);
@@ -242,6 +256,9 @@ public class XmDFSInputStream extends DFSInputStream {
     if (needRefreshLocatedBlocks) {
       ++doRefreshLocatedBlocks;
     }
+    if (requestRefreshLocatedBlocks%100 == 0) {
+      DFSClient.LOG.info("needRefreshLocatedBlocks: cache status: " + getCacheStatus());
+    }
     return needRefreshLocatedBlocks;
   }
 
@@ -253,5 +270,13 @@ public class XmDFSInputStream extends DFSInputStream {
   @Override
   protected long getBlockSize() {
     return blockSize;
+  }
+
+  protected boolean isNeedToRetry(IOException ioe) {
+    if (ioe instanceof RemoteException
+        && (((RemoteException) ioe).unwrapRemoteException() instanceof SecretManager.InvalidToken)) {
+      return true;
+    }
+    return false;
   }
 }
