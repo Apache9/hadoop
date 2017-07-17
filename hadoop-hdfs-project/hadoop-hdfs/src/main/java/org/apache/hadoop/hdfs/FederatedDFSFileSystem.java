@@ -548,6 +548,13 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public void refreshNodes() throws IOException {
+    FileSystem[] childrenFs = viewFs.getChildFileSystems();
+    for (FileSystem childFs : childrenFs) {
+      if(childFs instanceof DistributedFileSystem){
+        DistributedFileSystem childDFS = (DistributedFileSystem)childFs;
+        childDFS.refreshNodes();
+      }
+    }
     throw new IOException(
         "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
@@ -1009,31 +1016,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public boolean isUriCompatible(URI uri, Configuration conf) {
-    String authority = uri.getAuthority();
-    if (authority == null) {
-      // use authority in defaultFs
-      authority = getDefaultUri(conf).getAuthority();
-    }
-    if (authority == null) {
-      return false;
-    }
-
-    Set<String> mountTables = new HashSet<String>();
-    for (Map.Entry<String, String> si : getConf()) {
-      final String key = si.getKey();
-      if (key.startsWith(Constants.CONFIG_VIEWFS_PREFIX)) {
-        String substr =
-            key.substring(Constants.CONFIG_VIEWFS_PREFIX.length() + 1);
-        String tableName = substr.substring(0, substr.indexOf('.'));
-        if (!mountTables.contains(tableName)) {
-          mountTables.add(tableName);
-        }
-      }
-    }
-    if (mountTables.contains(authority)) {
-      return true;
-    }
-    return false;
+    return HAUtil.isFederationUri(conf, uri);
   }
 
   Path convertToViewFsScheme(Path p) {

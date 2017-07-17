@@ -26,10 +26,7 @@ import static org.apache.hadoop.hdfs.protocol.HdfsConstants.HA_DT_SERVICE_PREFIX
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -37,6 +34,7 @@ import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.hdfs.NameNodeProxies.ProxyAndInfo;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -212,6 +210,38 @@ public class HAUtil {
     String host = nameNodeUri.getHost();
     // A logical name must be one of the service IDs.
     return DFSUtil.getNameServiceIds(conf).contains(host);
+  }
+
+  /**
+   * @return true if the given DFS appears to be federationdDFS.
+   */
+  public static boolean isFederationUri(
+          Configuration conf, URI nameNodeUri) {
+    String authority = nameNodeUri.getAuthority();
+    if (authority == null) {
+      // use authority in defaultFs
+      authority = FileSystem.getDefaultUri(conf).getAuthority();
+    }
+    if (authority == null) {
+      return false;
+    }
+
+    Set<String> mountTables = new HashSet<String>();
+    for (Map.Entry<String, String> si : conf) {
+      final String key = si.getKey();
+      if (key.startsWith(Constants.CONFIG_VIEWFS_PREFIX)) {
+        String substr =
+                key.substring(Constants.CONFIG_VIEWFS_PREFIX.length() + 1);
+        String tableName = substr.substring(0, substr.indexOf('.'));
+        if (!mountTables.contains(tableName)) {
+          mountTables.add(tableName);
+        }
+      }
+    }
+    if (mountTables.contains(authority)) {
+      return true;
+    }
+    return false;
   }
 
   /**

@@ -811,16 +811,19 @@ public class DFSAdmin extends FsShell {
     Configuration dfsConf = dfs.getConf();
     URI dfsUri = dfs.getUri();
     boolean isHaEnabled = HAUtil.isLogicalUri(dfsConf, dfsUri);
+    boolean isFederation = HAUtil.isFederationUri(dfsConf, dfsUri);
+    Collection<String> nsIds = DFSUtil.getNameServiceIds(dfsConf);
 
-    if (isHaEnabled) {
-      String nsId = dfsUri.getHost();
-      List<ProxyAndInfo<ClientProtocol>> proxies =
-          HAUtil.getProxiesForAllNameNodesInNameservice(dfsConf,
-          nsId, ClientProtocol.class);
-      for (ProxyAndInfo<ClientProtocol> proxy: proxies) {
-        proxy.getProxy().refreshNodes();
-        System.out.println("Refresh nodes successful for " +
-            proxy.getAddress());
+    if (isHaEnabled || isFederation) {
+      for (String nsId : nsIds) {
+        List<ProxyAndInfo<ClientProtocol>> proxies =
+                HAUtil.getProxiesForAllNameNodesInNameservice(dfsConf,
+                        nsId, ClientProtocol.class);
+        for (ProxyAndInfo<ClientProtocol> proxy : proxies) {
+          proxy.getProxy().refreshNodes();
+          System.out.println("Refresh nodes successful for " +
+                  proxy.getAddress());
+        }
       }
     } else {
       dfs.refreshNodes();
