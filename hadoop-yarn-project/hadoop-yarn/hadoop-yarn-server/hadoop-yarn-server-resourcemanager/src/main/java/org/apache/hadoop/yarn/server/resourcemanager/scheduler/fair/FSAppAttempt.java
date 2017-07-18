@@ -880,6 +880,10 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
         toBePreempted = container;
       }
     }
+    if (toBePreempted != null) {
+      LOG.info("App " + getName() + " is going to preempt a running " +
+          "container: " + toBePreempted.getContainerId());
+    }
     return toBePreempted;
   }
 }

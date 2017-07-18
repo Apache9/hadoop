@@ -342,8 +342,12 @@ public abstract class FSQueue implements Queue, Schedulable {
       // only update preemption request to parent if this current queue is starved
       parent.updateResourceToPreempt(newResourceToPreemptFromSibling);
     }
-    LOG.info("update resource to preempt, queue: " + getName() + ", " +
-        "preemption between children: " + resourceToPreemptBetweenChildren);
+
+    if (Resources.greaterThan(scheduler.getResourceCalculator(), scheduler.getClusterResource(),
+        resourceToPreemptBetweenChildren, Resources.none())) {
+      LOG.info("update resource to preempt, queue: " + getName() + ", " +
+          "preemption between children: " + resourceToPreemptBetweenChildren);
+    }
   }
 
   public void clearPreemptedResources() {
