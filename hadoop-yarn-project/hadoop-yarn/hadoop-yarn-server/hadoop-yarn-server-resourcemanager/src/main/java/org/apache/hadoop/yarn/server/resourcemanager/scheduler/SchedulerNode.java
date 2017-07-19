@@ -138,11 +138,13 @@ public abstract class SchedulerNode {
 
     launchedContainers.put(container.getId(), rmContainer);
 
-    LOG.info("Assigned container " + container.getId() + " of capacity "
-        + container.getResource() + " on host " + rmNode.getNodeAddress()
-        + ", which has " + numContainers + " containers, "
-        + getUsedResource() + " used and " + getAvailableResource()
-        + " available after allocation");
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Assigned container " + container.getId() + " of capacity "
+              + container.getResource() + " on host " + rmNode.getNodeAddress()
+              + ", which has " + numContainers + " containers, "
+              + getUsedResource() + " used and " + getAvailableResource()
+              + " available after allocation");
+    }
   }
 
   /**
@@ -201,11 +203,13 @@ public abstract class SchedulerNode {
       updateResource(container);
     }
 
-    LOG.info("Released container " + container.getId() + " of capacity "
-        + container.getResource() + " on host " + rmNode.getNodeAddress()
-        + ", which currently has " + numContainers + " containers, "
-        + getUsedResource() + " used and " + getAvailableResource()
-        + " available" + ", release resources=" + true);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Released container " + container.getId() + " of capacity "
+              + container.getResource() + " on host " + rmNode.getNodeAddress()
+              + ", which currently has " + numContainers + " containers, "
+              + getUsedResource() + " used and " + getAvailableResource()
+              + " available" + ", release resources=" + true);
+    }
   }
 
   private synchronized void addAvailableResource(Resource resource) {
