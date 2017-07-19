@@ -197,8 +197,10 @@ public class NMTokenSecretManagerInRM extends BaseNMTokenSecretManager {
       NMToken nmToken = null;
       if (nodeSet != null) {
         if (!nodeSet.contains(container.getNodeId())) {
-          LOG.info("Sending NMToken for nodeId : " + container.getNodeId()
-              + " for container : " + container.getId());
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Sending NMToken for nodeId : " + container.getNodeId()
+                + " for container : " + container.getId());
+          }
           Token token =
               createNMToken(container.getId().getApplicationAttemptId(),
                 container.getNodeId(), applicationSubmitter);

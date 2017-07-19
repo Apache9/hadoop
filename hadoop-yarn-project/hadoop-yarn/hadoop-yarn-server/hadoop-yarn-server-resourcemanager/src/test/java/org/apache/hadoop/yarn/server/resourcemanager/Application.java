@@ -258,11 +258,13 @@ public class Application {
     nodeManager.stopContainers(stopRequest);
     
     Resources.subtractFrom(used, requestSpec.get(task.getPriority()));
-    
-    LOG.info("Finished task " + task.getTaskId() + 
-        " of application " + applicationId + 
-        " on node " + nodeManager.getHostName() + 
-        ", currently using " + used + " resources");
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Finished task " + task.getTaskId() +
+          " of application " + applicationId +
+          " on node " + nodeManager.getHostName() +
+          ", currently using " + used + " resources");
+    }
   }
   
   private synchronized void addResourceRequest(

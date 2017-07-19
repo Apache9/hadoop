@@ -95,16 +95,21 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
             containerStatus, 
             event)
         );
-    LOG.info("Completed container: " + rmContainer.getContainerId() + 
-        " in state: " + rmContainer.getState() + " event:" + event);
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Completed container: " + rmContainer.getContainerId() +
+          " in state: " + rmContainer.getState() + " event:" + event);
+    }
 
     containersToPreempt.remove(rmContainer.getContainerId());
 
-    RMAuditLogger.logSuccess(getUser(), 
-        AuditConstants.RELEASE_CONTAINER, "SchedulerApp", 
-        getApplicationId(), containerId);
-    
-    // Update usage metrics 
+    if (LOG.isDebugEnabled()) {
+      RMAuditLogger.logSuccess(getUser(),
+          AuditConstants.RELEASE_CONTAINER, "SchedulerApp",
+          getApplicationId(), containerId);
+    }
+
+    // Update usage metrics
     Resource containerResource = rmContainer.getContainer().getResource();
     queue.getMetrics().releaseResources(getUser(), 1, containerResource);
     Resources.subtractFrom(currentConsumption, containerResource);
@@ -155,11 +160,11 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
           + container.getId().getApplicationAttemptId() 
           + " container=" + container.getId() + " host="
           + container.getNodeId().getHost() + " type=" + type);
+
+      RMAuditLogger.logSuccess(getUser(),
+          AuditConstants.ALLOC_CONTAINER, "SchedulerApp",
+          getApplicationId(), container.getId());
     }
-    RMAuditLogger.logSuccess(getUser(), 
-        AuditConstants.ALLOC_CONTAINER, "SchedulerApp", 
-        getApplicationId(), container.getId());
-    
     return rmContainer;
   }
 

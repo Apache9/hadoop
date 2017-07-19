@@ -140,10 +140,10 @@ public abstract class SchedulerNode {
 
     if (LOG.isDebugEnabled()) {
       LOG.debug("Assigned container " + container.getId() + " of capacity "
-              + container.getResource() + " on host " + rmNode.getNodeAddress()
-              + ", which has " + numContainers + " containers, "
-              + getUsedResource() + " used and " + getAvailableResource()
-              + " available after allocation");
+          + container.getResource() + " on host " + rmNode.getNodeAddress()
+          + ", which has " + numContainers + " containers, "
+          + getUsedResource() + " used and " + getAvailableResource()
+          + " available after allocation");
     }
   }
 
@@ -205,10 +205,10 @@ public abstract class SchedulerNode {
 
     if (LOG.isDebugEnabled()) {
       LOG.debug("Released container " + container.getId() + " of capacity "
-              + container.getResource() + " on host " + rmNode.getNodeAddress()
-              + ", which currently has " + numContainers + " containers, "
-              + getUsedResource() + " used and " + getAvailableResource()
-              + " available" + ", release resources=" + true);
+          + container.getResource() + " on host " + rmNode.getNodeAddress()
+          + ", which currently has " + numContainers + " containers, "
+          + getUsedResource() + " used and " + getAvailableResource()
+          + " available" + ", release resources=" + true);
     }
   }
 

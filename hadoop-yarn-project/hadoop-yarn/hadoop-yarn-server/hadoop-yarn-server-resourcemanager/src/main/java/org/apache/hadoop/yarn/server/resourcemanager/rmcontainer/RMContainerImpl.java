@@ -381,11 +381,13 @@ public class RMContainerImpl implements RMContainer {
             " on container " + this.containerId);
       }
       if (oldState != getState()) {
-        LOG.info(event.getContainerId() + " Container Transitioned from "
-            + oldState + " to " + getState());
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(event.getContainerId() + " Container Transitioned from "
+              + oldState + " to " + getState());
+        }
       }
     }
-    
+
     finally {
       writeLock.unlock();
     }

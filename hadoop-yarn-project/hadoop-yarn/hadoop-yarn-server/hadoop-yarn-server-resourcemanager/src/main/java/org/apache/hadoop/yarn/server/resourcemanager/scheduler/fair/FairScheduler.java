@@ -887,8 +887,10 @@ public class FairScheduler extends
   protected synchronized void completedContainer(RMContainer rmContainer,
       ContainerStatus containerStatus, RMContainerEventType event) {
     if (rmContainer == null) {
-      LOG.info("Container " + containerStatus.getContainerId()
-          + " completed with event " + event);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Container " + containerStatus.getContainerId()
+            + " completed with event " + event);
+      }
       return;
     }
 
@@ -900,9 +902,11 @@ public class FairScheduler extends
     ApplicationId appId =
         container.getId().getApplicationAttemptId().getApplicationId();
     if (application == null) {
-      LOG.info("Container " + container + " of" +
-          " finished application " + appId +
-          " completed with event " + event);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Container " + container + " of" +
+            " finished application " + appId +
+            " completed with event " + event);
+      }
       return;
     }
 
