@@ -15,34 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.hadoop.hdfs;
 
-package org.apache.hadoop.hdfs.server.datanode;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockResponseProto;
 
-import org.apache.hadoop.classification.InterfaceAudience;
+import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http2.Http2Headers;
 
-/**
- * holder class that holds checksum bytes and the length in a block at which
- * the checksum bytes end
- * 
- * ex: length = 1023 and checksum is 4 bytes which is for 512 bytes, then
- *     the checksum applies for the last chunk, or bytes 512 - 1023
- */
-@InterfaceAudience.Private
-public class ChunkChecksum {
-  private final long dataLength;
-  // can be null if not available
-  private final byte[] checksum;
+interface Http2BlockDataReceiver {
 
-  ChunkChecksum(long dataLength, byte[] checksum) {
-    this.dataLength = dataLength;
-    this.checksum = checksum;
-  }
+  void http2HeaderReceived(Http2Headers headers);
 
-  public long getDataLength() {
-    return dataLength;
-  }
+  void resonpseReceived(OpReadBlockResponseProto resp);
 
-  public byte[] getChecksum() {
-    return checksum;
-  }
+  void frameHeaderReceived(OpReadBlockFrameHeaderProto header);
+
+  void frameDataReceived(ByteBuf data);
+  
+  void onComplete();
+  
+  void channelInactive();
+  
+  void onError(Throwable error);
 }

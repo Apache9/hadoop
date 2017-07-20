@@ -3042,4 +3042,12 @@ public class DataNode extends ReconfigurableBase
     checkSuperuserPrivilege();
     spanReceiverHost.removeSpanReceiver(id);
   }
+
+  public boolean isBlockTokenEnabled() {
+    return isBlockTokenEnabled;
+  }
+
+  public BlockPoolTokenSecretManager getBlockPoolTokenSecretManager() {
+    return blockPoolTokenSecretManager;
+  }
 }
