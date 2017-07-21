@@ -1036,7 +1036,11 @@ public class BlockManager {
     }
     DatanodeStorageInfo[] storageInfos = node.getStorageInfos();
     int startStorage = DFSUtil.getRandom().nextInt(storageInfos.length);
-    Iterator<BlockInfo> iter = node.getBlockIterator(storageInfos[startStorage].getStorageID());
+    DatanodeStorageInfo[] storageInfosTocheck = new DatanodeStorageInfo[storageInfos.length - startStorage];
+    for (int i = startStorage; i < storageInfos.length; i ++) {
+      storageInfosTocheck[i-startStorage] = storageInfos[i];
+    }
+    Iterator<BlockInfo> iter = node.getBlockIterator(storageInfosTocheck);
     int skipedBlocks = 0;
     for (int i = 0; i < startStorage; i ++) {
       skipedBlocks += storageInfos[i].numBlocks();
