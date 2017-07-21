@@ -1010,11 +1010,12 @@ public class BlockManager {
     if(numBlocks == 0) {
       return new BlocksWithLocations(new BlockWithLocations[0]);
     }
-    Iterator<BlockInfo> iter = node.getBlockIterator();
-    int startBlock = DFSUtil.getRandom().nextInt(numBlocks); // starting from a random block
-    // skip blocks
-    for(int i=0; i<startBlock; i++) {
-      iter.next();
+    DatanodeStorageInfo[] storageInfos = node.getStorageInfos();
+    int startStorage = DFSUtil.getRandom().nextInt(storageInfos.length);
+    Iterator<BlockInfo> iter = node.getBlockIterator(storageInfos[startStorage].getStorageID());
+    int skipedBlocks = 0;
+    for (int i = 0; i < startStorage; i ++) {
+      skipedBlocks += storageInfos[i].numBlocks();
     }
     List<BlockWithLocations> results = new ArrayList<BlockWithLocations>();
     long totalSize = 0;
@@ -1026,13 +1027,12 @@ public class BlockManager {
     }
     if(totalSize<size) {
       iter = node.getBlockIterator(); // start from the beginning
-      for(int i=0; i<startBlock&&totalSize<size; i++) {
+      for(int i=0; i<skipedBlocks&&totalSize<size; i++) {
         curBlock = iter.next();
         if(!curBlock.isComplete())  continue;
         totalSize += addBlock(curBlock, results);
       }
     }
-
     return new BlocksWithLocations(
         results.toArray(new BlockWithLocations[results.size()]));
   }
