@@ -1402,6 +1402,8 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
       appAttempt.proxiedTrackingUrl = 
         appAttempt.generateProxyUriWithScheme(appAttempt.originalTrackingUrl);
 
+      long pendingTime = (System.currentTimeMillis() - appAttempt.startTime) / 1000;
+      LOG.info("App attempt: " + appAttempt.applicationAttemptId + " wait for " + pendingTime + " s for scheduling.");
       // Let the app know
       appAttempt.eventHandler.handle(new RMAppEvent(appAttempt
           .getAppAttemptId().getApplicationId(),

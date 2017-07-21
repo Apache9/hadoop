@@ -439,9 +439,13 @@ public class SystemMetricsPublisher extends CompositeService {
 
     @Override
     public void handle(SystemMetricsEvent event) {
+      long start = System.currentTimeMillis();
       handleSystemMetricsEvent(event);
+      long cost = System.currentTimeMillis() - start;
+      if (cost > 10) {
+        LOG.info("Pushing system metric to timelineserver too slow: " + cost + " ms");
+      }
     }
-
   }
 
   @SuppressWarnings({ "rawtypes", "unchecked" })
@@ -493,9 +497,7 @@ public class SystemMetricsPublisher extends CompositeService {
     }
 
     protected AsyncDispatcher createDispatcher() {
-      return new AsyncDispatcher();
+      return new AsyncDispatcher("SystemMetricsPublisher-Async-Dispatcher");
     }
-
   }
-
 }

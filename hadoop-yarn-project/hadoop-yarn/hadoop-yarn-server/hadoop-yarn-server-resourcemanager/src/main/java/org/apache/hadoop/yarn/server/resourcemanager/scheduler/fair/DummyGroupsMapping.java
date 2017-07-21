@@ -21,15 +21,16 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 import org.apache.hadoop.security.GroupMappingServiceProvider;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 
 public class DummyGroupsMapping implements GroupMappingServiceProvider {
+  private final static List<String> DEFAULT_GROUPS = Arrays.asList("hadoop");
 
   @Override
   @SuppressWarnings("unchecked")
   public List<String> getGroups(String user) throws IOException {
-    return Collections.EMPTY_LIST;
+    return DEFAULT_GROUPS;
   }
 
   @Override

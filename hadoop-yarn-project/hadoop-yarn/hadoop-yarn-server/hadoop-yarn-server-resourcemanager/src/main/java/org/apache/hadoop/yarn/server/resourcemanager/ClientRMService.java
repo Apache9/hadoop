@@ -329,7 +329,7 @@ public class ClientRMService extends AbstractService implements
         .newRecordInstance(GetApplicationReportResponse.class);
     response.setApplicationReport(report);
 
-    RMAuditLogger.logSuccess(callerUGI.getUserName(), "getApplicationReport", "ClientRMService");
+    // RMAuditLogger.logSuccess(callerUGI.getUserName(), "getApplicationReport", "ClientRMService");
     return response;
   }
 

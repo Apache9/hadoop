@@ -73,8 +73,16 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
     this(new LinkedBlockingQueue<Event>());
   }
 
+  public AsyncDispatcher(String name) {
+    this(name, new LinkedBlockingQueue<Event>());
+  }
+
   public AsyncDispatcher(BlockingQueue<Event> eventQueue) {
-    super("Dispatcher");
+    this("Dispatcher", eventQueue);
+  }
+
+  public AsyncDispatcher(String name, BlockingQueue<Event> eventQueue) {
+    super(name);
     this.eventQueue = eventQueue;
     this.eventDispatchers = new HashMap<Class<? extends Enum>, EventHandler>();
   }
@@ -230,7 +238,7 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
       /* all this method does is enqueue all the events onto the queue */
       int qSize = eventQueue.size();
       if (qSize !=0 && qSize %1000 == 0) {
-        LOG.info("Size of event-queue is " + qSize);
+        LOG.info("Size of event-queue is " + qSize + " in service: " + getName());
       }
       int remCapacity = eventQueue.remainingCapacity();
       if (remCapacity < 1000) {

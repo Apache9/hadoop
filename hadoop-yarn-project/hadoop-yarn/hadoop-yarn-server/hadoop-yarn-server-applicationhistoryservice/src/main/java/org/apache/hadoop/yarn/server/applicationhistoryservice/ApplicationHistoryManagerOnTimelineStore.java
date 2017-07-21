@@ -115,7 +115,7 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
           apps.put(app.appReport.getApplicationId(), app.appReport);
         } catch (Exception e) {
           LOG.error("Error on generating application report for " +
-              entity.getEntityId(), e);
+              entity.getEntityId());
         }
       }
     }

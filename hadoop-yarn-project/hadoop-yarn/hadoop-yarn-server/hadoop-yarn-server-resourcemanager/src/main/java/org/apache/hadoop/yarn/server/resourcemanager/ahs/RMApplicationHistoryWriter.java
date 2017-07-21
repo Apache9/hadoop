@@ -145,8 +145,10 @@ public class RMApplicationHistoryWriter extends CompositeService {
             (WritingApplicationStartEvent) event;
         try {
           writer.applicationStarted(wasEvent.getApplicationStartData());
-          LOG.info("Stored the start data of application "
-              + wasEvent.getApplicationId());
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Stored the start data of application "
+                + wasEvent.getApplicationId());
+          }
         } catch (IOException e) {
           LOG.error("Error when storing the start data of application "
               + wasEvent.getApplicationId());
@@ -157,8 +159,10 @@ public class RMApplicationHistoryWriter extends CompositeService {
             (WritingApplicationFinishEvent) event;
         try {
           writer.applicationFinished(wafEvent.getApplicationFinishData());
-          LOG.info("Stored the finish data of application "
-              + wafEvent.getApplicationId());
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Stored the finish data of application "
+                + wafEvent.getApplicationId());
+          }
         } catch (IOException e) {
           LOG.error("Error when storing the finish data of application "
               + wafEvent.getApplicationId());
@@ -170,8 +174,10 @@ public class RMApplicationHistoryWriter extends CompositeService {
         try {
           writer.applicationAttemptStarted(waasEvent
             .getApplicationAttemptStartData());
-          LOG.info("Stored the start data of application attempt "
-              + waasEvent.getApplicationAttemptId());
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Stored the start data of application attempt "
+                + waasEvent.getApplicationAttemptId());
+          }
         } catch (IOException e) {
           LOG.error("Error when storing the start data of application attempt "
               + waasEvent.getApplicationAttemptId());
@@ -183,8 +189,10 @@ public class RMApplicationHistoryWriter extends CompositeService {
         try {
           writer.applicationAttemptFinished(waafEvent
             .getApplicationAttemptFinishData());
-          LOG.info("Stored the finish data of application attempt "
-              + waafEvent.getApplicationAttemptId());
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Stored the finish data of application attempt "
+                + waafEvent.getApplicationAttemptId());
+          }
         } catch (IOException e) {
           LOG
             .error("Error when storing the finish data of application attempt "
@@ -196,8 +204,10 @@ public class RMApplicationHistoryWriter extends CompositeService {
             (WritingContainerStartEvent) event;
         try {
           writer.containerStarted(wcsEvent.getContainerStartData());
-          LOG.info("Stored the start data of container "
-              + wcsEvent.getContainerId());
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Stored the start data of container "
+                + wcsEvent.getContainerId());
+          }
         } catch (IOException e) {
           LOG.error("Error when storing the start data of container "
               + wcsEvent.getContainerId());
@@ -208,8 +218,10 @@ public class RMApplicationHistoryWriter extends CompositeService {
             (WritingContainerFinishEvent) event;
         try {
           writer.containerFinished(wcfEvent.getContainerFinishData());
-          LOG.info("Stored the finish data of container "
-              + wcfEvent.getContainerId());
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Stored the finish data of container "
+                + wcfEvent.getContainerId());
+          }
         } catch (IOException e) {
           LOG.error("Error when storing the finish data of container "
               + wcfEvent.getContainerId());
@@ -355,7 +367,7 @@ public class RMApplicationHistoryWriter extends CompositeService {
     }
 
     protected AsyncDispatcher createDispatcher() {
-      return new AsyncDispatcher();
+      return new AsyncDispatcher("RMApplicationHistoryWriter-Dispatcher");
     }
 
   }

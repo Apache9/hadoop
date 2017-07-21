@@ -103,8 +103,10 @@ public class AMLauncher implements Runnable {
     ContainerId masterContainerID = masterContainer.getId();
     ApplicationSubmissionContext applicationContext =
       application.getSubmissionContext();
-    LOG.info("Setting up container " + masterContainer
-        + " for AM " + application.getAppAttemptId());  
+    if (LOG.isDebugEnabled()) {
+      LOG.info("Setting up container " + masterContainer
+          + " for AM " + application.getAppAttemptId());
+    }
     ContainerLaunchContext launchContext =
         createAMContainerLaunchContext(applicationContext, masterContainerID);
 
@@ -188,12 +190,13 @@ public class AMLauncher implements Runnable {
     // Construct the actual Container
     ContainerLaunchContext container = 
         applicationMasterContext.getAMContainerSpec();
-    LOG.info("Command to launch container "
-        + containerID
-        + " : "
-        + StringUtils.arrayToString(container.getCommands().toArray(
-            new String[0])));
-    
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Command to launch container "
+          + containerID
+          + " : "
+          + StringUtils.arrayToString(container.getCommands().toArray(
+          new String[0])));
+    }
     // Finalize the container
     setupTokens(container, containerID);
     

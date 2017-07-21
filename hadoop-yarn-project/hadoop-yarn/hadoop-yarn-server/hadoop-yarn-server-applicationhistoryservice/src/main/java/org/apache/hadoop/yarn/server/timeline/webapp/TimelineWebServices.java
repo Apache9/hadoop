@@ -248,6 +248,7 @@ public class TimelineWebServices {
       @Context HttpServletRequest req,
       @Context HttpServletResponse res,
       TimelineEntities entities) {
+    long start = System.currentTimeMillis();
     init(res);
     UserGroupInformation callerUGI = getUser(req);
     if (callerUGI == null) {
@@ -256,7 +257,12 @@ public class TimelineWebServices {
       throw new ForbiddenException(msg);
     }
     try {
-      return timelineDataManager.postEntities(entities, callerUGI);
+      TimelinePutResponse response = timelineDataManager.postEntities(entities, callerUGI);
+      long cost = System.currentTimeMillis() - start;
+      if (cost > 10) {
+        LOG.info("Show postEntities to timelineDataManager with " + cost + " ms");
+      }
+      return response;
     } catch (Exception e) {
       LOG.error("Error putting entities", e);
       throw new WebApplicationException(e,
