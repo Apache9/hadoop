@@ -493,6 +493,9 @@ public class DatanodeDescriptor extends DatanodeInfo {
   Iterator<BlockInfo> getBlockIterator(final String storageID) {
     return new BlockIterator(getStorageInfo(storageID));
   }
+  Iterator<BlockInfo> getBlockIterator(final DatanodeStorageInfo[] datanodeStorageInfos) {
+    return new BlockIterator(datanodeStorageInfos);
+  }
 
   /**
    * Store block replication work.
