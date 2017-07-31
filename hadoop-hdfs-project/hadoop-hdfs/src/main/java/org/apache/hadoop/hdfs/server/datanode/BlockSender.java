@@ -34,6 +34,7 @@ import java.util.Arrays;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.fs.ChecksumException;
+import org.apache.hadoop.hdfs.TracerLog;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
@@ -47,6 +48,8 @@ import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 
 /**
  * Reads a block from the disk and sends it to a recipient.
@@ -491,12 +494,15 @@ class BlockSender implements java.io.Closeable {
       boolean transferTo, DataTransferThrottler throttler) throws IOException {
     int dataLen = (int) Math.min(endOffset - offset,
                              (chunkSize * (long) maxChunks));
-    
+
     int numChunks = numberOfChunks(dataLen); // Number of chunks be sent in the packet
     int checksumDataLen = numChunks * checksumSize;
     int packetLen = dataLen + checksumDataLen + 4;
     boolean lastDataPacket = offset + dataLen == endOffset && dataLen > 0;
 
+    TraceScope traceScope = TracerLog.startScope("Send Packet",
+      "blockID=" + block.getLocalBlock().toString() +
+      ", offset=" + offset + ", dataLen=" + dataLen);
     // The packet buffer is organized as follows:
     // _______HHHHCCCCD?D?D?D?
     //        ^   ^
@@ -550,6 +556,9 @@ class BlockSender implements java.io.Closeable {
         long begin = System.nanoTime();
         sockOut.write(buf, headerOff, dataOff - headerOff);
         long endOfWriteHeader = System.nanoTime();
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("Write header done.");
+        }
         // no need to flush since we know out is not a buffered stream
         FileChannel fileCh = ((FileInputStream)blockIn).getChannel();
         LongWritable waitTime = new LongWritable();
@@ -557,6 +566,9 @@ class BlockSender implements java.io.Closeable {
         sockOut.transferToFully(fileCh, blockInPosition, dataLen, 
             waitTime, transferTime);
         long end = System.nanoTime();
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("transferToFully done.");
+        }
         datanode.metrics.addSendDataPacketBlockedOnNetworkNanos(waitTime.get());
         datanode.metrics.addSendDataPacketTransferNanos(transferTime.get());
         if (waitTime.get() > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L
@@ -574,6 +586,9 @@ class BlockSender implements java.io.Closeable {
         long end = System.nanoTime();
         if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
           LOG.info("BlockSender normal transfer2 cost:" + (end - begin) + "ns");
+        }
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("normal write done.");
         }
       }
     } catch (IOException e) {
@@ -610,6 +625,7 @@ class BlockSender implements java.io.Closeable {
       throttler.throttle(packetLen);
     }
 
+    TracerLog.closeTrace(traceScope, TracerLog.TracerWarnTimeType.rwPacket);
     return dataLen;
   }
   

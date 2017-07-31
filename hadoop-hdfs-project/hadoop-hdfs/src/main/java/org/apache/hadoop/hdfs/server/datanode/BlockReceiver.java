@@ -37,6 +37,7 @@ import java.util.zip.Checksum;
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.fs.FSOutputSummer;
+import org.apache.hadoop.hdfs.TracerLog;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -58,6 +59,8 @@ import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.StringUtils;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 
 /** A class that receives a block and writes to its own disk, meanwhile
  * may copies it to another site. If a throttler is provided,
@@ -452,6 +455,9 @@ class BlockReceiver implements Closeable {
    * returns the number of data bytes that the packet has.
    */
   private int receivePacket() throws IOException {
+    TraceScope traceScope = TracerLog.startScope("Receive Packet",
+      "blockID=" + block.getLocalBlock().toString() + ", inAddr=" + inAddr);
+
     // read the next packet
     packetReceiver.receiveNextPacket(in);
     long receivePacketStart = Time.monotonicNow();
@@ -459,6 +465,10 @@ class BlockReceiver implements Closeable {
     if (LOG.isDebugEnabled()){
       LOG.debug("Receiving one packet for block " + block +
                 ": " + header);
+    }
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("Received a packet, offsetInBlock=" + header.getOffsetInBlock()
+        + ", seqno=" + header.getSeqno() + ", dataLen=" + header.getDataLen());
     }
 
     // Sanity check the header
@@ -512,6 +522,9 @@ class BlockReceiver implements Closeable {
       } catch (IOException e) {
         handleMirrorOutError(e);
       }
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("Write to mirror done, mirrorAddr=" + mirrorAddr);
+      }
     }
     
     ByteBuffer dataBuf = packetReceiver.getDataSlice();
@@ -524,6 +537,9 @@ class BlockReceiver implements Closeable {
       // sync block if requested
       if (syncBlock) {
         flushOrSync(true);
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("Sync block done.");
+        }
       }
     } else {
       int checksumLen = ((len + bytesPerChecksum - 1)/bytesPerChecksum)*
@@ -607,6 +623,9 @@ class BlockReceiver implements Closeable {
                 + (t2 - t1) + "ms, volume: " + datanode.data.getVolume(block));
             datanode.metrics.addSlowWriteDataToDiskMs(t2 - t1);
           }
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("Write data to disk done.");
+          }
 
           // If this is a partial chunk, then verify that this is the only
           // chunk in the packet. Calculate new crc for this chunk.
@@ -667,6 +686,9 @@ class BlockReceiver implements Closeable {
     long receivePacketEnd = Time.monotonicNow();
     if (receivePacketEnd - receivePacketStart > SLOW_LOG_THRESHOLD_MS) {
       LOG.info("receivePacket cost:" + (receivePacketEnd - receivePacketStart) + "ms");
+    }
+    if (seqno >=0 ) {
+      TracerLog.closeTrace(traceScope, TracerLog.TracerWarnTimeType.rwPacket);
     }
     return lastPacketInBlock?-1:len;
   }

@@ -53,6 +53,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.htrace.Trace;
 
 /**
  * This is a wrapper around connection to datanode
@@ -223,6 +224,10 @@ public class RemoteBlockReader2  implements BlockReader {
       } else {
         sendReadResult(Status.SUCCESS);
       }
+    }
+    if (Trace.isTracing()) {
+      Trace.addTimelineAnnotation("HDFS: received a new package: seqno=" + curHeader.getSeqno()
+        +" offsetInBlock=" + curHeader.getOffsetInBlock());
     }
   }
   

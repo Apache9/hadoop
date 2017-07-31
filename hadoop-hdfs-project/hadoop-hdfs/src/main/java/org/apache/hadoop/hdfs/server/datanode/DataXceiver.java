@@ -47,6 +47,7 @@ import java.util.Arrays;
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
 import org.apache.hadoop.hdfs.ShortCircuitShm.SlotId;
+import org.apache.hadoop.hdfs.TracerLog;
 import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -85,6 +86,8 @@ import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.net.InetAddresses;
 import com.google.protobuf.ByteString;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 
 
 /**
@@ -600,6 +603,11 @@ class DataXceiver extends Receiver implements Runnable {
                 " tcp no delay " + peer.getTcpNoDelay());
     }
 
+    TraceScope traceScope = TracerLog.startScope("Receive block ",
+      "blockID=" + block.getLocalBlock()
+        + " src=" + remoteAddress
+        + " dest=" + localAddress);
+
     // We later mutate block's generation stamp and length, but we need to
     // forward the original version of the block to downstream mirrors, so
     // make a copy here.
@@ -635,9 +643,17 @@ class DataXceiver extends Receiver implements Runnable {
             clientname, srcDataNode, datanode, requestedChecksum,
             cachingStrategy);
         storageUuid = blockReceiver.getStorageUuid();
+
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("Created a BlockReceiver, storageUuid =" + storageUuid);
+        }
       } else {
         storageUuid = datanode.data.recoverClose(
             block, latestGenerationStamp, minBytesRcvd);
+
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("recoverClose done, storageUuid =" + storageUuid);
+        }
       }
 
       //
@@ -699,6 +715,9 @@ class DataXceiver extends Receiver implements Runnable {
                        firstBadLink);
             }
           }
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("Connect to downstream machine done, mirrorNode =" + mirrorNode);
+          }
 
         } catch (IOException e) {
           if (isClient) {
@@ -741,7 +760,14 @@ class DataXceiver extends Receiver implements Runnable {
           .build()
           .writeDelimitedTo(replyOut);
         replyOut.flush();
+
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("Send connect-ack to source done");
+        }
       }
+
+      Trace.addTimelineAnnotation("Begin to receive block ...");
+      TracerLog.closeTrace(traceScope);
 
       // receive the block and mirror to the next target
       if (blockReceiver != null) {
