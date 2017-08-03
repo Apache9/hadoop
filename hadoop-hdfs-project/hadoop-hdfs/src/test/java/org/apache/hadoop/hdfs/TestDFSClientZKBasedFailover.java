@@ -21,9 +21,11 @@ package org.apache.hadoop.hdfs;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Collection;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.TimeoutException;
@@ -40,13 +42,26 @@ import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.ha.HealthMonitor;
 import org.apache.hadoop.ha.TestNodeFencer.AlwaysSucceedFencer;
 import org.apache.hadoop.ha.ZKFCTestUtil;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSecretManager;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.namenode.ha.ZkConfiguredFailoverProxyProvider;
 import org.apache.hadoop.hdfs.tools.DFSZKFailoverController;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
+
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.MultithreadedTestUtil.TestContext;
 import org.apache.hadoop.test.MultithreadedTestUtil.TestingThread;
+import org.apache.hadoop.util.Time;
+import org.junit.Assert;
 import org.junit.Test;
 
 import com.google.common.base.Supplier;
@@ -67,7 +82,7 @@ public class TestDFSClientZKBasedFailover {
     FileSystem fs = null;
     private boolean configRetryTime = false;
     private int retryTimes;
-    private int sleepBetweenRetry;
+    private int durationBetweenRetryZk;
     private final String nameservice = nameservicePrefix
         + MiniDFSCluster.nextInstanceId();
 
@@ -75,17 +90,17 @@ public class TestDFSClientZKBasedFailover {
 
     public FailoverTestContext(FailoverTest ft) {
       failoverTest = ft;
+      conf = new Configuration();
     }
 
     public void setup(boolean single) throws Exception {
       super.setUp();
-      conf = new Configuration();
-
       // Specify the quorum per-nameservice, to ensure that these configs
       // can be nameservice-scoped.
-      conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY + "."
-          + nameservice,
-          hostPort);
+      /*
+       * conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + nameservice,
+       * hostPort);
+       */
       conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
       conf.set(DFSConfigKeys.DFS_HA_FENCE_METHODS_KEY,
           AlwaysSucceedFencer.class.getName());
@@ -97,12 +112,18 @@ public class TestDFSClientZKBasedFailover {
           CommonConfigurationKeysPublic.IPC_CLIENT_CONNECTION_MAXIDLETIME_KEY,
           0);
 
+      // default to 0
+      conf.setInt(
+          DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_DURATION_BETWEEN_RETRYZK,
+          0);
+
       //Change the failover retry times and interval
       if (configRetryTime) {
-        conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_NUM_RETRIES,
+        conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY,
                 retryTimes);
-        conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_SLEEP_BETWEEN_RETRY,
-                sleepBetweenRetry);
+        conf.setInt(
+            DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_DURATION_BETWEEN_RETRYZK,
+            durationBetweenRetryZk);
       }
 
       conf.setInt(DFSConfigKeys.DFS_HA_ZKFC_PORT_KEY + "." + nameservice
@@ -163,14 +184,55 @@ public class TestDFSClientZKBasedFailover {
     public void setRetryTime(int times, int interval) {
       configRetryTime = true;
       retryTimes = times;
-      sleepBetweenRetry = interval;
+      durationBetweenRetryZk = interval;
+    }
+
+    public void resetFs() throws IOException {
+      try {
+        fs.close();
+        fs = HATestUtil.configureZKBasedFailoverFs(cluster, conf);
+      } catch (Exception e) {
+        throw new IOException(e);
+      }
+    }
+
+    public void setClientName(String cname) {
+      conf.set("mapreduce.task.attempt.id", cname);
+    }
+
+    public void setFailoverFencePeriod(long fp) {
+      conf.setLong(DFSConfigKeys.DFS_CLIENT_ZK_FAILOVER_FENCE_PERIOD_INMS, fp);
+    }
+
+    public void setDurationBetweenZkRetry(long dbz) {
+      conf.setLong(
+          DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_DURATION_BETWEEN_RETRYZK,
+          dbz);
+    }
+
+    public void setInitialMRDelay(long delay) {
+      conf.setLong(
+          DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_MAPREDUCE_INITIAL_DELAY, delay);
+    }
+
+    public void setZkQuorum(String quorum) {
+      conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY, quorum);
     }
 
     public void runTest() throws Exception {
       failoverTest.runTest(this);
     }
 
+    public void waitForActive(int idx) throws IOException {
+      try {
+        waitForHAState(cluster, idx, HAServiceState.ACTIVE);
+      } catch (Exception e) {
+        throw new IOException(e);
+      }
+    }
+
     public void shutdown() throws Exception {
+      UserGroupInformation.setLoginUser(null);
       cluster.shutdown();
 
       if (thr1 != null) {
@@ -291,11 +353,10 @@ public class TestDFSClientZKBasedFailover {
         Path testDir1 = new Path("/dir1");
         fs.mkdirs(testDir1);
         assertTrue(fs.exists(testDir1));
-
         ftc.cluster.shutdownNameNode(0);
         ftc.cluster.shutdownNameNode(1);
         //zk re-election may last around 20s
-        new Timer().schedule(new StartNameNodeTask(ftc), 20000);
+        new Timer().schedule(new StartNameNodeTask(ftc), 30000);
 
         boolean getActiveNNSuccess = true;
         try {
@@ -309,14 +370,242 @@ public class TestDFSClientZKBasedFailover {
 
     FailoverTestContext ftc = new FailoverTestContext(ft);
     //inappropriate config, maybe too short to handle zk re-election
-    ftc.setRetryTime(3, 5000);
+    ftc.setRetryTime(2, 0);
     ftc.setup(false);
     ft.runTest(ftc);
     ftc.shutdown();
   }
 
-  // TBD: Add test cases for different combination of configuration
+  @Test
+  public void testInitialZkDelay() throws Exception {
+    FailoverTest ft = new FailoverTest() {
+      public void runTest(FailoverTestContext ftc) throws IOException,
+          URISyntaxException {
+        FileSystem fs = ftc.fs;
+        Path testDir1 = new Path("/dir1");
+        fs.mkdirs(testDir1);
+        ftc.setClientName("mapreduce");
+        ftc.setInitialMRDelay(10000);
+        long start = Time.now();
+        ftc.resetFs();
+        // At least delay 100000/10
+        assertTrue(Time.now() - start > 1000);
+        assertTrue(Time.now() - start < 11000);
+        fs = ftc.fs;
+        assertTrue(fs.exists(testDir1));
+        ftc.setInitialMRDelay(0);
+        start = Time.now();
+        ftc.resetFs();
+        // No longer sleep, so it should not delay 500ms
+        assertTrue(Time.now() - start < 1000);
+        fs = ftc.fs;
+        assertTrue(fs.exists(testDir1));
+      }
+    };
 
+    FailoverTestContext ftc = new FailoverTestContext(ft);
+    ftc.setup(false);
+    ft.runTest(ftc);
+    ftc.shutdown();
+  }
+
+  @Test
+  public void testFailoverZkDelay() throws Exception {
+    FailoverTest ft = new FailoverTest() {
+      public void runTest(FailoverTestContext ftc) throws IOException,
+          URISyntaxException {
+        FileSystem fs = ftc.fs;
+        Path testDir1 = new Path("/dir1");
+        fs.mkdirs(testDir1);
+        ftc.setDurationBetweenZkRetry(0);
+        ftc.setFailoverFencePeriod(10000);
+        ftc.resetFs();
+        fs = ftc.fs;
+        assertTrue(fs.exists(testDir1));
+        ftc.cluster.shutdownNameNode(0);
+        ftc.waitForActive(1);
+        long start = Time.now();
+        assertTrue(fs.exists(testDir1));
+        assertTrue(Time.now() - start > 1000);
+        assertTrue(Time.now() - start < 11000);
+        ftc.setDurationBetweenZkRetry(0);
+        ftc.setFailoverFencePeriod(0);
+        ftc.cluster.restartNameNode(0, false);
+        ftc.resetFs();
+        fs = ftc.fs;
+        assertTrue(fs.exists(testDir1));
+        ftc.cluster.shutdownNameNode(1);
+        ftc.waitForActive(0);
+        start = Time.now();
+        assertTrue(fs.exists(testDir1));
+        assertTrue(Time.now() - start < 1000);
+      }
+    };
+
+    FailoverTestContext ftc = new FailoverTestContext(ft);
+    ftc.setup(false);
+    ft.runTest(ftc);
+    ftc.shutdown();
+  }
+
+  @Test
+  public void testRetryZkDuration1() throws Exception {
+    FailoverTest ft = new FailoverTest() {
+      public void runTest(FailoverTestContext ftc) throws IOException,
+          URISyntaxException {
+        // cannot accesss zk, after nn failover we can still access hdfs
+        FileSystem fs = ftc.fs;
+        Path testDir1 = new Path("/dir1");
+        fs.mkdirs(testDir1);
+        ftc.setDurationBetweenZkRetry(60000);
+        ftc.setFailoverFencePeriod(0);
+        ftc.resetFs();
+        fs = ftc.fs;
+        assertTrue(fs.exists(testDir1));
+        fs.getConf().set(CommonConfigurationKeys.ZK_QUORUM_KEY,
+            "127.0.0.1:" + 80);
+        ftc.cluster.shutdownNameNode(0);
+        ftc.waitForActive(1);
+        long start = Time.now();
+        assertTrue(fs.exists(testDir1));
+        assertTrue(Time.now() - start < 1000);
+      }
+    };
+
+    FailoverTestContext ftc = new FailoverTestContext(ft);
+    ftc.setup(false);
+    ft.runTest(ftc);
+    ftc.shutdown();
+  }
+
+  @Test
+  public void testRetryZkDuration2() throws Exception {
+    FailoverTest ft = new FailoverTest() {
+      public void runTest(FailoverTestContext ftc) throws IOException,
+          URISyntaxException {
+        FileSystem fs = ftc.fs;
+        // Test basic failover
+        Path testDir1 = new Path("/dir1");
+        fs.mkdirs(testDir1);
+        assertTrue(fs.exists(testDir1));
+        try {
+          ftc.setupSecondNN(nnPort3);
+        } catch (Exception e) {
+          throw new IOException("Fail to setup second Namenode", e);
+        }
+        String origQuorum =
+            fs.getConf().get(CommonConfigurationKeys.ZK_QUORUM_KEY);
+        fs.getConf().set(CommonConfigurationKeys.ZK_QUORUM_KEY,
+            "127.0.0.1:" + 80);
+        ftc.cluster.shutdownNameNode(0);
+        ftc.waitForActive(1);
+        try {
+          fs.exists(testDir1);
+          // we should not be able to access the hdfs
+          assertTrue(false);
+        } catch (Exception e) {
+        }
+        fs.getConf().set(CommonConfigurationKeys.ZK_QUORUM_KEY, origQuorum);
+        try {
+          Thread.sleep(16000);
+        } catch (Exception e) {
+          throw new IOException(e);
+        }
+        long start = Time.now();
+        assertTrue(fs.exists(testDir1));
+        assertTrue(Time.now() - start < 1000);
+      }
+    };
+
+    FailoverTestContext ftc = new FailoverTestContext(ft);
+    ftc.setRetryTime(2, 8000);
+    ftc.setFailoverFencePeriod(0);
+    ftc.setup(true);
+    ft.runTest(ftc);
+    ftc.shutdown();
+  }
+
+  @Test
+  public void testDelegationTokenForNewNamenode() throws Exception {
+    FailoverTest ft = new FailoverTest() {
+      public void runTest(FailoverTestContext ftc) throws IOException,
+          URISyntaxException {
+        // create a fake delegation token manager
+        FSNamesystem mockNameSys = mock(FSNamesystem.class);
+        DelegationTokenSecretManager sm =
+            new DelegationTokenSecretManager(
+                DFSConfigKeys.DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT,
+                DFSConfigKeys.DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT,
+                DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_DEFAULT,
+                3600000, mockNameSys);
+        sm.startThreads();
+
+        // create a fake delegation token and add to ugi
+        DelegationTokenIdentifier dtId =
+            new DelegationTokenIdentifier(new Text("mi"), new Text("test"),
+                new Text("mi"));
+        Token<DelegationTokenIdentifier> token =
+            new Token<DelegationTokenIdentifier>(dtId, sm);
+        UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+        Text logicalServiceName =
+            HAUtil.buildTokenServiceForLogicalUri(
+                HATestUtil.getLogicalUri(ftc.cluster),
+                HdfsConstants.HDFS_URI_SCHEME);
+        token.setService(logicalServiceName);
+        ugi.addToken(logicalServiceName, token);
+
+        // access the namenode and failover
+        FileSystem fs = ftc.fs;
+        // Test basic failover
+        Path testDir1 = new Path("/dir1");
+        fs.mkdirs(testDir1);
+        assertTrue(fs.exists(testDir1));
+        try {
+          ftc.setupSecondNN(nnPort3);
+        } catch (Exception e) {
+          throw new IOException("Fail to setup second Namenode", e);
+        }
+        ftc.cluster.shutdownNameNode(0);
+
+        Exception expectedException = null;
+        try {
+          fs.exists(testDir1);
+        } catch (RemoteException e) {
+          // When the fs init, since there is no delegation token in ugi,
+          // the connection to namenode is established by SIMPLE authentication
+          // method. After we added a new namenode and force the failover
+          // happen, ZkConfiguredFailoverProvider cloned the delegation token
+          // we just added to logical address to new address, so the new
+          // connection is established by DELEGATION_TOKEN authentication
+          // method.
+          // But the token is fake and not exist on namenode, the call should
+          // fail
+          expectedException = e;
+        }
+        Assert.assertNotNull(expectedException);
+
+        Collection<Token<? extends TokenIdentifier>> set = ugi.getTokens();
+        assertEquals(set.size(), 2);
+
+        String newNNAddress = "127.0.0.1:" + nnPort3;
+        boolean hasNewNNAddress = false;
+        for (Token<? extends TokenIdentifier> t : ugi.getTokens()) {
+          if (t.getService().toString().equals(newNNAddress)) {
+            hasNewNNAddress = true;
+            break;
+          }
+        }
+        assertTrue(hasNewNNAddress);
+      }
+    };
+
+    FailoverTestContext ftc = new FailoverTestContext(ft);
+    ftc.setup(true);
+    ft.runTest(ftc);
+    ftc.shutdown();
+  }
+
+  // TBD: Add test cases for different combination of configuration
   private void waitForHAState(MiniDFSCluster cluster, int nnidx,
       final HAServiceState state)
       throws TimeoutException, InterruptedException {
