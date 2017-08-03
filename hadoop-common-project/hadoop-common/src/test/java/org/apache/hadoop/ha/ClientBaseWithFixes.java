@@ -65,8 +65,7 @@ public abstract class ClientBaseWithFixes extends ZKTestCase {
     protected static final Logger LOG = LoggerFactory.getLogger(ClientBaseWithFixes.class);
 
     public static int CONNECTION_TIMEOUT = 30000;
-    static final File BASETEST =
-        new File(System.getProperty("build.test.dir", "build"));
+    static final File BASETEST = new File(System.getProperty("build.test.dir", "test-tmp"));
 
     protected final String hostPort = initHostPort();
     protected int maxCnxns = 0;
@@ -479,6 +478,8 @@ public abstract class ClientBaseWithFixes extends ZKTestCase {
         if (tmpDir != null) {
             Assert.assertTrue("delete " + tmpDir.toString(), recursiveDelete(tmpDir));
         }
+
+        Assert.assertTrue("delete " + BASETEST, recursiveDelete(BASETEST));
 
         // This has to be set to null when the same instance of this class is reused between test cases
         serverFactory = null;

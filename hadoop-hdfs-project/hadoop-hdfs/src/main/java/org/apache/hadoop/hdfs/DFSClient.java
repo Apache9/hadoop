@@ -596,7 +596,25 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
     this.authority = nameNodeUri == null? "null": nameNodeUri.getAuthority();
     this.clientName = "DFSClient_" + dfsClientConf.taskId + "_" + 
         DFSUtil.getRandom().nextInt()  + "_" + Thread.currentThread().getId();
-    
+    if (!dfsClientConf.taskId.equals("NONMAPREDUCE")) {
+      if (conf.getLong(DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_INITIAL_DELAY,
+          DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_INITIAL_DELAY_DEFAULT) == 0) {
+        long mapreduceZkDelay =
+            conf.getLong(
+                DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_MAPREDUCE_INITIAL_DELAY,
+                DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_MAPREDUCE_INITIAL_DELAY_DEFAULT);
+        conf.setLong(DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_INITIAL_DELAY,
+            mapreduceZkDelay);
+      }
+    }
+    provider = DFSUtil.createKeyProvider(conf);
+    if (LOG.isDebugEnabled()) {
+      if (provider == null) {
+        LOG.debug("No KeyProvider found.");
+      } else {
+        LOG.debug("Found KeyProvider: " + provider.toString());
+      }
+    }
     int numResponseToDrop = conf.getInt(
         DFSConfigKeys.DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_KEY,
         DFSConfigKeys.DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_DEFAULT);
