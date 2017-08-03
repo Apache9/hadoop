@@ -55,7 +55,8 @@ public class ConfiguredFailoverProxyProvider<T> extends
   protected final Configuration conf;
   protected final List<AddressRpcProxyPair<T>> proxies =
       new ArrayList<AddressRpcProxyPair<T>>();
-  private final UserGroupInformation ugi;
+  protected final URI logicalUri;
+  protected final UserGroupInformation ugi;
   private final Class<T> xface;
 
   protected int currentProxyIndex = 0;
@@ -68,6 +69,7 @@ public class ConfiguredFailoverProxyProvider<T> extends
     this.xface = xface;
     
     this.conf = new Configuration(conf);
+    this.logicalUri = uri;
     int maxRetries = this.conf.getInt(
         DFSConfigKeys.DFS_CLIENT_FAILOVER_CONNECTION_RETRIES_KEY,
         DFSConfigKeys.DFS_CLIENT_FAILOVER_CONNECTION_RETRIES_DEFAULT);
@@ -84,25 +86,7 @@ public class ConfiguredFailoverProxyProvider<T> extends
     
     try {
       ugi = UserGroupInformation.getCurrentUser();
-      
-      Map<String, Map<String, InetSocketAddress>> map = DFSUtil.getHaNnRpcAddresses(
-          conf);
-      Map<String, InetSocketAddress> addressesInNN = map.get(uri.getHost());
-      
-      if (addressesInNN == null || addressesInNN.size() == 0) {
-        throw new RuntimeException("Could not find any configured addresses " +
-            "for URI " + uri);
-      }
-      
-      Collection<InetSocketAddress> addressesOfNns = addressesInNN.values();
-      for (InetSocketAddress address : addressesOfNns) {
-        proxies.add(new AddressRpcProxyPair<T>(address));
-      }
-
-      // The client may have a delegation token set for the logical
-      // URI of the cluster. Clone this token to apply to each of the
-      // underlying IPC addresses so that the IPC code can find it.
-      HAUtil.cloneDelegationTokenForLogicalUri(ugi, uri, addressesOfNns);
+      initializeProxies(uri);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -111,6 +95,27 @@ public class ConfiguredFailoverProxyProvider<T> extends
   @Override
   public Class<T> getInterface() {
     return xface;
+  }
+
+  protected void initializeProxies(URI uri) {
+    Map<String, Map<String, InetSocketAddress>> map =
+        DFSUtil.getHaNnRpcAddresses(conf);
+    Map<String, InetSocketAddress> addressesInNN = map.get(uri.getHost());
+
+    if (addressesInNN == null || addressesInNN.size() == 0) {
+      throw new RuntimeException("Could not find any configured addresses "
+          + "for URI " + uri);
+    }
+
+    Collection<InetSocketAddress> addressesOfNns = addressesInNN.values();
+    for (InetSocketAddress address : addressesOfNns) {
+      proxies.add(new AddressRpcProxyPair<T>(address));
+    }
+
+    // The client may have a delegation token set for the logical
+    // URI of the cluster. Clone this token to apply to each of the
+    // underlying IPC addresses so that the IPC code can find it.
+    HAUtil.cloneDelegationTokenForLogicalUri(ugi, uri, addressesOfNns);
   }
 
   /**
