@@ -2053,4 +2053,64 @@ public class TestDFSShell {
       }
     }
   }
+
+ @Test (timeout = 30000)
+  public void testDeleteTheTrashFileWithSpecialCharInPath() throws Exception {
+    // Run a cluster, optionally with trash enabled on the server
+    String currentUser = System.getProperty("user.name");
+    Configuration serverConf = new HdfsConfiguration();
+    serverConf.set("dfs.permissions.superuser", currentUser);
+    serverConf.set(DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_KEY, "true");
+
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(serverConf)
+            .numDataNodes(1).format(true).build();
+    Configuration clientConf = new Configuration(serverConf);
+
+    FsShell shell = new FsShell(clientConf);
+    FileSystem fs = null;
+
+    try {
+      // Create and delete a file
+      fs = cluster.getFileSystem();
+
+      String testfile = "/tmp/TestDFSShell-deleteFileUsingTrash-?testquery#testFregment";
+
+      String trashFile = shell.getCurrentTrashDir() + "/" + testfile;
+      writeFile(fs, new Path(testfile));
+      String[] argv = new String[] { "-rm", testfile };
+      int res = ToolRunner.run(shell, argv);
+      assertEquals("rm failed", 0, res);
+      assertFalse("File was not removed", fs.exists(new Path(testfile)));
+      assertTrue("File was not in trash", fs.exists(new Path(trashFile)));
+
+      int clusterport = cluster.getNameNodePort();
+
+      String fullpath = "hdfs://localhost:" + clusterport + testfile;
+
+      writeFile(fs, new Path(fullpath));
+      trashFile = shell.getCurrentTrashDir() + "/" + testfile;
+      argv = new String[] { "-rm", testfile };
+      res = ToolRunner.run(shell, argv);
+      assertEquals("rm failed", 0, res);
+      assertFalse("File was not removed", fs.exists(new Path(testfile)));
+      assertTrue("File was not in trash", fs.exists(new Path(trashFile)));
+
+      testfile = "/tmp/TestDFSShell-deleteFileUsingTrash-?testquery%23testFregment";
+      trashFile = shell.getCurrentTrashDir() + "/" + testfile;
+      writeFile(fs, new Path(testfile));
+      argv = new String[] { "-rm", testfile };
+      res = ToolRunner.run(shell, argv);
+      assertEquals("rm failed", 0, res);
+      assertFalse("File was not removed", fs.exists(new Path(testfile)));
+      assertTrue("File was not in trash", fs.exists(new Path(trashFile)));
+
+    } finally {
+      if (fs != null) {
+        fs.close();
+      }
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
 }

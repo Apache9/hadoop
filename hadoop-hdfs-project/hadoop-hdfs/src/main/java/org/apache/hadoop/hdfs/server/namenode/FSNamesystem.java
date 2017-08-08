@@ -3515,13 +3515,13 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     Path path = new Path(src);
 
 
-    if (!dir.exists(path.toUri().toString())) {
-      LOG.warn("path doesn't exist " + path.toUri().toString());
+    if (!dir.exists(path.toUri().getPath().toString())) {
+      LOG.warn("path doesn't exist " + path.toUri().getPath().toString());
       return false;
     }
 
     if (isInTrash(path)) {
-      LOG.error("path already in trash" + path.toUri().toString());
+      LOG.error("path already in trash" + path.toUri().getPath().toString());
       return false;                               // already in trash
     }
 
@@ -3538,7 +3538,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     for (int i = 0; i < 2; i++) {
       String newBaseTrashPath = null;
       try {
-        if ((newBaseTrashPath = mkdirForTrash(baseTrashPath.toUri().toString(), permissionStatus)) == null) {      // create current
+        if ((newBaseTrashPath = mkdirForTrash(baseTrashPath.toUri().getPath().toString(), permissionStatus)) == null) {      // create current
           LOG.warn("Can't create(mkdir) trash directory: "+baseTrashPath);
           return false;
         }
@@ -3555,13 +3555,13 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       try {
         // if the target path in Trash already exists, then append with
         // a current time in millisecs.
-        String orig = targetTrashPath.toUri().toString();
+        String orig = targetTrashPath.toUri().getPath().toString();
 
-        while(dir.exists(targetTrashPath.toUri().toString())) {
+        while(dir.exists(targetTrashPath.toUri().getPath().toString())) {
           targetTrashPath = new Path(orig + Time.now());
         }
 
-        if (renameTo(path.toUri().toString(), targetTrashPath.toUri().toString()))           // move to current trash
+        if (renameTo(path.toUri().getPath().toString(), targetTrashPath.toUri().getPath().toString()))           // move to current trash
           return true;
       } catch (IOException e) {
         cause = e;
