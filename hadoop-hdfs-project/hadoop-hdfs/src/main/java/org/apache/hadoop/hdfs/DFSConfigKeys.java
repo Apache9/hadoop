@@ -572,6 +572,26 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_DATANODE_SOCKET_BACKLOG_KEY = "dfs.datanode.socket.backlog";
   public static final int DFS_DATANODE_SOCKET_BACKLOG_DEFAULT = 0;
 
+  public static final String DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_KEY = "dfs.client.deadnode.detect.enable";
+  public static final boolean DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_DEFALT = false;
+  public static final String DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY = "dfs.client.deadnode.detect.live.enable";
+  public static final boolean DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_DEFALT = true;
+  public static final String DFS_CLIENT_DEAD_NODE_DETECT_INTERVAL_KEY = "dfs.client.deadnode.detect.dead.interval";
+  public static final long DFS_CLIENT_DEAD_NODE_DETECT_INTERVAL_DEFALT = 60 * 1000; //ms
+  public static final String DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY = "dfs.client.deadnode.detect.live.interval";
+  public static final long DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_DEFALT = 600 * 1000; //ms
+  public static final String DFS_CLIENT_DEAD_NODE_DETECT_TIMEOUT_KEY = "dfs.client.deadnode.detect.timeout";
+  public static final int DFS_CLIENT_DEAD_NODE_DETECT_TIMEOUT_DEFALT = 20 * 1000; //ms
+  public static final String DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY = "dfs.client.deadnode.detect.retires";
+  public static final int DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_DEFALT = 3;
+  public static final String DFS_CLIENT_LIVE_NODE_DETECT_QUEUE_MAX_KEY = "dfs.client.deadnode.detect.live.queue.max";
+  public static final int DFS_CLIENT_LIVE_NODE_DETECT_QUEUE_MAX_DEFALT = 1000;
+  public static final String DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_KEY = "dfs.client.deadnode.detect.dead.queue.max";
+  public static final int DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_DEFALT = 100;
+  public static final String DFS_CLIENT_LIVE_NODE_DETECT_THREADS_KEY = "dfs.client.deadnode.detect.live.threads";
+  public static final int DFS_CLIENT_LIVE_NODE_DETECT_THREADS_DEFALT = 100;
+  public static final String DFS_CLIENT_DEAD_NODE_DETECT_THREADS_KEY = "dfs.client.deadnode.detect.dead.threads";
+  public static final int DFS_CLIENT_DEAD_NODE_DETECT_THREADS_DEFALT = 10;
   // property for fsimage compression
   public static final String DFS_IMAGE_COMPRESS_KEY = "dfs.image.compress";
   public static final boolean DFS_IMAGE_COMPRESS_DEFAULT = false;

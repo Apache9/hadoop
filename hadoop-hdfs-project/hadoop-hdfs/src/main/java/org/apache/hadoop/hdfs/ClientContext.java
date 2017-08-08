@@ -27,6 +27,7 @@ import org.apache.hadoop.hdfs.DFSClient.Conf;
 import org.apache.hadoop.hdfs.shortcircuit.DomainSocketFactory;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitCache;
 import org.apache.hadoop.hdfs.util.ByteArrayManager;
+import org.apache.hadoop.util.Daemon;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -94,6 +95,10 @@ public class ClientContext {
    */
   private boolean printedConfWarning = false;
 
+  private Daemon deadNodeDetectorThr = null;
+  private boolean enableSharedDeadNodes = false;
+  private DeadNodeDetector deadNodeDetector = null;
+
   private ClientContext(String name, Conf conf) {
     this.name = name;
     this.confString = confAsString(conf);
@@ -111,6 +116,12 @@ public class ClientContext {
     this.domainSocketFactory = new DomainSocketFactory(conf);
 
     this.byteArrayManager = ByteArrayManager.newInstance(conf.writeByteArrayManagerConf);
+    this.enableSharedDeadNodes = conf.enableSharedDeadNodes;
+    if (enableSharedDeadNodes) {
+      deadNodeDetector = new DeadNodeDetector(conf.conf, name);
+      deadNodeDetectorThr = new Daemon(deadNodeDetector);
+      deadNodeDetectorThr.start();
+    }
   }
 
   public static String confAsString(Conf conf) {
@@ -214,4 +225,8 @@ public class ClientContext {
   public ByteArrayManager getByteArrayManager() {
     return byteArrayManager;
   }
+
+  public boolean isEnableSharedDeadNodes () { return enableSharedDeadNodes; }
+
+  public DeadNodeDetector getDeadNodeDetector () { return deadNodeDetector; }
 }
