@@ -86,6 +86,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -244,7 +247,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
   private static final DFSHedgedReadMetrics HEDGED_READ_METRIC =
       new DFSHedgedReadMetrics();
   private static ThreadPoolExecutor HEDGED_READ_THREAD_POOL;
-  
+
+
   /**
    * DFSClient configuration 
    */
@@ -304,6 +308,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
     final long slowLogThresholdMs;
     final int slowConnWarningMs;
     final boolean forceDeleteToTrash;
+    final boolean enableSharedDeadNodes;
+    Configuration conf = null;
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
@@ -463,6 +469,12 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 
       forceDeleteToTrash = conf.getBoolean(DFS_FORCE_DELETE_TO_TRASH,
         DFS_FORCE_DELETE_TO_TRASH_DEFAULT);
+
+      enableSharedDeadNodes = conf.getBoolean(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_KEY,
+          DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_DEFALT);
+      if (enableSharedDeadNodes) {
+        this.conf = conf;
+      }
     }
 
     private DataChecksum.Type getChecksumType(Configuration conf) {
@@ -2923,4 +2935,74 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
   DFSHedgedReadMetrics getHedgedReadMetrics() {
     return HEDGED_READ_METRIC;
   }
+
+  public void addToDead(DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
+    if (clientContext.isEnableSharedDeadNodes()) {
+      clientContext.getDeadNodeDetector().addToDead(datanodeInfo);
+    } else {
+      dfsInputStream.getDeadNodes().put(datanodeInfo, datanodeInfo);
+    }
+  }
+
+
+  public void removeFromDead(DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
+    if (clientContext.isEnableSharedDeadNodes()) {
+      return;
+    } else {
+      dfsInputStream.getDeadNodes().remove(datanodeInfo);
+    }
+  }
+
+  public void clearDeadDatanodesOfDFSInputStream (DFSInputStream dfsInputStream) {
+    if (clientContext.isEnableSharedDeadNodes()) {
+      return;
+    } else {
+      dfsInputStream.getDeadNodes().clear();
+    }
+  }
+
+  public ConcurrentHashMap<DatanodeInfo, DatanodeInfo> getDeadNodes (DFSInputStream dfsInputStream) {
+    if (clientContext.isEnableSharedDeadNodes()) {
+      return clientContext.getDeadNodeDetector().getDeadNodes();
+    } else {
+      return dfsInputStream.getDeadNodes();
+    }
+  }
+
+  // for the test
+  public Set<DatanodeInfo> getLiveNodes() {
+    if (clientContext.isEnableSharedDeadNodes()) {
+      return clientContext.getDeadNodeDetector().getLiveNodesToDetect();
+    }
+
+    return null;
+  }
+
+  public boolean hasDeadNode (DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
+    if (clientContext.isEnableSharedDeadNodes()) {
+      return clientContext.getDeadNodeDetector().hasDeadNodes(datanodeInfo);
+    } else {
+      return dfsInputStream.getDeadNodes().contains(datanodeInfo);
+    }
+  }
+
+  public void addNodeToDetect (DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
+    if (!clientContext.isEnableSharedDeadNodes()) {
+      return;
+    }
+    clientContext.getDeadNodeDetector().addNodeToDetect(dfsInputStream, datanodeInfo);
+
+  }
+
+  public void removeNodeFromDetect(DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
+    if (!clientContext.isEnableSharedDeadNodes()) {
+      return;
+    }
+    clientContext.getDeadNodeDetector().removeNodeFromDetect(dfsInputStream, datanodeInfo);
+  }
+
+  public boolean isEnableSharedDeadNodes() {
+    return clientContext.isEnableSharedDeadNodes();
+  }
+
 }

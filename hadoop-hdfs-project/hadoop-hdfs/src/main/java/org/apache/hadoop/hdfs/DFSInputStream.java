@@ -217,8 +217,16 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   
   private final byte[] oneByteBuf = new byte[1]; // used for 'int read()'
 
-  void addToDeadNodes(DatanodeInfo dnInfo) {
-    deadNodes.put(dnInfo, dnInfo);
+  public void addToDeadNodes(DatanodeInfo dnInfo) {
+    dfsClient.addToDead(this, dnInfo);
+  }
+
+  public ConcurrentHashMap<DatanodeInfo, DatanodeInfo> getDeadNodes() {
+   return deadNodes;
+  }
+
+  public DFSClient getDfsClient () {
+    return this.dfsClient;
   }
   
   DFSInputStream(DFSClient dfsClient, String src, int buffersize, boolean verifyChecksum
@@ -292,7 +300,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         }
       }
     }
+    removeNodeFromDetect(locatedBlocks);
     locatedBlocks = newInfo;
+    addNodeToDetect(newInfo);
     long lastBlockBeingWrittenLength = 0;
     if (!locatedBlocks.isLastBlockComplete()) {
       final LocatedBlock last = locatedBlocks.getLastLocatedBlock();
@@ -310,7 +320,6 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         lastBlockBeingWrittenLength = len; 
       }
     }
-
     currentNode = null;
     return lastBlockBeingWrittenLength;
   }
@@ -512,6 +521,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           final LocatedBlocks newBlocks = dfsClient.getLocatedBlocks(src, offset);
           assert (newBlocks != null) : "Could not find target position " + offset;
           locatedBlocks.insertRange(targetBlockIdx, newBlocks.getLocatedBlocks());
+          addNodeToDetect(newBlocks);
         }
         blk = locatedBlocks.get(targetBlockIdx);
       }
@@ -542,6 +552,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         throw new IOException("Could not find target position " + offset);
       }
       locatedBlocks.insertRange(targetBlockIdx, newBlocks.getLocatedBlocks());
+      addNodeToDetect(newBlocks);
     } finally {
       rwLock.writeLock().unlock();
     }
@@ -615,6 +626,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           LocatedBlocks newBlocks;
           newBlocks = dfsClient.getLocatedBlocks(src, curOff, remaining);
           locatedBlocks.insertRange(blockIdx, newBlocks.getLocatedBlocks());
+          addNodeToDetect(newBlocks);
           continue;
         }
         assert curOff >= blk.getStartOffset() : "Block not found";
@@ -756,6 +768,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       super.close();
       closed = true;
     } finally {
+      // if client is closed we need remove the datanode from the detect anyway
+      // since user should not use this inputstream anymore
+      removeNodeFromDetect(locatedBlocks);
       rwLock.writeLock().unlock();
     }
   }
@@ -1022,7 +1037,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         return getBestNodeDNAddrPair(nodes, ignoredNodes);
       } catch (IOException ie) {
         String errMsg =
-          getBestNodeDNAddrPairErrorString(nodes, deadNodes, ignoredNodes);
+          getBestNodeDNAddrPairErrorString(nodes, dfsClient.getDeadNodes(this), ignoredNodes);
         String blockInfo = block.getBlock() + " file=" + src;
         if (failures >= dfsClient.getMaxBlockAcquireFailures()) {
           String description = "Could not obtain block: " + blockInfo;
@@ -1055,7 +1070,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           Thread.sleep((long)waitTime);
         } catch (InterruptedException iex) {
         }
-        deadNodes.clear(); //2nd option is to remove only nodes[blockId]
+        dfsClient.clearDeadDatanodesOfDFSInputStream(this); //2nd option is to remove only nodes[blockId]
         openInfo();
         block = getBlockAt(block.getStartOffset(), false);
         failures++;
@@ -1073,7 +1088,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
    */
   private DNAddrPair getBestNodeDNAddrPair(final DatanodeInfo[] nodes,
       Collection<DatanodeInfo> ignoredNodes) throws IOException {
-    DatanodeInfo chosenNode = bestNode(nodes, deadNodes, ignoredNodes);
+    DatanodeInfo chosenNode = bestNode(nodes, dfsClient.getDeadNodes(this), ignoredNodes);
     final String dnAddr =
         chosenNode.getXferAddr(dfsClient.getConf().connectToDnViaHostname);
     if (DFSClient.LOG.isDebugEnabled()) {
@@ -1634,14 +1649,14 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   public boolean seekToNewSource(long targetPos) throws IOException {
     rwLock.writeLock().lock();
     try {
-      boolean markedDead = deadNodes.containsKey(currentNode);
+      boolean markedDead = dfsClient.hasDeadNode(this, currentNode);
       addToDeadNodes(currentNode);
       DatanodeInfo oldNode = currentNode;
       DatanodeInfo newNode = blockSeekTo(targetPos);
       if (!markedDead) {
         /* remove it from deadNodes. blockSeekTo could have cleared 
          * deadNodes and added currentNode again. Thats ok. */
-        deadNodes.remove(oldNode);
+        dfsClient.removeFromDead(this, oldNode);
       }
       if (!oldNode.getDatanodeUuid().equals(newNode.getDatanodeUuid())) {
         currentNode = newNode;
@@ -1933,8 +1948,10 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           if (newInfo == null) {
             throw new IOException("Cannot open filename " + src);
           }
+          removeNodeFromDetect(locatedBlocks);
           locatedBlocks = newInfo;
           setRefreshLocatedBlocks(false);
+          addNodeToDetect(newInfo);
         }
 
         if (!locatedBlocks.isLastBlockComplete()) {
@@ -2027,5 +2044,27 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
   protected boolean isNeedToRetry(IOException ioe) {
     return false;
+  }
+
+  private void addNodeToDetect (LocatedBlocks locatedBlocks) {
+    if (!dfsClient.isEnableSharedDeadNodes() || locatedBlocks == null) {
+      return;
+    }
+    for (LocatedBlock locatedBlock : locatedBlocks.getLocatedBlocks()) {
+      for (DatanodeInfo datanodeInfo : locatedBlock.getLocations()) {
+        dfsClient.addNodeToDetect(this, datanodeInfo);
+      }
+    }
+  }
+
+  private void removeNodeFromDetect (LocatedBlocks locatedBlocks) {
+    if (!dfsClient.isEnableSharedDeadNodes() || locatedBlocks == null) {
+      return;
+    }
+    for (LocatedBlock locatedBlock : locatedBlocks.getLocatedBlocks()) {
+      for (DatanodeInfo datanodeInfo : locatedBlock.getLocations()) {
+        dfsClient.removeNodeFromDetect(this, datanodeInfo);
+      }
+    }
   }
 }

@@ -20,6 +20,8 @@ package org.apache.hadoop.hdfs;
 import com.google.common.annotations.VisibleForTesting;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -28,6 +30,8 @@ import org.apache.hadoop.hdfs.DFSClient.Conf;
 import org.apache.hadoop.hdfs.client.ShortCircuitCache;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.util.Daemon;
 
 /**
  * ClientContext contains context information for a client.
@@ -90,6 +94,10 @@ public class ClientContext {
    */
   private boolean printedConfWarning = false;
 
+  private Daemon deadNodeDetectorThr = null;
+  private boolean enableSharedDeadNodes = false;
+  private DeadNodeDetector deadNodeDetector = null;
+
   private ClientContext(String name, Conf conf) {
     this.name = name;
     this.confString = confAsString(conf);
@@ -105,6 +113,12 @@ public class ClientContext {
           new PeerCache(conf.socketCacheCapacity, conf.socketCacheExpiry);
     this.useLegacyBlockReaderLocal = conf.useLegacyBlockReaderLocal;
     this.domainSocketFactory = new DomainSocketFactory(conf);
+    this.enableSharedDeadNodes = conf.enableSharedDeadNodes;
+    if (enableSharedDeadNodes) {
+      deadNodeDetector = new DeadNodeDetector(conf.conf, name);
+      deadNodeDetectorThr = new Daemon(deadNodeDetector);
+      deadNodeDetectorThr.start();
+    }
   }
 
   public static String confAsString(Conf conf) {
@@ -204,4 +218,8 @@ public class ClientContext {
   public DomainSocketFactory getDomainSocketFactory() {
     return domainSocketFactory;
   }
+
+  public boolean isEnableSharedDeadNodes () { return enableSharedDeadNodes; }
+
+  public DeadNodeDetector getDeadNodeDetector () { return deadNodeDetector; }
 }
