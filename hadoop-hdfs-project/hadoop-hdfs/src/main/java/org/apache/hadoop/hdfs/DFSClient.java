@@ -607,14 +607,6 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
             mapreduceZkDelay);
       }
     }
-    provider = DFSUtil.createKeyProvider(conf);
-    if (LOG.isDebugEnabled()) {
-      if (provider == null) {
-        LOG.debug("No KeyProvider found.");
-      } else {
-        LOG.debug("Found KeyProvider: " + provider.toString());
-      }
-    }
     int numResponseToDrop = conf.getInt(
         DFSConfigKeys.DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_KEY,
         DFSConfigKeys.DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_DEFAULT);

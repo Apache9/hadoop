@@ -547,10 +547,8 @@ public class TestDFSClientZKBasedFailover {
         Token<DelegationTokenIdentifier> token =
             new Token<DelegationTokenIdentifier>(dtId, sm);
         UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
-        Text logicalServiceName =
-            HAUtil.buildTokenServiceForLogicalUri(
-                HATestUtil.getLogicalUri(ftc.cluster),
-                HdfsConstants.HDFS_URI_SCHEME);
+        Text logicalServiceName = HAUtil.buildTokenServiceForLogicalUri(
+            HATestUtil.getLogicalUri(ftc.cluster));
         token.setService(logicalServiceName);
         ugi.addToken(logicalServiceName, token);
 
