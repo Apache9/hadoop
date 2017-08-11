@@ -303,6 +303,7 @@ public class TestProcfsBasedProcessTree {
     String rssmemPage = "0";
     String utime = "0";
     String stime = "0";
+    String numsOfThread = "1";
 
     public ProcessStatInfo(String[] statEntries) {
       pid = statEntries[0];
@@ -318,14 +319,17 @@ public class TestProcfsBasedProcessTree {
         utime = statEntries[7];
         stime = statEntries[8];
       }
+      if (statEntries.length > 9){
+        numsOfThread = statEntries[9];
+      }
     }
 
     // construct a line that mimics the procfs stat file.
     // all unused numerical entries are set to 0.
     public String getStatLine() {
       return String.format("%s (%s) S %s %s %s 0 0 0"
-          + " 0 0 0 0 %s %s 0 0 0 0 0 0 0 %s %s 0 0" + " 0 0 0 0 0 0 0 0"
-          + " 0 0 0 0 0", pid, name, ppid, pgrpId, session, utime, stime, vmem,
+          + " 0 0 0 0 %s %s 0 0 0 0 %s 0 0 %s %s 0 0" + " 0 0 0 0 0 0 0 0"
+          + " 0 0 0 0 0", pid, name, ppid, pgrpId, session, utime, stime, numsOfThread, vmem,
         rssmemPage);
     }
   }

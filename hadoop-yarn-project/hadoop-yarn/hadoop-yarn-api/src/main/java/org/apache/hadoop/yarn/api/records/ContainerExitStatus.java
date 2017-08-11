@@ -72,4 +72,8 @@ public class ContainerExitStatus {
    */
   public static final int KILLED_AFTER_APP_COMPLETION = -107;
 
+  /**
+   * Container terminated because of exceeding the maximum number of threads
+   */
+  public static final int KILLED_EXCEEDED_MAX_NUMS_OF_THREAD = -1008;
 }

@@ -767,6 +767,19 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_PMEM_MB = NM_PREFIX + "resource.memory-mb";
   public static final int DEFAULT_NM_PMEM_MB = 8 * 1024;
 
+  /**
+   * The maximum number of threads containers can use
+   */
+  public static final String MAX_NUMS_OF_THREAD = NM_PREFIX + "maxNumsOfThread";
+  public static final int DEFAULT_MAX_NUMS_OF_THREAD = 512;
+
+  /**
+   * Specifies whether number of threads check is enabled.
+   */
+  public static final String NUMS_OF_THREAD_CHECK_ENABLED = NM_PREFIX
+          + "numsOfThread-check-enabled";
+  public static final boolean DEFAULT_NUMS_OF_THREAD_CHECk_ENABLED = true;
+
   /** Specifies whether physical memory check is enabled. */
   public static final String NM_PMEM_CHECK_ENABLED = NM_PREFIX
       + "pmem-check-enabled";

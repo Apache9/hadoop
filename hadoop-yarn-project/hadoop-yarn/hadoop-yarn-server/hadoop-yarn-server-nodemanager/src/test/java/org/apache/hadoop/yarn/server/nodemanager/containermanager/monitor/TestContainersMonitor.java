@@ -180,6 +180,57 @@ public class TestContainersMonitor extends BaseContainerManagerTest {
     }
   }
 
+  /**
+   * Test to verify the check for whether the number of threads is over limit or not
+   */
+  @Test
+  public void testNumsOfThreadLimits() throws IOException{
+    // set up a dummy proc file system
+    File procfsRootDir = new File(localDir, "proc");
+    String[] pids = { "100", "200" };
+    try {
+      TestProcfsBasedProcessTree.setupProcfsRootDir(procfsRootDir);
+
+      // create pid dirs.
+      TestProcfsBasedProcessTree.setupPidDirs(procfsRootDir, pids);
+
+      // create process infos.
+      TestProcfsBasedProcessTree.ProcessStatInfo[] procs =
+              new TestProcfsBasedProcessTree.ProcessStatInfo[2];
+
+      // pid comm ppid pgrp session vsize rss utime stime nums_thread
+      procs[0] = new TestProcfsBasedProcessTree.ProcessStatInfo(
+              new String[] { "100", "proc1", "1", "100", "100", "100000" ,"210000","900","300","200"});
+      procs[1] = new TestProcfsBasedProcessTree.ProcessStatInfo(
+              new String[] { "200", "proc2", "1", "100", "100", "100000" ,"210000","900","300","1024"});
+      // write stat files.
+      TestProcfsBasedProcessTree.writeStatFiles(procfsRootDir, pids, procs, null);
+
+      ContainersMonitorImpl test = new ContainersMonitorImpl(null, null, null);
+
+      // numsOfThread limit
+      long limit = 512;
+
+      // pid 100: the number of threads shouldn't be over limit
+      ProcfsBasedProcessTree pTree = new ProcfsBasedProcessTree(
+              "100",
+              procfsRootDir.getAbsolutePath());
+      pTree.updateProcessTree();
+      assertTrue("the number of threads shouldn't be over limit ",
+              !test.numsOfThreadOverLimit("dummyId",pTree.getCumulativeNumsOfThread(),limit));
+
+      // pid 200: the number of threads should be over limit
+      pTree = new ProcfsBasedProcessTree(
+              "200",
+              procfsRootDir.getAbsolutePath());
+      pTree.updateProcessTree();
+      assertTrue("the number of threads should be over limit ",
+              test.numsOfThreadOverLimit("dummyId",pTree.getCumulativeNumsOfThread(),limit));
+    } finally {
+      //FileUtil.fullyDelete(procfsRootDir);
+    }
+  }
+
   @Test
   public void testContainerKillOnMemoryOverflow() throws IOException,
       InterruptedException, YarnException {
@@ -301,7 +352,7 @@ public class TestContainersMonitor extends BaseContainerManagerTest {
 
     cm = new ContainersMonitorImpl(mock(ContainerExecutor.class),
         mock(AsyncDispatcher.class), mock(Context.class));
-    cm.init(getConfForCM(false, false, 8192, 2.1f));
+    cm.init(getConfForCM(false, false, 8192, 2.1f,true));
     assertEquals(expPmem, cm.getPmemAllocatedForContainers());
     assertEquals(expVmem, cm.getVmemAllocatedForContainers());
     assertEquals(false, cm.isPmemCheckEnabled());
@@ -309,7 +360,7 @@ public class TestContainersMonitor extends BaseContainerManagerTest {
 
     cm = new ContainersMonitorImpl(mock(ContainerExecutor.class),
         mock(AsyncDispatcher.class), mock(Context.class));
-    cm.init(getConfForCM(true, false, 8192, 2.1f));
+    cm.init(getConfForCM(true, false, 8192, 2.1f,true));
     assertEquals(expPmem, cm.getPmemAllocatedForContainers());
     assertEquals(expVmem, cm.getVmemAllocatedForContainers());
     assertEquals(true, cm.isPmemCheckEnabled());
@@ -317,7 +368,7 @@ public class TestContainersMonitor extends BaseContainerManagerTest {
 
     cm = new ContainersMonitorImpl(mock(ContainerExecutor.class),
         mock(AsyncDispatcher.class), mock(Context.class));
-    cm.init(getConfForCM(true, true, 8192, 2.1f));
+    cm.init(getConfForCM(true, true, 8192, 2.1f, true));
     assertEquals(expPmem, cm.getPmemAllocatedForContainers());
     assertEquals(expVmem, cm.getVmemAllocatedForContainers());
     assertEquals(true, cm.isPmemCheckEnabled());
@@ -325,20 +376,36 @@ public class TestContainersMonitor extends BaseContainerManagerTest {
 
     cm = new ContainersMonitorImpl(mock(ContainerExecutor.class),
         mock(AsyncDispatcher.class), mock(Context.class));
-    cm.init(getConfForCM(false, true, 8192, 2.1f));
+    cm.init(getConfForCM(false, true, 8192, 2.1f,true));
     assertEquals(expPmem, cm.getPmemAllocatedForContainers());
     assertEquals(expVmem, cm.getVmemAllocatedForContainers());
     assertEquals(false, cm.isPmemCheckEnabled());
     assertEquals(true, cm.isVmemCheckEnabled());
   }
 
+  @Test
+  public void testNumsOfThreadFlags(){
+    ContainersMonitor cm = null;
+
+    cm = new ContainersMonitorImpl(mock(ContainerExecutor.class),
+            mock(AsyncDispatcher.class), mock(Context.class));
+    cm.init(getConfForCM(false, false, 8192, 2.1f, true));
+    assertEquals(true, cm.isNumsOfThreadCheckEnabled());
+
+    cm = new ContainersMonitorImpl(mock(ContainerExecutor.class),
+            mock(AsyncDispatcher.class), mock(Context.class));
+    cm.init(getConfForCM(false, false, 8192, 2.1f, false));
+    assertEquals(false, cm.isNumsOfThreadCheckEnabled());
+  }
+
   private YarnConfiguration getConfForCM(boolean pMemEnabled,
-      boolean vMemEnabled, int nmPmem, float vMemToPMemRatio) {
+      boolean vMemEnabled, int nmPmem, float vMemToPMemRatio, boolean numsOfThreadCheckEnabled) {
     YarnConfiguration conf = new YarnConfiguration();
     conf.setInt(YarnConfiguration.NM_PMEM_MB, nmPmem);
     conf.setBoolean(YarnConfiguration.NM_PMEM_CHECK_ENABLED, pMemEnabled);
     conf.setBoolean(YarnConfiguration.NM_VMEM_CHECK_ENABLED, vMemEnabled);
     conf.setFloat(YarnConfiguration.NM_VMEM_PMEM_RATIO, vMemToPMemRatio);
+    conf.setBoolean(YarnConfiguration.NUMS_OF_THREAD_CHECK_ENABLED,numsOfThreadCheckEnabled);
     return conf;
   }
 }

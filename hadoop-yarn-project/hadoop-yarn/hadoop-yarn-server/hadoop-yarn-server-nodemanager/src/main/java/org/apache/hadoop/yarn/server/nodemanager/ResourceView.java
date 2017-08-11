@@ -29,4 +29,8 @@ public interface ResourceView {
   boolean isPmemCheckEnabled();
 
   long getVCoresAllocatedForContainers();
+
+  boolean isNumsOfThreadCheckEnabled();
+
+  long getMaxNumsOfThreadForContainers();
 }

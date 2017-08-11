@@ -120,6 +120,10 @@ public class TestNMWebServicesContainers extends JerseyTest {
         public boolean isPmemCheckEnabled() {
           return true;
         }
+        @Override
+        public boolean isNumsOfThreadCheckEnabled() { return true; }
+        @Override
+        public long getMaxNumsOfThreadForContainers() { return 1; }
       };
       conf.set(YarnConfiguration.NM_LOCAL_DIRS, testRootDir.getAbsolutePath());
       conf.set(YarnConfiguration.NM_LOG_DIRS, testLogDir.getAbsolutePath());

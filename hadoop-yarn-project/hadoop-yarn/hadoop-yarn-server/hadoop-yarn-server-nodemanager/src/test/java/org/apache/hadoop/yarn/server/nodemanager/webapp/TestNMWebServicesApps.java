@@ -131,6 +131,11 @@ public class TestNMWebServicesApps extends JerseyTest {
         public boolean isPmemCheckEnabled() {
           return true;
         }
+
+        @Override
+        public boolean isNumsOfThreadCheckEnabled() { return true; }
+        @Override
+        public long getMaxNumsOfThreadForContainers() { return 1; }
       };
       nmWebApp = new NMWebApp(resourceView, aclsManager, dirsHandler);
       bind(JAXBContextResolver.class);

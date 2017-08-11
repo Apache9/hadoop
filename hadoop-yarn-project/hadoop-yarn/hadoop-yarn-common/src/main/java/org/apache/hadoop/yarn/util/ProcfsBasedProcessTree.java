@@ -55,10 +55,10 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
 
   private static final String PROCFS = "/proc/";
 
-  private static final Pattern PROCFS_STAT_FILE_FORMAT = Pattern .compile(
-    "^([0-9-]+)\\s([^\\s]+)\\s[^\\s]\\s([0-9-]+)\\s([0-9-]+)\\s([0-9-]+)\\s" +
-    "([0-9-]+\\s){7}([0-9]+)\\s([0-9]+)\\s([0-9-]+\\s){7}([0-9]+)\\s([0-9]+)" +
-    "(\\s[0-9-]+){15}");
+  private static final Pattern PROCFS_STAT_FILE_FORMAT = Pattern.compile(
+          "^([0-9-]+)\\s([^\\s]+)\\s[^\\s]\\s([0-9-]+)\\s([0-9-]+)\\s([0-9-]+)\\s" +
+                  "([0-9-]+\\s){7}([0-9]+)\\s([0-9]+)\\s([0-9-]+\\s){4}([0-9]+)\\s([0-9-]+\\s){2}([0-9]+)\\s([0-9]+)" +
+                  "(\\s[0-9-]+){15}");
 
   public static final String PROCFS_STAT_FILE = "stat";
   public static final String PROCFS_CMDLINE_FILE = "cmdline";
@@ -424,6 +424,19 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
   }
 
   /**
+   * Get the number of threads the Container use
+   * if Container is exist, then return the number of threads the container use
+   * else return 1
+   */
+  @Override
+  public long getCumulativeNumsOfThread() {
+    if (processTree.containsKey(this.pid)) {
+      return processTree.get(this.pid).getNumsOfThread();
+    }
+    return 1;
+  }
+
+  /**
    * Get the CPU time in millisecond used by all the processes in the
    * process-tree since the process-tree created
    *
@@ -473,7 +486,7 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
     return processList;
   }
 
-  /**
+   /**
    * Construct the ProcessInfo using the process' PID and procfs rooted at the
    * specified directory and return the same. It is provided mainly to assist
    * testing purposes.
@@ -505,11 +518,11 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
       Matcher m = PROCFS_STAT_FILE_FORMAT.matcher(str);
       boolean mat = m.find();
       if (mat) {
-        // Set (name) (ppid) (pgrpId) (session) (utime) (stime) (vsize) (rss)
+        // Set (name) (ppid) (pgrpId) (session) (utime) (stime) (numsOfThread) (vsize) (rss)
         pinfo.updateProcessInfo(m.group(2), m.group(3),
                 Integer.parseInt(m.group(4)), Integer.parseInt(m.group(5)),
                 Long.parseLong(m.group(7)), new BigInteger(m.group(8)),
-                Long.parseLong(m.group(10)), Long.parseLong(m.group(11)));
+                Long.parseLong(m.group(10)), Long.parseLong(m.group(12)), Long.parseLong(m.group(13)));
       } else {
         LOG.warn("Unexpected: procfs stat file is not in the expected format"
             + " for process with pid " + pinfo.getPid());
@@ -562,6 +575,7 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
     private Long vmem; // virtual memory usage
     private Long rssmemPage; // rss memory usage in # of pages
     private Long utime = 0L; // # of jiffies in user mode
+    private Long numsOfThread; // number of threads in this process
     private final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
     private BigInteger stime = new BigInteger("0"); // # of jiffies in kernel mode
     // how many times has this process been seen alive
@@ -617,6 +631,8 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
       return dtime;
     }
 
+    public long getNumsOfThread() { return numsOfThread; }
+
     public Long getRssmemPage() { // get rss # of pages
       return rssmemPage;
     }
@@ -626,13 +642,14 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
     }
 
     public void updateProcessInfo(String name, String ppid, Integer pgrpId,
-        Integer sessionId, Long utime, BigInteger stime, Long vmem, Long rssmem) {
+                                  Integer sessionId, Long utime, BigInteger stime, Long numsOfThread, Long vmem, Long rssmem) {
       this.name = name;
       this.ppid = ppid;
       this.pgrpId = pgrpId;
       this.sessionId = sessionId;
       this.utime = utime;
       this.stime = stime;
+      this.numsOfThread = numsOfThread;
       this.vmem = vmem;
       this.rssmemPage = rssmem;
     }

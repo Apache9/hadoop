@@ -102,6 +102,10 @@ public class TestNMWebServer {
       public boolean isPmemCheckEnabled() {
         return true;
       }
+      @Override
+      public boolean isNumsOfThreadCheckEnabled() { return true; }
+      @Override
+      public long getMaxNumsOfThreadForContainers() { return 1; }
     };
     Configuration conf = new Configuration();
     conf.set(YarnConfiguration.NM_LOCAL_DIRS, testRootDir.getAbsolutePath());
@@ -165,6 +169,10 @@ public class TestNMWebServer {
       public boolean isPmemCheckEnabled() {
         return true;
       }
+      @Override
+      public boolean isNumsOfThreadCheckEnabled() { return true; }
+      @Override
+      public long getMaxNumsOfThreadForContainers() { return 1; }
     };
     Configuration conf = new Configuration();
     conf.set(YarnConfiguration.NM_LOCAL_DIRS, testRootDir.getAbsolutePath());

@@ -66,9 +66,11 @@ public class ContainersMonitorImpl extends AbstractService implements
 
   private long maxVmemAllottedForContainers = UNKNOWN_MEMORY_LIMIT;
   private long maxPmemAllottedForContainers = UNKNOWN_MEMORY_LIMIT;
+  private long maxNumsOfThreadForContainers;
 
   private boolean pmemCheckEnabled;
   private boolean vmemCheckEnabled;
+  private boolean numsOfThreadCheckEnabled;
 
   private long maxVCoresAllottedForContainers;
 
@@ -114,12 +116,19 @@ public class ContainersMonitorImpl extends AbstractService implements
         YarnConfiguration.NM_VCORES,
         YarnConfiguration.DEFAULT_NM_VCORES);
 
+    long configuredNumsOfThreadForContainers = conf.getLong(
+            YarnConfiguration.MAX_NUMS_OF_THREAD,
+            YarnConfiguration.DEFAULT_MAX_NUMS_OF_THREAD
+    );
 
     // Setting these irrespective of whether checks are enabled. Required in
     // the UI.
     // ///////// Physical memory configuration //////
     this.maxPmemAllottedForContainers = configuredPMemForContainers;
     this.maxVCoresAllottedForContainers = configuredVCoresForContainers;
+
+    // ///////// The maximum number of threads configuration //////
+    this.maxNumsOfThreadForContainers = configuredNumsOfThreadForContainers;
 
     // ///////// Virtual memory configuration //////
     float vmemRatio = conf.getFloat(YarnConfiguration.NM_VMEM_PMEM_RATIO,
@@ -133,8 +142,12 @@ public class ContainersMonitorImpl extends AbstractService implements
         YarnConfiguration.DEFAULT_NM_PMEM_CHECK_ENABLED);
     vmemCheckEnabled = conf.getBoolean(YarnConfiguration.NM_VMEM_CHECK_ENABLED,
         YarnConfiguration.DEFAULT_NM_VMEM_CHECK_ENABLED);
+    numsOfThreadCheckEnabled = conf.getBoolean(YarnConfiguration.NUMS_OF_THREAD_CHECK_ENABLED,
+            YarnConfiguration.DEFAULT_NUMS_OF_THREAD_CHECk_ENABLED);
+
     LOG.info("Physical memory check enabled: " + pmemCheckEnabled);
     LOG.info("Virtual memory check enabled: " + vmemCheckEnabled);
+    LOG.info("Number of threads check enabled: " + numsOfThreadCheckEnabled);
 
     if (pmemCheckEnabled) {
       // Logging if actual pmem cannot be determined.
@@ -316,6 +329,17 @@ public class ContainersMonitorImpl extends AbstractService implements
                                   curMemUsageOfAgedProcesses, limit);
   }
 
+  // Testing the number of threads is over limit
+  boolean numsOfThreadOverLimit(String containerId, long curNumsOfThread, long numsOfThreadLimit) {
+    if (curNumsOfThread > numsOfThreadLimit) {
+      LOG.warn("Process tree for container: " + containerId +
+              " use more threads than the configured limit. Limit= "
+              + numsOfThreadLimit + ", current usage = " + curNumsOfThread);
+      return true;
+    }
+    return false;
+  }
+
   private class MonitoringThread extends Thread {
     public MonitoringThread() {
       super("Container Monitor");
@@ -399,18 +423,25 @@ public class ContainersMonitorImpl extends AbstractService implements
             pTree.updateProcessTree();    // update process-tree
             long currentVmemUsage = pTree.getCumulativeVmem();
             long currentPmemUsage = pTree.getCumulativeRssmem();
+            long currentNumsOfThread = pTree.getCumulativeNumsOfThread();
             // as processes begin with an age 1, we want to see if there
             // are processes more than 1 iteration old.
             long curMemUsageOfAgedProcesses = pTree.getCumulativeVmem(1);
             long curRssMemUsageOfAgedProcesses = pTree.getCumulativeRssmem(1);
             long vmemLimit = ptInfo.getVmemLimit();
             long pmemLimit = ptInfo.getPmemLimit();
+            long numsOfThreadLimit = getMaxNumsOfThreadForContainers();
             LOG.info(String.format(
                 "Memory usage of ProcessTree %s for container-id %s: ",
                      pId, containerId.toString()) +
                 formatUsageString(currentVmemUsage, vmemLimit, currentPmemUsage, pmemLimit));
 
+            LOG.info(String.format(
+                    "The number of threads of Process %s for container-id %s",
+                    pId, containerId.toString()) + " is " + currentNumsOfThread);
+
             boolean isMemoryOverLimit = false;
+            boolean isNumsOfThreadOverLimit = false;
             String msg = "";
             int containerExitStatus = ContainerExitStatus.INVALID;
             if (isVmemCheckEnabled()
@@ -438,9 +469,16 @@ public class ContainersMonitorImpl extends AbstractService implements
                   pId, containerId, pTree);
               isMemoryOverLimit = true;
               containerExitStatus = ContainerExitStatus.KILLED_EXCEEDED_PMEM;
+            } else if (isNumsOfThreadCheckEnabled() && numsOfThreadOverLimit(containerId.toString(),
+                    currentNumsOfThread, numsOfThreadLimit)) {
+              msg = String.format("Container [pid=%s,containerID=%s] is running beyond the number of threads limits. ", pId, containerId)
+                      + "Limit usage: " + numsOfThreadLimit + ", Current usage: " + currentNumsOfThread +
+                      ". Killing container.\n";
+              isNumsOfThreadOverLimit = true;
+              containerExitStatus = ContainerExitStatus.KILLED_EXCEEDED_MAX_NUMS_OF_THREAD;
             }
 
-            if (isMemoryOverLimit) {
+            if (isMemoryOverLimit || isNumsOfThreadOverLimit) {
               // Virtual or physical memory over limit. Fail the container and
               // remove
               // the corresponding process tree
@@ -539,6 +577,19 @@ public class ContainersMonitorImpl extends AbstractService implements
   @Override
   public boolean isVmemCheckEnabled() {
     return this.vmemCheckEnabled;
+  }
+
+  @Override
+  public boolean isNumsOfThreadCheckEnabled() { return this.numsOfThreadCheckEnabled; }
+
+  @Override
+  public long getMaxNumsOfThreadForContainers() {
+    long configuredNumsOfThreadForContainers = conf.getLong(
+            YarnConfiguration.MAX_NUMS_OF_THREAD,
+            YarnConfiguration.DEFAULT_MAX_NUMS_OF_THREAD
+    );
+    this.maxNumsOfThreadForContainers = configuredNumsOfThreadForContainers;
+    return this.maxNumsOfThreadForContainers;
   }
 
   @Override

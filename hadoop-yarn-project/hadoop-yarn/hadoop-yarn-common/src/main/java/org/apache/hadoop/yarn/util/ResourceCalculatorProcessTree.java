@@ -107,6 +107,11 @@ public abstract class ResourceCalculatorProcessTree extends Configured {
   public abstract long getCumulativeRssmem(int olderThanAge);
 
   /**
+   * Get the number of threads the Container use
+   */
+  public long getCumulativeNumsOfThread() { return 1; }
+
+  /**
    * Get the CPU time in millisecond used by all the processes in the
    * process-tree since the process-tree created
    *
