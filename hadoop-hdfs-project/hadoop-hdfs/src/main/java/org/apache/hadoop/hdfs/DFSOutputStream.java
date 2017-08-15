@@ -99,7 +99,6 @@ import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 
 
 /****************************************************************
@@ -163,7 +162,7 @@ public class DFSOutputStream extends FSOutputSummer
   private boolean failPacket = false;
   private boolean exceptionInClose = false;
   private boolean leaseRecovered = false;
-  volatile Span curSpan = null;
+  private AtomicScope atomicScope = new AtomicScope();
 
   private class Packet {
     final long seqno;           // sequencenumber of buffer in block
@@ -478,7 +477,6 @@ public class DFSOutputStream extends FSOutputSummer
      */
     @Override
     public void run() {
-      TraceScope sendScope = null;
       long lastPacket = Time.now();
       while (!streamerClosed && dfsClient.clientRunning) {
 
@@ -526,9 +524,6 @@ public class DFSOutputStream extends FSOutputSummer
             if (dataQueue.isEmpty()) {
               one = new Packet();  // heartbeat packet
             } else {
-              if (curSpan != null) {
-                sendScope = Trace.continueSpan(curSpan);
-              }
               one = dataQueue.getFirst(); // regular data packet
             }
           }
@@ -541,8 +536,8 @@ public class DFSOutputStream extends FSOutputSummer
             }
             setPipeline(nextBlockOutputStream());
             initDataStreaming();
-            if (Trace.isTracing()) {
-              Trace.addTimelineAnnotation("HDFS: Allocating new block done.");
+            if (atomicScope.isTracing()) {
+              atomicScope.traceMsg("HDFS: Allocating new block done.");
             }
           } else if (stage == BlockConstructionStage.PIPELINE_SETUP_APPEND) {
             if(DFSClient.LOG.isDebugEnabled()) {
@@ -611,13 +606,10 @@ public class DFSOutputStream extends FSOutputSummer
           }
           lastPacket = Time.now();
 
-          if (Trace.isTracing()) {
-            Trace.addTimelineAnnotation("HDFS: sent packet: " + one);
+          if (atomicScope.isTracing()) {
+            atomicScope.traceMsg("HDFS: sent packet: " + one);
           }
-          if (sendScope != null) {
-            sendScope.detach();
-            sendScope = null;
-          }
+
           // update bytesSent
           long tmpBytesSent = one.getLastByteOffsetBlock();
           if (bytesSent < tmpBytesSent) {
@@ -870,6 +862,10 @@ public class DFSOutputStream extends FSOutputSummer
             }
             isLastPacketInBlock = one.lastPacketInBlock;
 
+            if (atomicScope.isTracing()) {
+              atomicScope.traceMsg("HDFS: Received ack for " + one);
+            }
+
             Long begin = packetSendTime.get(ack.getSeqno());
             if (begin != null) {
               long duration = Time.monotonicNow() - begin;
@@ -881,15 +877,6 @@ public class DFSOutputStream extends FSOutputSummer
                     + dfsClient.getConf().slowLogThresholdMs + "ms); ack: " + ack
                     + ", targets: " + Arrays.asList(targets));
               }
-            }
-
-            if (curSpan != null) {
-              TraceScope sendScope = null;
-              sendScope = Trace.continueSpan(curSpan);
-              if (Trace.isTracing()) {
-                Trace.addTimelineAnnotation("HDFS: Received ack for " +one);
-              }
-              sendScope.detach();
             }
 
             // Fail the packet write for testing in order to force a
@@ -1352,13 +1339,14 @@ public class DFSOutputStream extends FSOutputSummer
         accessToken = lb.getBlockToken();
         nodes = lb.getLocations();
 
-        if (Trace.isTracing()) {
+        if (atomicScope.isTracing()) {
           StringBuilder sBuilder = new StringBuilder();
           for (DatanodeInfo info : nodes) {
-            sBuilder.append("["+ info + "] ");
+            sBuilder.append("[" + info + "] ");
           }
-          Trace.addTimelineAnnotation("HDFS: target datanodes. " + sBuilder.toString());
+          atomicScope.traceMsg("HDFS: target datanodes. " + sBuilder.toString());
         }
+
         //
         // Connect to first DataNode in the list.
         //
@@ -1372,9 +1360,10 @@ public class DFSOutputStream extends FSOutputSummer
           DFSClient.LOG.info("Excluding datanode " + nodes[errorIndex]);
           excludedNodes.put(nodes[errorIndex], nodes[errorIndex]);
 
-        } else if (Trace.isTracing()) {
-          Trace.addTimelineAnnotation("HDFS: created blocks. " +
-            block.getLocalBlock() + " on datanode " + nodes[0]);
+        } else {
+          if (atomicScope.isTracing()) {
+            atomicScope.traceMsg("HDFS: created blocks. " + block.getLocalBlock() + " on datanode " + nodes[0]);
+          }
         }
       } while (!success && --count >= 0);
 
@@ -1858,7 +1847,7 @@ public class DFSOutputStream extends FSOutputSummer
             ", appendChunk=" + appendChunk);
       }
       waitAndQueueCurrentPacket();
-      if (Trace.isTracing()) {
+      if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
         Trace.addTimelineAnnotation("HDFS: put current packet to queue done. " + currentPacket);
       }
       // If the reopened file did not end at chunk boundary and the above
@@ -1884,7 +1873,7 @@ public class DFSOutputStream extends FSOutputSummer
         waitAndQueueCurrentPacket();
         bytesCurBlock = 0;
         lastFlushOffset = 0;
-        if (Trace.isTracing()) {
+        if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
           Trace.addTimelineAnnotation("HDFS: block boundary, sent an empty packet.");
         }
       }
@@ -1954,7 +1943,6 @@ public class DFSOutputStream extends FSOutputSummer
       throws IOException {
     dfsClient.checkOpen();
     checkClosed();
-    curSpan = Trace.currentSpan();
     try {
       long toWaitFor;
       long lastBlockLength = -1L;
@@ -1965,6 +1953,9 @@ public class DFSOutputStream extends FSOutputSummer
          * After the flush, reset the bytesCurBlock back to its previous value,
          * any partial checksum chunk will be sent now and in next packet.
          */
+        if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
+          atomicScope.setSpan(Trace.currentSpan());
+        }
         long saveOffset = bytesCurBlock;
         Packet oldCurrentPacket = currentPacket;
         // flush checksum buffer, but keep checksum buffer intact
@@ -2021,6 +2012,9 @@ public class DFSOutputStream extends FSOutputSummer
         toWaitFor = lastQueuedSeqno;
       } // end synchronized
 
+      if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
+        Trace.addTimelineAnnotation("HDFS: wait for seqno="+ toWaitFor);
+      }
       waitForAckedSeqno(toWaitFor);
 
       // update the block length first time irrespective of flag
@@ -2070,11 +2064,13 @@ public class DFSOutputStream extends FSOutputSummer
       }
       throw e;
     } finally {
-      curSpan = null;
+      if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
+        atomicScope.clean();
+      }
     }
-    if (Trace.isTracing()) {
-      Trace.addTimelineAnnotation("HDFS: flush done. seqno=" + lastAckedSeqno
-        + " block offset=" + lastFlushOffset + " src=" + src);
+    if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
+      Trace.addTimelineAnnotation("HDFS: flush done. lastAckedSeqno=" + lastAckedSeqno
+        + " lastFlushOffset=" + lastFlushOffset + " src=" + src);
     }
   }
 
@@ -2319,7 +2315,7 @@ public class DFSOutputStream extends FSOutputSummer
     } catch (ClosedChannelException e) {
     } finally {
       closed = true;
-      if (Trace.isTracing()) {
+      if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
         Trace.addTimelineAnnotation("HDFS: closed file: " + src);
       }
     }
@@ -2413,5 +2409,38 @@ public class DFSOutputStream extends FSOutputSummer
   @VisibleForTesting
   public long getFileId() {
     return fileId;
+  }
+
+
+  class AtomicScope {
+    volatile private Span curSpan = null;
+
+    public boolean isTracing() {
+      if ((curSpan == null)) {
+        return false;
+      }
+      return true;
+    }
+
+    public void setSpan(Span span) {
+      curSpan = span;
+    }
+
+    public void clean (){
+      if (curSpan == null) {
+        return;
+      }
+      synchronized (this) {
+          curSpan = null;
+      }
+    }
+
+    public void traceMsg(String msg) {
+      synchronized (this) {
+        if (curSpan != null) {
+          curSpan.addTimelineAnnotation(msg);
+        }
+      }
+    }
   }
 }

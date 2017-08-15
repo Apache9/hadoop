@@ -91,6 +91,7 @@ public class TestHdfsHtrace {
   public void testWriteFlush() throws Exception {
     Configuration conf = new Configuration();
 
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
       .format(true).build();
     FileSystem fs = cluster.getFileSystem();
@@ -137,6 +138,7 @@ public class TestHdfsHtrace {
     conf.set(DFSConfigKeys.DFS_CLIENT_CONTEXT, UUID.randomUUID().toString());
     conf.set(DFSConfigKeys.DFS_DOMAIN_SOCKET_PATH_KEY, new File(sockDir.getDir(),
         "TestShortCircuitLocalRead._PORT.sock").getAbsolutePath());
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
 
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
       .format(true).build();
@@ -165,10 +167,8 @@ public class TestHdfsHtrace {
       String str = scope.getSpan().toJson();
       Assert.assertTrue(!str.isEmpty());
       List<TimelineAnnotation> listAnnotation = scope.getSpan().getTimelineAnnotations();
-      Assert.assertTrue(listAnnotation.get(0).getMessage().contains("HDFS: chosen DataNode"));
-      Assert.assertTrue(listAnnotation.get(1).getMessage().contains("HDFS: created Reader"));
-      Assert.assertTrue(listAnnotation.get(2).getMessage().contains("HDFS: fill data buffer done"));
-      Assert.assertEquals(listAnnotation.get(3).getMessage(),
+      Assert.assertTrue(listAnnotation.get(0).getMessage().contains("HDFS: created Reader"));
+      Assert.assertEquals(listAnnotation.get(1).getMessage(),
         "HDFS: read done, offset=0 length=" + blockSize + " read length=" + blockSize);
 
       TraceScope scopePosition = Trace.startSpan("HdfsHtraceLocal.WriteRead.position", Sampler.ALWAYS);
@@ -181,8 +181,7 @@ public class TestHdfsHtrace {
       Assert.assertTrue(!str.isEmpty());
       listAnnotation = scopePosition.getSpan().getTimelineAnnotations();
       Assert.assertTrue(listAnnotation.get(0).getMessage().contains("HDFS: created Reader"));
-      Assert.assertTrue(listAnnotation.get(1).getMessage().contains("HDFS: fill data buffer done"));
-      Assert.assertEquals(listAnnotation.get(2).getMessage(),
+      Assert.assertEquals(listAnnotation.get(1).getMessage(),
         "HDFS: read done, offset=0 length=" + blockSize + " read length=" + blockSize);
 
     } finally {
@@ -302,6 +301,7 @@ public class TestHdfsHtrace {
     Configuration conf = new Configuration();
     conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_KEY, 0);
     conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY, 0);
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
 
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(5)
       .format(true).build();
@@ -353,4 +353,88 @@ public class TestHdfsHtrace {
   public static long getSeed() {
     return seed;
   }
+
+
+  @Test
+  public void testFlushSync() throws Exception {
+
+    BufferAppender bufferAppender;
+    bufferAppender = new BufferAppender();
+    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+    Configuration conf = new Configuration();
+    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_KEY, 0);
+    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY, 0);
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
+
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
+      .format(true).build();
+    FileSystem fs = cluster.getFileSystem();
+
+    try {
+      // check that / exists
+      Path path = new Path("/");
+      assertTrue("/ should be a directory", fs.getFileStatus(path)
+        .isDirectory() == true);
+
+      int dataSize = 64*1024;
+      byte[] count = AppendTestUtil.randomBytes(seed, dataSize);
+
+      Path file1 = fs.makeQualified(new Path("testFlushSync.dat"));
+      FSDataOutputStream fos = createFile(fs, file1, 1, blockSize);
+
+      int cnt = 10;
+      while(cnt-- > 0) {
+        TraceScope traceScope = TracerLog.startScope("testFlushSync", "NO:"+cnt);
+        fos.write(count);
+        fos.write(count);
+        fos.write(count);
+        fos.write(count);
+        fos.write(count);
+        fos.hflush();
+        TracerLog.closeTrace(traceScope);
+
+      }
+      ArrayList<String> msgs = bufferAppender.getMessage();
+      Assert.assertTrue(msgs.size() > 0);
+      fos.close();
+
+    } finally {
+      fs.close();
+      cluster.shutdown();
+    }
+  }
+
+  @Test
+  public void testDisableClientTracer() throws Exception {
+    Configuration conf = new Configuration();
+
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, false);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
+      .format(true).build();
+    FileSystem fs = cluster.getFileSystem();
+
+    try {
+      // check that / exists
+      Path path = new Path("/");
+      assertTrue("/ should be a directory", fs.getFileStatus(path)
+        .isDirectory() == true);
+
+      int dataSize = 64*1024;
+      byte[] data = AppendTestUtil.randomBytes(seed, dataSize);
+
+      Path file1 = fs.makeQualified(new Path("testFlushSync.dat"));
+      FSDataOutputStream fos = createFile(fs, file1, 1, blockSize);
+      TraceScope traceScope = Trace.startSpan("disableTracer.dat", Sampler.ALWAYS);
+      fos.write(data);
+      fos.hflush();
+      fos.close();
+      List<TimelineAnnotation> listAnnotation = traceScope.getSpan().getTimelineAnnotations();
+      Assert.assertTrue(listAnnotation.isEmpty());
+
+    } finally {
+      fs.close();
+      cluster.shutdown();
+    }
+  }
+
 }

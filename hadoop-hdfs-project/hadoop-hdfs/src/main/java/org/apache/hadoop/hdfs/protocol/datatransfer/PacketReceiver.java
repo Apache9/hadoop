@@ -27,11 +27,13 @@ import java.nio.channels.ReadableByteChannel;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.hdfs.TracerLog;
 import org.apache.hadoop.hdfs.util.DirectBufferPool;
 import org.apache.hadoop.io.IOUtils;
 
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Ints;
+import org.apache.htrace.TraceScope;
 
 /**
  * Class to handle reading packets one-at-a-time from the wire.
@@ -146,7 +148,9 @@ public class PacketReceiver implements Closeable {
     if (headerLen < 0) {
       throw new IOException("Invalid header length " + headerLen);
     }
-    
+
+    TracerLog.startScope("Receive Packet","Receive a header, headerLen=" + headerLen);
+
     if (LOG.isTraceEnabled()) {
       LOG.trace("readNextPacket: dataPlusChecksumLen = " + dataPlusChecksumLen +
           " headerLen = " + headerLen);

@@ -176,7 +176,7 @@ public class RemoteBlockReader2  implements BlockReader {
     PacketHeader curHeader = packetReceiver.getHeader();
     curDataSlice = packetReceiver.getDataSlice();
     assert curDataSlice.capacity() == curHeader.getDataLen();
-    
+
     if (LOG.isTraceEnabled()) {
       LOG.trace("DFSClient readNextPacket got header " + curHeader);
     }
@@ -224,10 +224,6 @@ public class RemoteBlockReader2  implements BlockReader {
       } else {
         sendReadResult(Status.SUCCESS);
       }
-    }
-    if (Trace.isTracing()) {
-      Trace.addTimelineAnnotation("HDFS: received a new package: seqno=" + curHeader.getSeqno()
-        +" offsetInBlock=" + curHeader.getOffsetInBlock());
     }
   }
   

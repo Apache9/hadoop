@@ -455,9 +455,6 @@ class BlockReceiver implements Closeable {
    * returns the number of data bytes that the packet has.
    */
   private int receivePacket() throws IOException {
-    TraceScope traceScope = TracerLog.startScope("Receive Packet",
-      "blockID=" + block.getLocalBlock().toString() + ", inAddr=" + inAddr);
-
     // read the next packet
     packetReceiver.receiveNextPacket(in);
     long receivePacketStart = Time.monotonicNow();
@@ -467,8 +464,10 @@ class BlockReceiver implements Closeable {
                 ": " + header);
     }
     if (Trace.isTracing()) {
-      Trace.addTimelineAnnotation("Received a packet, offsetInBlock=" + header.getOffsetInBlock()
-        + ", seqno=" + header.getSeqno() + ", dataLen=" + header.getDataLen());
+      Trace.addTimelineAnnotation("Received a packet, blockID=" +
+        block.getLocalBlock().toString() + ", inAddr=" + inAddr +
+        ", offsetInBlock=" + header.getOffsetInBlock() +
+        ", seqno=" + header.getSeqno() + ", dataLen=" + header.getDataLen());
     }
 
     // Sanity check the header
@@ -687,7 +686,8 @@ class BlockReceiver implements Closeable {
     if (receivePacketEnd - receivePacketStart > SLOW_LOG_THRESHOLD_MS) {
       LOG.info("receivePacket cost:" + (receivePacketEnd - receivePacketStart) + "ms");
     }
-    if (seqno >=0 ) {
+    if (Trace.isTracing() && seqno >=0 ) {
+      TraceScope traceScope = Trace.continueSpan(Trace.currentSpan());
       TracerLog.closeTrace(traceScope, TracerLog.TracerWarnTimeType.rwPacket);
     }
     return lastPacketInBlock?-1:len;
