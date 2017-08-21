@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.FsStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.shell.Command;
 import org.apache.hadoop.fs.shell.CommandFormat;
+import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -52,10 +53,13 @@ import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DatanodeLocalInfo;
+import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotException;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
@@ -367,7 +371,7 @@ public class DFSAdmin extends FsShell {
     }
     return (DistributedFileSystem) fs.getDistributedFileSystem();
   }
-  
+
   /**
    * Gives a report on how the FileSystem is doing.
    * @exception IOException if the filesystem does not exist.
@@ -766,6 +770,7 @@ public class DFSAdmin extends FsShell {
       "\t[-disallowSnapshot <snapshotDir>]\n" +
       "\t[-shutdownDatanode <datanode_host:ipc_port> [upgrade]]\n" +
       "\t[-getDatanodeInfo <datanode_host:ipc_port>\n" +
+      "\t[-reportBadBlock file blockIndex\n" +
       "\t[-help [cmd]]\n";
 
     String report ="-report: \tReports basic filesystem information and statistics.\n";
@@ -879,6 +884,11 @@ public class DFSAdmin extends FsShell {
     String getDatanodeInfo = "-getDatanodeInfo <datanode_host:ipc_port>\n"
         + "\tGet the information about the given datanode. This command can\n"
         + "\tbe used for checking if a datanode is alive.\n";
+
+    String reportBadBlock = "-reportBadBlock file blockIndex\n"
+      + "\tReport the a bad block in a file. This command can\n"
+      + "\tbe used for marking a block as corrupted manually.\n"
+      + "\tPlease make sure you know what you are doing!\n";
     
     String help = "-help [cmd]: \tDisplays help for the given command or all commands if none\n" +
       "\t\tis specified.\n";
@@ -937,6 +947,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(shutdownDatanode);
     } else if ("getDatanodeInfo".equalsIgnoreCase(cmd)) {
       System.out.println(getDatanodeInfo);
+    } else if ("reportBadBlock".equalsIgnoreCase(cmd)) {
+      System.out.println(reportBadBlock);
     } else if ("help".equals(cmd)) {
       System.out.println(help);
     } else {
@@ -967,6 +979,7 @@ public class DFSAdmin extends FsShell {
       System.out.println(disallowSnapshot);
       System.out.println(shutdownDatanode);
       System.out.println(getDatanodeInfo);
+      System.out.println(reportBadBlock);
       System.out.println(help);
       System.out.println();
       ToolRunner.printGenericCommandUsage(System.out);
@@ -1388,6 +1401,7 @@ public class DFSAdmin extends FsShell {
       System.err.println("           [-fetchImage <local directory>]");
       System.err.println("           [-shutdownDatanode <datanode_host:ipc_port> [upgrade]]");
       System.err.println("           [-getDatanodeInfo <datanode_host:ipc_port>]");
+      System.err.println("           [-reportBadBlock file blockIndex]");
       System.err.println("           [-help [cmd]]");
       System.err.println();
       ToolRunner.printGenericCommandUsage(System.err);
@@ -1519,6 +1533,11 @@ public class DFSAdmin extends FsShell {
         printUsage(cmd);
         return exitCode;
       }
+    } else if ("-reportBadBlock".equals(cmd)) {
+      if (argv.length != 3) {
+        printUsage(cmd);
+        return exitCode;
+      }
     }
     
     // initialize DFSAdmin
@@ -1590,6 +1609,8 @@ public class DFSAdmin extends FsShell {
         exitCode = shutdownDatanode(argv, i);
       } else if ("-getDatanodeInfo".equals(cmd)) {
         exitCode = getDatanodeInfo(argv, i);
+      } else if ("-reportBadBlock".equals(cmd)) {
+        exitCode = reportBadBlock(argv, i);
       } else if ("-help".equals(cmd)) {
         if (i < argv.length) {
           printHelp(argv[i]);
@@ -1700,6 +1721,20 @@ public class DFSAdmin extends FsShell {
       System.err.println("Datanode unreachable.");
       return -1;
     }
+    return 0;
+  }
+
+  private int reportBadBlock(String[] argv, int i) throws IOException  {
+    Path file = new Path(argv[i++]);
+    int blockIdx = Integer.parseInt(argv[i++]);
+    DFSClient dfsClient;
+    dfsClient = getDFS().getClient();
+    HdfsFileStatus status = dfsClient.getFileInfo(file.toString());
+    LocatedBlocks blocks = dfsClient.getLocatedBlocks(file.toString(),
+      status.getBlockSize() * blockIdx, status.getBlockSize());
+    Preconditions.checkState(blocks != null);
+    Preconditions.checkState(blocks.getLocatedBlocks().size() == 1);
+    dfsClient.reportBadBlocks(new LocatedBlock[] { blocks.getLocatedBlocks().get(0) });
     return 0;
   }
 
