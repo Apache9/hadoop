@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Constructor;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
@@ -35,6 +36,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.Stack;
@@ -81,7 +83,7 @@ import com.google.common.annotations.VisibleForTesting;
  * Hadoop DFS is a multi-machine system that appears as a single
  * disk.  It's useful because of its fault tolerance and potentially
  * very large capacity.
- * 
+ *
  * <p>
  * The local implementation is {@link LocalFileSystem} and distributed
  * implementation is DistributedFileSystem.
@@ -89,10 +91,10 @@ import com.google.common.annotations.VisibleForTesting;
 @InterfaceAudience.Public
 @InterfaceStability.Stable
 public abstract class FileSystem extends Configured implements Closeable {
-  public static final String FS_DEFAULT_NAME_KEY = 
-                   CommonConfigurationKeys.FS_DEFAULT_NAME_KEY;
-  public static final String DEFAULT_FS = 
-                   CommonConfigurationKeys.FS_DEFAULT_NAME_DEFAULT;
+  public static final String FS_DEFAULT_NAME_KEY =
+          CommonConfigurationKeys.FS_DEFAULT_NAME_KEY;
+  public static final String DEFAULT_FS =
+          CommonConfigurationKeys.FS_DEFAULT_NAME_DEFAULT;
 
   public static final Log LOG = LogFactory.getLog(FileSystem.class);
 
@@ -108,10 +110,10 @@ public abstract class FileSystem extends Configured implements Closeable {
   private Cache.Key key;
 
   /** Recording statistics per a FileSystem class */
-  private static final Map<Class<? extends FileSystem>, Statistics> 
-    statisticsTable =
-      new IdentityHashMap<Class<? extends FileSystem>, Statistics>();
-  
+  private static final Map<Class<? extends FileSystem>, Statistics>
+          statisticsTable =
+          new IdentityHashMap<Class<? extends FileSystem>, Statistics>();
+
   /**
    * The statistics for this file system.
    */
@@ -122,7 +124,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * or the JVM is exited.
    */
   private Set<Path> deleteOnExit = new TreeSet<Path>();
-  
+
   boolean resolveSymlinks;
   /**
    * This method adds a file system for testing so that we can find it later. It
@@ -133,7 +135,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException
    */
   static void addFileSystemForTesting(URI uri, Configuration conf,
-      FileSystem fs) throws IOException {
+                                      FileSystem fs) throws IOException {
     CACHE.map.put(new Cache.Key(uri, conf), fs);
   }
 
@@ -148,11 +150,11 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws InterruptedException
    */
   public static FileSystem get(final URI uri, final Configuration conf,
-        final String user) throws IOException, InterruptedException {
+                               final String user) throws IOException, InterruptedException {
     String ticketCachePath =
-      conf.get(CommonConfigurationKeys.KERBEROS_TICKET_CACHE_PATH);
+            conf.get(CommonConfigurationKeys.KERBEROS_TICKET_CACHE_PATH);
     UserGroupInformation ugi =
-        UserGroupInformation.getBestUGI(ticketCachePath, user);
+            UserGroupInformation.getBestUGI(ticketCachePath, user);
     return ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
       @Override
       public FileSystem run() throws IOException {
@@ -168,7 +170,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   public static FileSystem get(Configuration conf) throws IOException {
     return get(getDefaultUri(conf), conf);
   }
-  
+
   /** Get the default filesystem URI from a configuration.
    * @param conf the configuration to use
    * @return the uri of the default filesystem
@@ -199,10 +201,10 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param conf the configuration
    */
   public void initialize(URI name, Configuration conf) throws IOException {
-    statistics = getStatistics(name.getScheme(), getClass());    
+    statistics = getStatistics(name.getScheme(), getClass());
     resolveSymlinks = conf.getBoolean(
-        CommonConfigurationKeys.FS_CLIENT_RESOLVE_REMOTE_SYMLINKS_KEY,
-        CommonConfigurationKeys.FS_CLIENT_RESOLVE_REMOTE_SYMLINKS_DEFAULT);
+            CommonConfigurationKeys.FS_CLIENT_RESOLVE_REMOTE_SYMLINKS_KEY,
+            CommonConfigurationKeys.FS_CLIENT_RESOLVE_REMOTE_SYMLINKS_DEFAULT);
   }
 
   /**
@@ -218,10 +220,10 @@ public abstract class FileSystem extends Configured implements Closeable {
 
   /** Returns a URI whose scheme and authority identify this FileSystem.*/
   public abstract URI getUri();
-  
+
   /**
    * Return a canonicalized form of this FileSystem's URI.
-   * 
+   *
    * The default implementation simply calls {@link #canonicalizeUri(URI)}
    * on the filesystem's own URI, so subclasses typically only need to
    * implement that method.
@@ -231,14 +233,14 @@ public abstract class FileSystem extends Configured implements Closeable {
   protected URI getCanonicalUri() {
     return canonicalizeUri(getUri());
   }
-  
+
   /**
    * Canonicalize the given URI.
-   * 
+   *
    * This is filesystem-dependent, but may for example consist of
    * canonicalizing the hostname using DNS and adding the default
    * port if not specified.
-   * 
+   *
    * The default implementation simply fills in the default port if
    * not specified and if the filesystem has a default port.
    *
@@ -250,18 +252,18 @@ public abstract class FileSystem extends Configured implements Closeable {
       // reconstruct the uri with the default port set
       try {
         uri = new URI(uri.getScheme(), uri.getUserInfo(),
-            uri.getHost(), getDefaultPort(),
-            uri.getPath(), uri.getQuery(), uri.getFragment());
+                uri.getHost(), getDefaultPort(),
+                uri.getPath(), uri.getQuery(), uri.getFragment());
       } catch (URISyntaxException e) {
         // Should never happen!
         throw new AssertionError("Valid URI became unparseable: " +
-            uri);
+                uri);
       }
     }
-    
+
     return uri;
   }
-  
+
   /**
    * Get the default port for this file system.
    * @return the default port or 0 if there isn't one
@@ -271,8 +273,8 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   protected static FileSystem getFSofPath(final Path absOrFqPath,
-      final Configuration conf)
-      throws UnsupportedFileSystemException, IOException {
+                                          final Configuration conf)
+          throws UnsupportedFileSystemException, IOException {
     absOrFqPath.checkNotSchemeWithRelative();
     absOrFqPath.checkNotRelative();
 
@@ -286,21 +288,21 @@ public abstract class FileSystem extends Configured implements Closeable {
    * filesystem's service tokens.
    * If file system provides a token of its own then it must have a canonical
    * name, otherwise canonical name can be null.
-   * 
-   * Default Impl: If the file system has child file systems 
+   *
+   * Default Impl: If the file system has child file systems
    * (such as an embedded file system) then it is assumed that the fs has no
    * tokens of its own and hence returns a null name; otherwise a service
    * name is built using Uri and port.
-   * 
+   *
    * @return a service string that uniquely identifies this file system, null
    *         if the filesystem does not implement tokens
-   * @see SecurityUtil#buildDTServiceName(URI, int) 
+   * @see SecurityUtil#buildDTServiceName(URI, int)
    */
   @InterfaceAudience.LimitedPrivate({ "HDFS", "MapReduce" })
   public String getCanonicalServiceName() {
     return (getChildFileSystems() == null)
-      ? SecurityUtil.buildDTServiceName(getUri(), getDefaultPort())
-      : null;
+            ? SecurityUtil.buildDTServiceName(getUri(), getDefaultPort())
+            : null;
   }
 
   /** @deprecated call #getUri() instead.*/
@@ -310,22 +312,22 @@ public abstract class FileSystem extends Configured implements Closeable {
   /** @deprecated call #get(URI,Configuration) instead. */
   @Deprecated
   public static FileSystem getNamed(String name, Configuration conf)
-    throws IOException {
+          throws IOException {
     return get(URI.create(fixName(name)), conf);
   }
-  
+
   /** Update old-format filesystem names, for back-compatibility.  This should
    * eventually be replaced with a checkName() method that throws an exception
-   * for old-format names. */ 
+   * for old-format names. */
   private static String fixName(String name) {
     // convert old-format name to new-format name
     if (name.equals("local")) {         // "local" is now "file:///".
       LOG.warn("\"local\" is a deprecated filesystem name."
-               +" Use \"file:///\" instead.");
+              +" Use \"file:///\" instead.");
       name = "file:///";
     } else if (name.indexOf('/')==-1) {   // unqualified is "hdfs://"
       LOG.warn("\""+name+"\" is a deprecated filesystem name."
-               +" Use \"hdfs://"+name+"/\" instead.");
+              +" Use \"hdfs://"+name+"/\" instead.");
       name = "hdfs://"+name;
     }
     return name;
@@ -337,7 +339,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @return a LocalFileSystem
    */
   public static LocalFileSystem getLocal(Configuration conf)
-    throws IOException {
+          throws IOException {
     return (LocalFileSystem)get(LocalFileSystem.NAME, conf);
   }
 
@@ -350,6 +352,8 @@ public abstract class FileSystem extends Configured implements Closeable {
     String scheme = uri.getScheme();
     String authority = uri.getAuthority();
 
+    conf = ConfigurationService.updateConfigurationWithNameService(uri, conf);
+
     if (scheme == null && authority == null) {     // use default FS
       return get(conf);
     }
@@ -357,11 +361,11 @@ public abstract class FileSystem extends Configured implements Closeable {
     if (scheme != null && authority == null) {     // no authority
       URI defaultUri = getDefaultUri(conf);
       if (scheme.equals(defaultUri.getScheme())    // if scheme matches default
-          && defaultUri.getAuthority() != null) {  // & default has authority
+              && defaultUri.getAuthority() != null) {  // & default has authority
         return get(defaultUri, conf);              // return default
       }
     }
-    
+
     String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
     if (conf.getBoolean(disableCacheName, false)) {
       return createFileSystem(uri, conf);
@@ -371,7 +375,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Returns the FileSystem for this URI's scheme and authority and the 
+   * Returns the FileSystem for this URI's scheme and authority and the
    * passed user. Internally invokes {@link #newInstance(URI, Configuration)}
    * @param uri of the filesystem
    * @param conf the configuration to use
@@ -381,15 +385,15 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws InterruptedException
    */
   public static FileSystem newInstance(final URI uri, final Configuration conf,
-      final String user) throws IOException, InterruptedException {
+                                       final String user) throws IOException, InterruptedException {
     String ticketCachePath =
-      conf.get(CommonConfigurationKeys.KERBEROS_TICKET_CACHE_PATH);
+            conf.get(CommonConfigurationKeys.KERBEROS_TICKET_CACHE_PATH);
     UserGroupInformation ugi =
-        UserGroupInformation.getBestUGI(ticketCachePath, user);
+            UserGroupInformation.getBestUGI(ticketCachePath, user);
     return ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
       @Override
       public FileSystem run() throws IOException {
-        return newInstance(uri,conf); 
+        return newInstance(uri,conf);
       }
     });
   }
@@ -410,7 +414,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     if (authority == null) {                       // no authority
       URI defaultUri = getDefaultUri(conf);
       if (scheme.equals(defaultUri.getScheme())    // if scheme matches default
-          && defaultUri.getAuthority() != null) {  // & default has authority
+              && defaultUri.getAuthority() != null) {  // & default has authority
         return newInstance(defaultUri, conf);              // return default
       }
     }
@@ -432,14 +436,14 @@ public abstract class FileSystem extends Configured implements Closeable {
    * This always returns a new FileSystem object.
    */
   public static LocalFileSystem newInstanceLocal(Configuration conf)
-    throws IOException {
+          throws IOException {
     return (LocalFileSystem)newInstance(LocalFileSystem.NAME, conf);
   }
 
   /**
    * Close all cached filesystems. Be sure those filesystems are not
    * used anymore.
-   * 
+   *
    * @throws IOException
    */
   public static void closeAll() throws IOException {
@@ -447,17 +451,17 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Close all cached filesystems for a given UGI. Be sure those filesystems 
+   * Close all cached filesystems for a given UGI. Be sure those filesystems
    * are not used anymore.
    * @param ugi user group info to close
    * @throws IOException
    */
-  public static void closeAllForUGI(UserGroupInformation ugi) 
-  throws IOException {
+  public static void closeAllForUGI(UserGroupInformation ugi)
+          throws IOException {
     CACHE.closeAll(ugi);
   }
 
-  /** 
+  /**
    * Make sure that a path specifies a FileSystem.
    * @param path to use
    */
@@ -465,13 +469,13 @@ public abstract class FileSystem extends Configured implements Closeable {
     checkPath(path);
     return path.makeQualified(this.getUri(), this.getWorkingDirectory());
   }
-    
+
   /**
    * Get a new delegation token for this file system.
    * This is an internal method that should have been declared protected
    * but wasn't historically.
    * Callers should use {@link #addDelegationTokens(String, Credentials)}
-   * 
+   *
    * @param renewer the account name that is allowed to renew the token.
    * @return a new delegation token
    * @throws IOException
@@ -480,18 +484,18 @@ public abstract class FileSystem extends Configured implements Closeable {
   public Token<?> getDelegationToken(String renewer) throws IOException {
     return null;
   }
-  
+
   /**
    * Obtain all delegation tokens used by this FileSystem that are not
    * already present in the given Credentials.  Existing tokens will neither
    * be verified as valid nor having the given renewer.  Missing tokens will
    * be acquired and added to the given Credentials.
-   * 
+   *
    * Default Impl: works for simple fs with its own token
    * and also for an embedded fs whose tokens are those of its
    * children file system (i.e. the embedded fs has not tokens of its
    * own).
-   * 
+   *
    * @param renewer the user allowed to renew the delegation tokens
    * @param credentials cache in which to add new delegation tokens
    * @return list of new delegation tokens
@@ -499,7 +503,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   @InterfaceAudience.LimitedPrivate({ "HDFS", "MapReduce" })
   public Token<?>[] addDelegationTokens(
-      final String renewer, Credentials credentials) throws IOException {
+          final String renewer, Credentials credentials) throws IOException {
     if (credentials == null) {
       credentials = new Credentials();
     }
@@ -507,7 +511,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     collectDelegationTokens(renewer, credentials, tokens);
     return tokens.toArray(new Token<?>[tokens.size()]);
   }
-  
+
   /**
    * Recursively obtain the tokens for this FileSystem and all descended
    * FileSystems as determined by getChildFileSystems().
@@ -519,7 +523,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   private void collectDelegationTokens(final String renewer,
                                        final Credentials credentials,
                                        final List<Token<?>> tokens)
-                                           throws IOException {
+          throws IOException {
     final String serviceName = getCanonicalServiceName();
     // Collect token of the this filesystem and then of its embedded children
     if (serviceName != null) { // fs has token, grab it
@@ -547,7 +551,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * It does not recurse and get grand children.  If a FileSystem
    * has multiple child FileSystems, then it should return a unique list
    * of those FileSystems.  Default is to return null to signify no children.
-   * 
+   *
    * @return FileSystems used by this FileSystem
    */
   @InterfaceAudience.LimitedPrivate({ "HDFS" })
@@ -555,15 +559,15 @@ public abstract class FileSystem extends Configured implements Closeable {
   public FileSystem[] getChildFileSystems() {
     return null;
   }
-  
+
   /** create a file with the provided permission
    * The permission of the file is set to be the provided permission as in
    * setPermission, not permission&~umask
-   * 
+   *
    * It is implemented using two RPCs. It is understood that it is inefficient,
    * but the implementation is thread-safe. The other option is to change the
    * value of umask in configuration to be 0, but it is not thread-safe.
-   * 
+   *
    * @param fs file system handle
    * @param file the name of the file to be created
    * @param permission the permission of the file
@@ -571,7 +575,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException
    */
   public static FSDataOutputStream create(FileSystem fs,
-      Path file, FsPermission permission) throws IOException {
+                                          Path file, FsPermission permission) throws IOException {
     // create the file with default permission
     FSDataOutputStream out = fs.create(file);
     // set its permission to the supplied one
@@ -582,9 +586,9 @@ public abstract class FileSystem extends Configured implements Closeable {
   /** create a directory with the provided permission
    * The permission of the directory is set to be the provided permission as in
    * setPermission, not permission&~umask
-   * 
+   *
    * @see #create(FileSystem, Path, FsPermission)
-   * 
+   *
    * @param fs file system handle
    * @param dir the name of the directory to be created
    * @param permission the permission of the directory
@@ -592,7 +596,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException
    */
   public static boolean mkdirs(FileSystem fs, Path dir, FsPermission permission)
-  throws IOException {
+          throws IOException {
     // create the directory using the default permission
     boolean result = fs.mkdirs(dir);
     // set its permission to be the supplied one
@@ -608,7 +612,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     super(null);
   }
 
-  /** 
+  /**
    * Check that a Path belongs to this FileSystem.
    * @param path to check
    */
@@ -624,7 +628,7 @@ public abstract class FileSystem extends Configured implements Closeable {
       String thisAuthority = thisUri.getAuthority();
       String thatAuthority = uri.getAuthority();
       if (thatAuthority == null &&                // path's authority is null
-          thisAuthority != null) {                // fs has an authority
+              thisAuthority != null) {                // fs has an authority
         URI defaultUri = getDefaultUri(getConf());
         if (thisScheme.equalsIgnoreCase(defaultUri.getScheme())) {
           uri = defaultUri; // schemes match, so use this uri instead
@@ -637,21 +641,21 @@ public abstract class FileSystem extends Configured implements Closeable {
         uri = canonicalizeUri(uri);
         thatAuthority = uri.getAuthority();
         if (thisAuthority == thatAuthority ||       // authorities match
-            (thisAuthority != null &&
-             thisAuthority.equalsIgnoreCase(thatAuthority)))
+                (thisAuthority != null &&
+                        thisAuthority.equalsIgnoreCase(thatAuthority)))
           return;
       }
     }
     throw new IllegalArgumentException("Wrong FS: "+path+
-                                       ", expected: "+this.getUri());
+            ", expected: "+this.getUri());
   }
 
   /**
-   * Return an array containing hostnames, offset and size of 
-   * portions of the given file.  For a nonexistent 
+   * Return an array containing hostnames, offset and size of
+   * portions of the given file.  For a nonexistent
    * file or regions, null will be returned.
    *
-   * This call is most helpful with DFS, where it returns 
+   * This call is most helpful with DFS, where it returns
    * hostnames of machines that contain the given file.
    *
    * The FileSystem will simply return an elt containing 'localhost'.
@@ -660,8 +664,8 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param start offset into the given file
    * @param len length for which to get locations for
    */
-  public BlockLocation[] getFileBlockLocations(FileStatus file, 
-      long start, long len) throws IOException {
+  public BlockLocation[] getFileBlockLocations(FileStatus file,
+                                               long start, long len) throws IOException {
     if (file == null) {
       return null;
     }
@@ -677,16 +681,16 @@ public abstract class FileSystem extends Configured implements Closeable {
     String[] name = { "localhost:50010" };
     String[] host = { "localhost" };
     return new BlockLocation[] {
-      new BlockLocation(name, host, 0, file.getLen()) };
+            new BlockLocation(name, host, 0, file.getLen()) };
   }
- 
+
 
   /**
-   * Return an array containing hostnames, offset and size of 
-   * portions of the given file.  For a nonexistent 
+   * Return an array containing hostnames, offset and size of
+   * portions of the given file.  For a nonexistent
    * file or regions, null will be returned.
    *
-   * This call is most helpful with DFS, where it returns 
+   * This call is most helpful with DFS, where it returns
    * hostnames of machines that contain the given file.
    *
    * The FileSystem will simply return an elt containing 'localhost'.
@@ -696,15 +700,15 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param start offset into the given file
    * @param len length for which to get locations for
    */
-  public BlockLocation[] getFileBlockLocations(Path p, 
-      long start, long len) throws IOException {
+  public BlockLocation[] getFileBlockLocations(Path p,
+                                               long start, long len) throws IOException {
     if (p == null) {
       throw new NullPointerException();
     }
     FileStatus file = getFileStatus(p);
     return getFileBlockLocations(file, start, len);
   }
-  
+
   /**
    * Return a set of server default configuration values
    * @return server default configuration values
@@ -714,17 +718,17 @@ public abstract class FileSystem extends Configured implements Closeable {
   @Deprecated
   public FsServerDefaults getServerDefaults() throws IOException {
     Configuration conf = getConf();
-    // CRC32 is chosen as default as it is available in all 
+    // CRC32 is chosen as default as it is available in all
     // releases that support checksum.
     // The client trash configuration is ignored.
-    return new FsServerDefaults(getDefaultBlockSize(), 
-        conf.getInt("io.bytes.per.checksum", 512), 
-        64 * 1024, 
-        getDefaultReplication(),
-        conf.getInt("io.file.buffer.size", 4096),
-        false,
-        CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT,
-        DataChecksum.Type.CRC32);
+    return new FsServerDefaults(getDefaultBlockSize(),
+            conf.getInt("io.bytes.per.checksum", 512),
+            64 * 1024,
+            getDefaultReplication(),
+            conf.getInt("io.file.buffer.size", 4096),
+            false,
+            CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT,
+            DataChecksum.Type.CRC32);
   }
 
   /**
@@ -742,13 +746,13 @@ public abstract class FileSystem extends Configured implements Closeable {
    * Return the fully-qualified path of path f resolving the path
    * through any symlinks or mount point
    * @param p path to be resolved
-   * @return fully qualified path 
+   * @return fully qualified path
    * @throws FileNotFoundException
    */
-   public Path resolvePath(final Path p) throws IOException {
-     checkPath(p);
-     return getFileStatus(p).getPath();
-   }
+  public Path resolvePath(final Path p) throws IOException {
+    checkPath(p);
+    return getFileStatus(p).getPath();
+  }
 
   /**
    * Opens an FSDataInputStream at the indicated Path.
@@ -756,8 +760,8 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param bufferSize the size of the buffer to be used.
    */
   public abstract FSDataInputStream open(Path f, int bufferSize)
-    throws IOException;
-    
+          throws IOException;
+
   /**
    * Opens an FSDataInputStream at the indicated Path. With this extended open
    * method, the underlying input stream will be replaced with XmDFSInputStream.
@@ -766,7 +770,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   public FSDataInputStream openEx(Path f, int bufferSize) throws IOException {
     throw new UnsupportedOperationException(
-        "openEx is not supported by file system other than DistributedFileSystem");
+            "openEx is not supported by file system other than DistributedFileSystem");
   }
 
   /**
@@ -802,11 +806,11 @@ public abstract class FileSystem extends Configured implements Closeable {
    *   the file will be overwritten, and if false an exception will be thrown.
    */
   public FSDataOutputStream create(Path f, boolean overwrite)
-      throws IOException {
-    return create(f, overwrite, 
-                  getConf().getInt("io.file.buffer.size", 4096),
-                  getDefaultReplication(f),
-                  getDefaultBlockSize(f));
+          throws IOException {
+    return create(f, overwrite,
+            getConf().getInt("io.file.buffer.size", 4096),
+            getDefaultReplication(f),
+            getDefaultBlockSize(f));
   }
 
   /**
@@ -816,12 +820,12 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param f the file to create
    * @param progress to report progress
    */
-  public FSDataOutputStream create(Path f, Progressable progress) 
-      throws IOException {
-    return create(f, true, 
-                  getConf().getInt("io.file.buffer.size", 4096),
-                  getDefaultReplication(f),
-                  getDefaultBlockSize(f), progress);
+  public FSDataOutputStream create(Path f, Progressable progress)
+          throws IOException {
+    return create(f, true,
+            getConf().getInt("io.file.buffer.size", 4096),
+            getDefaultReplication(f),
+            getDefaultBlockSize(f), progress);
   }
 
   /**
@@ -831,11 +835,11 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param replication the replication factor
    */
   public FSDataOutputStream create(Path f, short replication)
-      throws IOException {
-    return create(f, true, 
-                  getConf().getInt("io.file.buffer.size", 4096),
-                  replication,
-                  getDefaultBlockSize(f));
+          throws IOException {
+    return create(f, true,
+            getConf().getInt("io.file.buffer.size", 4096),
+            replication,
+            getDefaultBlockSize(f));
   }
 
   /**
@@ -846,17 +850,17 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param replication the replication factor
    * @param progress to report progress
    */
-  public FSDataOutputStream create(Path f, short replication, 
-      Progressable progress) throws IOException {
-    return create(f, true, 
-                  getConf().getInt(
-                      CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY,
-                      CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT),
-                  replication,
-                  getDefaultBlockSize(f), progress);
+  public FSDataOutputStream create(Path f, short replication,
+                                   Progressable progress) throws IOException {
+    return create(f, true,
+            getConf().getInt(
+                    CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY,
+                    CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT),
+            replication,
+            getDefaultBlockSize(f), progress);
   }
 
-    
+
   /**
    * Create an FSDataOutputStream at the indicated Path.
    * @param f the file name to create
@@ -864,15 +868,15 @@ public abstract class FileSystem extends Configured implements Closeable {
    *   the file will be overwritten, and if false an error will be thrown.
    * @param bufferSize the size of the buffer to be used.
    */
-  public FSDataOutputStream create(Path f, 
+  public FSDataOutputStream create(Path f,
                                    boolean overwrite,
                                    int bufferSize
-                                   ) throws IOException {
-    return create(f, overwrite, bufferSize, 
-                  getDefaultReplication(f),
-                  getDefaultBlockSize(f));
+  ) throws IOException {
+    return create(f, overwrite, bufferSize,
+            getDefaultReplication(f),
+            getDefaultBlockSize(f));
   }
-    
+
   /**
    * Create an FSDataOutputStream at the indicated Path with write-progress
    * reporting.
@@ -881,31 +885,31 @@ public abstract class FileSystem extends Configured implements Closeable {
    *   the file will be overwritten, and if false an error will be thrown.
    * @param bufferSize the size of the buffer to be used.
    */
-  public FSDataOutputStream create(Path f, 
+  public FSDataOutputStream create(Path f,
                                    boolean overwrite,
                                    int bufferSize,
                                    Progressable progress
-                                   ) throws IOException {
-    return create(f, overwrite, bufferSize, 
-                  getDefaultReplication(f),
-                  getDefaultBlockSize(f), progress);
+  ) throws IOException {
+    return create(f, overwrite, bufferSize,
+            getDefaultReplication(f),
+            getDefaultBlockSize(f), progress);
   }
-    
-    
+
+
   /**
    * Create an FSDataOutputStream at the indicated Path.
    * @param f the file name to open
    * @param overwrite if a file with this name already exists, then if true,
    *   the file will be overwritten, and if false an error will be thrown.
    * @param bufferSize the size of the buffer to be used.
-   * @param replication required block replication for the file. 
+   * @param replication required block replication for the file.
    */
-  public FSDataOutputStream create(Path f, 
+  public FSDataOutputStream create(Path f,
                                    boolean overwrite,
                                    int bufferSize,
                                    short replication,
                                    long blockSize
-                                   ) throws IOException {
+  ) throws IOException {
     return create(f, overwrite, bufferSize, replication, blockSize, null);
   }
 
@@ -916,18 +920,18 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param overwrite if a file with this name already exists, then if true,
    *   the file will be overwritten, and if false an error will be thrown.
    * @param bufferSize the size of the buffer to be used.
-   * @param replication required block replication for the file. 
+   * @param replication required block replication for the file.
    */
   public FSDataOutputStream create(Path f,
-                                            boolean overwrite,
-                                            int bufferSize,
-                                            short replication,
-                                            long blockSize,
-                                            Progressable progress
-                                            ) throws IOException {
+                                   boolean overwrite,
+                                   int bufferSize,
+                                   short replication,
+                                   long blockSize,
+                                   Progressable progress
+  ) throws IOException {
     return this.create(f, FsPermission.getFileDefault().applyUMask(
-        FsPermission.getUMask(getConf())), overwrite, bufferSize,
-        replication, blockSize, progress);
+            FsPermission.getUMask(getConf())), overwrite, bufferSize,
+            replication, blockSize, progress);
   }
 
   /**
@@ -945,13 +949,13 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @see #setPermission(Path, FsPermission)
    */
   public abstract FSDataOutputStream create(Path f,
-      FsPermission permission,
-      boolean overwrite,
-      int bufferSize,
-      short replication,
-      long blockSize,
-      Progressable progress) throws IOException;
-  
+                                            FsPermission permission,
+                                            boolean overwrite,
+                                            int bufferSize,
+                                            short replication,
+                                            long blockSize,
+                                            Progressable progress) throws IOException;
+
   /**
    * Create an FSDataOutputStream at the indicated Path with write-progress
    * reporting.
@@ -966,16 +970,16 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @see #setPermission(Path, FsPermission)
    */
   public FSDataOutputStream create(Path f,
-      FsPermission permission,
-      EnumSet<CreateFlag> flags,
-      int bufferSize,
-      short replication,
-      long blockSize,
-      Progressable progress) throws IOException {
+                                   FsPermission permission,
+                                   EnumSet<CreateFlag> flags,
+                                   int bufferSize,
+                                   short replication,
+                                   long blockSize,
+                                   Progressable progress) throws IOException {
     return create(f, permission, flags, bufferSize, replication,
-        blockSize, progress, null);
+            blockSize, progress, null);
   }
-  
+
   /**
    * Create an FSDataOutputStream at the indicated Path with a custom
    * checksum option
@@ -992,18 +996,18 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @see #setPermission(Path, FsPermission)
    */
   public FSDataOutputStream create(Path f,
-      FsPermission permission,
-      EnumSet<CreateFlag> flags,
-      int bufferSize,
-      short replication,
-      long blockSize,
-      Progressable progress,
-      ChecksumOpt checksumOpt) throws IOException {
+                                   FsPermission permission,
+                                   EnumSet<CreateFlag> flags,
+                                   int bufferSize,
+                                   short replication,
+                                   long blockSize,
+                                   Progressable progress,
+                                   ChecksumOpt checksumOpt) throws IOException {
     // Checksum options are ignored by default. The file systems that
     // implement checksum need to override this method. The full
     // support is currently only available in DFS.
-    return create(f, permission, flags.contains(CreateFlag.OVERWRITE), 
-        bufferSize, replication, blockSize, progress);
+    return create(f, permission, flags.contains(CreateFlag.OVERWRITE),
+            bufferSize, replication, blockSize, progress);
   }
 
   /*.
@@ -1015,14 +1019,14 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   @Deprecated
   protected FSDataOutputStream primitiveCreate(Path f,
-     FsPermission absolutePermission, EnumSet<CreateFlag> flag, int bufferSize,
-     short replication, long blockSize, Progressable progress,
-     ChecksumOpt checksumOpt) throws IOException {
+                                               FsPermission absolutePermission, EnumSet<CreateFlag> flag, int bufferSize,
+                                               short replication, long blockSize, Progressable progress,
+                                               ChecksumOpt checksumOpt) throws IOException {
 
     boolean pathExists = exists(f);
     CreateFlag.validate(f, pathExists, flag);
-    
-    // Default impl  assumes that permissions do not matter and 
+
+    // Default impl  assumes that permissions do not matter and
     // nor does the bytesPerChecksum  hence
     // calling the regular create is good enough.
     // FSs that implement permissions should override this.
@@ -1030,12 +1034,12 @@ public abstract class FileSystem extends Configured implements Closeable {
     if (pathExists && flag.contains(CreateFlag.APPEND)) {
       return append(f, bufferSize, progress);
     }
-    
+
     return this.create(f, absolutePermission,
-        flag.contains(CreateFlag.OVERWRITE), bufferSize, replication,
-        blockSize, progress);
+            flag.contains(CreateFlag.OVERWRITE), bufferSize, replication,
+            blockSize, progress);
   }
-  
+
   /**
    * This version of the mkdirs method assumes that the permission is absolute.
    * It has been added to support the FileContext that processes the permission
@@ -1045,11 +1049,11 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   @Deprecated
   protected boolean primitiveMkdir(Path f, FsPermission absolutePermission)
-    throws IOException {
+          throws IOException {
     // Default impl is to assume that permissions do not matter and hence
     // calling the regular mkdirs is good enough.
     // FSs that implement permissions should override this.
-   return this.mkdirs(f, absolutePermission);
+    return this.mkdirs(f, absolutePermission);
   }
 
 
@@ -1061,10 +1065,10 @@ public abstract class FileSystem extends Configured implements Closeable {
    * to FileContext for user applications.
    */
   @Deprecated
-  protected void primitiveMkdir(Path f, FsPermission absolutePermission, 
-                    boolean createParent)
-    throws IOException {
-    
+  protected void primitiveMkdir(Path f, FsPermission absolutePermission,
+                                boolean createParent)
+          throws IOException {
+
     if (!createParent) { // parent must exist.
       // since the this.mkdirs makes parent dirs automatically
       // we must throw exception if parent does not exist.
@@ -1102,11 +1106,11 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   @Deprecated
   public FSDataOutputStream createNonRecursive(Path f,
-      boolean overwrite,
-      int bufferSize, short replication, long blockSize,
-      Progressable progress) throws IOException {
+                                               boolean overwrite,
+                                               int bufferSize, short replication, long blockSize,
+                                               Progressable progress) throws IOException {
     return this.createNonRecursive(f, FsPermission.getFileDefault(),
-        overwrite, bufferSize, replication, blockSize, progress);
+            overwrite, bufferSize, replication, blockSize, progress);
   }
 
   /**
@@ -1125,38 +1129,38 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @see #setPermission(Path, FsPermission)
    * @deprecated API only for 0.20-append
    */
-   @Deprecated
-   public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
-       boolean overwrite, int bufferSize, short replication, long blockSize,
-       Progressable progress) throws IOException {
-     return createNonRecursive(f, permission,
-         overwrite ? EnumSet.of(CreateFlag.CREATE, CreateFlag.OVERWRITE)
-             : EnumSet.of(CreateFlag.CREATE), bufferSize,
-             replication, blockSize, progress);
-   }
+  @Deprecated
+  public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
+                                               boolean overwrite, int bufferSize, short replication, long blockSize,
+                                               Progressable progress) throws IOException {
+    return createNonRecursive(f, permission,
+            overwrite ? EnumSet.of(CreateFlag.CREATE, CreateFlag.OVERWRITE)
+                    : EnumSet.of(CreateFlag.CREATE), bufferSize,
+            replication, blockSize, progress);
+  }
 
-   /**
-    * Opens an FSDataOutputStream at the indicated Path with write-progress
-    * reporting. Same as create(), except fails if parent directory doesn't
-    * already exist.
-    * @param f the file name to open
-    * @param permission
-    * @param flags {@link CreateFlag}s to use for this stream.
-    * @param bufferSize the size of the buffer to be used.
-    * @param replication required block replication for the file.
-    * @param blockSize
-    * @param progress
-    * @throws IOException
-    * @see #setPermission(Path, FsPermission)
-    * @deprecated API only for 0.20-append
-    */
-    @Deprecated
-    public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
-        EnumSet<CreateFlag> flags, int bufferSize, short replication, long blockSize,
-        Progressable progress) throws IOException {
-      throw new IOException("createNonRecursive unsupported for this filesystem "
-          + this.getClass());
-    }
+  /**
+   * Opens an FSDataOutputStream at the indicated Path with write-progress
+   * reporting. Same as create(), except fails if parent directory doesn't
+   * already exist.
+   * @param f the file name to open
+   * @param permission
+   * @param flags {@link CreateFlag}s to use for this stream.
+   * @param bufferSize the size of the buffer to be used.
+   * @param replication required block replication for the file.
+   * @param blockSize
+   * @param progress
+   * @throws IOException
+   * @see #setPermission(Path, FsPermission)
+   * @deprecated API only for 0.20-append
+   */
+  @Deprecated
+  public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
+                                               EnumSet<CreateFlag> flags, int bufferSize, short replication, long blockSize,
+                                               Progressable progress) throws IOException {
+    throw new IOException("createNonRecursive unsupported for this filesystem "
+            + this.getClass());
+  }
 
   /**
    * Creates the given Path as a brand-new zero-length file.  If
@@ -1201,7 +1205,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException
    */
   public abstract FSDataOutputStream append(Path f, int bufferSize,
-      Progressable progress) throws IOException;
+                                            Progressable progress) throws IOException;
 
   /**
    * Concat existing files together.
@@ -1210,18 +1214,18 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException
    */
   public void concat(final Path trg, final Path [] psrcs) throws IOException {
-    throw new UnsupportedOperationException("Not implemented by the " + 
-        getClass().getSimpleName() + " FileSystem implementation");
+    throw new UnsupportedOperationException("Not implemented by the " +
+            getClass().getSimpleName() + " FileSystem implementation");
   }
 
- /**
+  /**
    * Get replication.
-   * 
+   *
    * @deprecated Use getFileStatus() instead
    * @param src file name
    * @return file replication
    * @throws IOException
-   */ 
+   */
   @Deprecated
   public short getReplication(Path src) throws IOException {
     return getFileStatus(src).getReplication();
@@ -1229,7 +1233,7 @@ public abstract class FileSystem extends Configured implements Closeable {
 
   /**
    * Set replication for an existing file.
-   * 
+   *
    * @param src file name
    * @param replication new replication
    * @throws IOException
@@ -1237,7 +1241,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    *         false if file does not exist or is a directory
    */
   public boolean setReplication(Path src, short replication)
-    throws IOException {
+          throws IOException {
     return true;
   }
 
@@ -1271,17 +1275,17 @@ public abstract class FileSystem extends Configured implements Closeable {
    * implementation. Please refer to the file system documentation for
    * details. This default implementation is non atomic.
    * <p>
-   * This method is deprecated since it is a temporary method added to 
-   * support the transition from FileSystem to FileContext for user 
+   * This method is deprecated since it is a temporary method added to
+   * support the transition from FileSystem to FileContext for user
    * applications.
-   * 
+   *
    * @param src path to be renamed
    * @param dst new path after rename
    * @throws IOException on failure
    */
   @Deprecated
   protected void rename(final Path src, final Path dst,
-      final Rename... options) throws IOException {
+                        final Rename... options) throws IOException {
     // Default implementation
     final FileStatus srcStatus = getFileLinkStatus(src);
     if (srcStatus == null) {
@@ -1306,18 +1310,18 @@ public abstract class FileSystem extends Configured implements Closeable {
     if (dstStatus != null) {
       if (srcStatus.isDirectory() != dstStatus.isDirectory()) {
         throw new IOException("Source " + src + " Destination " + dst
-            + " both should be either file or directory");
+                + " both should be either file or directory");
       }
       if (!overwrite) {
         throw new FileAlreadyExistsException("rename destination " + dst
-            + " already exists.");
+                + " already exists.");
       }
       // Delete the destination that is a file or an empty directory
       if (dstStatus.isDirectory()) {
         FileStatus[] list = listStatus(dst);
         if (list != null && list.length != 0) {
           throw new IOException(
-              "rename cannot overwrite non empty destination directory " + dst);
+                  "rename cannot overwrite non empty destination directory " + dst);
         }
       }
       delete(dst, false);
@@ -1326,20 +1330,20 @@ public abstract class FileSystem extends Configured implements Closeable {
       final FileStatus parentStatus = getFileStatus(parent);
       if (parentStatus == null) {
         throw new FileNotFoundException("rename destination parent " + parent
-            + " not found.");
+                + " not found.");
       }
       if (!parentStatus.isDirectory()) {
         throw new ParentNotDirectoryException("rename destination parent " + parent
-            + " is a file.");
+                + " is a file.");
       }
     }
     if (!rename(src, dst)) {
       throw new IOException("rename from " + src + " to " + dst + " failed.");
     }
   }
-  
+
   /**
-   * Delete a file 
+   * Delete a file
    * @deprecated Use {@link #delete(Path, boolean)} instead.
    */
   @Deprecated
@@ -1350,14 +1354,14 @@ public abstract class FileSystem extends Configured implements Closeable {
   public boolean delete(Path f, boolean recursive, boolean skipTrash) throws IOException {
     throw new IOException("Operation is not supported");
   }
-  
+
   /** Delete a file.
    *
    * @param f the path to delete.
-   * @param recursive if path is a directory and set to 
+   * @param recursive if path is a directory and set to
    * true, the directory is deleted else throws an exception. In
-   * case of a file the recursive can be set to either true or false. 
-   * @return  true if delete is successful else false. 
+   * case of a file the recursive can be set to either true or false.
+   * @return  true if delete is successful else false.
    * @throws IOException
    */
   public abstract boolean delete(Path f, boolean recursive) throws IOException;
@@ -1370,7 +1374,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * the marked path will be deleted as a result of closing the FileSystem.
    *
    * The path has to exist in the file system.
-   * 
+   *
    * @param f the path to delete.
    * @return  true if deleteOnExit is successful, otherwise false.
    * @throws IOException
@@ -1384,7 +1388,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     }
     return true;
   }
-  
+
   /**
    * Cancel the deletion of the path when the FileSystem is closed
    * @param f the path to cancel deletion
@@ -1415,7 +1419,7 @@ public abstract class FileSystem extends Configured implements Closeable {
       }
     }
   }
-  
+
   /** Check if exists.
    * @param f source file
    */
@@ -1428,7 +1432,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /** True iff the named path is a directory.
-   * Note: Avoid using this method. Instead reuse the FileStatus 
+   * Note: Avoid using this method. Instead reuse the FileStatus
    * returned by getFileStatus() or listStatus() methods.
    * @param f path to check
    */
@@ -1441,7 +1445,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /** True iff the named path is a regular file.
-   * Note: Avoid using this method. Instead reuse the FileStatus 
+   * Note: Avoid using this method. Instead reuse the FileStatus
    * returned by getFileStatus() or listStatus() methods.
    * @param f path to check
    */
@@ -1452,17 +1456,17 @@ public abstract class FileSystem extends Configured implements Closeable {
       return false;               // f does not exist
     }
   }
-  
+
   /** The number of bytes in a file. */
   /** @deprecated Use getFileStatus() instead */
   @Deprecated
   public long getLength(Path f) throws IOException {
     return getFileStatus(f).getLen();
   }
-    
+
   /** Return the {@link ContentSummary} of a given {@link Path}.
-  * @param f path to use
-  */
+   * @param f path to use
+   */
   public ContentSummary getContentSummary(Path f) throws IOException {
     FileStatus status = getFileStatus(f);
     if (status.isFile()) {
@@ -1473,7 +1477,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     long[] summary = {0, 0, 1};
     for(FileStatus s : listStatus(f)) {
       ContentSummary c = s.isDirectory() ? getContentSummary(s.getPath()) :
-                                     new ContentSummary(s.getLen(), 1, 0);
+              new ContentSummary(s.getLen(), 1, 0);
       summary[0] += c.getLength();
       summary[1] += c.getFileCount();
       summary[2] += c.getDirectoryCount();
@@ -1482,38 +1486,38 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /** Return the {@link QuotaSummary} of a given {@link Path}.
-  * @param f path to use
-  */
+   * @param f path to use
+   */
   public QuotaSummary getQuotaSummary(Path f) throws IOException {
     // retun -1 by default
     return new QuotaSummary(-1, -1, -1, -1);
   }
 
   final private static PathFilter DEFAULT_FILTER = new PathFilter() {
-      @Override
-      public boolean accept(Path file) {
-        return true;
-      }     
-    };
-    
+    @Override
+    public boolean accept(Path file) {
+      return true;
+    }
+  };
+
   /**
    * List the statuses of the files/directories in the given path if the path is
    * a directory.
-   * 
+   *
    * @param f given path
    * @return the statuses of the files/directories in the given patch
    * @throws FileNotFoundException when the path does not exist;
    *         IOException see specific implementation
    */
-  public abstract FileStatus[] listStatus(Path f) throws FileNotFoundException, 
-                                                         IOException;
-    
+  public abstract FileStatus[] listStatus(Path f) throws FileNotFoundException,
+          IOException;
+
   /*
    * Filter files/directories in the given path using the user-supplied path
    * filter. Results are added to the given array <code>results</code>.
    */
   private void listStatus(ArrayList<FileStatus> results, Path f,
-      PathFilter filter) throws FileNotFoundException, IOException {
+                          PathFilter filter) throws FileNotFoundException, IOException {
     FileStatus listing[] = listStatus(f);
     if (listing == null) {
       throw new IOException("Error accessing " + f);
@@ -1532,16 +1536,16 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException
    */
   public RemoteIterator<Path> listCorruptFileBlocks(Path path)
-    throws IOException {
+          throws IOException {
     throw new UnsupportedOperationException(getClass().getCanonicalName() +
-                                            " does not support" +
-                                            " listCorruptFileBlocks");
+            " does not support" +
+            " listCorruptFileBlocks");
   }
 
   /**
    * Filter files/directories in the given path using the user-supplied path
    * filter.
-   * 
+   *
    * @param f
    *          a path name
    * @param filter
@@ -1549,10 +1553,10 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @return an array of FileStatus objects for the files under the given path
    *         after applying the filter
    * @throws FileNotFoundException when the path does not exist;
-   *         IOException see specific implementation   
+   *         IOException see specific implementation
    */
-  public FileStatus[] listStatus(Path f, PathFilter filter) 
-                                   throws FileNotFoundException, IOException {
+  public FileStatus[] listStatus(Path f, PathFilter filter)
+          throws FileNotFoundException, IOException {
     ArrayList<FileStatus> results = new ArrayList<FileStatus>();
     listStatus(results, f, filter);
     return results.toArray(new FileStatus[results.size()]);
@@ -1561,7 +1565,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   /**
    * Filter files/directories in the given list of paths using default
    * path filter.
-   * 
+   *
    * @param files
    *          a list of paths
    * @return a list of statuses for the files under the given paths after
@@ -1570,14 +1574,14 @@ public abstract class FileSystem extends Configured implements Closeable {
    *         IOException see specific implementation
    */
   public FileStatus[] listStatus(Path[] files)
-      throws FileNotFoundException, IOException {
+          throws FileNotFoundException, IOException {
     return listStatus(files, DEFAULT_FILTER);
   }
 
   /**
    * Filter files/directories in the given list of paths using user-supplied
    * path filter.
-   * 
+   *
    * @param files
    *          a list of paths
    * @param filter
@@ -1588,7 +1592,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    *         IOException see specific implementation
    */
   public FileStatus[] listStatus(Path[] files, PathFilter filter)
-      throws FileNotFoundException, IOException {
+          throws FileNotFoundException, IOException {
     ArrayList<FileStatus> results = new ArrayList<FileStatus>();
     for (int i = 0; i < files.length; i++) {
       listStatus(results, files[i], filter);
@@ -1599,7 +1603,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   /**
    * <p>Return all the files that match filePattern and are not checksum
    * files. Results are sorted by their names.
-   * 
+   *
    * <p>
    * A filename pattern is composed of <i>regular</i> characters and
    * <i>special pattern matching</i> characters, which are:
@@ -1639,7 +1643,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    *    <p>
    *    <dt> <tt> {ab,cd} </tt>
    *    <dd> Matches a string from the string set <tt>{<i>ab, cd</i>} </tt>
-   *    
+   *
    *    <p>
    *    <dt> <tt> {ab,c{de,fh}} </tt>
    *    <dd> Matches a string from the string set <tt>{<i>ab, cde, cfh</i>}</tt>
@@ -1656,14 +1660,14 @@ public abstract class FileSystem extends Configured implements Closeable {
   public FileStatus[] globStatus(Path pathPattern) throws IOException {
     return new Globber(this, pathPattern, DEFAULT_FILTER).glob();
   }
-  
+
   /**
    * Return an array of FileStatus objects whose path names match pathPattern
    * and is accepted by the user-supplied path filter. Results are sorted by
    * their path names.
    * Return null if pathPattern has no glob and the path does not exist.
-   * Return an empty array if pathPattern has a glob and no path matches it. 
-   * 
+   * Return an empty array if pathPattern has a glob and no path matches it.
+   *
    * @param pathPattern
    *          a regular expression specifying the path pattern
    * @param filter
@@ -1672,27 +1676,27 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException if any I/O error occurs when fetching file status
    */
   public FileStatus[] globStatus(Path pathPattern, PathFilter filter)
-      throws IOException {
+          throws IOException {
     return new Globber(this, pathPattern, filter).glob();
   }
-  
+
   /**
    * List the statuses of the files/directories in the given path if the path is
-   * a directory. 
+   * a directory.
    * Return the file's status and block locations If the path is a file.
-   * 
+   *
    * If a returned status is a file, it contains the file's block locations.
-   * 
+   *
    * @param f is the path
    *
-   * @return an iterator that traverses statuses of the files/directories 
+   * @return an iterator that traverses statuses of the files/directories
    *         in the given path
    *
    * @throws FileNotFoundException If <code>f</code> does not exist
    * @throws IOException If an I/O error occurred
    */
   public RemoteIterator<LocatedFileStatus> listLocatedStatus(final Path f)
-  throws FileNotFoundException, IOException {
+          throws FileNotFoundException, IOException {
     return listLocatedStatus(f, DEFAULT_FILTER);
   }
 
@@ -1702,14 +1706,14 @@ public abstract class FileSystem extends Configured implements Closeable {
    * The results are filtered by the given path filter
    * @param f a path
    * @param filter a path filter
-   * @return an iterator that traverses statuses of the files/directories 
+   * @return an iterator that traverses statuses of the files/directories
    *         in the given path
    * @throws FileNotFoundException if <code>f</code> does not exist
    * @throws IOException if any I/O error occurred
    */
   protected RemoteIterator<LocatedFileStatus> listLocatedStatus(final Path f,
-      final PathFilter filter)
-  throws FileNotFoundException, IOException {
+                                                                final PathFilter filter)
+          throws FileNotFoundException, IOException {
     return new RemoteIterator<LocatedFileStatus>() {
       private final FileStatus[] stats = listStatus(f, filter);
       private int i = 0;
@@ -1726,8 +1730,8 @@ public abstract class FileSystem extends Configured implements Closeable {
         }
         FileStatus result = stats[i++];
         BlockLocation[] locs = result.isFile() ?
-            getFileBlockLocations(result.getPath(), 0, result.getLen()) :
-            null;
+                getFileBlockLocations(result.getPath(), 0, result.getLen()) :
+                null;
         return new LocatedFileStatus(result, locs);
       }
     };
@@ -1735,12 +1739,12 @@ public abstract class FileSystem extends Configured implements Closeable {
 
   /**
    * List the statuses and block locations of the files in the given path.
-   * 
-   * If the path is a directory, 
+   *
+   * If the path is a directory,
    *   if recursive is false, returns files in the directory;
    *   if recursive is true, return files in the subtree rooted at the path.
    * If the path is a file, return the file's status and block locations.
-   * 
+   *
    * @param f is the path
    * @param recursive if the subdirectories need to be traversed recursively
    *
@@ -1750,15 +1754,15 @@ public abstract class FileSystem extends Configured implements Closeable {
    *         IOException see specific implementation
    */
   public RemoteIterator<LocatedFileStatus> listFiles(
-      final Path f, final boolean recursive)
-  throws FileNotFoundException, IOException {
+          final Path f, final boolean recursive)
+          throws FileNotFoundException, IOException {
     return new RemoteIterator<LocatedFileStatus>() {
-      private Stack<RemoteIterator<LocatedFileStatus>> itors = 
-        new Stack<RemoteIterator<LocatedFileStatus>>();
+      private Stack<RemoteIterator<LocatedFileStatus>> itors =
+              new Stack<RemoteIterator<LocatedFileStatus>>();
       private RemoteIterator<LocatedFileStatus> curItor =
-        listLocatedStatus(f);
+              listLocatedStatus(f);
       private LocatedFileStatus curFile;
-     
+
       @Override
       public boolean hasNext() throws IOException {
         while (curFile == null) {
@@ -1796,45 +1800,45 @@ public abstract class FileSystem extends Configured implements Closeable {
           LocatedFileStatus result = curFile;
           curFile = null;
           return result;
-        } 
+        }
         throw new java.util.NoSuchElementException("No more entry in " + f);
       }
     };
   }
-  
+
   /** Return the current user's home directory in this filesystem.
    * The default implementation returns "/user/$USER/".
    */
   public Path getHomeDirectory() {
     return this.makeQualified(
-        new Path("/user/"+System.getProperty("user.name")));
+            new Path("/user/"+System.getProperty("user.name")));
   }
 
 
   /**
    * Set the current working directory for the given file system. All relative
    * paths will be resolved relative to it.
-   * 
+   *
    * @param new_dir
    */
   public abstract void setWorkingDirectory(Path new_dir);
-    
+
   /**
    * Get the current working directory for the given file system
    * @return the directory pathname
    */
   public abstract Path getWorkingDirectory();
-  
-  
+
+
   /**
    * Note: with the new FilesContext class, getWorkingDirectory()
-   * will be removed. 
+   * will be removed.
    * The working directory is implemented in FilesContext.
-   * 
+   *
    * Some file systems like LocalFileSystem have an initial workingDir
    * that we use as the starting workingDir. For other file systems
    * like HDFS there is no built in notion of an initial workingDir.
-   * 
+   *
    * @return if there is built in notion of workingDir then it
    * is returned; else a null is returned.
    */
@@ -1857,7 +1861,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param permission to apply to f
    */
   public abstract boolean mkdirs(Path f, FsPermission permission
-      ) throws IOException;
+  ) throws IOException;
 
   /**
    * The src file is on the local disk.  Add it to FS at
@@ -1866,7 +1870,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param dst path
    */
   public void copyFromLocalFile(Path src, Path dst)
-    throws IOException {
+          throws IOException {
     copyFromLocalFile(false, src, dst);
   }
 
@@ -1877,7 +1881,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param dst path
    */
   public void moveFromLocalFile(Path[] srcs, Path dst)
-    throws IOException {
+          throws IOException {
     copyFromLocalFile(true, true, srcs, dst);
   }
 
@@ -1888,7 +1892,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param dst path
    */
   public void moveFromLocalFile(Path src, Path dst)
-    throws IOException {
+          throws IOException {
     copyFromLocalFile(true, src, dst);
   }
 
@@ -1901,10 +1905,10 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param dst path
    */
   public void copyFromLocalFile(boolean delSrc, Path src, Path dst)
-    throws IOException {
+          throws IOException {
     copyFromLocalFile(delSrc, true, src, dst);
   }
-  
+
   /**
    * The src files are on the local disk.  Add it to FS at
    * the given dst name.
@@ -1914,13 +1918,13 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param srcs array of paths which are source
    * @param dst path
    */
-  public void copyFromLocalFile(boolean delSrc, boolean overwrite, 
+  public void copyFromLocalFile(boolean delSrc, boolean overwrite,
                                 Path[] srcs, Path dst)
-    throws IOException {
+          throws IOException {
     Configuration conf = getConf();
     FileUtil.copy(getLocal(conf), srcs, this, dst, delSrc, overwrite, conf);
   }
-  
+
   /**
    * The src file is on the local disk.  Add it to FS at
    * the given dst name.
@@ -1930,13 +1934,13 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param src path
    * @param dst path
    */
-  public void copyFromLocalFile(boolean delSrc, boolean overwrite, 
+  public void copyFromLocalFile(boolean delSrc, boolean overwrite,
                                 Path src, Path dst)
-    throws IOException {
+          throws IOException {
     Configuration conf = getConf();
     FileUtil.copy(getLocal(conf), src, this, dst, delSrc, overwrite, conf);
   }
-    
+
   /**
    * The src file is under FS, and the dst is on the local disk.
    * Copy it from FS control to the local dst name.
@@ -1946,7 +1950,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   public void copyToLocalFile(Path src, Path dst) throws IOException {
     copyToLocalFile(false, src, dst);
   }
-    
+
   /**
    * The src file is under FS, and the dst is on the local disk.
    * Copy it from FS control to the local dst name.
@@ -1965,19 +1969,19 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param delSrc whether to delete the src
    * @param src path
    * @param dst path
-   */   
+   */
   public void copyToLocalFile(boolean delSrc, Path src, Path dst)
-    throws IOException {
+          throws IOException {
     copyToLocalFile(delSrc, src, dst, false);
   }
-  
-    /**
+
+  /**
    * The src file is under FS, and the dst is on the local disk. Copy it from FS
    * control to the local dst name. delSrc indicates if the src will be removed
    * or not. useRawLocalFileSystem indicates whether to use RawLocalFileSystem
    * as local file system or not. RawLocalFileSystem is non crc file system.So,
    * It will not create any crc files at local.
-   * 
+   *
    * @param delSrc
    *          whether to delete the src
    * @param src
@@ -1986,12 +1990,12 @@ public abstract class FileSystem extends Configured implements Closeable {
    *          path
    * @param useRawLocalFileSystem
    *          whether to use RawLocalFileSystem as local file system or not.
-   * 
+   *
    * @throws IOException
    *           - if any IO error
    */
   public void copyToLocalFile(boolean delSrc, Path src, Path dst,
-      boolean useRawLocalFileSystem) throws IOException {
+                              boolean useRawLocalFileSystem) throws IOException {
     Configuration conf = getConf();
     FileSystem local = null;
     if (useRawLocalFileSystem) {
@@ -2011,7 +2015,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param tmpLocalFile path of local tmp file
    */
   public Path startLocalOutput(Path fsOutputFile, Path tmpLocalFile)
-    throws IOException {
+          throws IOException {
     return tmpLocalFile;
   }
 
@@ -2024,7 +2028,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param tmpLocalFile path to local tmp file
    */
   public void completeLocalOutput(Path fsOutputFile, Path tmpLocalFile)
-    throws IOException {
+          throws IOException {
     moveFromLocalFile(tmpLocalFile, fsOutputFile);
   }
 
@@ -2048,7 +2052,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     }
     return used;
   }
-  
+
   /**
    * Get the block size for a particular file.
    * @param f the filename
@@ -2070,7 +2074,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     // default to 32MB: large enough to minimize the impact of seeks
     return getConf().getLong("fs.local.block.size", 32 * 1024 * 1024);
   }
-    
+
   /** Return the number of bytes that large input files should be optimally
    * be split into to minimize i/o time.  The given path will be used to
    * locate the actual filesystem.  The full path does not have to exist.
@@ -2092,12 +2096,12 @@ public abstract class FileSystem extends Configured implements Closeable {
    * Get the default replication for a path.   The given path will be used to
    * locate the actual filesystem.  The full path does not have to exist.
    * @param path of the file
-   * @return default replication for the path's filesystem 
+   * @return default replication for the path's filesystem
    */
   public short getDefaultReplication(Path path) {
     return getDefaultReplication();
   }
-  
+
   /**
    * Return a file status object that represents the path.
    * @param f The path we want information from
@@ -2187,21 +2191,21 @@ public abstract class FileSystem extends Configured implements Closeable {
    * See {@link FileContext#createSymlink(Path, Path, boolean)}
    */
   public void createSymlink(final Path target, final Path link,
-      final boolean createParent) throws AccessControlException,
-      FileAlreadyExistsException, FileNotFoundException,
-      ParentNotDirectoryException, UnsupportedFileSystemException, 
-      IOException {
+                            final boolean createParent) throws AccessControlException,
+          FileAlreadyExistsException, FileNotFoundException,
+          ParentNotDirectoryException, UnsupportedFileSystemException,
+          IOException {
     // Supporting filesystems should override this method
     throw new UnsupportedOperationException(
-        "Filesystem does not support symlinks!");
+            "Filesystem does not support symlinks!");
   }
 
   /**
    * See {@link FileContext#getFileLinkStatus(Path)}
    */
   public FileStatus getFileLinkStatus(final Path f)
-      throws AccessControlException, FileNotFoundException,
-      UnsupportedFileSystemException, IOException {
+          throws AccessControlException, FileNotFoundException,
+          UnsupportedFileSystemException, IOException {
     // Supporting filesystems should override this method
     return getFileStatus(f);
   }
@@ -2219,7 +2223,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   public Path getLinkTarget(Path f) throws IOException {
     // Supporting filesystems should override this method
     throw new UnsupportedOperationException(
-        "Filesystem does not support symlinks!");
+            "Filesystem does not support symlinks!");
   }
 
   /**
@@ -2228,7 +2232,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   protected Path resolveLink(Path f) throws IOException {
     // Supporting filesystems should override this method
     throw new UnsupportedOperationException(
-        "Filesystem does not support symlinks!");
+            "Filesystem does not support symlinks!");
   }
 
   /**
@@ -2256,7 +2260,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Set the verify checksum flag. This is only applicable if the 
+   * Set the verify checksum flag. This is only applicable if the
    * corresponding FileSystem supports checksum. By default doesn't do anything.
    * @param verifyChecksum
    */
@@ -2265,7 +2269,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Set the write checksum flag. This is only applicable if the 
+   * Set the write checksum flag. This is only applicable if the
    * corresponding FileSystem supports checksum. By default doesn't do anything.
    * @param writeChecksum
    */
@@ -2277,7 +2281,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * Returns a status object describing the use and capacity of the
    * file system. If the file system has multiple partitions, the
    * use and capacity of the root partition is reflected.
-   * 
+   *
    * @return a FsStatus object
    * @throws IOException
    *           see specific implementation
@@ -2292,7 +2296,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * use and capacity of the partition pointed to by the specified
    * path is reflected.
    * @param p Path for which status should be obtained. null means
-   * the default partition. 
+   * the default partition.
    * @return a FsStatus object
    * @throws IOException
    *           see specific implementation
@@ -2307,7 +2311,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param permission
    */
   public void setPermission(Path p, FsPermission permission
-      ) throws IOException {
+  ) throws IOException {
   }
 
   /**
@@ -2318,21 +2322,21 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @param groupname If it is null, the original groupname remains unchanged.
    */
   public void setOwner(Path p, String username, String groupname
-      ) throws IOException {
+  ) throws IOException {
   }
 
   /**
    * Set access time of a file
    * @param p The path
    * @param mtime Set the modification time of this file.
-   *              The number of milliseconds since Jan 1, 1970. 
+   *              The number of milliseconds since Jan 1, 1970.
    *              A value of -1 means that this call should not set modification time.
    * @param atime Set the access time of this file.
-   *              The number of milliseconds since Jan 1, 1970. 
+   *              The number of milliseconds since Jan 1, 1970.
    *              A value of -1 means that this call should not set access time.
    */
   public void setTimes(Path p, long mtime, long atime
-      ) throws IOException {
+  ) throws IOException {
   }
 
   /**
@@ -2351,11 +2355,11 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @return the snapshot path.
    */
   public Path createSnapshot(Path path, String snapshotName)
-      throws IOException {
+          throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support createSnapshot");
+            + " doesn't support createSnapshot");
   }
-  
+
   /**
    * Rename a snapshot
    * @param path The directory path where the snapshot was taken
@@ -2364,22 +2368,22 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException
    */
   public void renameSnapshot(Path path, String snapshotOldName,
-      String snapshotNewName) throws IOException {
+                             String snapshotNewName) throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support renameSnapshot");
+            + " doesn't support renameSnapshot");
   }
-  
+
   /**
    * Delete a snapshot of a directory
    * @param path  The directory that the to-be-deleted snapshot belongs to
    * @param snapshotName The name of the snapshot
    */
   public void deleteSnapshot(Path path, String snapshotName)
-      throws IOException {
+          throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support deleteSnapshot");
+            + " doesn't support deleteSnapshot");
   }
-  
+
   /**
    * Modifies ACL entries of files and directories.  This method can add new ACL
    * entries or modify the permissions on existing ACL entries.  All existing
@@ -2391,9 +2395,9 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException if an ACL could not be modified
    */
   public void modifyAclEntries(Path path, List<AclEntry> aclSpec)
-      throws IOException {
+          throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support modifyAclEntries");
+            + " doesn't support modifyAclEntries");
   }
 
   /**
@@ -2405,9 +2409,9 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException if an ACL could not be modified
    */
   public void removeAclEntries(Path path, List<AclEntry> aclSpec)
-      throws IOException {
+          throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support removeAclEntries");
+            + " doesn't support removeAclEntries");
   }
 
   /**
@@ -2417,9 +2421,9 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException if an ACL could not be modified
    */
   public void removeDefaultAcl(Path path)
-      throws IOException {
+          throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support removeDefaultAcl");
+            + " doesn't support removeDefaultAcl");
   }
 
   /**
@@ -2431,9 +2435,9 @@ public abstract class FileSystem extends Configured implements Closeable {
    * @throws IOException if an ACL could not be removed
    */
   public void removeAcl(Path path)
-      throws IOException {
+          throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support removeAcl");
+            + " doesn't support removeAcl");
   }
 
   /**
@@ -2447,7 +2451,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   public void setAcl(Path path, List<AclEntry> aclSpec) throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support setAcl");
+            + " doesn't support setAcl");
   }
 
   /**
@@ -2459,7 +2463,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   public AclStatus getAclStatus(Path path) throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
-        + " doesn't support getAclStatus");
+            + " doesn't support getAclStatus");
   }
 
   /**
@@ -2586,7 +2590,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   private volatile static boolean FILE_SYSTEMS_LOADED = false;
 
   private static final Map<String, Class<? extends FileSystem>>
-    SERVICE_FILE_SYSTEMS = new HashMap<String, Class<? extends FileSystem>>();
+          SERVICE_FILE_SYSTEMS = new HashMap<String, Class<? extends FileSystem>>();
 
   private static void loadFileSystems() {
     synchronized (FileSystem.class) {
@@ -2621,11 +2625,11 @@ public abstract class FileSystem extends Configured implements Closeable {
 
   public FileSystem getDistributedFileSystem() {
     throw new UnsupportedOperationException(
-        "It should not be called against a non-distributed file system");
+            "It should not be called against a non-distributed file system");
   }
 
   public static Class<? extends FileSystem> getFileSystemClass(String scheme,
-      Configuration conf) throws IOException {
+                                                               Configuration conf) throws IOException {
     if (!FILE_SYSTEMS_LOADED) {
       loadFileSystems();
     }
@@ -2643,7 +2647,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   private static FileSystem createFileSystem(URI uri, Configuration conf
-      ) throws IOException {
+  ) throws IOException {
     Class<?> clazz = getFileSystemClass(uri.getScheme(), conf);
     if (clazz == null) {
       throw new IOException("No FileSystem for scheme: " + uri.getScheme());
@@ -2651,10 +2655,10 @@ public abstract class FileSystem extends Configured implements Closeable {
     FileSystem fs = (FileSystem)ReflectionUtils.newInstance(clazz, conf);
     if (fs.supportRaid()) {
       if (conf.getBoolean(CommonConfigurationKeys.HADOOP_RAID_ENABLED_KEY,
-        CommonConfigurationKeys.HADOOP_RAID_ENABLED_DEFAULT)) {
+              CommonConfigurationKeys.HADOOP_RAID_ENABLED_DEFAULT)) {
         clazz =
-            (Class<? extends FileSystem>) conf.getClass(
-              CommonConfigurationKeys.HADOOP_RAID_FILESYSTEM_CLASS_KEY, null);
+                (Class<? extends FileSystem>) conf.getClass(
+                        CommonConfigurationKeys.HADOOP_RAID_FILESYSTEM_CLASS_KEY, null);
         if (clazz == null) {
           throw new IOException("Raid is enabled whereas no raid file system is specified");
         }
@@ -2714,7 +2718,7 @@ public abstract class FileSystem extends Configured implements Closeable {
           fs.close(); // close the new file system
           return oldfs;  // return the old file system
         }
-        
+
         // now insert the new file system into the map
         if (map.isEmpty()
                 && !ShutdownHookManager.get().isShutdownInProgress()) {
@@ -2733,7 +2737,7 @@ public abstract class FileSystem extends Configured implements Closeable {
       if (map.containsKey(key) && fs == map.get(key)) {
         map.remove(key);
         toAutoClose.remove(key);
-        }
+      }
     }
 
     synchronized void closeAll() throws IOException {
@@ -2796,7 +2800,7 @@ public abstract class FileSystem extends Configured implements Closeable {
         final Key key = entry.getKey();
         final FileSystem fs = entry.getValue();
         if (ugi.equals(key.ugi) && fs != null) {
-          targetFSList.add(fs);   
+          targetFSList.add(fs);
         }
       }
       List<IOException> exceptions = new ArrayList<IOException>();
@@ -2829,7 +2833,7 @@ public abstract class FileSystem extends Configured implements Closeable {
         scheme = uri.getScheme()==null?"":uri.getScheme().toLowerCase();
         authority = uri.getAuthority()==null?"":uri.getAuthority().toLowerCase();
         this.unique = unique;
-        
+
         this.ugi = UserGroupInformation.getCurrentUser();
       }
 
@@ -2839,7 +2843,7 @@ public abstract class FileSystem extends Configured implements Closeable {
       }
 
       static boolean isEqual(Object a, Object b) {
-        return a == b || (a != null && a.equals(b));        
+        return a == b || (a != null && a.equals(b));
       }
 
       @Override
@@ -2850,39 +2854,39 @@ public abstract class FileSystem extends Configured implements Closeable {
         if (obj != null && obj instanceof Key) {
           Key that = (Key)obj;
           return isEqual(this.scheme, that.scheme)
-                 && isEqual(this.authority, that.authority)
-                 && isEqual(this.ugi, that.ugi)
-                 && (this.unique == that.unique);
+                  && isEqual(this.authority, that.authority)
+                  && isEqual(this.ugi, that.ugi)
+                  && (this.unique == that.unique);
         }
-        return false;        
+        return false;
       }
 
       @Override
       public String toString() {
-        return "("+ugi.toString() + ")@" + scheme + "://" + authority;        
+        return "("+ugi.toString() + ")@" + scheme + "://" + authority;
       }
     }
   }
-  
+
   /**
    * Tracks statistics about how many reads, writes, and so forth have been
    * done in a FileSystem.
-   * 
-   * Since there is only one of these objects per FileSystem, there will 
+   *
+   * Since there is only one of these objects per FileSystem, there will
    * typically be many threads writing to this object.  Almost every operation
    * on an open file will involve a write to this object.  In contrast, reading
    * statistics is done infrequently by most programs, and not at all by others.
    * Hence, this is optimized for writes.
-   * 
-   * Each thread writes to its own thread-local area of memory.  This removes 
+   *
+   * Each thread writes to its own thread-local area of memory.  This removes
    * contention and allows us to scale up to many, many threads.  To read
-   * statistics, the reader thread totals up the contents of all of the 
+   * statistics, the reader thread totals up the contents of all of the
    * thread-local data areas.
    */
   public static final class Statistics {
     /**
      * Statistics data.
-     * 
+     *
      * There is only a single writer to thread-local StatisticsData objects.
      * Hence, volatile is adequate here-- we do not need AtomicLong or similar
      * to prevent lost updates.
@@ -2932,8 +2936,8 @@ public abstract class FileSystem extends Configured implements Closeable {
       @Override
       public String toString() {
         return bytesRead + " bytes read, " + bytesWritten + " bytes written, "
-            + readOps + " read ops, " + largeReadOps + " large read ops, "
-            + writeOps + " write ops";
+                + readOps + " read ops, " + largeReadOps + " large read ops, "
+                + writeOps + " write ops";
       }
       
       public long getBytesRead() {
@@ -2976,7 +2980,7 @@ public abstract class FileSystem extends Configured implements Closeable {
      * Thread-local data.
      */
     private final ThreadLocal<StatisticsData> threadData;
-    
+
     /**
      * List of all thread-local data areas.  Protected by the Statistics lock.
      */
@@ -2991,7 +2995,7 @@ public abstract class FileSystem extends Configured implements Closeable {
 
     /**
      * Copy constructor.
-     * 
+     *
      * @param other    The input Statistics object which is cloned.
      */
     public Statistics(Statistics other) {
@@ -3017,7 +3021,7 @@ public abstract class FileSystem extends Configured implements Closeable {
       StatisticsData data = threadData.get();
       if (data == null) {
         data = new StatisticsData(
-            new WeakReference<Thread>(Thread.currentThread()));
+                new WeakReference<Thread>(Thread.currentThread()));
         threadData.set(data);
         synchronized(this) {
           if (allData == null) {
@@ -3036,7 +3040,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     public void incrementBytesRead(long newBytes) {
       getThreadStatistics().bytesRead += newBytes;
     }
-    
+
     /**
      * Increment the bytes written in the statistics
      * @param newBytes the additional bytes written
@@ -3044,7 +3048,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     public void incrementBytesWritten(long newBytes) {
       getThreadStatistics().bytesWritten += newBytes;
     }
-    
+
     /**
      * Increment the number of read operations
      * @param count number of read operations
@@ -3074,7 +3078,7 @@ public abstract class FileSystem extends Configured implements Closeable {
      * this Statistics object.
      *
      * For each StatisticsData object, we will call accept on the visitor.
-     * Finally, at the end, we will call aggregate to get the final total. 
+     * Finally, at the end, we will call aggregate to get the final total.
      *
      * @param         The visitor to use.
      * @return        The total.
@@ -3083,7 +3087,7 @@ public abstract class FileSystem extends Configured implements Closeable {
       visitor.accept(rootData);
       if (allData != null) {
         for (Iterator<StatisticsData> iter = allData.iterator();
-            iter.hasNext(); ) {
+             iter.hasNext(); ) {
           StatisticsData data = iter.next();
           visitor.accept(data);
           if (data.owner.get() == null) {
@@ -3118,7 +3122,7 @@ public abstract class FileSystem extends Configured implements Closeable {
         }
       });
     }
-    
+
     /**
      * Get the total number of bytes written
      * @return the number of bytes
@@ -3137,7 +3141,7 @@ public abstract class FileSystem extends Configured implements Closeable {
         }
       });
     }
-    
+
     /**
      * Get the number of file system read operations such as list files
      * @return number of read operations
@@ -3179,7 +3183,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     }
 
     /**
-     * Get the number of file system write operations such as create, append 
+     * Get the number of file system write operations such as create, append
      * rename etc.
      * @return number of write operations
      */
@@ -3249,7 +3253,7 @@ public abstract class FileSystem extends Configured implements Closeable {
         }
       });
     }
-    
+
     /**
      * Get the uri scheme associated with this statistics object.
      * @return the schema associated with this set of statistics
@@ -3258,7 +3262,7 @@ public abstract class FileSystem extends Configured implements Closeable {
       return scheme;
     }
   }
-  
+
   /**
    * Get the Map of Statistics object indexed by URI Scheme.
    * @return a Map having a key as URI scheme and value as Statistics object
@@ -3279,13 +3283,13 @@ public abstract class FileSystem extends Configured implements Closeable {
   public static synchronized List<Statistics> getAllStatistics() {
     return new ArrayList<Statistics>(statisticsTable.values());
   }
-  
+
   /**
    * Get the statistics for a particular file system
    * @param cls the class to lookup
    * @return a statistics object
    */
-  public static synchronized 
+  public static synchronized
   Statistics getStatistics(String scheme, Class<? extends FileSystem> cls) {
     Statistics result = statisticsTable.get(cls);
     if (result == null) {
@@ -3294,7 +3298,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     }
     return result;
   }
-  
+
   /**
    * Reset all statistics for all file systems
    */
@@ -3309,10 +3313,10 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   public static synchronized
   void printStatistics() throws IOException {
-    for (Map.Entry<Class<? extends FileSystem>, Statistics> pair: 
+    for (Map.Entry<Class<? extends FileSystem>, Statistics> pair:
             statisticsTable.entrySet()) {
-      System.out.println("  FileSystem " + pair.getKey().getName() + 
-                         ": " + pair.getValue());
+      System.out.println("  FileSystem " + pair.getKey().getName() +
+              ": " + pair.getValue());
     }
   }
 
