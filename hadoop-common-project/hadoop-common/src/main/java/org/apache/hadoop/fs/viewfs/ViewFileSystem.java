@@ -394,22 +394,30 @@ public class ViewFileSystem extends FileSystem {
     InodeTree.ResolveResult<FileSystem> res =
         fsStateResolve(getUriPath(f), true);
 
-    FileStatus[] statusLst = res.targetFileSystem.listStatus(res.remainingPath);
+    FileStatus[] statusList = new FileStatus[0];
+    try {
+       statusList = res.targetFileSystem.listStatus(res.remainingPath);
+    } catch (FileNotFoundException e) {
+      if (!(fsState instanceof MergedInodeTree))
+          throw e;
+    }
+
     if (!res.isInternalDir()) {
       // We need to change the name in the FileStatus as described in
       // {@link #getFileStatus }
       ChRootedFileSystem targetFs;
       targetFs = (ChRootedFileSystem) res.targetFileSystem;
       int i = 0;
-      for (FileStatus status : statusLst) {
+      for (FileStatus status : statusList) {
           String suffix = targetFs.stripOutRoot(status.getPath());
-          statusLst[i++] = new ViewFsFileStatus(status, this.makeQualified(
+          statusList[i++] = new ViewFsFileStatus(status, this.makeQualified(
               suffix.length() == 0 ? f : new Path(res.resolvedPath, suffix)));
       }
     }
     if (!(fsState instanceof MergedInodeTree))
-      return statusLst;
+      return statusList;
 
+    // if use mergedInodeTree, find more mountpoints to merge the listStatus result
     List<FileStatus> mergedList = new ArrayList<FileStatus>();
     InodeTree.MountPoint<FileSystem> currentNode = null;
     InodeTree.MountPoint<FileSystem> nearestAncestorNode = null;
@@ -425,27 +433,31 @@ public class ViewFileSystem extends FileSystem {
       }
     }
 
-    if (currentNode != null) {
-      // first check whether the current inode is a mountpoint
-      // if it is, we don't need to check ancestor mountpoints
-      if (currentNode.target instanceof InodeTree.AbstractINodeDir
-          && res.remainingPath.equals(InodeTree.SlashPath)) {
-        // only when current point is an internode mountpoint, we need to add the childrens
-        // in mount table to list result
-        InternalDirOfViewFs interFs = new InternalDirOfViewFs(
-                (InodeTree.AbstractINodeDir<FileSystem>) currentNode.target, creationTime,
-                ugi, myUri);
-        mergedList.addAll(Arrays.asList(interFs.listStatus(res.remainingPath)));
-      }
-    } else if (nearestAncestorNode != null) {
-      String pathDiff = res.resolvedPath.substring(nearestAncestorNode.src.length());
-      if (!pathDiff.startsWith("/"))
-        pathDiff = "/" + pathDiff;
-      if (pathDiff.endsWith("/"))
-        pathDiff = pathDiff.substring(0, pathDiff.length() - 1);
+    try {
+      if (currentNode != null) {
+        // first check whether the current inode is a mountpoint
+        // if it is, we don't need to check ancestor mountpoints
+        if (currentNode.target instanceof InodeTree.AbstractINodeDir
+                && res.remainingPath.equals(InodeTree.SlashPath)) {
+          // only when current point is an internode mountpoint, we need to add the childrens
+          // in mount table to list result
+          InternalDirOfViewFs interFs = new InternalDirOfViewFs(
+                  (InodeTree.AbstractINodeDir<FileSystem>) currentNode.target, creationTime,
+                  ugi, myUri);
+          mergedList.addAll(Arrays.asList(interFs.listStatus(res.remainingPath)));
+        }
+      } else if (nearestAncestorNode != null) {
+        String pathDiff = res.resolvedPath.substring(nearestAncestorNode.src.length());
+        if (!pathDiff.startsWith("/"))
+          pathDiff = "/" + pathDiff;
+        if (pathDiff.endsWith("/"))
+          pathDiff = pathDiff.substring(0, pathDiff.length() - 1);
 
-      mergedList.addAll(Arrays.asList(nearestAncestorNode.target.getFileSystem()
-              .listStatus(new Path(pathDiff + res.remainingPath))));
+        mergedList.addAll(Arrays.asList(nearestAncestorNode.target.getFileSystem()
+                .listStatus(new Path(pathDiff + res.remainingPath))));
+      }
+    } catch (FileNotFoundException e) {
+      // ignore, leave mergedList empty
     }
 
     for (FileStatus status : mergedList) {
@@ -453,7 +465,7 @@ public class ViewFileSystem extends FileSystem {
       resMap.put(truePath, new ViewFsFileStatus(status,
               this.makeQualified(new Path(truePath))));
     }
-    for (FileStatus status : statusLst) {
+    for (FileStatus status : statusList) {
       resMap.put(status.getPath().toUri().getPath(), status);
     }
     return resMap.values().toArray(new FileStatus[] {});

@@ -340,6 +340,13 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
   }
 
   @Test
+  public void testListStatusInternaldirWithRootDefault() throws Exception {
+    FileSystem fsv = getFsWithRootMountPoints();
+    FileStatus[] res = fsv.listStatus(new Path("/internalDir"));
+    assertEquals(res.length, 2);
+  }
+
+  @Test
   public void testListStatusOnlyResolveOnLeafNode() throws Exception {
     fsView.mkdirs(new Path("/log_collector/web/orders/old_orders"));
     FileSystemTestHelper.createFile(fsView, new Path("/log_collector/web/orders/order1"));
