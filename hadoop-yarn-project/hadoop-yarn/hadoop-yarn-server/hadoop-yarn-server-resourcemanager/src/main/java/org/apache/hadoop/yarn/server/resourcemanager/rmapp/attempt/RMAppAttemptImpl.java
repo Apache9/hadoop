@@ -1407,7 +1407,8 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
 
       // update pendingTime
       appAttempt.pendingTime = System.currentTimeMillis() - appAttempt.startTime;
-      LOG.info("App attempt: " + appAttempt.applicationAttemptId + " wait for " + appAttempt.pendingTime + " ms for scheduling.");
+      LOG.info("App attempt: " + appAttempt.applicationAttemptId + " wait for " + appAttempt.pendingTime
+          + " ms for scheduling at queue: " + appAttempt.getSubmissionContext().getQueue());
       // Let the app know
       appAttempt.eventHandler.handle(new RMAppEvent(appAttempt
           .getAppAttemptId().getApplicationId(),

@@ -133,6 +133,9 @@ public class FairScheduler extends
 
   // How often fair shares are re-calculated (ms)
   protected long updateInterval;
+  // How often queue's resource usage are re-calculated (ms)
+  protected long updateResourceUsageInterval;
+
   private final int UPDATE_DEBUG_FREQUENCY = 5;
   private int updatesToSkipForDebug = UPDATE_DEBUG_FREQUENCY;
 
@@ -140,6 +143,9 @@ public class FairScheduler extends
 
   @VisibleForTesting
   Thread updateThread;
+
+  @VisibleForTesting
+  Thread updateResourceUsageThread;
 
   @VisibleForTesting
   Thread schedulingThread;
@@ -272,6 +278,27 @@ public class FairScheduler extends
           return;
         } catch (Exception e) {
           LOG.error("Exception in fair scheduler UpdateThread", e);
+        }
+      }
+    }
+  }
+
+  private class UpdateResourceUsageThread extends Thread {
+
+    @Override
+    public void run() {
+      while (!Thread.currentThread().isInterrupted()) {
+        try {
+          Thread.sleep(updateResourceUsageInterval);
+          long start = getClock().getTime();
+          FSQueue rootQueue = queueMgr.getRootQueue();
+          rootQueue.updateResourceUsage();
+          long duration = getClock().getTime() - start;
+        } catch (InterruptedException ie) {
+          LOG.warn("Update queue resource usage thread interrupted. Exiting.");
+          return;
+        } catch (Exception e) {
+          LOG.error("Exception in fair scheduler UpdateResourceUsageThread", e);
         }
       }
     }
@@ -1379,6 +1406,15 @@ public class FairScheduler extends
             + " ms instead");
       }
 
+      updateResourceUsageInterval = this.conf.getUpdateResourceUsageInterval();
+      if (updateResourceUsageInterval < 0) {
+        updateResourceUsageInterval = FairSchedulerConfiguration.DEFAULT_UPDATE_RESOURCE_USAGE_INTERVAL_MS;
+        LOG.warn(FairSchedulerConfiguration.UPDATE_RESOURCE_USAGE_INTERVAL_MS
+            + " is invalid, so using default value " +
+            +FairSchedulerConfiguration.DEFAULT_UPDATE_RESOURCE_USAGE_INTERVAL_MS
+            + " ms instead");
+      }
+
       rootMetrics = FSQueueMetrics.forQueue("root", null, true, conf);
       fsOpDurations = FSOpDurations.getInstance(true);
 
@@ -1399,6 +1435,10 @@ public class FairScheduler extends
       updateThread = new UpdateThread();
       updateThread.setName("FairSchedulerUpdateThread");
       updateThread.setDaemon(true);
+
+      updateResourceUsageThread = new UpdateResourceUsageThread();
+      updateResourceUsageThread.setName("FairSchedulerUpdateResourceUsageThread");
+      updateResourceUsageThread.setDaemon(true);
 
       if (continuousSchedulingEnabled) {
         // start continuous scheduling thread
@@ -1422,8 +1462,10 @@ public class FairScheduler extends
 
   private synchronized void startSchedulerThreads() {
     Preconditions.checkNotNull(updateThread, "updateThread is null");
+    Preconditions.checkNotNull(updateResourceUsageThread, "updateResourceUsageThread is null");
     Preconditions.checkNotNull(allocsLoader, "allocsLoader is null");
     updateThread.start();
+    updateResourceUsageThread.start();
     if (continuousSchedulingEnabled) {
       Preconditions.checkNotNull(schedulingThread, "schedulingThread is null");
       schedulingThread.start();
@@ -1449,6 +1491,10 @@ public class FairScheduler extends
       if (updateThread != null) {
         updateThread.interrupt();
         updateThread.join(THREAD_JOIN_TIMEOUT_MS);
+      }
+      if (updateResourceUsageThread != null) {
+        updateResourceUsageThread.interrupt();
+        updateResourceUsageThread.join(THREAD_JOIN_TIMEOUT_MS);
       }
       if (continuousSchedulingEnabled) {
         if (schedulingThread != null) {
