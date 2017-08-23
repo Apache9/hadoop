@@ -500,9 +500,10 @@ class BlockSender implements java.io.Closeable {
     int packetLen = dataLen + checksumDataLen + 4;
     boolean lastDataPacket = offset + dataLen == endOffset && dataLen > 0;
 
-    TraceScope traceScope = TracerLog.startScope("Send Packet",
-      "blockID=" + block.getLocalBlock().toString() +
-      ", offset=" + offset + ", dataLen=" + dataLen);
+    if (TracerLog.isEnabled()) {
+      TracerLog.startScope("Send Packet","blockID=" + block.getLocalBlock() +
+        " offset=" + offset + " dataLen=" + dataLen + " seqno=" + seqno);
+    }
     // The packet buffer is organized as follows:
     // _______HHHHCCCCD?D?D?D?
     //        ^   ^
@@ -625,7 +626,7 @@ class BlockSender implements java.io.Closeable {
       throttler.throttle(packetLen);
     }
 
-    TracerLog.closeTrace(traceScope, TracerLog.TracerWarnTimeType.rwPacket);
+    TracerLog.closeScope(TracerLog.TracerWarnTimeType.rwPacket);
     return dataLen;
   }
   

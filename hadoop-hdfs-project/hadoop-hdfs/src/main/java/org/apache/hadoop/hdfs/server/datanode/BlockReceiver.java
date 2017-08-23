@@ -464,9 +464,8 @@ class BlockReceiver implements Closeable {
                 ": " + header);
     }
     if (Trace.isTracing()) {
-      Trace.addTimelineAnnotation("Received a packet, blockID=" +
-        block.getLocalBlock().toString() + ", inAddr=" + inAddr +
-        ", offsetInBlock=" + header.getOffsetInBlock() +
+      Trace.addTimelineAnnotation("Received a packet, blockID=" + block.getLocalBlock().toString() +
+        ", inAddr=" + inAddr + ", myAddr=" + myAddr + ", offsetInBlock=" + header.getOffsetInBlock() +
         ", seqno=" + header.getSeqno() + ", dataLen=" + header.getDataLen());
     }
 
@@ -687,8 +686,7 @@ class BlockReceiver implements Closeable {
       LOG.info("receivePacket cost:" + (receivePacketEnd - receivePacketStart) + "ms");
     }
     if (Trace.isTracing() && seqno >=0 ) {
-      TraceScope traceScope = Trace.continueSpan(Trace.currentSpan());
-      TracerLog.closeTrace(traceScope, TracerLog.TracerWarnTimeType.rwPacket);
+      TracerLog.closeScope(TracerLog.TracerWarnTimeType.rwPacket);
     }
     return lastPacketInBlock?-1:len;
   }

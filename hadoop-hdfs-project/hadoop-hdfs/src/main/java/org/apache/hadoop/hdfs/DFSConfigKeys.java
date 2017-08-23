@@ -840,8 +840,8 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final boolean DFS_NAMENODE_BLOCKPLACEMENT_CHOOSERANDOM_IN_CTX_DEFAULT = 
       false;
 
-  public static final long DFS_TRACER_WARN_TIME_NORMAL_DEFAULT = 100; // Millis
+  public static final long DFS_TRACER_WARN_TIME_NORMAL_DEFAULT = 500; // Millis
   public static final String DFS_TRACER_WARN_TIME_NORMAL_KEY = "dfs.tracer.span.warm.normal.time";
-  public static final long DFS_TRACER_WARN_TIME_RWPACKET_DEFAULT = 500; // Millis
+  public static final long DFS_TRACER_WARN_TIME_RWPACKET_DEFAULT = 2000; // Millis
   public static final String DFS_TRACER_WARN_TIME_RWPACKET_KEY = "dfs.tracer.span.warm.rwpacket.time";
 }

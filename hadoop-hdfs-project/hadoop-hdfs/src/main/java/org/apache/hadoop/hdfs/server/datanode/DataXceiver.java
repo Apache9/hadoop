@@ -603,11 +603,6 @@ class DataXceiver extends Receiver implements Runnable {
                 " tcp no delay " + peer.getTcpNoDelay());
     }
 
-    TraceScope traceScope = TracerLog.startScope("Receive block ",
-      "blockID=" + block.getLocalBlock()
-        + " src=" + remoteAddress
-        + " dest=" + localAddress);
-
     // We later mutate block's generation stamp and length, but we need to
     // forward the original version of the block to downstream mirrors, so
     // make a copy here.
@@ -643,23 +638,20 @@ class DataXceiver extends Receiver implements Runnable {
             clientname, srcDataNode, datanode, requestedChecksum,
             cachingStrategy);
         storageUuid = blockReceiver.getStorageUuid();
-
-        if (Trace.isTracing()) {
-          Trace.addTimelineAnnotation("Created a BlockReceiver, storageUuid =" + storageUuid);
-        }
       } else {
         storageUuid = datanode.data.recoverClose(
             block, latestGenerationStamp, minBytesRcvd);
-
-        if (Trace.isTracing()) {
-          Trace.addTimelineAnnotation("recoverClose done, storageUuid =" + storageUuid);
-        }
       }
 
       //
       // Connect to downstream machine, if appropriate
       //
       if (targets.length > 0) {
+        if (TracerLog.isEnabled()) {
+          TracerLog.startScope("Connect Mirror","blockID=" + block.getLocalBlock()
+              + " src=" + remoteAddress + " dest=" + localAddress);
+        }
+
         InetSocketAddress mirrorTarget = null;
         // Connect to backup machine
         mirrorNode = targets[0].getXferAddr(connectToDnViaHostname);
@@ -694,6 +686,9 @@ class DataXceiver extends Receiver implements Runnable {
           mirrorOut = new DataOutputStream(new BufferedOutputStream(unbufMirrorOut,
               HdfsConstants.SMALL_BUFFER_SIZE));
           mirrorIn = new DataInputStream(unbufMirrorIn);
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("Connected to datanode, mirrorNode =" + mirrorNode);
+          }
 
           new Sender(mirrorOut).writeBlock(originalBlock, blockToken,
               clientname, targets, srcDataNode, stage, pipelineSize,
@@ -716,7 +711,7 @@ class DataXceiver extends Receiver implements Runnable {
             }
           }
           if (Trace.isTracing()) {
-            Trace.addTimelineAnnotation("Connect to downstream machine done, mirrorNode =" + mirrorNode);
+            Trace.addTimelineAnnotation("Created block on mirror datanode.");
           }
 
         } catch (IOException e) {
@@ -743,8 +738,16 @@ class DataXceiver extends Receiver implements Runnable {
             LOG.info(datanode + ":Exception transfering " +
                      block + " to mirror " + mirrorNode +
                      "- continuing without the mirror", e);
+            if (Trace.isTracing()) {
+              Trace.addTimelineAnnotation(datanode + ":Exception transfering " +
+                                          block + " to mirror " + mirrorNode +
+                                          "- continuing without the mirror");
+            }
           }
+        } finally {
+          TracerLog.closeScope();
         }
+
       }
 
       // send connect-ack to source for clients and not transfer-RBW/Finalized
@@ -765,9 +768,6 @@ class DataXceiver extends Receiver implements Runnable {
           Trace.addTimelineAnnotation("Send connect-ack to source done");
         }
       }
-
-      Trace.addTimelineAnnotation("Begin to receive block ...");
-      TracerLog.closeTrace(traceScope);
 
       // receive the block and mirror to the next target
       if (blockReceiver != null) {

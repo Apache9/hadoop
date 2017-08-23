@@ -149,7 +149,10 @@ public class PacketReceiver implements Closeable {
       throw new IOException("Invalid header length " + headerLen);
     }
 
-    TracerLog.startScope("Receive Packet","Receive a header, headerLen=" + headerLen);
+    if (TracerLog.isEnabled()) {
+      TracerLog.startScope("Receive Packet", "dataPlusChecksumLen=" +
+        dataPlusChecksumLen + " headerLen=" + headerLen);
+    }
 
     if (LOG.isTraceEnabled()) {
       LOG.trace("readNextPacket: dataPlusChecksumLen = " + dataPlusChecksumLen +

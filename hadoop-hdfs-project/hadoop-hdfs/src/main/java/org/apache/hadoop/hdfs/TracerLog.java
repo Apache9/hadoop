@@ -42,6 +42,7 @@ public class TracerLog {
   private static Configuration conf;
   private static long warnTimeNormal = 0;
   private static long warnTimePacket = 0;
+  private static boolean initialised = false;
 
   public static void init(Configuration c) {
     conf = c;
@@ -51,7 +52,7 @@ public class TracerLog {
     warnTimePacket = conf.getLong(
       DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY,
       DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_DEFAULT);
-    //warnTime = time;
+    initialised = true;
   }
 
   public static long getWarnTime(TracerWarnTimeType type) {
@@ -61,21 +62,37 @@ public class TracerLog {
     }
   }
 
-  public static TraceScope startScope(String op, String info) {
+  public static boolean isEnabled() {
+    return initialised;
+  }
+
+  public static void startScope(String op, String info) {
+    if (!initialised) {
+      return;
+    }
     StringBuilder sb = new StringBuilder();
     sb.append("op=").append(op);
     sb.append(", ").append(info);
-    return Trace.startSpan(sb.toString(), Sampler.ALWAYS);
+    if (Trace.startSpan(sb.toString(), Sampler.ALWAYS) == null) {
+      tracerLog.info("Failed to startSpan: " + sb.toString());
+    }
   }
 
-  public static void closeTrace(TraceScope traceScope) {
-    closeTrace(traceScope, TracerWarnTimeType.normal);
+  public static void closeScope() {
+    closeScope(TracerWarnTimeType.normal);
   }
 
-  public static void closeTrace(TraceScope traceScope,
-                                TracerWarnTimeType warnTimeType ) {
-    traceScope.close();
-    Span span = traceScope.getSpan();
+  public static void closeScope(TracerWarnTimeType warnTimeType) {
+    if (!initialised) {
+      return;
+    }
+    Span span = Trace.currentSpan();
+    if (span == null) {
+      tracerLog.info("Invalid traceScope");
+      return;
+    }
+
+    span.stop();
     long duration = span.getAccumulatedMillis();
     long warnTime = getWarnTime(warnTimeType);
     if (duration >= warnTime) {
