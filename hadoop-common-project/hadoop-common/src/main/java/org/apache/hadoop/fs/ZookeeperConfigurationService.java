@@ -1,11 +1,15 @@
 package org.apache.hadoop.fs;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooKeeper;
 
 public class ZookeeperConfigurationService extends ConfigurationService {
@@ -28,11 +32,14 @@ public class ZookeeperConfigurationService extends ConfigurationService {
   private Configuration fetchConfFromZk(String zkHost, int sessionTimeout,
                                         String authority) throws IOException {
     ZooKeeper zk = null;
-    String confString = null;
+    byte[] bytes = null;
     try {
-      zk = new ZooKeeper(zkHost, sessionTimeout, null);
-      confString = new String(
-              zk.getData("/configuration-service/" + authority, false, null));
+      zk = new ZooKeeper(zkHost, sessionTimeout, new Watcher() {
+        @Override
+        public void process(WatchedEvent event) {
+        }
+      });
+      bytes = zk.getData("/configuration-service/" + authority, false, null);
     } catch (Exception e) {
       throw new IOException("Failed fetching Configuration from Zookeeper:"+zkHost,e);
     } finally {
@@ -40,29 +47,23 @@ public class ZookeeperConfigurationService extends ConfigurationService {
         if (zk != null) {
           zk.close();
         }
-      } catch (InterruptedException e) {      }
+      } catch (InterruptedException e) {
+      }
     }
-    if (confString.length() == 0) {
+    if (bytes.length == 0) {
       LOG.warn("Fetched Configuration is empty!");
       return null;
     }
-    return parse(confString);
+
+    return createConfFromBytes(bytes);
   }
 
-  // easy parse
-  // confString is like
-  // "dfs.namenode.rpc-address.nameservice.host0:localhost:9090\n"
-  private Configuration parse(String confString) throws IOException {
+  private Configuration createConfFromBytes(byte[] bytes) throws IOException {
     Configuration conf = new Configuration(false);
-    String[] props = confString.split("\\$\n");
-    for (String prop : props) {
-      int i = prop.indexOf(":");
-      if (i < 0 || i > prop.length() - 1) {
-        throw new IOException(
-                "Bad Configuration String. Couldn't parse:" + prop);
-      }
-      conf.set(prop.substring(0, i), prop.substring(i + 1, prop.length()));
-    }
+    ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+    conf.readFields(new DataInputStream(in));
+    in.close();
     return conf;
   }
+
 }
