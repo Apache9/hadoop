@@ -15,6 +15,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.URI;
 
@@ -35,14 +37,18 @@ public class TestConfigurationService {
   public void setup() throws IOException, QuorumPeerConfig.ConfigException,
       KeeperException, InterruptedException {
     // config data in ZK
-    String confString = "dfs.nameservices:" + NAMESERVICE + "$\n"
-        + "dfs.ha.namenodes." + NAMESERVICE + ":host0,host1" + "$\n"
-        + "dfs.namenode.rpc-address." + NAMESERVICE + ".host0:localhost:57200"
-        + "$\n" + "dfs.namenode.rpc-address." + NAMESERVICE
-        + ".host1:localhost:57000" + "$\n"
-        + "dfs.client.failover.proxy.provider." + NAMESERVICE + ""
-        + ":org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-        + "$\n";
+    Configuration conf = new Configuration(false);
+    conf.set("dfs.nameservices", NAMESERVICE);
+    conf.set("dfs.ha.namenodes." + NAMESERVICE, "host0,host1");
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host0", "localhost:57200");
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host1", "localhost:57000");
+    conf.set("dfs.client.failover.proxy.provider." + NAMESERVICE, "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    conf.write(new DataOutputStream(out));
+    out.flush();
+    byte[] bytes = out.toByteArray();
+    out.close();
 
     ZooKeeper zk = new ZooKeeper(ZK_HOST, 3000, null);
     Stat stat = zk.exists(ZK_BASE, false);
@@ -55,7 +61,7 @@ public class TestConfigurationService {
       zk.create(ZK_BASE + "/" + NAMESERVICE, "test".getBytes(),
           ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
     }
-    zk.setData(ZK_BASE + "/" + NAMESERVICE, confString.getBytes(), -1);
+    zk.setData(ZK_BASE + "/" + NAMESERVICE, bytes, -1);
     zk.close();
 
     // start minidfscluster
