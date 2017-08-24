@@ -233,9 +233,21 @@ public class ApplicationAttemptStateDataPBImpl extends
   }
 
   @Override
+  public long getPendingTime() {
+    ApplicationAttemptStateDataProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getPendingTime();
+  }
+
+  @Override
   public void setStartTime(long startTime) {
     maybeInitBuilder();
     builder.setStartTime(startTime);
+  }
+
+  @Override
+  public void setPendingTime(long pendingTime) {
+    maybeInitBuilder();
+    builder.setPendingTime(pendingTime);
   }
 
   @Override

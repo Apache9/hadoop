@@ -168,6 +168,11 @@ public class MockRMApp implements RMApp {
   }
 
   @Override
+  public long getPendingTime() {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
   public long getSubmitTime() {
     return submit;
   }

@@ -655,6 +655,14 @@ public class RMAppImpl implements RMApp, Recoverable {
   }
 
   @Override
+  public long getPendingTime() {
+    if(currentAttempt != null) {
+      return currentAttempt.getPendingTime();
+    }
+    return -1;
+  }
+
+  @Override
   public long getSubmitTime() {
     return this.submitTime;
   }

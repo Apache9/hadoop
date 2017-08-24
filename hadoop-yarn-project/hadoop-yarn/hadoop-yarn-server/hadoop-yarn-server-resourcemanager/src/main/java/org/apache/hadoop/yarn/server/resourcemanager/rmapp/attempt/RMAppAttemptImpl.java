@@ -151,6 +151,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
   private String originalTrackingUrl = "N/A";
   private String proxiedTrackingUrl = "N/A";
   private long startTime = 0;
+  private long pendingTime = -1;
   private long finishTime = 0;
 
   // Set to null initially. Will eventually get set 
@@ -816,6 +817,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     this.proxiedTrackingUrl = generateProxyUriWithScheme(originalTrackingUrl);
     this.finalStatus = attemptState.getFinalApplicationStatus();
     this.startTime = attemptState.getStartTime();
+    this.pendingTime = attemptState.getPendingTime();
     this.finishTime = attemptState.getFinishTime();
     this.attemptMetrics.updateAggregateAppResourceUsage(
         attemptState.getMemorySeconds(),attemptState.getVcoreSeconds());
@@ -872,6 +874,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
 
   }
 
+  // NEW --> SUBMITTED
   private static final class AttemptStartedTransition extends BaseTransition {
 	@Override
     public void transition(RMAppAttemptImpl appAttempt,
@@ -1172,7 +1175,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
             startTime, stateToBeStored, finalTrackingUrl, diags,
             finalStatus, exitStatus,
           getFinishTime(), resUsage.getMemorySeconds(),
-          resUsage.getVcoreSeconds());
+          resUsage.getVcoreSeconds(),pendingTime);
     LOG.info("Updating application attempt " + applicationAttemptId
         + " with final state: " + targetedFinalState + ", and exit status: "
         + exitStatus);
@@ -1402,8 +1405,9 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
       appAttempt.proxiedTrackingUrl = 
         appAttempt.generateProxyUriWithScheme(appAttempt.originalTrackingUrl);
 
-      long pendingTime = (System.currentTimeMillis() - appAttempt.startTime) / 1000;
-      LOG.info("App attempt: " + appAttempt.applicationAttemptId + " wait for " + pendingTime + " s for scheduling.");
+      // update pendingTime
+      appAttempt.pendingTime = System.currentTimeMillis() - appAttempt.startTime;
+      LOG.info("App attempt: " + appAttempt.applicationAttemptId + " wait for " + appAttempt.pendingTime + " ms for scheduling.");
       // Let the app know
       appAttempt.eventHandler.handle(new RMAppEvent(appAttempt
           .getAppAttemptId().getApplicationId(),
@@ -1844,6 +1848,16 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     this.readLock.lock();
     try {
       return this.startTime;
+    } finally {
+      this.readLock.unlock();
+    }
+  }
+
+  @Override
+  public long getPendingTime() {
+    this.readLock.lock();
+    try {
+      return pendingTime;
     } finally {
       this.readLock.unlock();
     }
