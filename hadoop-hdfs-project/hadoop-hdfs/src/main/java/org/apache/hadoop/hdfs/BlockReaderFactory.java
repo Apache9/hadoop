@@ -334,11 +334,7 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
     Preconditions.checkState(!DFSInputStream.tcpReadsDisabledForTesting,
         "TCP reads were disabled for testing, but we failed to " +
         "do a non-TCP read.");
-    if (clientContext.canUseHttp2BlockReader(length)) {
-      return getRemoteBlockReaderFromHttp2();
-    } else {
-      return getRemoteBlockReaderFromTcp();
-    }
+    return getRemoteBlockReaderFromTcp();
   }
 
   /**
@@ -646,17 +642,6 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
       }
     }
     return null;
-  }
-
-  private BlockReader getRemoteBlockReaderFromHttp2() throws IOException {
-    if (LOG.isTraceEnabled()) {
-      LOG.trace(this + ": trying to create a remote block reader from a " +
-          "HTTP/2 connection");
-    }
-    return Http2BlockReader.newBlockReader(fileName, block, token, startOffset,
-        length, verifyChecksum, clientName, datanode,
-        clientContext.getConnCache(), cachingStrategy,
-        conf.http2BlockReaderMaxBufferedDataSize);
   }
 
   /**

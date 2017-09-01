@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.datanode.web;
+package org.apache.hadoop.hdfs.server.datanode.web.webhdfs;
 
 import com.sun.jersey.api.ParamException;
 import com.sun.jersey.api.container.ContainerException;
@@ -23,8 +23,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.logging.Log;
-import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.web.JsonUtil;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
@@ -33,10 +31,9 @@ import org.apache.hadoop.security.token.SecretManager;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 
-import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
-import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
+import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_LENGTH;
+import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN;
 import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
@@ -44,11 +41,10 @@ import static io.netty.handler.codec.http.HttpResponseStatus.NOT_FOUND;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.APPLICATION_JSON;
 
-@InterfaceAudience.Private
-public class ExceptionHandler {
-  static Log LOG = DatanodeHttpServer.LOG;
+class ExceptionHandler {
+  static Log LOG = WebHdfsHandler.LOG;
 
-  public static DefaultFullHttpResponse exceptionCaught(Throwable cause) {
+  static DefaultFullHttpResponse exceptionCaught(Throwable cause) {
     Exception e = cause instanceof Exception ? (Exception) cause : new Exception(cause);
 
     if (LOG.isTraceEnabled()) {
@@ -73,8 +69,7 @@ public class ExceptionHandler {
       s = FORBIDDEN;
     } else if (e instanceof AuthorizationException) {
       s = FORBIDDEN;
-    } else if (e instanceof FileNotFoundException ||
-        e instanceof ReplicaNotFoundException) {
+    } else if (e instanceof FileNotFoundException) {
       s = NOT_FOUND;
     } else if (e instanceof IOException) {
       s = FORBIDDEN;
@@ -87,7 +82,7 @@ public class ExceptionHandler {
       s = INTERNAL_SERVER_ERROR;
     }
 
-    byte[] js = JsonUtil.toJsonString(e).getBytes(StandardCharsets.UTF_8);
+    final byte[] js = JsonUtil.toJsonString(e).getBytes();
     DefaultFullHttpResponse resp =
       new DefaultFullHttpResponse(HTTP_1_1, s, Unpooled.wrappedBuffer(js));
 
@@ -106,14 +101,15 @@ public class ExceptionHandler {
       if (t != null && t instanceof SecretManager.InvalidToken) {
         final Throwable t1 = t.getCause();
         if (t1 != null && t1 instanceof StandbyException) {
-          e = (StandbyException) t1;
+          e = (StandbyException)t1;
         }
       }
     } else {
       if (t != null && t instanceof Exception) {
-        e = (Exception) t;
+        e = (Exception)t;
       }
     }
     return e;
   }
+
 }

@@ -22,11 +22,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_DE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTP_ADDRESS_KEY;
 
+import io.netty.bootstrap.ChannelFactory;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -109,19 +108,21 @@ public class DatanodeHttpServer implements Closeable {
     this.confForCreate = new Configuration(conf);
     confForCreate.set(FsPermission.UMASK_LABEL, "000");
 
-    this.bossGroup = new NioEventLoopGroup(1);
+    this.bossGroup = new NioEventLoopGroup();
     this.workerGroup = new NioEventLoopGroup();
     this.externalHttpChannel = externalHttpChannel;
     HttpConfig.Policy policy = DFSUtil.getHttpPolicy(conf);
 
     if (policy.isHttpEnabled()) {
       this.httpServer = new ServerBootstrap().group(bossGroup, workerGroup)
-        .childOption(ChannelOption.TCP_NODELAY, true)
         .childHandler(new ChannelInitializer<SocketChannel>() {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
-          ch.pipeline().addLast(new PortUnificationServerHandler(jettyAddr,
-              conf, confForCreate, datanode));
+          ChannelPipeline p = ch.pipeline();
+          p.addLast(new HttpRequestDecoder(),
+            new HttpResponseEncoder(),
+            new ChunkedWriteHandler(),
+            new URLDispatcher(jettyAddr, conf, confForCreate));
         }
       });
       if (externalHttpChannel == null) {
