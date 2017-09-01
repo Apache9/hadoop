@@ -99,7 +99,8 @@ public class NNBench {
   public static short replicationFactorPerFile = 1; // default is 1
   public static String baseDir = "/benchmarks/NNBench";  // default
   public static boolean readFileAfterOpen = false; // default is to not read
-  
+  public static boolean disableBarrier = false; // default is to enable barrier
+
   // Supported operations
   private static final String OP_CREATE_WRITE = "create_write";
   private static final String OP_OPEN_READ = "open_read";
@@ -119,8 +120,8 @@ public class NNBench {
    * @throws IOException on error
    */
   private static void cleanupBeforeTestrun() throws IOException {
-    FileSystem tempFS = FileSystem.get(config);
-    
+    FileSystem tempFS = FileSystem.get(new Path(baseDir).toUri(), config);
+
     // Delete the data directory only if it is the create/write operation
     if (operation.equals(OP_CREATE_WRITE)) {
       LOG.info("Deleting data directory");
@@ -137,7 +138,7 @@ public class NNBench {
    * @throws IOException on error
    */
   private static void createControlFiles() throws IOException {
-    FileSystem tempFS = FileSystem.get(config);
+    FileSystem tempFS = FileSystem.get(new Path(baseDir).toUri(), config);
     LOG.info("Creating " + numberOfMaps + " control files");
 
     for (int i = 0; i < numberOfMaps; i++) {
@@ -199,6 +200,8 @@ public class NNBench {
       "\t-readFileAfterOpen <true or false. if true, it reads the file and " +
       "reports the average time to read. This is valid with the open_read " +
       "operation. default is false. This is not mandatory>\n" +
+      "\t-disableBarrier <true or false. if false, all map tasks will wait " +
+      "for each other to start running at same time. default is false" +
       "\t-help: Display the help statement\n";
       
     
@@ -264,6 +267,9 @@ public class NNBench {
       } else if (args[i].equals("-readFileAfterOpen")) {
         checkArgs(i + 1, args.length);
         readFileAfterOpen = Boolean.parseBoolean(args[++i]);
+      } else if (args[i].equals("-disableBarrier")) {
+        checkArgs(i + 1, args.length);
+        disableBarrier = Boolean.parseBoolean(args[++i]);
       } else if (args[i].equals("-help")) {
         displayUsage();
         System.exit(-1);
@@ -282,7 +288,8 @@ public class NNBench {
     LOG.info("       Replication factor: " + replicationFactorPerFile);
     LOG.info("                 Base dir: " + baseDir);
     LOG.info("     Read file after open: " + readFileAfterOpen);
-    
+    LOG.info("          Disable Barrier: " + disableBarrier);
+
     // Set user-defined parameters, so the map method can access the values
     config.set("test.nnbench.operation", operation);
     config.setLong("test.nnbench.maps", numberOfMaps);
@@ -296,6 +303,7 @@ public class NNBench {
             (int) replicationFactorPerFile);
     config.set("test.nnbench.basedir", baseDir);
     config.setBoolean("test.nnbench.readFileAfterOpen", readFileAfterOpen);
+    config.setBoolean("test.nnbench.disableBarrier", disableBarrier);
 
     config.set("test.nnbench.datadir.name", DATA_DIR_NAME);
     config.set("test.nnbench.outputdir.name", OUTPUT_DIR_NAME);
@@ -308,7 +316,7 @@ public class NNBench {
    * @throws IOException on error
    */
   private static void analyzeResults() throws IOException {
-    final FileSystem fs = FileSystem.get(config);
+    final FileSystem fs = FileSystem.get(new Path(baseDir).toUri(), config);
     Path reduceFile = new Path(new Path(baseDir, OUTPUT_DIR_NAME),
             "part-00000");
 
@@ -601,6 +609,7 @@ public class NNBench {
     String dataDirName = null;
     String op = null;
     boolean readFile = false;
+    boolean disableBarrier = false;
     final int MAX_OPERATION_EXCEPTIONS = 1000;
     
     // Data to collect from the operation
@@ -623,7 +632,8 @@ public class NNBench {
       setConf(conf);
       
       try {
-        filesystem = FileSystem.get(conf);
+        String dir = conf.get("test.nnbench.basedir");
+        filesystem = FileSystem.get(new Path(dir).toUri(), conf);
       } catch(Exception e) {
         throw new RuntimeException("Cannot get file system.", e);
       }
@@ -650,6 +660,10 @@ public class NNBench {
      * without interruption; false otherwise
      */
     private boolean barrier() {
+      if (disableBarrier) {
+        LOG.info("barrier is disabled");
+        return true;
+      }
       long startTime = getConf().getLong("test.nnbench.starttime", 0l);
       long currentTime = System.currentTimeMillis();
       long sleepTime = startTime - currentTime;
@@ -687,6 +701,7 @@ public class NNBench {
       dataDirName = conf.get("test.nnbench.datadir.name");
       op = conf.get("test.nnbench.operation");
       readFile = conf.getBoolean("test.nnbench.readFileAfterOpen", false);
+      disableBarrier = conf.getBoolean("test.nnbench.disableBarrier", false);
       
       long totalTimeTPmS = 0l;
       long startTimeTPmS = 0l;
