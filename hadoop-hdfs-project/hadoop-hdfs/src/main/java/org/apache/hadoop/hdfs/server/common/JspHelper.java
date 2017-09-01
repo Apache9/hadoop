@@ -21,12 +21,11 @@ package org.apache.hadoop.hdfs.server.common;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.DEFAULT_HADOOP_HTTP_STATIC_USER;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_HTTP_STATIC_USER;
 
-import com.google.common.base.Charsets;
-
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
@@ -81,6 +80,8 @@ import org.apache.hadoop.security.authorize.ProxyServers;
 import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.VersionInfo;
+
+import com.google.common.base.Charsets;
 
 @InterfaceAudience.Private
 public class JspHelper {
@@ -538,7 +539,7 @@ public class JspHelper {
     return UserGroupInformation.createRemoteUser(getDefaultWebUserName(conf));
   }
 
-  public static String getDefaultWebUserName(Configuration conf
+  private static String getDefaultWebUserName(Configuration conf
       ) throws IOException {
     String user = conf.get(
         HADOOP_HTTP_STATIC_USER, DEFAULT_HADOOP_HTTP_STATIC_USER);
@@ -687,7 +688,7 @@ public class JspHelper {
   /**
    * Expected user name should be a short name.
    */
-  public static void checkUsername(final String expected, final String name
+  private static void checkUsername(final String expected, final String name
       ) throws IOException {
     if (expected == null && name != null) {
       throw new IOException("Usernames not matched: expecting null but name="

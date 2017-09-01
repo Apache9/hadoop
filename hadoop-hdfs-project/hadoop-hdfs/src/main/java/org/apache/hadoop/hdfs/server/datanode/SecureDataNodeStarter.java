@@ -16,8 +16,6 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.channels.ServerSocketChannel;
@@ -30,7 +28,11 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.http.HttpConfig;
+import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.mortbay.jetty.Connector;
+
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * Utility class to start a datanode in a secure cluster, first obtaining 
@@ -42,17 +44,17 @@ public class SecureDataNodeStarter implements Daemon {
    */
   public static class SecureResources {
     private final ServerSocket streamingSocket;
-    private final ServerSocketChannel httpServerSocket;
-    public SecureResources(ServerSocket streamingSocket, ServerSocketChannel httpServerSocket) {
+    private final Connector listener;
+    public SecureResources(ServerSocket streamingSocket,
+        Connector listener) {
+
       this.streamingSocket = streamingSocket;
-      this.httpServerSocket = httpServerSocket;
+      this.listener = listener;
     }
 
     public ServerSocket getStreamingSocket() { return streamingSocket; }
 
-    public ServerSocketChannel getHttpServerChannel() {
-      return httpServerSocket;
-    }
+    public Connector getListener() { return listener; }
   }
   
   private String [] args;
@@ -118,31 +120,29 @@ public class SecureDataNodeStarter implements Daemon {
     // Bind a port for the web server. The code intends to bind HTTP server to
     // privileged port only, as the client can authenticate the server using
     // certificates if they are communicating through SSL.
-    final ServerSocketChannel httpChannel;
+    Connector listener = null;
     if (policy.isHttpEnabled()) {
-      httpChannel = ServerSocketChannel.open();
+      listener = HttpServer2.createDefaultChannelConnector();
       InetSocketAddress infoSocAddr = DataNode.getInfoAddr(conf);
-      httpChannel.socket().bind(infoSocAddr);
-      InetSocketAddress localAddr = (InetSocketAddress) httpChannel.socket()
-        .getLocalSocketAddress();
-
-      if (localAddr.getPort() != infoSocAddr.getPort()) {
+      listener.setHost(infoSocAddr.getHostName());
+      listener.setPort(infoSocAddr.getPort());
+      // Open listener here in order to bind to port as root
+      listener.open();
+      if (listener.getPort() != infoSocAddr.getPort()) {
         throw new RuntimeException("Unable to bind on specified info port in secure " +
             "context. Needed " + streamingAddr.getPort() + ", got " + ss.getLocalPort());
       }
       System.err.println("Successfully obtained privileged resources (streaming port = "
-          + ss + " ) (http listener port = " + localAddr.getPort() +")");
+          + ss + " ) (http listener port = " + listener.getConnection() +")");
 
-      if (localAddr.getPort() > 1023 && isSecure) {
+      if (listener.getPort() > 1023 && isSecure) {
         throw new RuntimeException(
             "Cannot start secure datanode with unprivileged HTTP ports");
       }
       System.err.println("Opened info server at " + infoSocAddr);
-    } else {
-      httpChannel = null;
     }
 
-    return new SecureResources(ss, httpChannel);
+    return new SecureResources(ss, listener);
   }
 
 }
