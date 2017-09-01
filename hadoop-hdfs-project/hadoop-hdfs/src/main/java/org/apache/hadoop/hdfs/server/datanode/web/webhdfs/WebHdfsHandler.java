@@ -46,10 +46,8 @@ import org.apache.hadoop.hdfs.web.resources.PutOpParam;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
-import org.apache.hadoop.util.LimitInputStream;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -187,7 +185,6 @@ public class WebHdfsHandler extends SimpleChannelInboundHandler<HttpRequest> {
     final String nnId = params.namenodeId();
     final int bufferSize = params.bufferSize();
     final long offset = params.offset();
-    final long length = params.length();
 
     DefaultHttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK);
     HttpHeaders headers = response.headers();
@@ -202,20 +199,12 @@ public class WebHdfsHandler extends SimpleChannelInboundHandler<HttpRequest> {
       dfsclient.open(path, bufferSize, true));
     in.seek(offset);
 
-    long contentLength = in.getVisibleLength() - offset;
-    if (length >= 0) {
-      contentLength = Math.min(contentLength, length);
-    }
-    final InputStream data;
-    if (contentLength >= 0) {
-      headers.set(CONTENT_LENGTH, contentLength);
-      data = new LimitInputStream(in, contentLength);
-    } else {
-      data = in;
+    if (in.getVisibleLength() >= offset) {
+      headers.set(CONTENT_LENGTH, in.getVisibleLength() - offset);
     }
 
     ctx.write(response);
-    ctx.writeAndFlush(new ChunkedStream(data) {
+    ctx.writeAndFlush(new ChunkedStream(in) {
       @Override
       public void close() throws Exception {
         super.close();
