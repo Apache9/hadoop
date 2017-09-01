@@ -66,7 +66,7 @@ class ParameterParser {
   }
 
   long offset() {
-    return new OffsetParam(param(OffsetParam.NAME)).getOffset();
+    return new OffsetParam(param(OffsetParam.NAME)).getValue();
   }
 
   long length() {
