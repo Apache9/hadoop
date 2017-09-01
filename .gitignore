@@ -22,5 +22,3 @@ hadoop-tools/hadoop-openstack/src/test/resources/contract-test-options.xml
 hadoop-yarn-project/hadoop-yarn/hadoop-yarn-registry/src/main/tla/yarnregistry.toolbox
 yarnregistry.pdf
 pom.xml.versionsBackup
-hadoop-hdfs-project/hadoop-hdfs/src/test/resources/common-version-info.properties
-hadoop-hdfs-project/hadoop-hdfs/src/test/resources/webapps
