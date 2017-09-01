@@ -51,7 +51,7 @@ class ParameterParser {
   private final Map<String, List<String>> params;
 
   ParameterParser(QueryStringDecoder decoder, Configuration conf) {
-    this.path = QueryStringDecoder.decodeComponent(decoder.path().substring(WEBHDFS_PREFIX_LENGTH));
+    this.path = decoder.path().substring(WEBHDFS_PREFIX_LENGTH);
     this.params = decoder.parameters();
     this.conf = conf;
   }
