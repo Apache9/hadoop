@@ -906,6 +906,15 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_HEALTH_CHECK_SCRIPT_OPTS = 
     NM_PREFIX + "health-checker.script.opts";
 
+  /** The pre kill container script to run. */
+  public static final String NM_PRE_KILL_CONTAINER_SCRIPT_PATH =
+          NM_PREFIX + "pre-kill-container.script.path";
+
+  /** Pre kill container script timeout period. */
+  public static final String NM_PRE_KILL_CONTAINER_SCRIPT_TIMEOUT_MS =
+          NM_PREFIX + "pre-kill-container.script.timeout-ms";
+  public static final long DEFAULT_NM_PRE_KILL_CONTAINER_SCRIPT_TIMEOUT_MS = 60 * 1000;
+
   /** The Docker image name(For DockerContainerExecutor).*/
   public static final String NM_DOCKER_CONTAINER_EXECUTOR_IMAGE_NAME =
     NM_PREFIX + "docker-container-executor.image-name";

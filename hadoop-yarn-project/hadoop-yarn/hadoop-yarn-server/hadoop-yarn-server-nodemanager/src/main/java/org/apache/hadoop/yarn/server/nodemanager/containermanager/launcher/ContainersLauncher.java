@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -31,7 +32,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
@@ -41,6 +45,7 @@ import org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerState;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ResourceLocalizationService;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -127,6 +132,9 @@ public class ContainersLauncher extends AbstractService
         running.put(containerId, launch);
         break;
       case CLEANUP_CONTAINER:
+        // Before killing container, run a script to do something. eg: jstack pid
+        runPreKillContainerScript(container, event);
+
         ContainerLaunch launcher = running.remove(containerId);
         if (launcher == null) {
           // Container not launched. So nothing needs to be done.
@@ -145,4 +153,44 @@ public class ContainersLauncher extends AbstractService
     }
   }
 
+  private void runPreKillContainerScript(Container container, ContainersLauncherEvent event) {
+    // RUNNING-->KILLING, only this situation the function can be used
+    if (container.getContainerState() != ContainerState.KILLING ||
+            event.getType() != ContainersLauncherEventType.CLEANUP_CONTAINER) {
+      return;
+    }
+
+    ContainerId containerId = container.getContainerId();
+    ApplicationId appId = containerId.getApplicationAttemptId().getApplicationId();
+    // The pid of the container is not null if it has already launched, otherwise is null
+    String pid = exec.getProcessId(containerId);
+    if(pid == null) {
+      LOG.debug("The process of the container : " + containerId + " doesn't exists.");
+      return;
+    }
+
+    File script = new File(getConfig().get(YarnConfiguration.NM_PRE_KILL_CONTAINER_SCRIPT_PATH));
+    if (!script.exists()) {
+      return;
+    }
+    if(!script.canExecute()) {
+      script.setExecutable(true);
+    }
+    String shell[] = {script.getAbsolutePath(), appId.toString(), containerId.toString(), pid};
+
+    // The default timeout is 60*1000ms
+    long scriptTimeout = getConfig().getLong(YarnConfiguration.NM_PRE_KILL_CONTAINER_SCRIPT_TIMEOUT_MS,
+            YarnConfiguration.DEFAULT_NM_PRE_KILL_CONTAINER_SCRIPT_TIMEOUT_MS);
+    ShellCommandExecutor exec = new ShellCommandExecutor(shell, null, null, scriptTimeout);
+    try {
+      exec.execute();
+      LOG.info("The pre-kill-container script : " + script.toString() + " for container: " + containerId + " is started.");
+      if (!exec.isTimedOut()) {
+        LOG.info("\n" + exec.getOutput());
+      }
+      LOG.info("The pre-kill-container script : " + script.toString() + " for container: " + containerId + " is finished.");
+    } catch (Exception e) {
+      LOG.error("Failed to execute pre-kill-container script : " + script.toString() + " for container: " + containerId + ".", e);
+    }
+  }
 }
