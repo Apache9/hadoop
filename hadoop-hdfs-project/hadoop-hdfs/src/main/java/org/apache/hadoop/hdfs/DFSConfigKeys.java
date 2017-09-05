@@ -968,34 +968,6 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final boolean DFS_NAMENODE_BLOCKPLACEMENT_CHOOSERANDOM_IN_CTX_DEFAULT = 
       false;
 
-  public static final String DFS_CLIENT_HTTP2_CONN_CACHE_CAPACITY_PER_DN_KEY =
-      "dfs.client.http2.conn.cache.capacity.per.dn";
-
-  public static final int DFS_CLIENT_HTTP2_CONN_CACHE_CAPACITY_PER_DN_DEFAULT =
-      Runtime.getRuntime().availableProcessors();
-
-  public static final String DFS_CLIENT_HTTP2_MAX_READ_LENGTH_KEY =
-      "dfs.client.http2.max.read.length";
-
-  public static final long DFS_CLIENT_HTTP2_MAX_READ_LENGTH_DEFAULT =
-      -1L;
-
-  public static final String DFS_HTTP2_FRAME_LOG_LEVEL_KEY =
-      "dfs.http2.frame.log.level";
-
-  public static final String DFS_HTTP2_FRAME_LOG_LEVEL_DEFAULT = "TRACE";
-
-  public static final String DFS_CLIENT_HTTP2_EVENT_LOOP_TYPE_KEY =
-      "dfs.client.http2.event.loop.type";
-
-  public static final String DFS_CLIENT_HTTP2_EVENT_LOOP_TYPE_DEFAULT = "NIO";
-
-  public static final String DFS_CLIENT_HTTP2_MAX_BUFFERED_DATA_SIZE_KEY =
-      "dfs.client.http2.max.buffered.data.size";
-
-  public static final long DFS_CLIENT_HTTP2_MAX_BUFFERED_DATA_SIZE_DEFAULT =
-      1024L * 1024;
-
   public static final String DFS_FEDERATION_RENAME_FILES_LIMIT =
       "dfs.federation.rename.files.limit";
   public static final int DFS_FEDERATION_RENAME_FILES_LIMIT_DEFAULT = 256;

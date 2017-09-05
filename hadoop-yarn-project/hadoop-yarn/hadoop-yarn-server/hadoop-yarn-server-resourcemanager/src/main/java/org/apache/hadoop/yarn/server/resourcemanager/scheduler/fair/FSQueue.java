@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.logging.Log;
@@ -70,6 +71,9 @@ public abstract class FSQueue implements Queue, Schedulable {
 
   protected List<RMContainer> warnedContainers = new ArrayList<RMContainer>();
 
+  protected volatile Resource usage = Resources.createResource(0);
+  protected volatile ReentrantLock usageUpdateLock = new ReentrantLock();
+
   public FSQueue(String name, FairScheduler scheduler, FSParentQueue parent) {
     this.name = name;
     this.scheduler = scheduler;
@@ -78,7 +82,6 @@ public abstract class FSQueue implements Queue, Schedulable {
     metrics.setMaxShare(getMaxShare());
     this.parent = parent;
   }
-  
   public String getName() {
     return name;
   }
@@ -439,4 +442,27 @@ public abstract class FSQueue implements Queue, Schedulable {
     }
     return true;
   }
+
+  public void updateUsage(Resource updatedUsage) {
+    usageUpdateLock.lock();
+    try {
+      usage = updatedUsage;
+    } finally {
+      usageUpdateLock.unlock();
+    }
+  }
+
+  public void addUsage(Resource assigned) {
+    usageUpdateLock.lock();
+    try {
+      Resources.addTo(usage, assigned);
+    } finally {
+      usageUpdateLock.unlock();
+    }
+  }
+
+  /**
+   * Update the resource usage of the queue
+   */
+  public abstract void updateResourceUsage();
 }

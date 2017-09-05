@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
-
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ADMIN;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ADDRESS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY;
@@ -29,11 +29,11 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DNS_INTERFACE_DE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DNS_INTERFACE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DNS_NAMESERVER_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DNS_NAMESERVER_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ENABLE_RAID_SERVICE;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HOST_NAME_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTP_ADDRESS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTP_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_IPC_ADDRESS_KEY;
@@ -41,20 +41,20 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_KERBEROS_PRINCIP
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_KEYTAB_FILE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PLUGINS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ENABLE_RAID_SERVICE;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ENABLE_RAID_SERVICE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_STARTUP_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATA_TRANSFER_PROTECTION_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATA_TRANSFER_PROTECTION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_MAX_NUM_BLOCKS_TO_LOG_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_MAX_NUM_BLOCKS_TO_LOG_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSER_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSER_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.IGNORE_SECURE_PORTS_FOR_TESTING_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.IGNORE_SECURE_PORTS_FOR_TESTING_KEY;
 import static org.apache.hadoop.util.ExitUtil.terminate;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.protobuf.BlockingService;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -70,7 +70,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
@@ -89,7 +88,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.management.ObjectName;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 
+=======
+>>>>>>> e257ed6ceaa5e91014f236aa9b06684c327fcf85
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -104,6 +106,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
+import org.apache.hadoop.hdfs.DFSUtil.ConfiguredNNAddress;
 import org.apache.hadoop.hdfs.HDFSPolicyProvider;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.StorageType;
@@ -156,20 +159,26 @@ import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NodeType;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.ReplicaState;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
+import org.apache.hadoop.hdfs.server.common.JspHelper;
 import org.apache.hadoop.hdfs.server.common.Storage;
 import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.datanode.SecureDataNodeStarter.SecureResources;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetrics;
-import org.apache.hadoop.hdfs.server.datanode.web.DatanodeHttpServer;
+import org.apache.hadoop.hdfs.server.datanode.web.resources.DatanodeWebHdfsMethods;
+import org.apache.hadoop.hdfs.server.namenode.FileChecksumServlets;
+import org.apache.hadoop.hdfs.server.namenode.StreamFile;
 import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlock;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.ReplicaRecoveryInfo;
+import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
+import org.apache.hadoop.hdfs.web.resources.Param;
 import org.apache.hadoop.http.HttpConfig;
+import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.ReadaheadPool;
 import org.apache.hadoop.io.nativeio.NativeIO;
@@ -186,12 +195,11 @@ import org.apache.hadoop.security.SaslPropertiesResolver;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
-import org.apache.hadoop.tracing.SpanReceiverHost;
-import org.apache.hadoop.tracing.SpanReceiverInfo;
+import org.apache.hadoop.tracing.TraceAdminPB;
 import org.apache.hadoop.tracing.TraceAdminPB.TraceAdminService;
-import org.apache.hadoop.tracing.TraceAdminProtocol;
 import org.apache.hadoop.tracing.TraceAdminProtocolPB;
 import org.apache.hadoop.tracing.TraceAdminProtocolServerSideTranslatorPB;
 import org.apache.hadoop.util.Daemon;
@@ -203,7 +211,15 @@ import org.apache.hadoop.util.ServicePlugin;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.VersionInfo;
+import org.apache.hadoop.tracing.SpanReceiverHost;
+import org.apache.hadoop.tracing.SpanReceiverInfo;
+import org.apache.hadoop.tracing.TraceAdminProtocol;
 import org.mortbay.util.ajax.JSON;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.protobuf.BlockingService;
 
 /**********************************************************
  * DataNode is a class (and program) that stores a set of
@@ -296,7 +312,7 @@ public class DataNode extends ReconfigurableBase
   private volatile boolean heartbeatsDisabledForTests = false;
   private DataStorage storage = null;
 
-  private DatanodeHttpServer httpServer = null;
+  private HttpServer2 infoServer = null;
   private int infoPort;
   private int infoSecurePort;
 
@@ -611,20 +627,68 @@ public class DataNode extends ReconfigurableBase
    * for information related to the different configuration options and
    * Http Policy is decided.
    */
-  private void startInfoServer(Configuration conf)
-    throws IOException {
-    // SecureDataNodeStarter will bind the privileged port to the channel if
-    // the DN is started by JSVC, pass it along.
-    ServerSocketChannel httpServerChannel = secureResources != null ?
-        secureResources.getHttpServerChannel() : null;
+  private void startInfoServer(Configuration conf) throws IOException {
+    HttpServer2.Builder builder = new HttpServer2.Builder().setName("datanode")
+        .setConf(conf).setACL(new AccessControlList(conf.get(DFS_ADMIN, " ")));
 
-    this.httpServer = new DatanodeHttpServer(conf, this, httpServerChannel);
-    httpServer.start();
-    if (httpServer.getHttpAddress() != null) {
-      infoPort = httpServer.getHttpAddress().getPort();
+    HttpConfig.Policy policy = DFSUtil.getHttpPolicy(conf);
+
+    if (policy.isHttpEnabled()) {
+      if (secureResources == null) {
+        InetSocketAddress infoSocAddr = DataNode.getInfoAddr(conf);
+        int port = infoSocAddr.getPort();
+        builder.addEndpoint(URI.create("http://"
+            + NetUtils.getHostPortString(infoSocAddr)));
+        if (port == 0) {
+          builder.setFindPort(true);
+        }
+      } else {
+        // The http socket is created externally using JSVC, we add it in
+        // directly.
+        builder.setConnector(secureResources.getListener());
+      }
     }
-    if (httpServer.getHttpsAddress() != null) {
-      infoSecurePort = httpServer.getHttpsAddress().getPort();
+
+    if (policy.isHttpsEnabled()) {
+      InetSocketAddress secInfoSocAddr = NetUtils.createSocketAddr(conf.get(
+          DFS_DATANODE_HTTPS_ADDRESS_KEY, DFS_DATANODE_HTTPS_ADDRESS_DEFAULT));
+
+      Configuration sslConf = DFSUtil.loadSslConfiguration(conf);
+      DFSUtil.loadSslConfToHttpServerBuilder(builder, sslConf);
+
+      int port = secInfoSocAddr.getPort();
+      if (port == 0) {
+        builder.setFindPort(true);
+      }
+      builder.addEndpoint(URI.create("https://"
+          + NetUtils.getHostPortString(secInfoSocAddr)));
+    }
+
+    this.infoServer = builder.build();
+
+    this.infoServer.addInternalServlet(null, "/streamFile/*", StreamFile.class);
+    this.infoServer.addInternalServlet(null, "/getFileChecksum/*",
+        FileChecksumServlets.GetServlet.class);
+    
+    this.infoServer.setAttribute("datanode", this);
+    this.infoServer.setAttribute(JspHelper.CURRENT_CONF, conf);
+    this.infoServer.addServlet(null, "/blockScannerReport", 
+                               DataBlockScanner.Servlet.class);
+
+    if (WebHdfsFileSystem.isEnabled(conf, LOG)) {
+      infoServer.addJerseyResourcePackage(DatanodeWebHdfsMethods.class
+          .getPackage().getName() + ";" + Param.class.getPackage().getName(),
+          WebHdfsFileSystem.PATH_PREFIX + "/*");
+    }
+    this.infoServer.start();
+
+    int connIdx = 0;
+    if (policy.isHttpEnabled()) {
+      infoPort = infoServer.getConnectorAddress(connIdx++).getPort();
+    }
+
+    if (policy.isHttpsEnabled()) {
+      infoSecurePort = infoServer.getConnectorAddress(connIdx).getPort();
     }
   }
 
@@ -711,7 +775,7 @@ public class DataNode extends ReconfigurableBase
       return;
     }
     // Try to get the ugi in the RPC call.
-    UserGroupInformation callerUgi = RPC.Server.getRemoteUser();
+    UserGroupInformation callerUgi = ipcServer.getRemoteUser();
     if (callerUgi == null) {
       // This is not from RPC.
       callerUgi = UserGroupInformation.getCurrentUser();
@@ -1606,14 +1670,13 @@ public class DataNode extends ReconfigurableBase
     shutdownPeriodicScanners();
 
     // Stop the web server
-    if (httpServer != null) {
+    if (infoServer != null) {
       try {
-        httpServer.close();
+        infoServer.stop();
       } catch (Exception e) {
-        LOG.warn("Exception shutting down DataNode HttpServer", e);
+        LOG.warn("Exception shutting down DataNode", e);
       }
     }
-
     if (pauseMonitor != null) {
       pauseMonitor.stop();
     }

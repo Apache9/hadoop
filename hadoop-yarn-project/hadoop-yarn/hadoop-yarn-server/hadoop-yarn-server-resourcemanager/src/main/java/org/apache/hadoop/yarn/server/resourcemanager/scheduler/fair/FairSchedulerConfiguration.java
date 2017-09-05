@@ -141,6 +141,10 @@ public class FairSchedulerConfiguration extends Configuration {
       CONF_PREFIX + "update-interval-ms";
   public static final int DEFAULT_UPDATE_INTERVAL_MS = 500;
 
+  public static final String UPDATE_RESOURCE_USAGE_INTERVAL_MS =
+      CONF_PREFIX + "resourceusage.update-interval-ms";
+  public static final int DEFAULT_UPDATE_RESOURCE_USAGE_INTERVAL_MS = 100;
+
   public FairSchedulerConfiguration() {
     super();
   }
@@ -268,6 +272,10 @@ public class FairSchedulerConfiguration extends Configuration {
 
   public long getUpdateInterval() {
     return getLong(UPDATE_INTERVAL_MS, DEFAULT_UPDATE_INTERVAL_MS);
+  }
+
+  public long getUpdateResourceUsageInterval() {
+    return getLong(UPDATE_RESOURCE_USAGE_INTERVAL_MS, DEFAULT_UPDATE_RESOURCE_USAGE_INTERVAL_MS);
   }
 
   public ResourceCalculator getResourceCalculator() {

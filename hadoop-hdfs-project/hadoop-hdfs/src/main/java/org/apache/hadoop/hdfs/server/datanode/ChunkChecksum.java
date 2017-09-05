@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hdfs.server.datanode;
 
-import org.apache.hadoop.classification.InterfaceAudience;
-
 /**
  * holder class that holds checksum bytes and the length in a block at which
  * the checksum bytes end
@@ -27,8 +25,8 @@ import org.apache.hadoop.classification.InterfaceAudience;
  * ex: length = 1023 and checksum is 4 bytes which is for 512 bytes, then
  *     the checksum applies for the last chunk, or bytes 512 - 1023
  */
-@InterfaceAudience.Private
-public class ChunkChecksum {
+
+class ChunkChecksum {
   private final long dataLength;
   // can be null if not available
   private final byte[] checksum;

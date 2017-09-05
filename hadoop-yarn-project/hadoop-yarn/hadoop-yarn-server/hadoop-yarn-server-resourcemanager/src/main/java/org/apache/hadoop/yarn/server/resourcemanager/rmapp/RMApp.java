@@ -161,6 +161,12 @@ public interface RMApp extends EventHandler<RMAppEvent> {
   long getStartTime();
 
   /**
+   * the pending time of the application
+   * @return the pending time of the application
+   */
+  long getPendingTime();
+
+  /**
    * the submit time of the application.
    * @return the submit time of the application.
    */

@@ -178,7 +178,7 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
       zkClient =
           new ZooKeeper(zkQuorum, conf.getInt(
               CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
-              CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT), this);
+              CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT), this, true);
       try {
         byte[] activeData = zkClient.getData(getZnode(), false, null);
         ActiveNodeInfo proto;

@@ -239,19 +239,24 @@ public class FSLeafQueue extends FSQueue {
 
   @Override
   public Resource getResourceUsage() {
-    Resource usage = Resources.createResource(0);
+    return usage;
+  }
+
+  @Override
+  public void updateResourceUsage() {
     readLock.lock();
     try {
+      Resource tmpUsage = Resources.createResource(0);
       for (FSAppAttempt app : runnableApps) {
-        Resources.addTo(usage, app.getResourceUsage());
+        Resources.addTo(tmpUsage, app.getResourceUsage());
       }
       for (FSAppAttempt app : nonRunnableApps) {
-        Resources.addTo(usage, app.getResourceUsage());
+        Resources.addTo(tmpUsage, app.getResourceUsage());
       }
+      updateUsage(tmpUsage);
     } finally {
       readLock.unlock();
     }
-    return usage;
   }
 
   public Resource getAmResourceUsage() {
@@ -332,9 +337,9 @@ public class FSLeafQueue extends FSQueue {
           break;
         }
         if (!assigned.equals(Resources.none())) {
+          addUsage(assigned);
           break;
         }
-
 
       }
     } finally {

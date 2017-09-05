@@ -58,6 +58,31 @@ public abstract class ApplicationAttemptStateData {
     return attemptStateData;
   }
 
+  //overload, add a field: pendingTime
+  public static ApplicationAttemptStateData newInstance(
+          ApplicationAttemptId attemptId, Container container,
+          Credentials attemptTokens, long startTime, RMAppAttemptState finalState,
+          String finalTrackingUrl, String diagnostics,
+          FinalApplicationStatus amUnregisteredFinalStatus, int exitStatus,
+          long finishTime, long memorySeconds, long vcoreSeconds, long pendingTime) {
+    ApplicationAttemptStateData attemptStateData =
+            Records.newRecord(ApplicationAttemptStateData.class);
+    attemptStateData.setAttemptId(attemptId);
+    attemptStateData.setMasterContainer(container);
+    attemptStateData.setAppAttemptTokens(attemptTokens);
+    attemptStateData.setState(finalState);
+    attemptStateData.setFinalTrackingUrl(finalTrackingUrl);
+    attemptStateData.setDiagnostics(diagnostics == null ? "" : diagnostics);
+    attemptStateData.setStartTime(startTime);
+    attemptStateData.setPendingTime(pendingTime);
+    attemptStateData.setFinalApplicationStatus(amUnregisteredFinalStatus);
+    attemptStateData.setAMContainerExitStatus(exitStatus);
+    attemptStateData.setFinishTime(finishTime);
+    attemptStateData.setMemorySeconds(memorySeconds);
+    attemptStateData.setVcoreSeconds(vcoreSeconds);
+    return attemptStateData;
+  }
+
   public static ApplicationAttemptStateData newInstance(
       ApplicationAttemptId attemptId, Container masterContainer,
       Credentials attemptTokens, long startTime, long memorySeconds,
@@ -136,7 +161,11 @@ public abstract class ApplicationAttemptStateData {
    */
   public abstract long getStartTime();
 
+  public abstract long getPendingTime();
+
   public abstract void setStartTime(long startTime);
+
+  public abstract void setPendingTime(long PendingTime);
 
   /**
    * Get the <em>final finish status</em> of the application.

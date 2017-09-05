@@ -84,7 +84,6 @@ public class DatanodeRegistration extends DatanodeID
       + "(" + getIpAddr()
       + ", datanodeUuid=" + getDatanodeUuid()
       + ", infoPort=" + getInfoPort()
-      + ", infoSecurePort=" + getInfoSecurePort()
       + ", ipcPort=" + getIpcPort()
       + ", storageInfo=" + storageInfo
       + ")";

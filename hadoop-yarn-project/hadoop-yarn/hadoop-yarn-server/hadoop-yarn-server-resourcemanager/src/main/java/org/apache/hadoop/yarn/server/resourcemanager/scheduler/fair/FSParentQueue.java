@@ -135,19 +135,23 @@ public class FSParentQueue extends FSQueue {
       readLock.unlock();
     }
   }
-
   @Override
   public Resource getResourceUsage() {
-    Resource usage = Resources.createResource(0);
+    return usage;
+  }
+
+  @Override
+  public void updateResourceUsage() {
     readLock.lock();
     try {
+      Resource tmpUsage = Resources.createResource(0);
       for (FSQueue child : childQueues) {
-        Resources.addTo(usage, child.getResourceUsage());
+        Resources.addTo(tmpUsage, child.getResourceUsage());
       }
+      updateUsage(tmpUsage);
     } finally {
       readLock.unlock();
     }
-    return usage;
   }
 
   @Override
@@ -224,7 +228,12 @@ public class FSParentQueue extends FSQueue {
     // Hold the write lock when sorting childQueues
     writeLock.lock();
     try {
+      long start = System.currentTimeMillis();
       Collections.sort(childQueues, policy.getComparator());
+      long cost = System.currentTimeMillis() - start;
+      if (cost > 10) {
+        LOG.info("Sort child queues of " + getName() + " cost: " + cost + " ms");
+      }
     } finally {
       writeLock.unlock();
     }
@@ -242,6 +251,7 @@ public class FSParentQueue extends FSQueue {
       for (FSQueue child : childQueues) {
         assigned = child.assignContainer(node);
         if (!Resources.equals(assigned, Resources.none())) {
+          addUsage(assigned);
           break;
         }
       }

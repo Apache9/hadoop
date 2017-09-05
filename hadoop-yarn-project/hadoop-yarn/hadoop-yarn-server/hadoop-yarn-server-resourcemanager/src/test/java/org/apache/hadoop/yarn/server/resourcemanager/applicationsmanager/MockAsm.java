@@ -77,6 +77,11 @@ public abstract class MockAsm extends MockApps {
     }
 
     @Override
+    public long getPendingTime() {
+      throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
     public long getSubmitTime() {
       throw new UnsupportedOperationException("Not supported yet.");
     }
