@@ -41,6 +41,8 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 @XmlSeeAlso({FairSchedulerLeafQueueInfo.class})
 public class FairSchedulerQueueInfo {
   private int maxApps;
+  private int numActiveApps;
+  private int numPendingApps;
   private ResourceType dominantResourceType;
   
   @XmlTransient
@@ -101,7 +103,8 @@ public class FairSchedulerQueueInfo {
     fractionResourcesMaxShare = resourceInfoRatio(maxResources, clusterResources);
     
     maxApps = allocConf.getQueueMaxApps(queueName);
-    
+    numActiveApps = queue.getNumRunnableApps();
+    numPendingApps = queue.getNumPendingApps();
     Collection<FSQueue> children = queue.getChildQueues();
     childQueues = new ArrayList<FairSchedulerQueueInfo>();
     for (FSQueue child : children) {
@@ -225,5 +228,13 @@ public class FairSchedulerQueueInfo {
   
   public Collection<FairSchedulerQueueInfo> getChildQueues() {
     return childQueues;
+  }
+
+  public int getNumActiveApplications() {
+    return numActiveApps;
+  }
+
+  public int getNumPendingApplications() {
+    return numPendingApps;
   }
 }

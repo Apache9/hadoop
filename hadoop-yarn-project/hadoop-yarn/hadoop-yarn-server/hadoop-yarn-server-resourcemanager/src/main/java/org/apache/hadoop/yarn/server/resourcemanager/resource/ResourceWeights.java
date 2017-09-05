@@ -24,7 +24,7 @@ import org.apache.hadoop.classification.InterfaceStability.Evolving;
 @Private
 @Evolving
 public class ResourceWeights {
-  public static final ResourceWeights NEUTRAL = new ResourceWeights(1.0f);
+  public static final ResourceWeights NEUTRAL = new ResourceWeights(1000f, 1.0f);
 
   private float[] weights = new float[ResourceType.values().length];
 
@@ -66,5 +66,11 @@ public class ResourceWeights {
     }
     sb.append(">");
     return sb.toString();
+  }
+
+  public static void addTo(ResourceWeights a, ResourceWeights b) {
+    for (ResourceType type: ResourceType.values()) {
+      a.setWeight(type, a.getWeight(type) + b.getWeight(type));
+    }
   }
 }

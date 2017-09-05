@@ -31,8 +31,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSLeafQueue;
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
 public class FairSchedulerLeafQueueInfo extends FairSchedulerQueueInfo {
-  private int numPendingApps;
-  private int numActiveApps;
   private String aclString;
 
   public FairSchedulerLeafQueueInfo() {
@@ -40,19 +38,8 @@ public class FairSchedulerLeafQueueInfo extends FairSchedulerQueueInfo {
   
   public FairSchedulerLeafQueueInfo(FSLeafQueue queue, FairScheduler scheduler) {
     super(queue, scheduler);
-    numPendingApps = queue.getNumPendingApps();
-    numActiveApps = queue.getNumActiveApps();
-
     AccessControlList acl = scheduler.getAllocationConfiguration().getQueueAcl(getQueueName(), QueueACL.SUBMIT_APPLICATIONS);
     aclString = acl.getAclString();
-  }
-  
-  public int getNumActiveApplications() {
-    return numActiveApps;
-  }
-  
-  public int getNumPendingApplications() {
-    return numPendingApps;
   }
 
   public String getAclString() {

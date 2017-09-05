@@ -275,4 +275,36 @@ public class RMServerUtils {
       conf.set(entry.getKey(), entry.getValue());
     }
   }
+
+  /**
+   * Get the full queue name
+   * @param appQueue
+   * @return
+   */
+  public static String getFullQueueName(String appQueue) {
+    String actucalQueueName = appQueue;
+    if (actucalQueueName.indexOf('@') != -1) {
+      actucalQueueName = actucalQueueName.substring(actucalQueueName.indexOf('@') + 1);
+    }
+    if (!actucalQueueName.startsWith("root.")) {
+      actucalQueueName = "root." + actucalQueueName;
+    }
+    return actucalQueueName;
+  }
+
+  /**
+   * Get the queue link for fair scheduler
+   * @param appQueue
+   * @return
+   */
+  public static String getFSQueueLink(String appQueue) {
+    StringBuffer sb = new StringBuffer("scheduler?openQueues=");
+    int start = -1;
+    while ((start = appQueue.indexOf('.', start + 1)) != -1) {
+      sb.append(appQueue.substring(0, start));
+      sb.append("#");
+    }
+    sb.append(appQueue);
+    return sb.toString();
+  }
 }

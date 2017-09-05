@@ -294,6 +294,9 @@ public class FairScheduler extends
           FSQueue rootQueue = queueMgr.getRootQueue();
           rootQueue.updateResourceUsage();
           long duration = getClock().getTime() - start;
+          if (duration > updateResourceUsageInterval) {
+            LOG.warn("Updating the resource usage of fair scheduler's queues cost: " + duration + " ms");
+          }
         } catch (InterruptedException ie) {
           LOG.warn("Update queue resource usage thread interrupted. Exiting.");
           return;

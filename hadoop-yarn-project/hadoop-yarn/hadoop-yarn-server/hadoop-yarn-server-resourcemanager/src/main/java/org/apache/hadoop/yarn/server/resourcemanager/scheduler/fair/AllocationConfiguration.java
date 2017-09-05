@@ -219,10 +219,9 @@ public class AllocationConfiguration {
   }
 
   public ResourceWeights getQueueWeight(String queue) {
-    ResourceWeights weight = queueWeights.get(queue);
-    return (weight == null) ? ResourceWeights.NEUTRAL : weight;
+    return queueWeights.get(queue);
   }
-  
+
   public int getUserMaxApps(String user) {
     Integer maxApps = userMaxApps.get(user);
     return (maxApps == null) ? userMaxAppsDefault : maxApps;

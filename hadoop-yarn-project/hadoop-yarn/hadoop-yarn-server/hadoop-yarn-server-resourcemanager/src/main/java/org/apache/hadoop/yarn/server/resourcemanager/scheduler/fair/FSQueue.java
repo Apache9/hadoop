@@ -52,6 +52,8 @@ public abstract class FSQueue implements Queue, Schedulable {
       FSQueue.class.getName());
   private Resource fairShare = Resources.createResource(0, 0);
   private Resource steadyFairShare = Resources.createResource(0, 0);
+  protected ResourceWeights weight = ResourceWeights.NEUTRAL;
+
   private final String name;
   protected final FairScheduler scheduler;
   private final FSQueueMetrics metrics;
@@ -113,11 +115,6 @@ public abstract class FSQueue implements Queue, Schedulable {
    */
   public abstract void preemptResource();
 
-  @Override
-  public ResourceWeights getWeights() {
-    return scheduler.getAllocationConfiguration().getQueueWeight(getName());
-  }
-  
   @Override
   public Resource getMinShare() {
     return scheduler.getAllocationConfiguration().getMinResources(getName());
@@ -226,6 +223,16 @@ public abstract class FSQueue implements Queue, Schedulable {
   }
 
   /**
+   * Update the expected shares for all child queues
+   */
+  public abstract void updateExpectedFairShares();
+
+  @Override
+  public ResourceWeights getWeights() {
+    return weight;
+  }
+
+  /**
    * Recomputes the shares for all child queues and applications based on this
    * queue's current share
    */
@@ -272,7 +279,13 @@ public abstract class FSQueue implements Queue, Schedulable {
    * Includes apps in subqueues.
    */
   public abstract int getNumRunnableApps();
-  
+
+  /**
+   * Return the number of apps for which waiting for scheduling.
+   * Includes apps in subqueues.
+   */
+  public abstract int getNumPendingApps();
+
   /**
    * Helper method to check if the queue should attempt assigning resources
    * 

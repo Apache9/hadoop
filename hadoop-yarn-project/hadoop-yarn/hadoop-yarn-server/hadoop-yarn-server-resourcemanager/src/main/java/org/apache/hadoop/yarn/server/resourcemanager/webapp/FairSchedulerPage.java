@@ -68,8 +68,6 @@ public class FairSchedulerPage extends RmView {
     protected void render(Block html) {
       ResponseInfo ri = info("\'" + qinfo.getQueueName() + "\' Queue Status").
           _("Used Resources:", qinfo.getUsedResources().toString()).
-          _("Num Active Applications:", qinfo.getNumActiveApplications()).
-          _("Num Pending Applications:", qinfo.getNumPendingApplications()).
           _("Min Resources:", qinfo.getMinResources().toString()).
           _("Max Resources:", qinfo.getMaxResources().toString()).
           _("Queue ACL:", qinfo.getAclString());
@@ -78,6 +76,8 @@ public class FairSchedulerPage extends RmView {
       if (maxApps < Integer.MAX_VALUE) {
           ri._("Max Running Applications:", qinfo.getMaxApplications());
       }
+      ri._("Num Pending Applications:", qinfo.getNumPendingApplications());
+      ri._("Num Active Applications:", qinfo.getNumActiveApplications());
       ri._("Expected Fair Share:", qinfo.getExpectedFairShare().toString());
       ri._(STEADY_FAIR_SHARE + ":", qinfo.getSteadyFairShare().toString());
       ri._(INSTANTANEOUS_FAIR_SHARE + ":", qinfo.getFairShare().toString());
@@ -108,6 +108,8 @@ public class FairSchedulerPage extends RmView {
       if (maxApps < Integer.MAX_VALUE) {
         ri._("Max Running Applications:", fsqinfo.qinfo.getMaxApplications());
       }
+      ri._("Num Pending Applications:", fsqinfo.qinfo.getNumPendingApplications());
+      ri._("Num Active Applications:", fsqinfo.qinfo.getNumActiveApplications());
       ri._("Expected Fair Share:", fsqinfo.qinfo.getExpectedFairShare().toString());
       ri._(STEADY_FAIR_SHARE + ":", fsqinfo.qinfo.getSteadyFairShare().toString());
       ri._(INSTANTANEOUS_FAIR_SHARE + ":", fsqinfo.qinfo.getFairShare().toString());

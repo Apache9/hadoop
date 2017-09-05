@@ -37,6 +37,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ActiveUsersManager;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppUtils;
@@ -447,6 +448,7 @@ public class FSLeafQueue extends FSQueue {
     }
   }
 
+  @Override
   public int getNumPendingApps() {
     int numPendingApps = 0;
     readLock.lock();
@@ -547,5 +549,16 @@ public class FSLeafQueue extends FSQueue {
         isFairSharePreemptionDisabled(getQueueName()) &&
         parent.getPolicy().checkIfUsageOverFairShare(getResourceUsage(),
         getFairShare());
+  }
+
+  @Override
+  public void updateExpectedFairShares() {
+    readLock.lock();
+    try {
+      ResourceWeights tmp = scheduler.getAllocationConfiguration().getQueueWeight(getName());
+      weight = (tmp == null) ? ResourceWeights.NEUTRAL : tmp;
+    } finally {
+      readLock.unlock();
+    }
   }
 }

@@ -27,6 +27,7 @@ import static org.apache.hadoop.yarn.webapp.view.JQueryUI._TH;
 
 import java.util.Collection;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringUtils;
@@ -35,6 +36,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
+import org.apache.hadoop.yarn.server.resourcemanager.RMServerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppMetrics;
@@ -131,12 +133,13 @@ public class AppBlock extends HtmlBlock {
     int attemptNumNonAMContainerPreempted =
         attemptMetrics == null ? 0 : attemptMetrics
             .getNumNonAMContainersPreempted();
-    
+    String actualQueue = RMServerUtils.getFullQueueName(app.getQueue());
     info("Application Overview")
         ._("User:", app.getUser())
         ._("Name:", app.getName())
         ._("Application Type:", app.getApplicationType())
         ._("Application Tags:", app.getApplicationTags())
+        ._("Queue Name:", RMServerUtils.getFSQueueLink(actualQueue), app.getQueue())
         ._("State:", app.getState())
         ._("FinalStatus:", app.getFinalStatus())
         ._("Started:", Times.format(app.getStartTime()))

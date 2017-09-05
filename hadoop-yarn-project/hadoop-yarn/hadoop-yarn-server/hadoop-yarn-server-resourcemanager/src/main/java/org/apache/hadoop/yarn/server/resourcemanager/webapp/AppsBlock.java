@@ -32,6 +32,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
+import org.apache.hadoop.yarn.server.resourcemanager.RMServerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppInfo;
 import org.apache.hadoop.yarn.webapp.hamlet.Hamlet;
@@ -50,17 +51,6 @@ class AppsBlock extends HtmlBlock {
     super(ctx);
     apps = rmContext.getRMApps();
     this.conf = conf;
-  }
-
-  private String getFullQueueName(String appQueue) {
-    String actucalQueueName = appQueue;
-    if (actucalQueueName.indexOf('@') != -1) {
-      actucalQueueName = actucalQueueName.substring(actucalQueueName.indexOf('@') + 1);
-    }
-    if (!actucalQueueName.startsWith("root.")) {
-      actucalQueueName = "root." + actucalQueueName;
-    }
-    return actucalQueueName;
   }
 
   @Override public void render(Block html) {
@@ -99,7 +89,7 @@ class AppsBlock extends HtmlBlock {
       AppInfo appInfo = new AppInfo(app, true, WebAppUtils.getHttpSchemePrefix(conf));
       String percent = String.format("%.1f", appInfo.getProgress());
 
-      String queue = getFullQueueName(app.getQueue());
+      String actualQueue = RMServerUtils.getFullQueueName(appInfo.getQueue());
 
       //AppID numerical value parsed by parseHadoopID in yarn.dt.plugins.js
       appsTableData.append("[\"<a href='")
@@ -111,7 +101,7 @@ class AppsBlock extends HtmlBlock {
         appInfo.getName()))).append("\",\"")
       .append(StringEscapeUtils.escapeJavaScript(StringEscapeUtils.escapeHtml(
         appInfo.getApplicationType()))).append("\",\"")
-      .append("<a href='" + url("scheduler?openQueues=" + queue) + "'>"
+      .append("<a href='" + url(RMServerUtils.getFSQueueLink(actualQueue)) + "'>"
           + StringEscapeUtils.escapeJavaScript(StringEscapeUtils.escapeHtml(appInfo.getQueue())) + "</a>").append("\",\"")
       .append(appInfo.getStartTime()).append("\",\"")
       .append(appInfo.getFinishTime()).append("\",\"")

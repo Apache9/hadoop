@@ -389,6 +389,9 @@ public class QueueManager {
       }
     }
 
+    // Update expected fair shares for all queues
+    rootQueue.updateExpectedFairShares();
+
     // Update steady fair shares for all queues
     rootQueue.recomputeSteadyShares();
     // Update the fair share preemption timeouts and preemption for all queues

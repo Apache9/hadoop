@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerState;
 import org.apache.hadoop.yarn.util.resource.Resources;
@@ -53,6 +54,7 @@ public class FSParentQueue extends FSQueue {
   private final List<FSQueue> childQueues = new ArrayList<FSQueue>();
   private Resource demand = Resources.createResource(0);
   private int runnableApps;
+  private int pendingApps;
 
   private ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private Lock readLock = rwLock.readLock();
@@ -112,6 +114,29 @@ public class FSParentQueue extends FSQueue {
   }
 
   @Override
+  public void updateExpectedFairShares() {
+    readLock.lock();
+    try {
+      for (FSQueue childQueue : childQueues) {
+        childQueue.updateExpectedFairShares();
+      }
+      ResourceWeights tmp = scheduler.getAllocationConfiguration().getQueueWeight(getName());
+      if (tmp != null) {
+        weight = tmp;
+      } else {
+        ResourceWeights sum = new ResourceWeights(0.0f);
+        for (FSQueue childQueue : childQueues) {
+          ResourceWeights weights = childQueue.getWeights();
+          ResourceWeights.addTo(sum, weights);
+        }
+        weight = sum;
+      }
+    } finally {
+      readLock.unlock();
+    }
+  }
+
+  @Override
   public void updatePreemptionVariables() {
     super.updatePreemptionVariables();
     // For child queues
@@ -144,11 +169,20 @@ public class FSParentQueue extends FSQueue {
   public void updateResourceUsage() {
     readLock.lock();
     try {
+      for (FSQueue child : childQueues) {
+        child.updateResourceUsage();
+      }
       Resource tmpUsage = Resources.createResource(0);
       for (FSQueue child : childQueues) {
         Resources.addTo(tmpUsage, child.getResourceUsage());
       }
       updateUsage(tmpUsage);
+
+      int tmpPendingApps = 0;
+      for (FSQueue child : childQueues) {
+        tmpPendingApps += child.getNumPendingApps();
+      }
+      pendingApps = tmpPendingApps;
     } finally {
       readLock.unlock();
     }
@@ -363,6 +397,16 @@ public class FSParentQueue extends FSQueue {
     readLock.lock();
     try {
       return runnableApps;
+    } finally {
+      readLock.unlock();
+    }
+  }
+
+  @Override
+  public int getNumPendingApps() {
+    readLock.lock();
+    try {
+      return pendingApps;
     } finally {
       readLock.unlock();
     }
