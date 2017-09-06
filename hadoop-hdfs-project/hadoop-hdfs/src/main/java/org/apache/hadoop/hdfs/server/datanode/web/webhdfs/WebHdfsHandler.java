@@ -38,6 +38,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.client.HdfsDataInputStream;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
 import org.apache.hadoop.hdfs.web.JsonUtil;
 import org.apache.hadoop.hdfs.web.WebHdfsFileSystem;
 import org.apache.hadoop.hdfs.web.resources.GetOpParam;
@@ -56,13 +57,13 @@ import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
 import java.util.EnumSet;
 
-import static io.netty.handler.codec.http.HttpHeaders.Names.ACCESS_CONTROL_ALLOW_METHODS;
-import static io.netty.handler.codec.http.HttpHeaders.Names.ACCESS_CONTROL_ALLOW_ORIGIN;
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONNECTION;
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_LENGTH;
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
-import static io.netty.handler.codec.http.HttpHeaders.Names.LOCATION;
-import static io.netty.handler.codec.http.HttpHeaders.Values.CLOSE;
+import static io.netty.handler.codec.http.HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS;
+import static io.netty.handler.codec.http.HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN;
+import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
+import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
+import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
+import static io.netty.handler.codec.http.HttpHeaderNames.LOCATION;
+import static io.netty.handler.codec.http.HttpHeaderValues.CLOSE;
 import static io.netty.handler.codec.http.HttpMethod.GET;
 import static io.netty.handler.codec.http.HttpMethod.POST;
 import static io.netty.handler.codec.http.HttpMethod.PUT;
@@ -97,8 +98,8 @@ public class WebHdfsHandler extends SimpleChannelInboundHandler<HttpRequest> {
   @Override
   public void channelRead0(final ChannelHandlerContext ctx,
                            final HttpRequest req) throws Exception {
-    Preconditions.checkArgument(req.getUri().startsWith(WEBHDFS_PREFIX));
-    QueryStringDecoder queryString = new QueryStringDecoder(req.getUri());
+    Preconditions.checkArgument(req.uri().startsWith(WEBHDFS_PREFIX));
+    QueryStringDecoder queryString = new QueryStringDecoder(req.uri());
     params = new ParameterParser(queryString, conf);
     DataNodeUGIProvider ugiProvider = new DataNodeUGIProvider(params);
     ugi = ugiProvider.ugi();
@@ -117,7 +118,7 @@ public class WebHdfsHandler extends SimpleChannelInboundHandler<HttpRequest> {
   public void handle(ChannelHandlerContext ctx, HttpRequest req)
     throws IOException, URISyntaxException {
     String op = params.op();
-    HttpMethod method = req.getMethod();
+    HttpMethod method = req.method();
     if (PutOpParam.Op.CREATE.name().equalsIgnoreCase(op)
       && method == PUT) {
       onCreate(ctx);

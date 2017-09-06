@@ -30,6 +30,8 @@ import org.apache.hadoop.hdfs.util.ByteArrayManager;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import io.netty.handler.codec.http2.Http2FrameLogger;
+
 /**
  * ClientContext contains context information for a client.
  * 
@@ -67,6 +69,11 @@ public class ClientContext {
   private final PeerCache peerCache;
 
   /**
+   * Cache HTTP/2 connections for using.
+   */
+  private final Http2ConnectionCache connCache;
+
+  /**
    * Stores information about socket paths.
    */
   private final DomainSocketFactory domainSocketFactory;
@@ -75,6 +82,13 @@ public class ClientContext {
    * True if we should use the legacy BlockReaderLocal.
    */
   private final boolean useLegacyBlockReaderLocal;
+
+  /**
+   * The maximum length of a read requst that can use HTTP/2 BlockReader. For
+   * now the outbound flow control has not been implemented yet so we should not
+   * use HTTP/2 BlockReader to read large data otherwise it may cause DN OOM.
+   */
+  private final long http2BlockReaderMaxReadLenth;
 
   /**
    * True if the legacy BlockReaderLocal is disabled.
@@ -94,23 +108,39 @@ public class ClientContext {
    */
   private boolean printedConfWarning = false;
 
+  private int getInitialWindowSize(Conf conf) {
+    if (conf.http2BlockReaderMaxReadLenth <= 0) {
+      return -1;
+    }
+    long initialWindowSize = 4 * conf.http2BlockReaderMaxReadLenth;
+    if (initialWindowSize <= 0) {
+      initialWindowSize = conf.http2BlockReaderMaxReadLenth;
+    }
+    return (int) Long.min(initialWindowSize, Integer.MAX_VALUE / 2);
+  }
+
   private ClientContext(String name, Conf conf) {
     this.name = name;
     this.confString = confAsString(conf);
-    this.shortCircuitCache = new ShortCircuitCache(
-        conf.shortCircuitStreamsCacheSize,
-        conf.shortCircuitStreamsCacheExpiryMs,
-        conf.shortCircuitMmapCacheSize,
-        conf.shortCircuitMmapCacheExpiryMs,
-        conf.shortCircuitMmapCacheRetryTimeout,
-        conf.shortCircuitCacheStaleThresholdMs,
-        conf.shortCircuitSharedMemoryWatcherInterruptCheckMs);
+    this.shortCircuitCache = new ShortCircuitCache(conf.shortCircuitStreamsCacheSize,
+            conf.shortCircuitStreamsCacheExpiryMs,
+            conf.shortCircuitMmapCacheSize, conf.shortCircuitMmapCacheExpiryMs,
+            conf.shortCircuitMmapCacheRetryTimeout,
+            conf.shortCircuitCacheStaleThresholdMs,
+            conf.shortCircuitSharedMemoryWatcherInterruptCheckMs);
     this.peerCache =
-          new PeerCache(conf.socketCacheCapacity, conf.socketCacheExpiry);
+        new PeerCache(conf.socketCacheCapacity, conf.socketCacheExpiry);
     this.useLegacyBlockReaderLocal = conf.useLegacyBlockReaderLocal;
     this.domainSocketFactory = new DomainSocketFactory(conf);
 
-    this.byteArrayManager = ByteArrayManager.newInstance(conf.writeByteArrayManagerConf);
+    this.byteArrayManager =
+        ByteArrayManager.newInstance(conf.writeByteArrayManagerConf);
+    
+    this.connCache = new Http2ConnectionCache(conf.http2EventLoopType,
+        conf.http2ConnCapacityPerDn, getInitialWindowSize(conf),
+        new Http2FrameLogger(conf.http2FrameLoggerLogLevel,
+            "HTTP/2 DTP Client"));
+    this.http2BlockReaderMaxReadLenth = conf.http2BlockReaderMaxReadLenth;
   }
 
   public static String confAsString(Conf conf) {
@@ -203,6 +233,10 @@ public class ClientContext {
     return disableLegacyBlockReaderLocal;
   }
 
+  public boolean canUseHttp2BlockReader(long length) {
+    return length >= 0 && length <= http2BlockReaderMaxReadLenth;
+  }
+
   public void setDisableLegacyBlockReaderLocal() {
     disableLegacyBlockReaderLocal = true;
   }
@@ -213,5 +247,9 @@ public class ClientContext {
 
   public ByteArrayManager getByteArrayManager() {
     return byteArrayManager;
+  }
+
+  public Http2ConnectionCache getConnCache() {
+    return connCache;
   }
 }

@@ -19,7 +19,7 @@ package org.apache.hadoop.hdfs;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_CRYPTO_CODEC_CLASSES_KEY_PREFIX;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.*;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_BLOCK_WRITE_LOCATEFOLLOWINGBLOCK_RETRIES_DEFAULT;
@@ -41,6 +41,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_BASE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_MAX_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_MAX_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_HTTP2_CONN_CACHE_CAPACITY_PER_DN_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_HTTP2_CONN_CACHE_CAPACITY_PER_DN_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_HTTP2_MAX_READ_LENGTH_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_HTTP2_MAX_READ_LENGTH_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_READ_PREFETCH_SIZE_KEY;
@@ -59,12 +63,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_WRITE_EXCLUDE_NODE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_DEFAULT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_CONTEXT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_CONTEXT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_FORCE_DELETE_TO_TRASH;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_FORCE_DELETE_TO_TRASH_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -132,7 +134,6 @@ import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
-import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.VolumeId;
 import org.apache.hadoop.fs.XAttr;
@@ -222,16 +223,14 @@ import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DataChecksum.Type;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
-import org.htrace.Sampler;
-import org.htrace.Span;
-import org.htrace.Trace;
-import org.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.net.InetAddresses;
+
+import io.netty.handler.logging.LogLevel;
 
 /********************************************************
  * DFSClient can connect to a Hadoop Filesystem and 
@@ -342,6 +341,11 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     final int failedDatanodeMaxRetry;
     final int slowConnWarningMs;
     final boolean forceDeleteToTrash;
+    final int http2ConnCapacityPerDn;
+    final long http2BlockReaderMaxReadLenth;
+    final LogLevel http2FrameLoggerLogLevel;
+    final String http2EventLoopType;
+    final long http2BlockReaderMaxBufferedDataSize;
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
@@ -523,6 +527,28 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
       forceDeleteToTrash = conf.getBoolean(DFS_FORCE_DELETE_TO_TRASH,
         DFS_FORCE_DELETE_TO_TRASH_DEFAULT);
+
+      http2ConnCapacityPerDn =
+          conf.getInt(DFS_CLIENT_HTTP2_CONN_CACHE_CAPACITY_PER_DN_KEY,
+              DFS_CLIENT_HTTP2_CONN_CACHE_CAPACITY_PER_DN_DEFAULT);
+      http2BlockReaderMaxReadLenth =
+          conf.getLong(DFS_CLIENT_HTTP2_MAX_READ_LENGTH_KEY,
+              DFS_CLIENT_HTTP2_MAX_READ_LENGTH_DEFAULT);
+      String level = conf.get(DFS_HTTP2_FRAME_LOG_LEVEL_KEY,
+          DFS_HTTP2_FRAME_LOG_LEVEL_DEFAULT);
+      LogLevel logLevel;
+      try {
+        logLevel = LogLevel.valueOf(level);
+      } catch (IllegalArgumentException e) {
+        logLevel =
+            LogLevel.valueOf(DFSConfigKeys.DFS_HTTP2_FRAME_LOG_LEVEL_DEFAULT);
+      }
+      http2FrameLoggerLogLevel = logLevel;
+      http2EventLoopType = conf.get(DFS_CLIENT_HTTP2_EVENT_LOOP_TYPE_KEY,
+          DFS_CLIENT_HTTP2_EVENT_LOOP_TYPE_DEFAULT);
+      http2BlockReaderMaxBufferedDataSize =
+          conf.getLong(DFS_CLIENT_HTTP2_MAX_BUFFERED_DATA_SIZE_KEY,
+              DFS_CLIENT_HTTP2_MAX_BUFFERED_DATA_SIZE_DEFAULT);
     }
 
     public boolean isUseLegacyBlockReaderLocal() {

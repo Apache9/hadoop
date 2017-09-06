@@ -80,7 +80,7 @@ public abstract class DataTransferProtoUtil {
     return header;
   }
 
-  static BaseHeaderProto buildBaseHeader(ExtendedBlock blk,
+  public static BaseHeaderProto buildBaseHeader(ExtendedBlock blk,
       Token<BlockTokenIdentifier> blockToken) {
     BaseHeaderProto.Builder builder =  BaseHeaderProto.newBuilder()
       .setBlock(PBHelper.convert(blk))
