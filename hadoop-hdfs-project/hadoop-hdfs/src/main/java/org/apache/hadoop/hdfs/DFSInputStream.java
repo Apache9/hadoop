@@ -306,7 +306,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           }
           return -1;
         }
-        final long len = readBlockLength(last);
+        final long len = readBlockLength(last, false);
         last.getBlock().setNumBytes(len);
         lastBlockBeingWrittenLength = len; 
       }
@@ -319,18 +319,26 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   }
 
   /** Read the block length from one of the datanodes. */
-  private long readBlockLength(LocatedBlock locatedblock) throws IOException {
+  private long readBlockLength(LocatedBlock locatedblock, boolean useCache) throws IOException {
     assert locatedblock != null : "LocatedBlock cannot be null";
     int replicaNotFoundCount = locatedblock.getLocations().length;
     
     for(DatanodeInfo datanode : locatedblock.getLocations()) {
-      ClientDatanodeProtocol cdp = getClientDatanodeProtocol(datanode);
-      
+      ClientDatanodeProtocol cdp = null;
+      if (useCache) {
+        cdp = getClientDatanodeProtocol(datanode);
+      }
       try {
-        cdp = DFSUtil.createClientDatanodeProtocolProxy(datanode,
-            dfsClient.getConfiguration(), dfsClient.getConf().socketTimeout,
-            dfsClient.getConf().connectToDnViaHostname, locatedblock);
+        if (null == cdp) {
+          cdp =
+            DFSUtil.createClientDatanodeProtocolProxy(datanode,
+              dfsClient.getConfiguration(),
+              dfsClient.getConf().socketTimeout,
+              dfsClient.getConf().connectToDnViaHostname, locatedblock);
+          if (useCache) {
             saveClientDatanodeProtocol(datanode, cdp);
+          }
+        }
         
         final long n = cdp.getReplicaVisibleLength(locatedblock.getBlock());
         
@@ -350,10 +358,11 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           DFSClient.LOG.debug("Failed to getReplicaVisibleLength from datanode "
               + datanode + " for block " + locatedblock.getBlock(), ioe);
         }
-        if (isNeedToRetry(ioe)) {
+        if (useCache && isNeedToRetry(ioe)) {
           // special case : clean the CDP cache and refresh located blocks for XmDFSInputStream
           if (DFSClient.LOG.isInfoEnabled()) {
             DFSClient.LOG.info("Retry is needed for this exception. "
+                + "useCache=" + useCache
                 + "datanode=" + datanode, ioe);
           }
           throw ioe;
@@ -1809,7 +1818,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
               continue;
             }
             try {
-              lastBlockLength = readBlockLength(last);
+              lastBlockLength = readBlockLength(last, true);
               last.getBlock().setNumBytes(lastBlockLength);
 
               if (lastBlockLength >= getBlockSize()) {

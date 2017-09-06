@@ -69,8 +69,38 @@ public class XmDFSInputStream extends DFSInputStream {
   }
 
   public String getCacheStatus(){
-    return "RefreshLocatedBlocks(" + requestRefreshLocatedBlocks + "," + doRefreshLocatedBlocks + ");" +
-           "NewCDP("+ requestNewCDP + "," + doNewCDP + ")";
+    StringBuilder builder = new StringBuilder();
+    builder.append("Cache Status:");
+    builder.append(" RequestedGetLocatedBlocks=").append(requestRefreshLocatedBlocks);
+    builder.append(" DoneGetLocatedBlocks=").append(doRefreshLocatedBlocks);
+    builder.append(" RequestedNewCDP=").append(requestNewCDP);
+    builder.append(" DoneNewCDP=").append(doNewCDP);
+    return builder.toString();
+  }
+
+  private void tryUpdateLength(boolean fileClosed) throws IOException {
+    if (fileClosed) {
+      // if the writing file is closed, clean the cache.
+      clearClientDatanodeProtocol();
+      setRefreshLocatedBlocks(true);
+      updateFileLength();
+    } else {
+      int retryTimes = 2;
+      while (retryTimes > 0) {
+        retryTimes--;
+        try {
+          updateFileLength();
+          break;
+        } catch (IOException ioe) {
+          Log.info("tryUpdateLength: updateFileLength got exception:", ioe);
+          if (!isNeedToRetry(ioe)) {
+            throw ioe;
+          }
+          Log.info("tryUpdateLength: need to retry for this exception, retryTimes="
+            + retryTimes);
+        }
+      }
+    }
   }
 
   @Override
@@ -93,15 +123,7 @@ public class XmDFSInputStream extends DFSInputStream {
     while (readLen == -1) {
       boolean fileClosed = dfsClient.isFileClosed(srcFile);
       long origLen = getFileLength();
-      try {
-        updateFileLength();
-      } catch (IOException ioe) {
-        if (isNeedToRetry(ioe)) {
-          updateFileLength();
-        } else {
-          throw ioe;
-        }
-      }
+      tryUpdateLength(fileClosed);
       long newLen = getFileLength();
       if (origLen == newLen) {
         if (fileClosed) {
@@ -186,7 +208,7 @@ public class XmDFSInputStream extends DFSInputStream {
       }
 
       boolean fileClosed = dfsClient.isFileClosed(srcFile);
-      updateFileLength();
+      tryUpdateLength(fileClosed);
       long newLen = getFileLength();
       if (origLen == newLen) {
         if (fileClosed) {
