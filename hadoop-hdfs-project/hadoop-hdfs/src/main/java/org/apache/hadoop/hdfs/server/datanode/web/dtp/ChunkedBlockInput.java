@@ -20,13 +20,13 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedOutputStream;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufOutputStream;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import io.netty.handler.codec.http2.Http2DataFrame;
-import io.netty.handler.stream.ChunkedInput;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufAllocator;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufOutputStream;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2DataFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.stream.ChunkedInput;
 
 import java.io.EOFException;
 import java.io.FileInputStream;

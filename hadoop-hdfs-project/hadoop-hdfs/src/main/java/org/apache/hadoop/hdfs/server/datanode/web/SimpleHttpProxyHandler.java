@@ -17,28 +17,28 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web;
 
-import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
-import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
+import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
+import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.http.DefaultFullHttpRequest;
-import io.netty.handler.codec.http.DefaultHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderValues;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpRequestEncoder;
-import io.netty.handler.codec.http.HttpResponseEncoder;
+import org.apache.hadoop.hbase.shaded.io.netty.bootstrap.Bootstrap;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.Unpooled;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFuture;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFutureListener;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInboundHandlerAdapter;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelPipeline;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.SocketChannel;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.nio.NioSocketChannel;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.DefaultFullHttpRequest;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.DefaultHttpResponse;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderValues;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpRequest;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpRequestEncoder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseEncoder;
 
 import java.net.InetSocketAddress;
 

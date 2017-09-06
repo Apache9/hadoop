@@ -30,7 +30,7 @@ import org.apache.hadoop.hdfs.util.ByteArrayManager;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import io.netty.handler.codec.http2.Http2FrameLogger;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2FrameLogger;
 
 /**
  * ClientContext contains context information for a client.

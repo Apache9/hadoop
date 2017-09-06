@@ -36,6 +36,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.web.WebHdfsTestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -89,6 +90,7 @@ public class TestReadFileOverHttp2 {
     return FileSystem.get(CLUSTER.getURI(0), conf);
   }
 
+  @Ignore
   @Test
   public void test() throws IOException {
 
@@ -120,6 +122,7 @@ public class TestReadFileOverHttp2 {
     }
   }
 
+  @Ignore
   @Test
   public void testPreadMultiThreaded()
       throws IOException, InterruptedException {

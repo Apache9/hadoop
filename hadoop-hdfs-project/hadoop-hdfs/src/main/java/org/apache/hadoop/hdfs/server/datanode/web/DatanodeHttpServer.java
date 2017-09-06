@@ -22,20 +22,20 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_DE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTP_ADDRESS_KEY;
 
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFactory;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.HttpRequestDecoder;
-import io.netty.handler.codec.http.HttpResponseEncoder;
-import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.stream.ChunkedWriteHandler;
+import org.apache.hadoop.hbase.shaded.io.netty.bootstrap.ServerBootstrap;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFactory;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFuture;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelOption;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelPipeline;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.EventLoopGroup;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.nio.NioEventLoopGroup;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.SocketChannel;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.nio.NioServerSocketChannel;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpRequestDecoder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseEncoder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.ssl.SslHandler;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.stream.ChunkedWriteHandler;
 
 import java.io.Closeable;
 import java.io.IOException;

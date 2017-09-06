@@ -19,18 +19,18 @@ package org.apache.hadoop.hdfs;
 
 import com.google.protobuf.CodedOutputStream;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufOutputStream;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelInitializer;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import io.netty.handler.codec.http2.Http2DataFrame;
-import io.netty.handler.codec.http2.Http2HeadersFrame;
-import io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
-import io.netty.util.concurrent.Promise;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufOutputStream;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpMethod;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2Headers;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2DataFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2HeadersFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.Promise;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -209,7 +209,7 @@ class Http2BlockReader implements BlockReader {
         channel.eventLoop().newPromise();
     final Channel stream;
     try {
-      stream = new Http2StreamChannelBootstrap().parentChannel(channel)
+      stream = new Http2StreamChannelBootstrap(channel)
           .handler(new ChannelInitializer<Channel>() {
 
             @Override
@@ -221,7 +221,7 @@ class Http2BlockReader implements BlockReader {
                   new Http2HeadersReceiver(receiver));
               promise.trySuccess(receiver);
             }
-          }).connect().syncUninterruptibly().channel();
+          }).open().syncUninterruptibly().getNow();
     } catch (IllegalArgumentException e) {
       // If the HTTP/2 connection has already been closed then a IAE will be
       // thrown so here we convert it to an IOException.

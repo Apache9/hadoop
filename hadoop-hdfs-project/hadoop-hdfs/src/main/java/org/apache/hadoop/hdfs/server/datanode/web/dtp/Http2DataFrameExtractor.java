@@ -15,36 +15,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs;
+package org.apache.hadoop.hdfs.server.datanode.web.dtp;
+
+import org.apache.hadoop.classification.InterfaceAudience;
 
 import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandler.Sharable;
 import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
 import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
 import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2DataFrame;
 
+@InterfaceAudience.Private
 @Sharable
-public final class Http2DataFrameUnwrapHandler
-    extends SimpleChannelInboundHandler<Http2DataFrame> {
+class Http2DataFrameExtractor extends SimpleChannelInboundHandler<Http2DataFrame> {
 
-  static final Object END_OF_STREAM = new Object();
+  private static final Http2DataFrameExtractor INSTANCE = new Http2DataFrameExtractor();
 
-  private static final Http2DataFrameUnwrapHandler HANDLER =
-      new Http2DataFrameUnwrapHandler();
-
-  private Http2DataFrameUnwrapHandler() {
-    super(Http2DataFrame.class, false);
+  public Http2DataFrameExtractor() {
+    super(false);
   }
 
   @Override
-  protected void channelRead0(ChannelHandlerContext ctx, Http2DataFrame msg)
-      throws Exception {
+  protected void channelRead0(ChannelHandlerContext ctx, Http2DataFrame msg) throws Exception {
     ctx.fireChannelRead(msg.content());
-    if (msg.isEndStream()) {
-      ctx.fireUserEventTriggered(END_OF_STREAM);
-    }
   }
 
-  public static Http2DataFrameUnwrapHandler get() {
-    return HANDLER;
+  public static Http2DataFrameExtractor get() {
+    return INSTANCE;
   }
 }

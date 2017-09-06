@@ -17,21 +17,6 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
-import io.netty.handler.codec.ByteToMessageDecoder;
-import io.netty.handler.codec.http.HttpServerCodec;
-import io.netty.handler.codec.http2.Http2CodecBuilder;
-import io.netty.handler.codec.http2.Http2CodecUtil;
-import io.netty.handler.codec.http2.Http2Exception;
-import io.netty.handler.codec.http2.Http2FrameLogger;
-import io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
-import io.netty.handler.logging.LogLevel;
-import io.netty.handler.stream.ChunkedWriteHandler;
-
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,6 +27,20 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
+
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufUtil;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.ByteToMessageDecoder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpServerCodec;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2CodecUtil;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2Exception;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2FrameLogger;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.logging.LogLevel;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.stream.ChunkedWriteHandler;
 
 /**
  * A port unification handler to support HTTP/1.1 and HTTP/2 on the same port.
@@ -100,15 +99,14 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
   }
 
   private void configureHttp2(ChannelHandlerContext ctx) throws Http2Exception {
-    ctx.pipeline()
-        .addLast(new Http2CodecBuilder(true, new Http2StreamChannelBootstrap()
-            .handler(new ChannelInitializer<Channel>() {
+    ctx.pipeline().addLast(
+        Http2MultiplexCodecBuilder.forServer(new ChannelInitializer<Channel>() {
 
-              @Override
-              protected void initChannel(Channel ch) throws Exception {
-                ch.pipeline().addLast(new DtpUrlDispatcher(datanode));
-              }
-            })).frameLogger(getFrameLogger()).build());
+          @Override
+          protected void initChannel(Channel ch) throws Exception {
+            ch.pipeline().addLast(new DtpUrlDispatcher(datanode));
+          }
+        }).frameLogger(getFrameLogger()).build());
   }
 
   @Override

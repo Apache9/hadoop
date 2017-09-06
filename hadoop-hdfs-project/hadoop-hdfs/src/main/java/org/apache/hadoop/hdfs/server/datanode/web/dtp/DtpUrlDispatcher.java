@@ -20,20 +20,19 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 import static org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUtil.OP_READ_BLOCK;
 import static org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUtil.URL_PREFIX;
 
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http2.Http2DataFrame;
-import io.netty.handler.codec.http2.Http2HeadersFrame;
-import io.netty.handler.codec.protobuf.ProtobufDecoder;
-import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
-import io.netty.handler.stream.ChunkedWriteHandler;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
+
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpMethod;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2HeadersFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.protobuf.ProtobufDecoder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.stream.ChunkedWriteHandler;
 
 @InterfaceAudience.Private
 public class DtpUrlDispatcher
@@ -66,14 +65,7 @@ public class DtpUrlDispatcher
 
     if (pathStr.endsWith(OP_READ_BLOCK)) {
       ctx.pipeline().remove(this).addLast(new ChunkedWriteHandler(),
-          new SimpleChannelInboundHandler<Http2DataFrame>() {
-
-            @Override
-            protected void channelRead0(ChannelHandlerContext ctx,
-                Http2DataFrame msg) throws Exception {
-              ctx.fireChannelRead(msg.content().retain());
-            }
-          }, new ProtobufVarint32FrameDecoder(),
+          Http2DataFrameExtractor.get(), new ProtobufVarint32FrameDecoder(),
           new ProtobufDecoder(OpReadBlockRequestProto.getDefaultInstance()),
           new ReadBlockHandler(datanode));
     } else {

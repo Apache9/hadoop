@@ -19,12 +19,12 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
 import com.google.common.base.Throwables;
 
-import io.netty.buffer.CompositeByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http2.Http2DataFrame;
-import io.netty.handler.codec.http2.Http2HeadersFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.CompositeByteBuf;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInboundHandlerAdapter;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2DataFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2HeadersFrame;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;

@@ -22,12 +22,12 @@ import java.util.List;
 
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufInputStream;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.ByteToMessageDecoder;
-import io.netty.handler.codec.CorruptedFrameException;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufInputStream;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.Unpooled;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.ByteToMessageDecoder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.CorruptedFrameException;
 
 class Http2BlockReaderFrameDecoder extends ByteToMessageDecoder {
 

@@ -17,31 +17,12 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
-import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
-import static io.netty.handler.codec.http.HttpHeaderValues.APPLICATION_OCTET_STREAM;
-import static io.netty.handler.codec.http.HttpResponseStatus.OK;
+import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
+import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderValues.APPLICATION_OCTET_STREAM;
+import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.SUCCESS;
 
 import com.google.protobuf.CodedOutputStream;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufOutputStream;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import io.netty.handler.codec.http2.Http2DataFrame;
-import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2HeadersFrame;
-import io.netty.handler.codec.http2.HttpConversionUtil;
-import io.netty.util.concurrent.EventExecutor;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.FutureListener;
-import io.netty.util.concurrent.Promise;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -76,6 +57,25 @@ import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
+
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
+import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufOutputStream;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFuture;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFutureListener;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.DefaultFullHttpResponse;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2Headers;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2DataFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2Headers;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2HeadersFrame;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.HttpConversionUtil;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.EventExecutor;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.Future;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.FutureListener;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.Promise;
 
 @InterfaceAudience.Private
 public class ReadBlockHandler

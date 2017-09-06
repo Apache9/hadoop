@@ -17,34 +17,6 @@
  */
 package org.apache.hadoop.hdfs;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandler.Sharable;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.epoll.EpollSocketChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.oio.OioEventLoopGroup;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.channel.socket.oio.OioSocketChannel;
-import io.netty.handler.codec.http2.Http2CodecBuilder;
-import io.netty.handler.codec.http2.Http2Connection;
-import io.netty.handler.codec.http2.Http2ConnectionHandler;
-import io.netty.handler.codec.http2.Http2FrameLogger;
-import io.netty.handler.codec.http2.Http2LocalFlowController;
-import io.netty.handler.codec.http2.Http2Settings;
-import io.netty.handler.codec.http2.Http2Stream;
-import io.netty.util.concurrent.DefaultThreadFactory;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.FutureListener;
-import io.netty.util.concurrent.Promise;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -59,6 +31,34 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.net.NetUtils;
+
+import org.apache.hadoop.hbase.shaded.io.netty.bootstrap.Bootstrap;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFuture;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFutureListener;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandler.Sharable;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInboundHandlerAdapter;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelOption;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.EventLoopGroup;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.epoll.EpollEventLoopGroup;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.epoll.EpollSocketChannel;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.nio.NioEventLoopGroup;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.oio.OioEventLoopGroup;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.nio.NioSocketChannel;
+import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.oio.OioSocketChannel;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2Connection;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2ConnectionHandler;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2FrameLogger;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2LocalFlowController;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2Settings;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2Stream;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.DefaultThreadFactory;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.Future;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.FutureListener;
+import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.Promise;
 
 /**
  * TODO: close idle connections.
@@ -232,8 +232,8 @@ class Http2ConnectionCache implements Closeable {
 
           @Override
           protected void initChannel(Channel ch) throws Exception {
-            Http2CodecBuilder builder =
-                new Http2CodecBuilder(false, new ChannelInitializer<Channel>() {
+            Http2MultiplexCodecBuilder builder = Http2MultiplexCodecBuilder
+                .forClient(new ChannelInitializer<Channel>() {
 
                   @Override
                   protected void initChannel(Channel ch) throws Exception {

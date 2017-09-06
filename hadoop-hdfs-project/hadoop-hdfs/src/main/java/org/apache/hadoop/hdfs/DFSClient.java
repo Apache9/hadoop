@@ -230,7 +230,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.net.InetAddresses;
 
-import io.netty.handler.logging.LogLevel;
+import org.apache.hadoop.hbase.shaded.io.netty.handler.logging.LogLevel;
 
 /********************************************************
  * DFSClient can connect to a Hadoop Filesystem and 
