@@ -18,6 +18,8 @@
 package org.apache.hadoop.hdfs;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -27,6 +29,8 @@ import org.apache.hadoop.hdfs.DFSClient.Conf;
 import org.apache.hadoop.hdfs.shortcircuit.DomainSocketFactory;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitCache;
 import org.apache.hadoop.hdfs.util.ByteArrayManager;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.util.Daemon;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -108,6 +112,10 @@ public class ClientContext {
    */
   private boolean printedConfWarning = false;
 
+  private static Daemon deadNodeDetectorThr = null;
+  private boolean enableSharedDeadNodes = false;
+  private static DeadNodeDetector deadNodeDetector = null;
+
   private int getInitialWindowSize(Conf conf) {
     if (conf.http2BlockReaderMaxReadLenth <= 0) {
       return -1;
@@ -141,6 +149,13 @@ public class ClientContext {
         new Http2FrameLogger(conf.http2FrameLoggerLogLevel,
             "HTTP/2 DTP Client"));
     this.http2BlockReaderMaxReadLenth = conf.http2BlockReaderMaxReadLenth;
+
+    this.enableSharedDeadNodes = conf.enableSharedDeadNodes;
+    if (enableSharedDeadNodes && deadNodeDetector == null) {
+      deadNodeDetector = new DeadNodeDetector(conf.conf, name);
+      deadNodeDetectorThr = new Daemon(deadNodeDetector);
+      deadNodeDetectorThr.start();
+    }
   }
 
   public static String confAsString(Conf conf) {
@@ -252,4 +267,8 @@ public class ClientContext {
   public Http2ConnectionCache getConnCache() {
     return connCache;
   }
+
+  public boolean isEnableSharedDeadNodes () { return enableSharedDeadNodes; }
+
+  public DeadNodeDetector getDeadNodeDetector () { return deadNodeDetector; }
 }
