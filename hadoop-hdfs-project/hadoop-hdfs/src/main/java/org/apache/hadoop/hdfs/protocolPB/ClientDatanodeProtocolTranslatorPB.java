@@ -32,6 +32,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.hdfs.TracerLog;
 import org.apache.hadoop.hdfs.protocol.BlockLocalPathInfo;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
@@ -66,6 +67,7 @@ import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
+import org.apache.htrace.Trace;
 
 /**
  * This class is the client side translator to translate the requests made on
@@ -172,6 +174,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       return rpcProxy.getReplicaVisibleLength(NULL_CONTROLLER, req).getLength();
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: setAcl done. block=" + b.getLocalBlock());
+      }
     }
   }
 
@@ -181,7 +187,12 @@ public class ClientDatanodeProtocolTranslatorPB implements
       rpcProxy.refreshNamenodes(NULL_CONTROLLER, VOID_REFRESH_NAMENODES);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: refreshNamenodes done.");
+      }
     }
+
   }
 
   @Override
@@ -192,6 +203,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       rpcProxy.deleteBlockPool(NULL_CONTROLLER, req);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: deleteBlockPool done. bpid=" + bpid);
+      }
     }
   }
 
@@ -207,6 +222,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       resp = rpcProxy.getBlockLocalPathInfo(NULL_CONTROLLER, req);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    }
+    if (TracerLog.isClientTracing()) {
+      Trace.addTimelineAnnotation("HDFS: getBlockLocalPathInfo done. block=" +
+        block.getLocalBlock());
     }
     return new BlockLocalPathInfo(PBHelper.convert(resp.getBlock()),
         resp.getLocalPath(), resp.getLocalMetaPath());
@@ -256,6 +275,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
     // Array of indexes into the list of volumes, one per block
     List<Integer> volumeIndexes = response.getVolumeIndexesList();
     // Parsed HdfsVolumeId values, one per block
+    if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: getHdfsBlocksMetadata done. blockIds=" +
+          blockIds);
+    }
     return new HdfsBlocksMetadata(blockPoolId, blockIds,
         volumeIds, volumeIndexes);
   }
@@ -268,6 +291,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       rpcProxy.shutdownDatanode(NULL_CONTROLLER, request);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: shutdownDatanode done.");
+      }
     }
   }
 
@@ -279,6 +306,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       return PBHelper.convert(response.getLocalInfo());
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: getDatanodeInfo done.");
+      }
     }
   }
 

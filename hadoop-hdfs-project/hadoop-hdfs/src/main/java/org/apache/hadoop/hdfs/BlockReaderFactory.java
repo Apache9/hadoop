@@ -57,6 +57,7 @@ import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.apache.htrace.Trace;
 
 
 /** 
@@ -297,6 +298,9 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
           if (LOG.isTraceEnabled()) {
             LOG.trace(this + ": returning new legacy block reader local.");
           }
+          if (TracerLog.isClientTracing()) {
+            Trace.addTimelineAnnotation("HDFS: created new legacy block reader local");
+          }
           return reader;
         }
       } else {
@@ -304,6 +308,9 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
         if (reader != null) {
           if (LOG.isTraceEnabled()) {
             LOG.trace(this + ": returning new block reader local.");
+          }
+          if (TracerLog.isClientTracing()) {
+            Trace.addTimelineAnnotation("HDFS: created new block reader local");
           }
           return reader;
         }
@@ -739,6 +746,9 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
         if (LOG.isTraceEnabled()) {
           LOG.trace("nextTcpPeer: reusing existing peer " + peer);
         }
+        if (TracerLog.isClientTracing()) {
+          Trace.addTimelineAnnotation("HDFS: reusing existing peer " + peer);
+        }
         return new BlockReaderPeer(peer, true);
       }
     }
@@ -746,6 +756,9 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
       Peer peer = remotePeerFactory.newConnectedPeer(inetSocketAddress);
       if (LOG.isTraceEnabled()) {
         LOG.trace("nextTcpPeer: created newConnectedPeer " + peer);
+      }
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: created new peer " + peer);
       }
       return new BlockReaderPeer(peer, false);
     } catch (IOException e) {

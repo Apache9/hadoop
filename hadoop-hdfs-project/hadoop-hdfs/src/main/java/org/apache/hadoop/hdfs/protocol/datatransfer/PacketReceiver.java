@@ -150,8 +150,7 @@ public class PacketReceiver implements Closeable {
     }
 
     if (TracerLog.isEnabled()) {
-      TracerLog.startScope("Receive Packet", "dataPlusChecksumLen=" +
-        dataPlusChecksumLen + " headerLen=" + headerLen);
+      TracerLog.startScope("Receive Packet", "headerLen=" + headerLen);
     }
 
     if (LOG.isTraceEnabled()) {

@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.TracerLog;
 import org.apache.hadoop.hdfs.protocol.*;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
@@ -47,6 +48,7 @@ import org.apache.hadoop.security.proto.SecurityProtos.GetDelegationTokenRequest
 import org.apache.hadoop.security.proto.SecurityProtos.GetDelegationTokenResponseProto;
 import org.apache.hadoop.security.proto.SecurityProtos.RenewDelegationTokenRequestProto;
 import org.apache.hadoop.security.token.Token;
+import org.apache.htrace.Trace;
 
 import java.io.Closeable;
 import java.io.FileNotFoundException;
@@ -118,6 +120,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
       throw ProtobufHelper.getRemoteException(e);
     } finally {
       HdfsPerfCounter.count("open", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: getBlockLocations done. file=" + src);
+      }
     }
   }
 
@@ -160,6 +165,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("create", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: create file done. file=" + src);
+      }
     }
 
   }
@@ -183,6 +191,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("append", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: append file done. file=" + src);
+      }
     }
   }
 
@@ -317,6 +328,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("complete", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: complete file done. file=" + src);
+      }
     }
   }
 
@@ -347,6 +361,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("rename", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: rename file done. src=" + src + " dst=" + dst);
+      }
     }
   }
   
@@ -378,6 +395,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("rename2", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: rename2 file done. src=" + src + " dst=" + dst);
+      }
     }
   }
 
@@ -410,6 +430,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("delete", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: delete file done. src=" + src + " recursive=" + recursive);
+      }
     }
   }
 
@@ -432,6 +455,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
       throw ProtobufHelper.getRemoteException(e);
     } finally {
       HdfsPerfCounter.count("mkdirs", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: mkdirs done. src=" + src);
+      }
     }
   }
 
@@ -457,6 +483,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("getListing", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: getListing done. src=" + src);
+      }
     }
   }
 
@@ -652,6 +681,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("getFileInfo", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: getFileInfo done. src=" + src);
+      }
     }
   }
 
@@ -733,6 +765,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
       throw ProtobufHelper.getRemoteException(e);
     } finally {
       HdfsPerfCounter.count("fsync", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: fsync done. src=" + src);
+      }
     }
   }
 
@@ -1182,6 +1217,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("modifyAclEntries", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: modifyAclEntries done. src=" + src);
+      }
     }
   }
 
@@ -1200,6 +1238,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("removeAclEntries", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: removeAclEntries done. src=" + src);
+      }
     }
   }
 
@@ -1216,6 +1257,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("removeDefaultAcl", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: HdfsPerfCounter done. src=" + src);
+      }
     }
   }
 
@@ -1232,6 +1276,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("removeAcl", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: removeAcl done. src=" + src);
+      }
     }
   }
 
@@ -1250,6 +1297,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
     } finally {
       HdfsPerfCounter
           .count("setAcl", 1, System.currentTimeMillis() - startTime);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: setAcl done. src=" + src);
+      }
     }
   }
 

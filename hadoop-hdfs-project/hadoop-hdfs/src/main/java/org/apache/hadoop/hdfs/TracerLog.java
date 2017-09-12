@@ -21,10 +21,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.htrace.Sampler;
 import org.apache.htrace.Span;
 import org.apache.htrace.TimelineAnnotation;
 import org.apache.htrace.Trace;
+import org.apache.htrace.TraceInfo;
 import org.apache.htrace.TraceScope;
 
 import java.text.DateFormat;
@@ -33,32 +33,46 @@ import java.util.List;
 
 
 public class TracerLog {
+  public enum TracerWarnTimeType { normal, rwPacket, rwBlock }
 
-  public enum TracerWarnTimeType { normal, rwPacket }
+  public static int     MAX_ANNOTATION_COUNT = 100;
+  public static String  TAG_MORE_LOGS = "more logs ......";
 
-  private static DateFormat tracerDateFormat =
-    new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
   private static final Log tracerLog = LogFactory.getLog(TracerLog.class.getName());
-  private static Configuration conf;
-  private static long warnTimeNormal = 0;
-  private static long warnTimePacket = 0;
-  private static boolean initialised = false;
+  private static DateFormat tracerDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+  private static TraceInfo tinfo = new TraceInfo(272860771,0);
+  private static ThreadLocal<TraceScope> threadLocalScope = new ThreadLocal<TraceScope>();
 
-  public static void init(Configuration c) {
-    conf = c;
+  private static boolean initialised    = false;
+  private static boolean clientEnabled  = false;
+  private static long    warnTimeNormal = 0;
+  private static long    warnTimePacket = 0;
+  private static long    warnTimeBlock  = 0;
+
+  public static void initClient(Configuration conf) {
+    clientEnabled = conf.getBoolean(
+      DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG,
+      DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG_DEFAULT);
+  }
+
+  public static void initServer(Configuration conf) {
     warnTimeNormal = conf.getLong(
       DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_KEY,
       DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_DEFAULT);
     warnTimePacket = conf.getLong(
       DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY,
       DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_DEFAULT);
+    warnTimeBlock = conf.getLong(
+      DFSConfigKeys.DFS_TRACER_WARN_TIME_RWBLOCK_KEY,
+      DFSConfigKeys.DFS_TRACER_WARN_TIME_RWBLOCK_DEFAULT);
     initialised = true;
   }
 
   public static long getWarnTime(TracerWarnTimeType type) {
     switch (type) {
       case rwPacket: return warnTimePacket;
-      default: return warnTimeNormal;
+      case rwBlock:  return warnTimeBlock;
+      default:       return warnTimeNormal;
     }
   }
 
@@ -66,39 +80,63 @@ public class TracerLog {
     return initialised;
   }
 
-  public static void startScope(String op, String info) {
+  public static void disable() {
+    initialised =false;
+  }
+
+  public static boolean isClientTracing() {
+    if (!Trace.isTracing() || !clientEnabled) {
+      return false;
+    }
+    int curCount = Trace.currentSpan().getTimelineAnnotations().size();
+    if (curCount < MAX_ANNOTATION_COUNT) {
+      return true;
+    }
+    if (curCount == MAX_ANNOTATION_COUNT) {
+      Trace.addTimelineAnnotation("HDFS: " + TAG_MORE_LOGS);
+    }
+    return false;
+  }
+
+  public static TraceScope startScope(String op, String info) {
     if (!initialised) {
-      return;
+      return null;
+    }
+    Span span = Trace.currentSpan();
+    if (span != null) {
+      if (span.getTraceId() != tinfo.traceId) {
+        return null;
+      }
     }
     StringBuilder sb = new StringBuilder();
     sb.append("op=").append(op);
     sb.append(", ").append(info);
-    if (Trace.startSpan(sb.toString(), Sampler.ALWAYS) == null) {
+    TraceScope scope = Trace.startSpan(sb.toString(), tinfo);
+    if (scope == null) {
       tracerLog.info("Failed to startSpan: " + sb.toString());
     }
+    return scope;
   }
 
-  public static void closeScope() {
-    closeScope(TracerWarnTimeType.normal);
+  public static void closeScope(TraceScope scope) {
+    closeScope(scope, TracerWarnTimeType.normal);
   }
 
-  public static void closeScope(TracerWarnTimeType warnTimeType) {
+  public static void closeScope(TraceScope scope, TracerWarnTimeType warnTimeType) {
     if (!initialised) {
       return;
     }
-    Span span = Trace.currentSpan();
-    if (span == null) {
-      tracerLog.info("Invalid traceScope");
+    if (scope == null) {
       return;
     }
 
-    span.stop();
+    Span span = scope.getSpan();
+    scope.close();
     long duration = span.getAccumulatedMillis();
     long warnTime = getWarnTime(warnTimeType);
     if (duration >= warnTime) {
       StringBuilder sb = new StringBuilder();
-
-      sb.append(span.getDescription()).append(", ");
+      sb.append(span.getDescription()).append(" ");
       sb.append("start=").append(tracerDateFormat.format(span.getStartTimeMillis())).append("\n");
       sb.append("TimelineAnnotations\n");
 
@@ -115,5 +153,21 @@ public class TracerLog {
       sb.append(span.getStopTimeMillis()-lastTime).append(" ms\n");
       tracerLog.info(sb.toString());
     }
+  }
+
+  // Use only the position of startScope is not in same scope with closeScope.
+  public static void startScopeThreadLocal(String op, String info) {
+    TraceScope scope = startScope(op, info);
+    threadLocalScope.set(scope);
+  }
+
+  public static void closeScopeThreadLocal() {
+    TraceScope scope = threadLocalScope.get();
+    closeScope(scope, TracerWarnTimeType.normal);
+  }
+
+  public static void closeScopeThreadLocal(TracerWarnTimeType warnTimeType) {
+    TraceScope scope = threadLocalScope.get();
+    closeScope(scope, warnTimeType);
   }
 }

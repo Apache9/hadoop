@@ -308,7 +308,6 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
     final long slowLogThresholdMs;
     final int slowConnWarningMs;
     final boolean forceDeleteToTrash;
-    final boolean enableTracerlog;
     final boolean enableSharedDeadNodes;
     Configuration conf = null;
 
@@ -471,12 +470,10 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
       forceDeleteToTrash = conf.getBoolean(DFS_FORCE_DELETE_TO_TRASH,
         DFS_FORCE_DELETE_TO_TRASH_DEFAULT);
 
-      enableTracerlog = conf.getBoolean(
-        DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG,
-        DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG_DEFAULT);
-
       enableSharedDeadNodes = conf.getBoolean(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_KEY,
           DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_DEFALT);
+
+      TracerLog.initClient(conf);
       if (enableSharedDeadNodes) {
         this.conf = conf;
       }
@@ -1539,9 +1536,6 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
         src, masked, flag, createParent, replication, blockSize, progress,
         buffersize, dfsClientConf.createChecksum(checksumOpt), favoredNodeStrs);
     beginFileLease(result.getFileId(), result);
-    if (Trace.isTracing() && getConf().enableTracerlog) {
-      Trace.addTimelineAnnotation("HDFS: created file: " + src);
-    }
     return result;
   }
   

@@ -255,8 +255,6 @@ public class DataNode extends Configured
         DFSConfigKeys.DFS_HDFS_BLOCKS_METADATA_ENABLED, 
         DFSConfigKeys.DFS_HDFS_BLOCKS_METADATA_ENABLED_DEFAULT);
 
-    TracerLog.init(conf);
-
     confVersion = "core-" +
         conf.get("hadoop.common.configuration.version", "UNSPECIFIED") +
         ",hdfs-" +
@@ -746,7 +744,8 @@ public class DataNode extends Configured
         dnConf.maxLockedMemory);
 
     storage = new DataStorage();
-    
+
+    TracerLog.initServer(conf);
     // global DN settings
     registerMXBean();
     initDataXceiver(conf);

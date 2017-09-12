@@ -464,9 +464,15 @@ class BlockReceiver implements Closeable {
                 ": " + header);
     }
     if (Trace.isTracing()) {
-      Trace.addTimelineAnnotation("Received a packet, blockID=" + block.getLocalBlock().toString() +
-        ", inAddr=" + inAddr + ", myAddr=" + myAddr + ", offsetInBlock=" + header.getOffsetInBlock() +
-        ", seqno=" + header.getSeqno() + ", dataLen=" + header.getDataLen());
+      StringBuilder builder = new StringBuilder();
+      builder.append("received a packet.");
+      builder.append(" block=").append(block.getLocalBlock());
+      builder.append(" in=").append(inAddr);
+      builder.append(" my=").append(myAddr);
+      builder.append(" offset=").append(header.getOffsetInBlock());
+      builder.append(" seqno=").append(header.getSeqno());
+      builder.append(" len=").append(header.getDataLen());
+      Trace.addTimelineAnnotation(builder.toString());
     }
 
     // Sanity check the header
@@ -521,7 +527,7 @@ class BlockReceiver implements Closeable {
         handleMirrorOutError(e);
       }
       if (Trace.isTracing()) {
-        Trace.addTimelineAnnotation("Write to mirror done, mirrorAddr=" + mirrorAddr);
+        Trace.addTimelineAnnotation("write to mirror done, mirrorAddr=" + mirrorAddr);
       }
     }
     
@@ -536,7 +542,7 @@ class BlockReceiver implements Closeable {
       if (syncBlock) {
         flushOrSync(true);
         if (Trace.isTracing()) {
-          Trace.addTimelineAnnotation("Sync block done.");
+          Trace.addTimelineAnnotation("sync block done.");
         }
       }
     } else {
@@ -622,7 +628,7 @@ class BlockReceiver implements Closeable {
             datanode.metrics.addSlowWriteDataToDiskMs(t2 - t1);
           }
           if (Trace.isTracing()) {
-            Trace.addTimelineAnnotation("Write data to disk done.");
+            Trace.addTimelineAnnotation("write data to disk done.");
           }
 
           // If this is a partial chunk, then verify that this is the only
@@ -685,8 +691,8 @@ class BlockReceiver implements Closeable {
     if (receivePacketEnd - receivePacketStart > SLOW_LOG_THRESHOLD_MS) {
       LOG.info("receivePacket cost:" + (receivePacketEnd - receivePacketStart) + "ms");
     }
-    if (Trace.isTracing() && seqno >=0 ) {
-      TracerLog.closeScope(TracerLog.TracerWarnTimeType.rwPacket);
+    if (Trace.isTracing()) {
+      TracerLog.closeScopeThreadLocal(TracerLog.TracerWarnTimeType.rwPacket);
     }
     return lastPacketInBlock?-1:len;
   }

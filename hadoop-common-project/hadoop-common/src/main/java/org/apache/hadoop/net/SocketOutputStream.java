@@ -33,6 +33,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.htrace.Trace;
 
 /**
  * This implements an output stream that can have a timeout while writing.
@@ -219,6 +220,9 @@ public class SocketOutputStream extends OutputStream
       long start = System.nanoTime();
       waitForWritable();
       long wait = System.nanoTime();
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("waitForWritable done.");
+      }
 
       int nTransfered = (int) fileCh.transferTo(position, count, getChannel());
       

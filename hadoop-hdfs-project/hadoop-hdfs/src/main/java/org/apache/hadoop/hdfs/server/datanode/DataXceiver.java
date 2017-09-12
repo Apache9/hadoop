@@ -285,6 +285,8 @@ class DataXceiver extends Receiver implements Runnable {
     updateCurrentThreadName("Passing file descriptors for block " + blk);
     BlockOpResponseProto.Builder bld = BlockOpResponseProto.newBuilder();
     FileInputStream fis[] = null;
+    TraceScope scope = TracerLog.startScope("RequestShortCircuitFds","block=" +
+      blk.getLocalBlock() + " slotId=" + slotId);
     try {
       if (peer.getDomainSocket() == null) {
         throw new IOException("You cannot pass file descriptors over " +
@@ -298,6 +300,9 @@ class DataXceiver extends Receiver implements Runnable {
       }
       try {
         fis = datanode.requestShortCircuitFdsForRead(blk, token, maxVersion);
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("request done.");
+        }
       } finally {
         if ((fis == null) && (slotId != null)) {
           datanode.shortCircuitRegistry.unregisterSlot(slotId);
@@ -343,12 +348,15 @@ class DataXceiver extends Receiver implements Runnable {
       if (fis != null) {
         IOUtils.cleanup(LOG, fis);
       }
+      TracerLog.closeScope(scope);
     }
   }
 
   @Override
   public void releaseShortCircuitFds(SlotId slotId) throws IOException {
     boolean success = false;
+    TraceScope scope = TracerLog.startScope(
+      "releaseShortCircuitFds","slotId=" + slotId);
     try {
       String error;
       Status status;
@@ -356,6 +364,9 @@ class DataXceiver extends Receiver implements Runnable {
         datanode.shortCircuitRegistry.unregisterSlot(slotId);
         error = null;
         status = Status.SUCCESS;
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("unregisterSlot done.");
+        }
       } catch (UnsupportedOperationException e) {
         error = "unsupported operation";
         status = Status.ERROR_UNSUPPORTED;
@@ -369,6 +380,9 @@ class DataXceiver extends Receiver implements Runnable {
       if (error != null) {
         bld.setError(error);
       }
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("release done.");
+      }
       bld.build().writeDelimitedTo(socketOut);
       success = true;
     } finally {
@@ -379,6 +393,7 @@ class DataXceiver extends Receiver implements Runnable {
             slotId.getShmId().getHi(), slotId.getShmId().getLo(),
             slotId.getSlotIdx(), datanode.getDatanodeUuid(), success));
       }
+      TracerLog.closeScope(scope);
     }
   }
 
@@ -406,6 +421,8 @@ class DataXceiver extends Receiver implements Runnable {
     NewShmInfo shmInfo = null;
     boolean success = false;
     DomainSocket sock = peer.getDomainSocket();
+    TraceScope scope = TracerLog.startScope(
+      "RequestShortCircuitShm","clientName=" + clientName);
     try {
       if (sock == null) {
         sendShmErrorResponse(ERROR_INVALID, "Bad request from " +
@@ -428,6 +445,9 @@ class DataXceiver extends Receiver implements Runnable {
         sendShmErrorResponse(ERROR,
             "Failed to create shared file descriptor: " + e.getMessage());
         return;
+      }
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("request done.");
       }
       sendShmSuccessResponse(sock, shmInfo);
       success = true;
@@ -464,6 +484,7 @@ class DataXceiver extends Receiver implements Runnable {
         }
       }
       IOUtils.cleanup(null, shmInfo);
+      TracerLog.closeScope(scope);
     }
   }
 
@@ -647,10 +668,8 @@ class DataXceiver extends Receiver implements Runnable {
       // Connect to downstream machine, if appropriate
       //
       if (targets.length > 0) {
-        if (TracerLog.isEnabled()) {
-          TracerLog.startScope("Connect Mirror","blockID=" + block.getLocalBlock()
-              + " src=" + remoteAddress + " dest=" + localAddress);
-        }
+        TraceScope scope = TracerLog.startScope("Connect Mirror","block=" +
+          block.getLocalBlock() + " src=" + remoteAddress + " my=" + localAddress);
 
         InetSocketAddress mirrorTarget = null;
         // Connect to backup machine
@@ -687,7 +706,7 @@ class DataXceiver extends Receiver implements Runnable {
               HdfsConstants.SMALL_BUFFER_SIZE));
           mirrorIn = new DataInputStream(unbufMirrorIn);
           if (Trace.isTracing()) {
-            Trace.addTimelineAnnotation("Connected to datanode, mirrorNode =" + mirrorNode);
+            Trace.addTimelineAnnotation("connected to datanode, mirror=" + mirrorNode);
           }
 
           new Sender(mirrorOut).writeBlock(originalBlock, blockToken,
@@ -711,7 +730,7 @@ class DataXceiver extends Receiver implements Runnable {
             }
           }
           if (Trace.isTracing()) {
-            Trace.addTimelineAnnotation("Created block on mirror datanode.");
+            Trace.addTimelineAnnotation("created block on mirror datanode.");
           }
 
         } catch (IOException e) {
@@ -745,7 +764,7 @@ class DataXceiver extends Receiver implements Runnable {
             }
           }
         } finally {
-          TracerLog.closeScope();
+          TracerLog.closeScope(scope);
         }
 
       }
@@ -763,10 +782,6 @@ class DataXceiver extends Receiver implements Runnable {
           .build()
           .writeDelimitedTo(replyOut);
         replyOut.flush();
-
-        if (Trace.isTracing()) {
-          Trace.addTimelineAnnotation("Send connect-ack to source done");
-        }
       }
 
       // receive the block and mirror to the next target
@@ -896,6 +911,14 @@ class DataXceiver extends Receiver implements Runnable {
   public void copyBlock(final ExtendedBlock block,
       final Token<BlockTokenIdentifier> blockToken) throws IOException {
     updateCurrentThreadName("Copying block " + block);
+    TraceScope scope = null;
+    if (TracerLog.isEnabled()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("block=").append(block.getLocalBlock());
+      builder.append(" from=").append(remoteAddress);
+      builder.append(" to=").append(localAddress);
+      scope = TracerLog.startScope("Copy Block", builder.toString());
+    }
     // Read in the header
     if (datanode.isBlockTokenEnabled) {
       try {
@@ -906,6 +929,10 @@ class DataXceiver extends Receiver implements Runnable {
             + " for OP_COPY_BLOCK for block " + block + " : "
             + e.getLocalizedMessage());
         sendResponse(ERROR_ACCESS_TOKEN, "Invalid access token");
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("invalid access token.");
+        }
+        TracerLog.closeScope(scope);
         return;
       }
 
@@ -917,6 +944,10 @@ class DataXceiver extends Receiver implements Runnable {
           "quota is exceeded.";
       LOG.info(msg);
       sendResponse(ERROR, msg);
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("quota is exceeded.");
+      }
+      TracerLog.closeScope(scope);
       return;
     }
 
@@ -944,6 +975,9 @@ class DataXceiver extends Receiver implements Runnable {
       datanode.metrics.incrBlocksRead();
       
       LOG.info("Copied " + block + " to " + peer.getRemoteAddressString());
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("copy done.");
+      }
     } catch (IOException ioe) {
       isOpSuccess = false;
       LOG.info("opCopyBlock " + block + " received exception " + ioe);
@@ -959,6 +993,7 @@ class DataXceiver extends Receiver implements Runnable {
       }
       IOUtils.closeStream(reply);
       IOUtils.closeStream(blockSender);
+      TracerLog.closeScope(scope, TracerLog.TracerWarnTimeType.rwBlock);
     }
 
     //update metrics    
@@ -971,7 +1006,14 @@ class DataXceiver extends Receiver implements Runnable {
       final String delHint,
       final DatanodeInfo proxySource) throws IOException {
     updateCurrentThreadName("Replacing block " + block + " from " + delHint);
-
+    TraceScope scope = null;
+    if (TracerLog.isEnabled()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("block=").append(block.getLocalBlock());
+      builder.append(" from=").append(remoteAddress);
+      builder.append(" to=").append(localAddress);
+      scope = TracerLog.startScope("Replace Block", builder.toString());
+    }
     /* read header */
     block.setNumBytes(dataXceiverServer.estimateBlockSize);
     if (datanode.isBlockTokenEnabled) {
@@ -983,6 +1025,10 @@ class DataXceiver extends Receiver implements Runnable {
             + " for OP_REPLACE_BLOCK for block " + block + " : "
             + e.getLocalizedMessage());
         sendResponse(ERROR_ACCESS_TOKEN, "Invalid access token");
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("Invalid access token.");
+        }
+        TracerLog.closeScope(scope);
         return;
       }
     }
@@ -993,6 +1039,10 @@ class DataXceiver extends Receiver implements Runnable {
           "quota is exceeded.";
       LOG.warn(msg);
       sendResponse(ERROR, msg);
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("quota is exceeded.");
+      }
+      TracerLog.closeScope(scope);
       return;
     }
 
@@ -1033,6 +1083,9 @@ class DataXceiver extends Receiver implements Runnable {
           HdfsConstants.SMALL_BUFFER_SIZE));
       proxyReply = new DataInputStream(new BufferedInputStream(unbufProxyIn,
           HdfsConstants.IO_FILE_BUFFER_SIZE));
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("connected to datanode. addr=" +dnAddr);
+      }
 
       /* send request to the proxy */
       new Sender(proxyOut).copyBlock(block, blockToken);
@@ -1066,11 +1119,17 @@ class DataXceiver extends Receiver implements Runnable {
       // receive a block
       blockReceiver.receiveBlock(null, null, null, null, 
           dataXceiverServer.balanceThrottler, null);
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("receive block done.");
+      }
                     
       // notify name node
       datanode.notifyNamenodeReceivedBlock(
           block, delHint, blockReceiver.getStorageUuid());
 
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation("notify namenode done.");
+      }
       LOG.info("Moved " + block + " from " + peer.getRemoteAddressString()
           + ", delHint=" + delHint);
       
@@ -1100,6 +1159,7 @@ class DataXceiver extends Receiver implements Runnable {
       IOUtils.closeStream(proxyOut);
       IOUtils.closeStream(blockReceiver);
       IOUtils.closeStream(proxyReply);
+      TracerLog.closeScope(scope, TracerLog.TracerWarnTimeType.rwBlock);
     }
 
     //update metrics

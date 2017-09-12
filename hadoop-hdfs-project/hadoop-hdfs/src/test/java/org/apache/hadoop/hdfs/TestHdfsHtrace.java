@@ -18,383 +18,575 @@
 package org.apache.hadoop.hdfs;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.*;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos;
+import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
+import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.net.unix.DomainSocket;
 import org.apache.hadoop.net.unix.TemporarySocketDirectory;
 import org.apache.htrace.*;
 import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LoggingEvent;
 import org.junit.*;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.*;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_KEY;
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
-class BufferAppender extends org.apache.log4j.AppenderSkeleton {
-  private static ArrayList<String> msgs = new ArrayList<String>();
-
-  @Override
-  protected void append(LoggingEvent evt) {
-    String str = (String)evt.getMessage();
-    msgs.add(str);
-  }
-
-  ArrayList<String> getMessage() {
-    return msgs;
-  }
-
-  public boolean requiresLayout() {
-    return true;
-  }
-
-  public void close() {
-    msgs.clear();
-  }
-}
 
 public class TestHdfsHtrace {
   private static TemporarySocketDirectory sockDir;
   private static final long seed = 0xDEADBEEFL;
-  private static final int blockSize = 10*1024;
+  private static final int blockSize = 2*64*1024;
+  private static byte[] smallData = AppendTestUtil.randomBytes(seed, 1024);
+
+  private static Configuration  conf = new HdfsConfiguration();
+  private static MiniDFSCluster cluster;
+  private static FileSystem  fs;
 
   @BeforeClass
-  public static void setUp() {
-    sockDir = new TemporarySocketDirectory();
-    DomainSocket.disableBindPathValidation();
+  public static void setUp() throws Exception{
+    conf.setLong(DFS_TRACER_WARN_TIME_NORMAL_KEY, 0);
+    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY, 0);
+    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWBLOCK_KEY, 0);
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
+    final String[] INITIAL_RACKS = {"/RACK0", "/RACK1", "/RACK2"};
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).racks(INITIAL_RACKS).build();
+    cluster.waitActive();
+    fs = cluster.getFileSystem();
   }
 
   @AfterClass
   public static void tearDown() throws IOException {
-    sockDir.close();
+    if (fs != null) {
+      fs.close();
+      fs = null;
+    }
+    if (cluster != null) {
+      cluster.shutdown();
+      cluster = null;
+    }
   }
 
-  @Before
-  public void before() {
-    Assume.assumeThat(DomainSocket.getLoadingFailureReason(), equalTo(null));
+  class BufferAppender extends org.apache.log4j.AppenderSkeleton {
+    private ArrayList<String> msgs = new ArrayList<String>();
+
+    @Override
+    protected void append(LoggingEvent evt) {
+      String str = (String)evt.getMessage();
+      msgs.add(str);
+    }
+
+    ArrayList<String> getMessage(int count) {
+      while (msgs.size() < count) {
+        Thread.yield();
+      }
+      return msgs;
+    }
+
+    public boolean requiresLayout() {
+      return true;
+    }
+
+    public void close() {
+      msgs.clear();
+    }
+  }
+
+  private static void mwait(long mills) {
+    try {
+      Thread.sleep(mills);
+    } catch (InterruptedException ie) {
+      // Ignore
+    }
   }
 
   // creates a file but does not close it
-  static FSDataOutputStream createFile(FileSystem fileSys, Path name, int repl, int bsize)
+  private static FSDataOutputStream createFile(FileSystem fileSys, Path name, int repl, int bsize)
     throws IOException {
-    FSDataOutputStream stm = fileSys.create(name, true,
-      fileSys.getConf().getInt("io.file.buffer.size", 4096),
-      (short)repl, bsize);
+    FSDataOutputStream stm = fileSys.create(name, true,4096, (short)repl, bsize);
     return stm;
   }
 
-  @Test
-  public void testWriteFlush() throws Exception {
-    Configuration conf = new Configuration();
-    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
-      .format(true).build();
-    cluster.waitActive();
-    FileSystem fs = cluster.getFileSystem();
-
-    try {
-      byte[] bigData = AppendTestUtil.randomBytes(seed, 2*blockSize);
-      byte[] smallData = AppendTestUtil.randomBytes(seed, blockSize/10);
-      Path file1 = fs.makeQualified(new Path("fileread.dat"));
-
-      TraceScope createScope = Trace.startSpan("HdfsHtraceLocal.WriteFlush", Sampler.ALWAYS);
-      FSDataOutputStream stm = createFile(fs, file1, 1, blockSize);
-      stm.write(bigData);
-      stm.hflush();
-      stm.write(smallData);
-      stm.hflush();
-      stm.write(smallData);
-      stm.hflush();
-      stm.close();
-      createScope.close();
-      String str = createScope.getSpan().toJson();
-      Assert.assertTrue(!str.isEmpty());
-
-      List<TimelineAnnotation> listAnnotation = createScope.getSpan().getTimelineAnnotations();
-      Assert.assertTrue(listAnnotation.get(0).getMessage().contains("created file"));
-
-    } finally {
-      fs.close();
-      cluster.shutdown();
-    }
-  }
-
-  @Test
-  public void testReadFromLocal() throws Exception {
-    Configuration conf = new Configuration();
-    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_KEY, true);
-    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_SKIP_CHECKSUM_KEY,
-      true);
-    conf.set(DFSConfigKeys.DFS_CLIENT_CONTEXT, UUID.randomUUID().toString());
-    conf.set(DFSConfigKeys.DFS_DOMAIN_SOCKET_PATH_KEY, new File(sockDir.getDir(),
-        "TestShortCircuitLocalRead._PORT.sock").getAbsolutePath());
-    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
-
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
-      .format(true).build();
-    cluster.waitActive();
-    FileSystem fs = cluster.getFileSystem();
-    try {
-      byte[] fileData = AppendTestUtil.randomBytes(seed, 3*blockSize+100);
-      Path file1 = fs.makeQualified(new Path("filelocal.dat"));
-
-      FSDataOutputStream stm = createFile(fs, file1, 1, blockSize);
-      stm.write(fileData);
-      stm.close();
-
-      TraceScope scope = Trace.startSpan("HdfsHtraceLocal.WriteRead.position", Sampler.ALWAYS);
-      FSDataInputStream ism = fs.open(file1);
-      byte[] readBuf = new byte[blockSize];
-      ism.read(readBuf);
-      stm.close();
-      scope.close();
-
-      String str = scope.getSpan().toJson();
-      Assert.assertTrue(!str.isEmpty());
-      List<TimelineAnnotation> listAnnotation = scope.getSpan().getTimelineAnnotations();
-      Assert.assertTrue(listAnnotation.get(0).getMessage().contains("HDFS: created Reader"));
-      Assert.assertEquals(listAnnotation.get(1).getMessage(),
-        "HDFS: read done, offset=0 length=" + blockSize + " read length=" + blockSize);
-
-      TraceScope scopePosition = Trace.startSpan("HdfsHtraceLocal.WriteRead.position", Sampler.ALWAYS);
-      //ism.readFully(0, actual);
-      ism.read(0, readBuf, 0, blockSize);
-      stm.close();
-      scopePosition.close();
-
-      str = scopePosition.getSpan().toJson();
-      Assert.assertTrue(!str.isEmpty());
-      listAnnotation = scopePosition.getSpan().getTimelineAnnotations();
-      Assert.assertTrue(listAnnotation.get(0).getMessage().contains("HDFS: created Reader"));
-      Assert.assertEquals(listAnnotation.get(1).getMessage(),
-        "HDFS: read done, offset=0 length=" + blockSize + " read length=" + blockSize);
-
-    } finally {
-      fs.close();
-      cluster.shutdown();
-    }
-  }
-
-  @Test
-  public void testDatanodeTraceWriteRead() throws Exception {
-    BufferAppender bufferAppender;
-    bufferAppender = new BufferAppender();
-
-    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
-    Configuration conf = new Configuration();
-    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_KEY, 0);
-    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY, 0);
-
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(3)
-      .format(true).build();
-    cluster.waitActive();
-    FileSystem fs = cluster.getFileSystem();
-
-    try {
-      int bSize = 2*64*1024;
-      byte[] data = AppendTestUtil.randomBytes(seed, bSize);
-      Path file1 = fs.makeQualified(new Path("tracer.dat"));
-      FSDataOutputStream os = createFile(fs, file1, 3, bSize);
-      os.write(data);
-      os.hflush();
-      os.close();
-
-      ArrayList<String> msgs = bufferAppender.getMessage();
-      int length = msgs.size();
-      Assert.assertTrue(length > 0);
-      for (int i=0; i < length; i++) {
-        Assert.assertTrue(msgs.get(i).contains("blockID="));
-        Assert.assertTrue(msgs.get(i).contains("TimelineAnnotations"));
-      }
-      String str = "offsetInBlock=0, seqno=0, dataLen=";
-      Assert.assertTrue(msgs.get(2).contains(str));
-      Assert.assertTrue(msgs.get(2).contains("Write data to disk done"));
-      msgs.clear();
-
-      FSDataInputStream is = fs.open(file1);
-      int rSize = 1024;
-      byte[] readBuf = new byte[rSize];
-      //ism.readFully(0, actual);
-      for (int i=0; i < 1; i++) {
-        is.read(readBuf);
-        try {
-          Thread.sleep(100);
-        } catch (InterruptedException ie) {
-          // Ignore
+  private static String getValue(String str, String key) {
+    String a[] = str.split(" ");
+    for (String s : a) {
+      if (s.length() >= key.length() &&
+        s.substring(0,key.length()).equals(key)) {
+        String b[] = s.split("=");
+        if (b.length == 2) {
+          return b[1].trim();
         }
       }
-      is.close();
-
-      msgs = bufferAppender.getMessage();
-      length = msgs.size();
-      Assert.assertTrue(length > 0);
-      for (int i=0; i < length; i++) {
-        Assert.assertTrue(msgs.get(i).contains("op=Send Packet"));
-        Assert.assertTrue(msgs.get(i).contains("blockID="));
-        Assert.assertTrue(msgs.get(i).contains("TimelineAnnotations"));
-      }
-      str = "offset=0 dataLen=";
-      Assert.assertTrue(msgs.get(0).contains(str));
-
-    } finally {
-      fs.close();
-      cluster.shutdown();
-      Logger.getLogger(TracerLog.class.getName()).removeAppender(bufferAppender);
     }
+    return null;
+  }
+
+  @Test
+  public void testClientCreate() throws Exception {
+    TraceScope readScope = Trace.startSpan("/tracer.testClientCreate", Sampler.ALWAYS);
+    String fileName = "testClientCreate.dat";
+    Path file = fs.makeQualified(new Path(fileName));
+    FSDataOutputStream fos = createFile(fs, file, 1, blockSize);
+
+    List<TimelineAnnotation> listAnnotation = readScope.getSpan().getTimelineAnnotations();
+    Assert.assertTrue(listAnnotation.size() > 0);
+    Assert.assertTrue(listAnnotation.get(0).getMessage().contains("HDFS: create file done."));
+    Assert.assertTrue(listAnnotation.get(0).getMessage().contains(fileName));
+    fos.close();
+    fs.delete(file, true);
+  }
+
+  @Test
+  public void testClientClose() throws Exception {
+    String fileName = "testClientCreate.dat";
+    Path file = fs.makeQualified(new Path(fileName));
+    FSDataOutputStream fos = createFile(fs, file, 1, blockSize);
+    fos.write(smallData);
+
+    TraceScope readScope = Trace.startSpan("/tracer.testClientClose", Sampler.ALWAYS);
+    fos.close();
+
+    List<TimelineAnnotation> listAnnotation = readScope.getSpan().getTimelineAnnotations();
+    Assert.assertTrue(listAnnotation.size() > 0);
+    Assert.assertTrue(listAnnotation.get(0).getMessage().equals("HDFS: flushBuffer done."));
+    Assert.assertTrue(listAnnotation.get(1).getMessage().equals("HDFS: waitAndQueueCurrentPacket done."));
+    Assert.assertTrue(listAnnotation.get(2).getMessage().equals("HDFS: flushInternal done."));
+    Assert.assertTrue(listAnnotation.get(3).getMessage().contains("HDFS: complete file done"));
+    Assert.assertTrue(listAnnotation.get(3).getMessage().contains(fileName));
+    fs.delete(file, true);
+  }
+
+  @Test
+  public void testClientWrite() throws Exception {
+    String fileName = "testClientWrite.dat";
+    Path file = fs.makeQualified(new Path(fileName));
+    FSDataOutputStream fos = createFile(fs, file, 1, blockSize);
+    int wSize = blockSize/2;
+    byte[] wBuf = new byte[wSize];
+
+    BufferAppender bufferAppender = new BufferAppender();
+    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+    TraceScope readScope = Trace.startSpan("tracer.ClientWrite", Sampler.ALWAYS);
+
+    fos.write(wBuf);
+    fos.write(wBuf);
+
+    List<TimelineAnnotation> listAnnotation = readScope.getSpan().getTimelineAnnotations();
+    Assert.assertTrue(listAnnotation.size() > 0);
+    String str =
+      "HDFS: packet is full, put it to queue. seqno=0 offset=0 len=65024 packetSize=65532 chunksPerPacket=127";
+    Assert.assertTrue(listAnnotation.get(0).getMessage().equals(str));
+    Assert.assertTrue(listAnnotation.get(1).getMessage().equals("HDFS: put packet to queue done."));
+    Assert.assertTrue(listAnnotation.get(8).getMessage().equals("HDFS: block boundary, sent an empty packet."));
+    fos.close();
+    fs.delete(file, true);
+  }
+
+  @Test
+  public void testClientWriteFlush() throws Exception {
+    String fileName = "/testClientWriteFlush.dat";
+    Path file = fs.makeQualified(new Path(fileName));
+    FSDataOutputStream fos = createFile(fs, file, 3, blockSize);
+    fos.write(smallData);
+
+    TraceScope flushScope = Trace.startSpan("HdfsHtraceLocal.WriteFlush", Sampler.ALWAYS);
+    fos.hflush();
+    flushScope.close();
+    List<TimelineAnnotation> listAnnotation = flushScope.getSpan().getTimelineAnnotations();
+    Assert.assertTrue(listAnnotation.get(0).getMessage().equals("HDFS: waiting for seqno=0"));
+    Assert.assertTrue(listAnnotation.get(1).getMessage().contains("HDFS: target datanodes"));
+    Assert.assertTrue(listAnnotation.get(2).getMessage().contains("HDFS: created block on datanode."));
+    Assert.assertTrue(listAnnotation.get(3).getMessage().
+      contains("send a packet done. seqno=0 offset=0 len=1024 block="));
+    Assert.assertTrue(listAnnotation.get(4).getMessage().
+      contains("HDFS: received an ack. seqno=0 offset=0 len=1024 block="));
+    Assert.assertTrue(listAnnotation.get(5).getMessage().contains("HDFS: fsync done."));
+    Assert.assertTrue(listAnnotation.get(5).getMessage().contains(fileName));
+    Assert.assertTrue(listAnnotation.get(6).getMessage().
+      contains("HDFS: flush done. lastFlushOffset=1024 lastAckedSeqno=0 src="));
+    Assert.assertTrue(listAnnotation.get(6).getMessage().contains(fileName));
+
+    fos.close();
+    fs.delete(file, true);
+  }
+
+  @Test
+  public void testClientRead() throws Exception {
+    Path file = fs.makeQualified(new Path("/ClientRead.dat"));
+    DFSTestUtil.createFile(fs, file, blockSize, (short)1, seed);
+
+    FSDataInputStream is = fs.open(file);
+    int rSize = 1024;
+    byte[] readBuf = new byte[rSize];
+
+    TraceScope readScope = Trace.startSpan("tracer.testClientRead", Sampler.ALWAYS);
+    int len = is.read(readBuf);
+
+    List<TimelineAnnotation> listAnnotation = readScope.getSpan().getTimelineAnnotations();
+    Assert.assertTrue(listAnnotation.size() > 0);
+    Assert.assertTrue(listAnnotation.get(0).getMessage().
+      contains("HDFS: chosen datanode "));
+    Assert.assertTrue(listAnnotation.get(1).getMessage().
+      contains("HDFS: created new peer"));
+    Assert.assertTrue(listAnnotation.get(2).getMessage().
+      contains("HDFS: created reader in blockSeekTo()."));
+    Assert.assertTrue(listAnnotation.get(3).getMessage().
+      equals("HDFS: received a packet. offset=0 len=65536 seqno=0"));
+    String str = "HDFS: read done. offset=0 len=1024 nread="+len;
+    Assert.assertTrue(listAnnotation.get(4).getMessage().equals(str));
+    fs.delete(file, true);
+    is.close();
+  }
+
+  @Test
+  public void testDatanodeWrite() throws Exception {
+
+    Path file = fs.makeQualified(new Path("/testDatanodeWrite.dat"));
+    FSDataOutputStream fos = createFile(fs, file, 1, blockSize);
+    int wSize = blockSize/2;
+    byte[] wBuf = new byte[wSize];
+
+    BufferAppender bufferAppender = new BufferAppender();
+    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+    fos.write(wBuf);
+
+    ArrayList<String> msgs = bufferAppender.getMessage(1);
+    Assert.assertTrue(msgs.get(0).contains("Receive Packet"));
+    String str = "offset=0 seqno=0 len=65024";
+    Assert.assertTrue(msgs.get(0).contains(str));
+    Assert.assertTrue(msgs.get(0).contains("write data to disk done"));
+    fs.delete(file, true);
+  }
+
+  @Test
+  public void testDatanodeRead() throws Exception {
+    byte[] buf = AppendTestUtil.randomBytes(seed, blockSize);
+    Path file = fs.makeQualified(new Path("/testDatanodeRead.dat"));
+    DFSTestUtil.createFile(fs, file,  blockSize, (short)1, seed);
+
+    FSDataInputStream is = fs.open(file);
+    int rSize = 1024;
+    byte[] readBuf = new byte[rSize];
+
+    BufferAppender bufferAppender = new BufferAppender();
+    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+    int len = is.read(readBuf);
+    is.close();
+
+    ArrayList<String> msgs = bufferAppender.getMessage(1);
+    Assert.assertTrue(msgs.size() > 0);
+    String str = "offset=0 len=65536 seqno=0";
+    Assert.assertTrue(msgs.get(0).contains("Send Packet"));
+    Assert.assertTrue(msgs.get(0).contains(str));
+    Assert.assertTrue(msgs.get(0).contains("write header done"));
+    Assert.assertTrue(msgs.get(0).contains("waitForWritable done"));
+    Assert.assertTrue(msgs.get(0).contains("transferToFully done"));
+    fs.delete(file, true);
+  }
+
+  /* Copy a block from sourceProxy to destination. If the block becomes
+  * over-replicated, preferably remove it from source.
+  *
+  * Return true if a block is successfully copied; otherwise false.
+  */
+  private boolean replaceBlock( ExtendedBlock block, DatanodeInfo source,
+                                DatanodeInfo sourceProxy, DatanodeInfo destination) throws IOException {
+    Socket sock = new Socket();
+    sock.connect(NetUtils.createSocketAddr(
+      destination.getXferAddr()), HdfsServerConstants.READ_TIMEOUT);
+    sock.setKeepAlive(true);
+    // sendRequest
+    DataOutputStream out = new DataOutputStream(sock.getOutputStream());
+    new Sender(out).replaceBlock(block, BlockTokenSecretManager.DUMMY_TOKEN,
+      source.getDatanodeUuid(), sourceProxy);
+    out.flush();
+    // receiveResponse
+    DataInputStream reply = new DataInputStream(sock.getInputStream());
+
+    DataTransferProtos.BlockOpResponseProto proto =
+      DataTransferProtos.BlockOpResponseProto.parseDelimitedFrom(reply);
+    return proto.getStatus() == DataTransferProtos.Status.SUCCESS;
+  }
+
+  @Test
+  public void testDatanodeReplaceBlock() throws Exception {
+    String strFile = "/testDatanodeReplaceBlock.dat";
+    Path file = fs.makeQualified(new Path(strFile));
+
+    int bSize = 1024;
+    // create a file with one block
+    DFSTestUtil.createFile(fs, file,  bSize, (short)1, seed);
+    DFSTestUtil.waitReplication(fs, file, (short)1);
+
+    InetSocketAddress addr = new InetSocketAddress("localhost", cluster.getNameNodePort());
+    DFSClient client = new DFSClient(addr, conf);
+    List<LocatedBlock> locatedBlocks = client.getNamenode().
+      getBlockLocations(strFile, 0, bSize).getLocatedBlocks();
+
+    LocatedBlock block = locatedBlocks.get(0);
+    DatanodeInfo[]  oldNodes = block.getLocations();
+    assertEquals(oldNodes.length, 1);
+    ExtendedBlock b = block.getBlock();
+
+    DatanodeInfo[] datanodes = client.datanodeReport(HdfsConstants.DatanodeReportType.ALL);
+    // find out the new node
+    DatanodeInfo newNode=null;
+    for(DatanodeInfo node : datanodes) {
+      if(!node.equals(oldNodes[0])) {
+        newNode = node;
+        break;
+      }
+    }
+    BufferAppender bufferAppender = new BufferAppender();
+    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+
+    replaceBlock(b, oldNodes[0], oldNodes[0], newNode);
+
+    ArrayList<String> msgs = bufferAppender.getMessage(6);
+    Assert.assertTrue(msgs.size() > 0);
+
+    String str = b.getLocalBlock().toString();
+    Assert.assertTrue(msgs.get(4).contains("Copy Block"));
+    Assert.assertTrue(msgs.get(4).contains(b.getLocalBlock().toString()));
+    Assert.assertTrue(msgs.get(5).contains("Replace Block"));
+    Assert.assertTrue(msgs.get(5).contains(b.getLocalBlock().toString()));
+    fs.delete(file, true);
+  }
+
+  @Test
+  public void testClientDatanodeRead() throws Exception {
+    int bSize = 10*64*1024;
+    byte[] buf = AppendTestUtil.randomBytes(seed, bSize);
+    Path file = fs.makeQualified(new Path("/testClientDatanodeRead.dat"));
+    FSDataOutputStream stm = createFile(fs, file, 1, bSize);
+    stm.write(buf);
+    stm.write(buf);
+    stm.close();
+
+    FSDataInputStream is = fs.open(file);
+    int rSize = 1024;
+    byte[] readBuf = new byte[rSize];
+    int len = 0;
+
+    BufferAppender bufferAppender;
+    bufferAppender = new BufferAppender();
+    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+    //TracerLog.init(conf);
+    TraceScope readScope = Trace.startSpan("tracer.ClientDatanodeRead", Sampler.ALWAYS);
+
+    int pos = 2*64*1024;
+    //len = is.read(readBuf);
+    is.seek(pos);
+    len = is.read(readBuf);
+
+    is.close();
+    readScope.close();
+    List<TimelineAnnotation> listAnnotation = readScope.getSpan().getTimelineAnnotations();
+    String clientBlockID = getValue(listAnnotation.get(2).getMessage(), "block");
+    String ClientOffsetInBlock = getValue(listAnnotation.get(3).getMessage(), "offset");
+
+    ArrayList<String> msgs = bufferAppender.getMessage(1);
+    String dnBlockID = getValue(msgs.get(0), "block");
+    String dnOffsetInBlock = getValue(msgs.get(0), "offset");
+
+    Assert.assertEquals(clientBlockID, dnBlockID);
+    Assert.assertEquals(ClientOffsetInBlock, dnOffsetInBlock);
+    fs.delete(file, true);
+  }
+
+  @Test
+  public void testClientDatanodeWriteFlush() throws Exception {
+    BufferAppender bufferAppender = new BufferAppender();
+    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+
+    //byte[] data = AppendTestUtil.randomBytes(seed, blockSize);
+    Path file = fs.makeQualified(new Path("/testClientDatanodeWriteFlush.dat"));
+    FSDataOutputStream fos = createFile(fs, file, 3, blockSize);
+
+    TraceScope writeFlushScope = Trace.startSpan("tracer.testClientDatanodeWriteFlush", Sampler.ALWAYS);
+    fos.write(smallData);
+    fos.hflush();
+
+    writeFlushScope.close();
+    List<TimelineAnnotation> listAnnotation = writeFlushScope.getSpan().getTimelineAnnotations();
+
+    String clientBlockId = getValue(listAnnotation.get(2).getMessage(), "block");
+    String clientDN1 = "/" + getValue(listAnnotation.get(2).getMessage(), "datanode");
+
+    ArrayList<String> msgs = bufferAppender.getMessage(3);
+    String ndtBlockIdOnMirror = getValue(msgs.get(0), "block");
+    String ndtBlockIdOnReceive = getValue(msgs.get(4), "block");
+    String dn1Mirror = getValue(msgs.get(1), "my");
+    String dn1Receive = getValue(msgs.get(2), "my");
+    Assert.assertEquals(ndtBlockIdOnMirror, ndtBlockIdOnReceive);
+    Assert.assertEquals(dn1Mirror, dn1Receive);
+
+    Assert.assertEquals(clientBlockId, ndtBlockIdOnReceive);
+    Assert.assertEquals(clientDN1, dn1Receive);
+
+    fos.close();
+    fs.delete(file, true);
+  }
+
+  @Test
+  public void testPressureFlushSync() throws Exception {
+    BufferAppender bufferAppender = new BufferAppender();
+    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+
+    int dataSize = blockSize/2;
+    byte[] data = AppendTestUtil.randomBytes(seed, dataSize);
+    Path file = fs.makeQualified(new Path("/testPressureFlushSync.dat"));
+    FSDataOutputStream fos = createFile(fs, file, 3, blockSize);
+    //int cnt = 1000;
+    int cnt = 1;
+    while(cnt-- > 0) {
+      TracerLog.startScope("PressureFlushSyn", "NO:"+cnt);
+      fos.write(data);
+      fos.hflush();
+      TracerLog.closeScopeThreadLocal();
+    }
+    ArrayList<String> msgs = bufferAppender.getMessage(1);
+    Assert.assertTrue(msgs.size() > 0);
+    fos.close();
+    fs.delete(file, true);
   }
 
   @Test
   public void testDatanodeTraceWarnTime() throws Exception {
-    BufferAppender bufferAppender;
-    bufferAppender = new BufferAppender();
-    bufferAppender.close();
-    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
-    Configuration conf = new Configuration();
-    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_KEY, 500);
+    conf.setLong(DFS_TRACER_WARN_TIME_NORMAL_KEY, 500);
     conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY, 1000);
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
-      .format(true).build();
-    cluster.waitActive();
-    FileSystem fs = cluster.getFileSystem();
+    TracerLog.initServer(conf);
 
-    try {
-      byte[] data = AppendTestUtil.randomBytes(seed, blockSize);
-      Path file1 = fs.makeQualified(new Path("tracer_no.dat"));
-
-      FSDataOutputStream os = createFile(fs, file1, 1, blockSize);
-      os.write(data);
-      os.hflush();
-      os.close();
-
-      ArrayList<String> msgs = bufferAppender.getMessage();
-      int length = msgs.size();
-      Assert.assertEquals(0, length);
-
-    } finally {
-      fs.close();
-      cluster.shutdown();
-      Logger.getLogger(TracerLog.class.getName()).removeAppender(bufferAppender);
-    }
-  }
-
-  @Test
-  public void testClientAndDatanode() throws Exception {
-    BufferAppender bufferAppender;
-    bufferAppender = new BufferAppender();
+    BufferAppender bufferAppender = new BufferAppender();
     Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
-    Configuration conf = new Configuration();
-    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_KEY, 0);
+
+    byte[] data = AppendTestUtil.randomBytes(seed, blockSize);
+    Path file = fs.makeQualified(new Path("/testDatanodeTraceWarnTime.dat"));
+
+    FSDataOutputStream os = createFile(fs, file, 1, blockSize);
+    os.write(data);
+    os.hflush();
+    os.close();
+
+    ArrayList<String> msgs = bufferAppender.getMessage(0);
+    int length = msgs.size();
+    Assert.assertEquals(0, length);
+
+    conf.setLong(DFS_TRACER_WARN_TIME_NORMAL_KEY, 0);
     conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY, 0);
-    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(5)
-      .format(true).build();
-    cluster.waitActive();
-    FileSystem fs = cluster.getFileSystem();
-    int sizePackage = 64*1024;
-    int sizeBlock = 5*sizePackage;
-
-    try {
-      TraceScope createScope = Trace.startSpan("clien_namenode.tracer", Sampler.ALWAYS);
-      byte[] data = AppendTestUtil.randomBytes(seed, sizePackage/8);
-      Path file1 = fs.makeQualified(new Path("tracer.dat"));
-      FSDataOutputStream os = createFile(fs, file1, 3 , sizeBlock);
-      os.write(data);
-      os.hflush();
-      os.close();
-      FSDataInputStream is = fs.open(file1);
-      byte[] readBuf = new byte[sizePackage];
-      is.read(readBuf);
-      is.close();
-
-      ArrayList<String> msgs = bufferAppender.getMessage();
-      int length = msgs.size();
-      Assert.assertTrue(length > 0);
-      for (int i=0; i < length; i++) {
-        Assert.assertTrue(msgs.get(i).contains("blockID="));
-        Assert.assertTrue(msgs.get(i).contains("TimelineAnnotations"));
-      }
-      createScope.close();
-      String strClient = createScope.getSpan().toJson();
-      Assert.assertTrue(!strClient.isEmpty());
-
-    } finally {
-      fs.close();
-      cluster.shutdown();
-      Logger.getLogger(TracerLog.class.getName()).removeAppender(bufferAppender);
-    }
+    TracerLog.initServer(conf);
+    fs.delete(file, true);
   }
 
-  @Test
-  public void testFlushSync() throws Exception {
-    BufferAppender bufferAppender;
-    bufferAppender = new BufferAppender();
-    Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
-    Configuration conf = new Configuration();
-    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_NORMAL_KEY, 0);
-    conf.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY, 0);
-    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
-      .format(true).build();
-    cluster.waitActive();
-    FileSystem fs = cluster.getFileSystem();
-
-    try {
-      int dataSize = 64*1024;
-      byte[] count = AppendTestUtil.randomBytes(seed, dataSize);
-      Path file1 = fs.makeQualified(new Path("testFlushSync.dat"));
-      FSDataOutputStream fos = createFile(fs, file1, 1, blockSize);
-      int cnt = 10;
-      while(cnt-- > 0) {
-        TracerLog.startScope("testFlushSync", "NO:"+cnt);
-        fos.write(count);
-        fos.write(count);
-        fos.write(count);
-        fos.write(count);
-        fos.write(count);
-        fos.hflush();
-        TracerLog.closeScope();
-
-      }
-      ArrayList<String> msgs = bufferAppender.getMessage();
-      Assert.assertTrue(msgs.size() > 0);
-      fos.close();
-
-    } finally {
-      fs.close();
-      cluster.shutdown();
-    }
-  }
 
   @Test
-  public void testDisableClientTracer() throws Exception {
+  public void testIsClientTracing() throws Exception {
     Configuration conf = new Configuration();
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, false);
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
-      .format(true).build();
-    cluster.waitActive();
-    FileSystem fs = cluster.getFileSystem();
-    try {
-      int dataSize = 64*1024;
-      byte[] data = AppendTestUtil.randomBytes(seed, dataSize);
+    TracerLog.initClient(conf);
 
-      Path file1 = fs.makeQualified(new Path("testFlushSync.dat"));
-      FSDataOutputStream fos = createFile(fs, file1, 1, blockSize);
-      TraceScope traceScope = Trace.startSpan("disableTracer.dat", Sampler.ALWAYS);
-      fos.write(data);
-      fos.hflush();
+    TraceScope maxScope = Trace.startSpan("tracer.testIsClientTracing", Sampler.ALWAYS);
+    boolean ret = TracerLog.isClientTracing();
+    Assert.assertFalse(ret);
+
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
+    TracerLog.initClient(conf);
+    ret = TracerLog.isClientTracing();
+    Assert.assertTrue(ret);
+
+    for(int i=0; i < TracerLog.MAX_ANNOTATION_COUNT; i++) {
+      ret = TracerLog.isClientTracing();
+      Assert.assertTrue(ret);
+      if (ret) {
+        Trace.addTimelineAnnotation("step " + i);
+      }
+    }
+    ret = TracerLog.isClientTracing();
+    Assert.assertFalse(ret);
+
+    maxScope.close();
+
+    List<TimelineAnnotation> listAnnotation = maxScope.getSpan().getTimelineAnnotations();
+    Assert.assertTrue(listAnnotation.get(TracerLog.MAX_ANNOTATION_COUNT).
+      getMessage().contains("HDFS: " + TracerLog.TAG_MORE_LOGS));
+  }
+
+  @Test
+  public void testClientReadFromLocal() throws Exception {
+    sockDir = new TemporarySocketDirectory();
+    DomainSocket.disableBindPathValidation();
+    Assume.assumeThat(DomainSocket.getLoadingFailureReason(), equalTo(null));
+
+    Configuration confLocal = new Configuration();
+    confLocal.setBoolean(DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_KEY, true);
+    confLocal.setBoolean(DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_SKIP_CHECKSUM_KEY, true);
+    confLocal.set(DFSConfigKeys.DFS_CLIENT_CONTEXT, UUID.randomUUID().toString());
+    confLocal.set(DFSConfigKeys.DFS_DOMAIN_SOCKET_PATH_KEY, new File(sockDir.getDir(),
+      "TestShortCircuitLocalRead._PORT.sock").getAbsolutePath());
+    confLocal.setLong(DFS_TRACER_WARN_TIME_NORMAL_KEY, 0);
+    confLocal.setLong(DFSConfigKeys.DFS_TRACER_WARN_TIME_RWPACKET_KEY, 0);
+    confLocal.setBoolean(DFSConfigKeys.DFS_CLIENT_ENABLE_TRACER_LOG, true);
+    MiniDFSCluster clusterLocal = new MiniDFSCluster.Builder(confLocal).numDataNodes(1)
+      .format(true).build();
+    clusterLocal.waitActive();
+    FileSystem fsLocal = clusterLocal.getFileSystem();
+    try {
+      byte[] fileData = AppendTestUtil.randomBytes(seed, blockSize+100);
+      Path file = fsLocal.makeQualified(new Path("/testClientReadFromLocal.dat"));
+      FSDataOutputStream fos = createFile(fsLocal, file, 1, blockSize);
+      fos.write(fileData);
       fos.close();
-      List<TimelineAnnotation> listAnnotation = traceScope.getSpan().getTimelineAnnotations();
-      Assert.assertTrue(listAnnotation.isEmpty());
+      FSDataInputStream ism = fsLocal.open(file);
+      int rSize = 64*1024;
+      byte[] readBuf = new byte[rSize];
+
+      BufferAppender bufferAppender = new BufferAppender();
+      Logger.getLogger(TracerLog.class.getName()).addAppender(bufferAppender);
+      TraceScope scope = Trace.startSpan("testClientReadFromLocal", Sampler.ALWAYS);
+
+      ism.read(readBuf);
+      scope.close();
+
+      List<TimelineAnnotation> listAnnotation = scope.getSpan().getTimelineAnnotations();
+      Assert.assertTrue(listAnnotation.get(0).getMessage().contains("HDFS: chosen datanode"));
+      Assert.assertTrue(listAnnotation.get(1).getMessage().equals("HDFS: created new block reader local"));
+      Assert.assertTrue(listAnnotation.get(2).getMessage().
+        contains("HDFS: created reader in blockSeekTo()."));
+      String str = "HDFS: read done. offset=0 len=" + rSize + " nread=" + rSize;
+      Assert.assertTrue(listAnnotation.get(3).getMessage().equals(str));
+
+      ArrayList<String> msgs = bufferAppender.getMessage(2);
+      Assert.assertTrue(msgs.size() > 0);
+      Assert.assertTrue(msgs.get(0).contains("RequestShortCircuitShm"));
+      Assert.assertTrue(msgs.get(0).contains("request done"));
+
+      Assert.assertTrue(msgs.get(1).contains("RequestShortCircuitFds"));
+      Assert.assertTrue(msgs.get(1).contains("request done"));
+
+      String dnBlockID = getValue(msgs.get(1), "block");
+      String clientBlockID = getValue(listAnnotation.get(2).getMessage(), "block");
+      Assert.assertEquals(dnBlockID, clientBlockID);
+
+      ism.close();
     } finally {
-      fs.close();
-      cluster.shutdown();
+      fsLocal.close();
+      clusterLocal.shutdown();
+      sockDir.close();
     }
   }
 

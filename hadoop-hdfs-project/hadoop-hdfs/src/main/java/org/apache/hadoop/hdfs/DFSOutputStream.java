@@ -536,9 +536,6 @@ public class DFSOutputStream extends FSOutputSummer
             }
             setPipeline(nextBlockOutputStream());
             initDataStreaming();
-            if (atomicScope.isTracing()) {
-              atomicScope.traceMsg("HDFS: Allocating new block done.");
-            }
           } else if (stage == BlockConstructionStage.PIPELINE_SETUP_APPEND) {
             if(DFSClient.LOG.isDebugEnabled()) {
               DFSClient.LOG.debug("Append to block " + block);
@@ -607,7 +604,13 @@ public class DFSOutputStream extends FSOutputSummer
           lastPacket = Time.now();
 
           if (atomicScope.isTracing()) {
-            atomicScope.traceMsg("HDFS: sent packet: " + one);
+            StringBuilder builder = new StringBuilder();
+            builder.append("HDFS: send a packet done.");
+            builder.append(" seqno=").append(one.seqno);
+            builder.append(" offset=").append(one.offsetInBlock);
+            builder.append(" len=").append(one.dataPos - one.dataStart);
+            builder.append(" block=").append(block.getLocalBlock());
+            atomicScope.traceMsg(builder.toString());
           }
 
           // update bytesSent
@@ -863,7 +866,13 @@ public class DFSOutputStream extends FSOutputSummer
             isLastPacketInBlock = one.lastPacketInBlock;
 
             if (atomicScope.isTracing()) {
-              atomicScope.traceMsg("HDFS: Received ack for " + one);
+              StringBuilder builder = new StringBuilder();
+              builder.append("HDFS: received an ack.");
+              builder.append(" seqno=").append(one.seqno);
+              builder.append(" offset=").append(one.offsetInBlock);
+              builder.append(" len=").append(one.dataPos - one.dataStart);
+              builder.append(" block=").append(block.getLocalBlock());
+              atomicScope.traceMsg(builder.toString());
             }
 
             Long begin = packetSendTime.get(ack.getSeqno());
@@ -1340,11 +1349,11 @@ public class DFSOutputStream extends FSOutputSummer
         nodes = lb.getLocations();
 
         if (atomicScope.isTracing()) {
-          StringBuilder sBuilder = new StringBuilder();
+          StringBuilder builder = new StringBuilder();
           for (DatanodeInfo info : nodes) {
-            sBuilder.append("[" + info + "] ");
+            builder.append(" [" + info + "]");
           }
-          atomicScope.traceMsg("HDFS: target datanodes. " + sBuilder.toString());
+          atomicScope.traceMsg("HDFS: target datanodes" + builder.toString());
         }
 
         //
@@ -1362,7 +1371,11 @@ public class DFSOutputStream extends FSOutputSummer
 
         } else {
           if (atomicScope.isTracing()) {
-            atomicScope.traceMsg("HDFS: created blocks. " + block.getLocalBlock() + " on datanode " + nodes[0]);
+            StringBuilder builder = new StringBuilder();
+            builder.append("HDFS: created block on datanode.");
+            builder.append(" datanode=").append(nodes[0]);
+            builder.append(" block=").append(block.getLocalBlock());
+            atomicScope.traceMsg(builder.toString());
           }
         }
       } while (!success && --count >= 0);
@@ -1846,9 +1859,20 @@ public class DFSOutputStream extends FSOutputSummer
             ", blockSize=" + blockSize +
             ", appendChunk=" + appendChunk);
       }
+      if (TracerLog.isClientTracing()) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("HDFS: packet is full, put it to queue.");
+        builder.append(" seqno=").append(currentPacket.seqno);
+        builder.append(" offset=").append(currentPacket.offsetInBlock);
+        builder.append(" len=").append(bytesCurBlock-currentPacket.offsetInBlock);
+        builder.append(" packetSize=").append(packetSize);
+        builder.append(" chunksPerPacket=").append(chunksPerPacket);
+
+        Trace.addTimelineAnnotation(builder.toString());
+      }
       waitAndQueueCurrentPacket();
-      if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
-        Trace.addTimelineAnnotation("HDFS: put current packet to queue done. " + currentPacket);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: put packet to queue done.");
       }
       // If the reopened file did not end at chunk boundary and the above
       // write filled up its partial chunk. Tell the summer to generate full 
@@ -1873,7 +1897,7 @@ public class DFSOutputStream extends FSOutputSummer
         waitAndQueueCurrentPacket();
         bytesCurBlock = 0;
         lastFlushOffset = 0;
-        if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
+        if (TracerLog.isClientTracing()) {
           Trace.addTimelineAnnotation("HDFS: block boundary, sent an empty packet.");
         }
       }
@@ -1953,7 +1977,7 @@ public class DFSOutputStream extends FSOutputSummer
          * After the flush, reset the bytesCurBlock back to its previous value,
          * any partial checksum chunk will be sent now and in next packet.
          */
-        if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
+        if (TracerLog.isClientTracing()) {
           atomicScope.setSpan(Trace.currentSpan());
         }
         long saveOffset = bytesCurBlock;
@@ -2012,8 +2036,8 @@ public class DFSOutputStream extends FSOutputSummer
         toWaitFor = lastQueuedSeqno;
       } // end synchronized
 
-      if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
-        Trace.addTimelineAnnotation("HDFS: wait for seqno="+ toWaitFor);
+      if (TracerLog.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: waiting for seqno="+ toWaitFor);
       }
       waitForAckedSeqno(toWaitFor);
 
@@ -2064,13 +2088,14 @@ public class DFSOutputStream extends FSOutputSummer
       }
       throw e;
     } finally {
-      if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
-        atomicScope.clean();
-      }
+      atomicScope.clean();
     }
-    if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
-      Trace.addTimelineAnnotation("HDFS: flush done. lastAckedSeqno=" + lastAckedSeqno
-        + " lastFlushOffset=" + lastFlushOffset + " src=" + src);
+    if (TracerLog.isClientTracing()) {
+      StringBuilder builder = new StringBuilder("HDFS: flush done.");
+      builder.append(" lastFlushOffset=").append(lastFlushOffset);
+      builder.append(" lastAckedSeqno=").append(lastAckedSeqno);
+      builder.append(" src=").append(src);
+      Trace.addTimelineAnnotation(builder.toString());
     }
   }
 
@@ -2118,6 +2143,9 @@ public class DFSOutputStream extends FSOutputSummer
     }
 
     waitForAckedSeqno(toWaitFor);
+    if (TracerLog.isClientTracing()) {
+      Trace.addTimelineAnnotation("HDFS: flushInternal done.");
+    }
   }
 
   private void waitForAckedSeqno(long seqno) throws IOException {
@@ -2262,9 +2290,15 @@ public class DFSOutputStream extends FSOutputSummer
       try {
         EmulateExceptionInClose eei = new EmulateExceptionInClose(5);
         flushBuffer(); // flush from all upper layers
+        if (TracerLog.isClientTracing()) {
+          Trace.addTimelineAnnotation("HDFS: flushBuffer done.");
+        }
         eei.kickRandomException();
         if (currentPacket != null) {
           waitAndQueueCurrentPacket();
+          if (TracerLog.isClientTracing()) {
+            Trace.addTimelineAnnotation("HDFS: waitAndQueueCurrentPacket done.");
+          }
         }
 
         if (bytesCurBlock != 0) {
@@ -2315,9 +2349,6 @@ public class DFSOutputStream extends FSOutputSummer
     } catch (ClosedChannelException e) {
     } finally {
       closed = true;
-      if (Trace.isTracing() && dfsClient.getConf().enableTracerlog) {
-        Trace.addTimelineAnnotation("HDFS: closed file: " + src);
-      }
     }
   }
 

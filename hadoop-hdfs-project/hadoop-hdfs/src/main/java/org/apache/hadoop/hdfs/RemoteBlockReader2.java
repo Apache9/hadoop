@@ -181,6 +181,15 @@ public class RemoteBlockReader2  implements BlockReader {
       LOG.trace("DFSClient readNextPacket got header " + curHeader);
     }
 
+    if (TracerLog.isClientTracing()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("HDFS: received a packet.");
+      builder.append(" offset=").append(curHeader.getOffsetInBlock());
+      builder.append(" len=").append(curHeader.getDataLen());
+      builder.append(" seqno=").append(curHeader.getSeqno());
+      Trace.addTimelineAnnotation(builder.toString());
+    }
+
     // Sanity check the lengths
     if (!curHeader.sanityCheck(lastSeqNo)) {
          throw new IOException("BlockReader: error in packet header " +

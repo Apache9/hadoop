@@ -500,9 +500,14 @@ class BlockSender implements java.io.Closeable {
     int packetLen = dataLen + checksumDataLen + 4;
     boolean lastDataPacket = offset + dataLen == endOffset && dataLen > 0;
 
+    TraceScope scope = null;
     if (TracerLog.isEnabled()) {
-      TracerLog.startScope("Send Packet","blockID=" + block.getLocalBlock() +
-        " offset=" + offset + " dataLen=" + dataLen + " seqno=" + seqno);
+      StringBuilder builder = new StringBuilder();
+      builder.append("block=").append(block.getLocalBlock());
+      builder.append(" offset=").append(offset);
+      builder.append(" len=").append(dataLen);
+      builder.append(" seqno=").append(seqno);
+      scope = TracerLog.startScope("Send Packet", builder.toString());
     }
     // The packet buffer is organized as follows:
     // _______HHHHCCCCD?D?D?D?
@@ -558,7 +563,7 @@ class BlockSender implements java.io.Closeable {
         sockOut.write(buf, headerOff, dataOff - headerOff);
         long endOfWriteHeader = System.nanoTime();
         if (Trace.isTracing()) {
-          Trace.addTimelineAnnotation("Write header done.");
+          Trace.addTimelineAnnotation("write header done.");
         }
         // no need to flush since we know out is not a buffered stream
         FileChannel fileCh = ((FileInputStream)blockIn).getChannel();
@@ -620,13 +625,14 @@ class BlockSender implements java.io.Closeable {
         }
       }
       throw ioeToSocketException(e);
+    } finally {
+      TracerLog.closeScope(scope, TracerLog.TracerWarnTimeType.rwPacket);
     }
 
     if (throttler != null) { // rebalancing so throttle
       throttler.throttle(packetLen);
     }
 
-    TracerLog.closeScope(TracerLog.TracerWarnTimeType.rwPacket);
     return dataLen;
   }
   
