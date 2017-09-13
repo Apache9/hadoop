@@ -28,6 +28,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.util.EnumSet;
 import java.util.UUID;
 
+import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -53,6 +54,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.util.Time;
 
 /**
  * This is a wrapper around connection to datanode
@@ -165,7 +167,15 @@ public class RemoteBlockReader2  implements BlockReader {
   @Override
   public int read(ByteBuffer buf) throws IOException {
     if (curDataSlice == null || curDataSlice.remaining() == 0 && bytesNeededToFinish > 0) {
-      readNextPacket();
+      long startTS = Time.monotonicNow();
+      try {
+        readNextPacket();
+        long cost = Time.monotonicNow() - startTS;
+        HdfsPerfCounter.count("readNextPacket", 1, cost);
+      } catch (IOException e) {
+        HdfsPerfCounter.countFail("readNextPacket", 1);
+        throw e;
+      }
     }
     if (curDataSlice.remaining() == 0) {
       // we're at EOF now
