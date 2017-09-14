@@ -1455,6 +1455,7 @@ public class FairScheduler extends
     // will just result in leaving things as they are.
     try {
       allocsLoader.reloadAllocations();
+      update();
     } catch (Exception e) {
       throw new IOException("Failed to initialize FairScheduler", e);
     }

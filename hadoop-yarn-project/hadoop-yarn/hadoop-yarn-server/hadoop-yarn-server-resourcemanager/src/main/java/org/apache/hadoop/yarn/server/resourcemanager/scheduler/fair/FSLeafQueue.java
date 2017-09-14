@@ -497,13 +497,18 @@ public class FSLeafQueue extends FSQueue {
   public boolean canRunAppAM(Resource amResource) {
     float maxAMShare =
         scheduler.getAllocationConfiguration().getQueueMaxAMShare(getName());
-    if (Math.abs(maxAMShare - -1.0f) < 0.0001) {
+    if (Math.abs(maxAMShare - 1.0f) < 0.0001) {
       return true;
     }
     Resource maxAMResource = Resources.multiply(getFairShare(), maxAMShare);
     Resource ifRunAMResource = Resources.add(amResourceUsage, amResource);
-    return !policy
+    boolean ret = !policy
         .checkIfAMResourceUsageOverLimit(ifRunAMResource, maxAMResource);
+    if (!ret) {
+      LOG.info("maxAMResource: " + maxAMResource + " amResourceUsage: " + amResourceUsage
+          + " amResource: " + amResource + " queue: " + getQueueName());
+    }
+    return ret;
   }
 
   public void addAMResourceUsage(Resource amResource) {
