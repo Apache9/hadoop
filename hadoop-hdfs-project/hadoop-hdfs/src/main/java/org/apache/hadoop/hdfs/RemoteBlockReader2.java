@@ -145,7 +145,15 @@ public class RemoteBlockReader2  implements BlockReader {
     }
 
     if (curDataSlice == null || curDataSlice.remaining() == 0 && bytesNeededToFinish > 0) {
-      readNextPacket();
+      long startTS = Time.monotonicNow();
+      try {
+        readNextPacket();
+        long cost = Time.monotonicNow() - startTS;
+        HdfsPerfCounter.count("readNextPacket", 1, cost);
+      } catch (IOException e) {
+        HdfsPerfCounter.countFail("readNextPacket", 1);
+        throw e;
+      }
     }
 
     if (LOG.isTraceEnabled()) {
