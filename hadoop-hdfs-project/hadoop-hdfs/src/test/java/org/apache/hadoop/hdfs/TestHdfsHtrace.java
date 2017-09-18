@@ -165,9 +165,10 @@ public class TestHdfsHtrace {
     Assert.assertTrue(listAnnotation.size() > 0);
     Assert.assertTrue(listAnnotation.get(0).getMessage().equals("HDFS: flushBuffer done."));
     Assert.assertTrue(listAnnotation.get(1).getMessage().equals("HDFS: waitAndQueueCurrentPacket done."));
-    Assert.assertTrue(listAnnotation.get(2).getMessage().equals("HDFS: flushInternal done."));
-    Assert.assertTrue(listAnnotation.get(3).getMessage().contains("HDFS: complete file done"));
-    Assert.assertTrue(listAnnotation.get(3).getMessage().contains(fileName));
+    Assert.assertTrue(listAnnotation.get(listAnnotation.size()-1).getMessage().
+      contains("HDFS: complete file done"));
+    Assert.assertTrue(listAnnotation.get(listAnnotation.size()-1).getMessage().
+      contains(fileName));
     fs.delete(file, true);
   }
 
@@ -237,6 +238,7 @@ public class TestHdfsHtrace {
     TraceScope readScope = Trace.startSpan("tracer.testClientRead", Sampler.ALWAYS);
     int len = is.read(readBuf);
 
+    readScope.close();
     List<TimelineAnnotation> listAnnotation = readScope.getSpan().getTimelineAnnotations();
     Assert.assertTrue(listAnnotation.size() > 0);
     Assert.assertTrue(listAnnotation.get(0).getMessage().

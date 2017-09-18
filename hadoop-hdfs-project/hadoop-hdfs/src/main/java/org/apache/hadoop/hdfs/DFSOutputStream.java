@@ -162,7 +162,7 @@ public class DFSOutputStream extends FSOutputSummer
   private boolean failPacket = false;
   private boolean exceptionInClose = false;
   private boolean leaseRecovered = false;
-  private AtomicScope atomicScope = new AtomicScope();
+  volatile private AtomicScope atomicScope = new AtomicScope();
 
   private class Packet {
     final long seqno;           // sequencenumber of buffer in block
@@ -1977,9 +1977,6 @@ public class DFSOutputStream extends FSOutputSummer
          * After the flush, reset the bytesCurBlock back to its previous value,
          * any partial checksum chunk will be sent now and in next packet.
          */
-        if (TracerLog.isClientTracing()) {
-          atomicScope.setSpan(Trace.currentSpan());
-        }
         long saveOffset = bytesCurBlock;
         Packet oldCurrentPacket = currentPacket;
         // flush checksum buffer, but keep checksum buffer intact
@@ -2087,8 +2084,6 @@ public class DFSOutputStream extends FSOutputSummer
         }
       }
       throw e;
-    } finally {
-      atomicScope.clean();
     }
     if (TracerLog.isClientTracing()) {
       StringBuilder builder = new StringBuilder("HDFS: flush done.");
@@ -2153,6 +2148,9 @@ public class DFSOutputStream extends FSOutputSummer
       DFSClient.LOG.debug("Waiting for ack for: " + seqno);
     }
     try {
+      if (TracerLog.isClientTracing()) {
+        atomicScope.setSpan(Trace.currentSpan());
+      }
       long t1 = Time.monotonicNow();
       synchronized (dataQueue) {
         while (!closed) {
@@ -2178,6 +2176,8 @@ public class DFSOutputStream extends FSOutputSummer
       }
       checkClosed();
     } catch (ClosedChannelException e) {
+    } finally {
+      atomicScope.clean();
     }
 
     if (lastAckedSeqno < seqno) {
@@ -2469,6 +2469,14 @@ public class DFSOutputStream extends FSOutputSummer
     public void traceMsg(String msg) {
       synchronized (this) {
         if (curSpan != null) {
+          int curCount = curSpan.getTimelineAnnotations().size();
+          if (curCount > TracerLog.MAX_ANNOTATION_COUNT) {
+            return;
+          }
+          if (curCount == TracerLog.MAX_ANNOTATION_COUNT) {
+            Trace.addTimelineAnnotation("HDFS: " + TracerLog.TAG_MORE_LOGS);
+            return;
+          }
           curSpan.addTimelineAnnotation(msg);
         }
       }
