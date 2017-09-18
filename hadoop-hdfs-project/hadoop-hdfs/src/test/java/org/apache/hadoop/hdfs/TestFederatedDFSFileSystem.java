@@ -1,6 +1,7 @@
 package org.apache.hadoop.hdfs;
 
 import junit.framework.Assert;
+import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -19,14 +20,23 @@ import org.apache.hadoop.fs.HdfsBlockLocation;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
+import org.apache.hadoop.hdfs.tools.DFSAdmin;
+import org.apache.hadoop.io.IOUtils;
+import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
@@ -34,9 +44,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.apache.hadoop.fs.FileContext.FILE_DEFAULT_PERM;
@@ -44,12 +57,16 @@ import static org.apache.hadoop.fs.FileContext.FILE_DEFAULT_PERM;
 public class TestFederatedDFSFileSystem {
   private static final Log LOG =
       LogFactory.getLog(TestFederatedDFSFileSystem.class);
-  private Configuration conf;
-  private MiniDFSCluster cluster1;
-  private MiniDFSCluster cluster2;
+  private static Configuration conf;
+  private static MiniDFSCluster cluster;
+  private static FileSystem fs1;
+  private static FileSystem fs2;
+  private static String nn1Address;
+  private static String nn2Address;
 
-  @Before
-  public void setup() throws IOException {
+  @BeforeClass
+  public static void setup() throws IOException {
+    LOG.info("before test");
     conf = new Configuration();
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024);
     // Bump up replication interval so that we only run replication
@@ -60,45 +77,61 @@ public class TestFederatedDFSFileSystem {
     conf.setLong(CommonConfigurationKeys.FS_TRASH_INTERVAL_KEY, 10000);
 
     try {
-      // disable hdfs impl cache
-      conf.setBoolean("fs.hdfs.impl.disable.cache", true);
-      conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
-              "hdfs://test-cluster/");
-      conf.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
-      conf.set("fs.AbstractFileSystem.hdfs.impl", FederatedHdfs.class.getName());
-
-      cluster1 = setupNewDFSCluster();
-      cluster2 = setupNewDFSCluster();
+      cluster = setupNewDFSCluster();
       setupFederationConfig();
     } catch (Exception e) {
       LOG.info("Setup test env failed " + e.getMessage());
     }
   }
 
-  private MiniDFSCluster setupNewDFSCluster() throws IOException {
-    Configuration tmpConf = new Configuration(conf);
+  @AfterClass
+  public static void teardown() throws IOException {
+    LOG.info("before test");
+    cluster.shutdown();
+  }
+
+  private static MiniDFSCluster setupNewDFSCluster() throws IOException {
+    /*
     File baseDir = new File("./target/test-dir-"
         + UUID.randomUUID().toString().substring(0, 4) + "/").getAbsoluteFile();
     FileUtil.fullyDelete(baseDir);
     tmpConf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, baseDir.getAbsolutePath());
+    */
 
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(tmpConf).numDataNodes(3)
-        .format(true).build();
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(new Configuration(conf))
+        .nnTopology(MiniDFSNNTopology.simpleHAFederatedTopology(2))
+        .numDataNodes(5).format(true).build();
     cluster.waitClusterUp();
     return cluster;
   }
 
-  private void setupFederationConfig() throws Exception {
-    String cluster1NNAddress =
-        "hdfs://" + cluster1.getNameNode().getHostAndPort();
-    String cluster2NNAddress =
-        "hdfs://" + cluster2.getNameNode().getHostAndPort();
-    cluster1.getFileSystem().mkdir(new Path("/home"), null);
-    cluster2.getFileSystem().mkdir(new Path("/user"), null);
+  private static void setupFederationConfig() throws Exception {
+    // make the 1st nn of namespace 1 and namespace 2 to active
+    cluster.transitionToActive(0);
+    cluster.transitionToActive(2);
+
+    fs1 = cluster.getFileSystem(0);
+    fs2 = cluster.getFileSystem(2);
+    fs1.mkdirs(new Path("/home"));
+    // make sure fs1 and fs2 is not connect to same namespace
+    assert(!fs2.exists(new Path("/home")));
+    fs2.mkdirs(new Path("/user"));
+
+    // disable hdfs impl cache
+    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+    conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
+        "hdfs://test-cluster/");
+    conf.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    conf.set("fs.AbstractFileSystem.hdfs.impl", FederatedHdfs.class.getName());
+
+    nn1Address =
+        "hdfs://" + cluster.getNameNode(0).getHostAndPort();
+    nn2Address =
+        "hdfs://" + cluster.getNameNode(2).getHostAndPort();
     ConfigUtil.addLink(conf, "test-cluster", "/home",
-        new URI(cluster1NNAddress + "/home"));
+        new URI(nn1Address+ "/home"));
     ConfigUtil.addLink(conf, "test-cluster", "/user",
-        new URI(cluster2NNAddress + "/user"));
+        new URI(nn2Address+ "/user"));
   }
 
   @Test
@@ -117,8 +150,6 @@ public class TestFederatedDFSFileSystem {
     out.write(testText.getBytes());
     out.close();
 
-    FileSystem fs1 = cluster1.getFileSystem();
-    FileSystem fs2 = cluster2.getFileSystem();
     Assert.assertTrue(fs1.exists(fooPath));
     Assert.assertTrue(fs2.exists(barPath));
     InputStream in = fs1.open(fooFilePath);
@@ -158,10 +189,8 @@ public class TestFederatedDFSFileSystem {
     // test configuration with non-federation cluster
     Configuration config = new Configuration(conf);
     config.set(DFSConfigKeys.DFS_NAMESERVICES, "dfs-cluster-a, dfs-cluster-b");
-    addClusterToConf(config, "dfs-cluster-a",
-        cluster1.getNameNode().getHostAndPort());
-    addClusterToConf(config, "dfs-cluster-b",
-        cluster2.getNameNode().getHostAndPort());
+    addClusterToConf(config, "dfs-cluster-a", nn1Address);
+    addClusterToConf(config, "dfs-cluster-b", nn2Address);
     fs = FileSystem.get(new URI("/user/foo"), config);
     Assert.assertTrue(fs instanceof FederatedDFSFileSystem);
     fs = FileSystem.get(new URI("hdfs://dfs-cluster-a/user/foo"), config);
@@ -178,16 +207,16 @@ public class TestFederatedDFSFileSystem {
     Assert.assertTrue(fs instanceof FederatedDFSFileSystem);
     // mkdir without scheme
     fs.mkdirs(new Path("/user/test"));
-    Assert.assertTrue(cluster2.getFileSystem().exists(new Path("/user/test")));
+    Assert.assertTrue(fs2.exists(new Path("/user/test")));
 
     // add more federation cluster
     ConfigUtil.addLink(config, "fed-cluster", "/data",
-            new URI("hdfs://" + cluster1.getNameNode().getHostAndPort()  + "/data"));
-    cluster1.getFileSystem().mkdirs(new Path("/data"));
+            new URI(nn1Address  + "/data"));
+    fs1.mkdirs(new Path("/data"));
     fs = FileSystem.get(new URI("hdfs://fed-cluster/user/foo"), config);
     Assert.assertTrue(fs instanceof FederatedDFSFileSystem);
     FileSystemTestHelper.createFile(fs, new Path("/data/file"));
-    Assert.assertTrue(cluster1.getFileSystem().exists(new Path("/data/file")));
+    Assert.assertTrue(fs1.exists(new Path("/data/file")));
   }
 
   @Test
@@ -210,7 +239,7 @@ public class TestFederatedDFSFileSystem {
   }
 
   // This UT is for a very tricky bug about path with fragment
-  // Some user may submit request using URI with fragment(start with #, like /user/foo/bar#1, the URI 
+  // Some user may submit request using URI with fragment(start with #, like /user/foo/bar#1, the URI
   // fragments usually used for browser, http request will ignore this part, only if using %23 instead
   // of #. In the previous implementation of FederatedDFSFileSystem, before calling ViewFileSystem
   // corresponding method with path, it always convert the path with hdfs scheme to viewfs scheme, the
@@ -246,8 +275,6 @@ public class TestFederatedDFSFileSystem {
     out.write(testText.getBytes());
     out.close();
 
-    FileSystem fs1 = cluster1.getFileSystem();
-    FileSystem fs2 = cluster2.getFileSystem();
     Assert.assertTrue(fs1.exists(fooPath));
     Assert.assertTrue(fs2.exists(barPath));
     InputStream in = fs1.open(fooFilePath);
@@ -258,7 +285,7 @@ public class TestFederatedDFSFileSystem {
   }
 
   @Test
-  public void testShell() throws Exception {
+  public void testShellCopy() throws Exception {
     FsShell shell = new FsShell(conf);
     File out = new File("testfile");
     PrintWriter pw = new PrintWriter(new FileWriter(out));
@@ -266,5 +293,142 @@ public class TestFederatedDFSFileSystem {
     pw.close();
     String[] argv = new String[] { "-copyFromLocal", "testfile", "/user/" };
     shell.run(argv);
+  }
+
+  @Test
+  public void testDFSConcat() throws Exception {
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
+    Path srcs[] = new Path[] { new Path("/user/foo/concat_f1"),
+        new Path("/user/foo/concat_f2") };
+    char[] data = new char[(int)dfs.getDefaultBlockSize()];
+    for (int i = 0; i < data.length; i++) {
+      data[i] = 'a';
+    }
+
+    OutputStream out = dfs.create(srcs[0]);
+    byte[] b = new String(data).getBytes();
+    out.write(b);
+    out.close();
+    out = dfs.create(srcs[1]);
+    out.write("xyz".getBytes());
+    out.close();
+
+    Path target = new Path("/user/foo/tgt");
+    for (int i = 0; i < data.length; i++) {
+      data[i] = 'b';
+    }
+    out = dfs.create(target);
+    out.write(new String(data).getBytes());
+    out.close();
+
+    dfs.concat(target, srcs);
+    FileStatus status = dfs.getFileStatus(target);
+    Assert.assertEquals(status.getLen(), 2048+3);
+  }
+
+  @Test
+  public void testSetQuota() throws Exception {
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
+    Path p = new Path("/user/test_quota");
+    if (dfs.exists(p)) {
+      dfs.delete(p, true);
+    }
+    dfs.mkdirs(p);
+
+    QuotaSummary qs = dfs.getQuotaSummary(p);
+    Assert.assertEquals(qs.getQuota(), -1);
+    Assert.assertEquals(qs.getSpaceQuota(), -1);
+
+    dfs.setQuota(p, 1024, 1024*1024);
+    qs = dfs.getQuotaSummary(p);
+    Assert.assertEquals(qs.getQuota(), 1024);
+    Assert.assertEquals(qs.getSpaceQuota(), 1024*1024);
+
+    // cleanup
+    dfs.delete(p, true);
+  }
+
+  boolean checkAllDnBalanderBandWidthLimit(long limit) {
+    for (DataNode dn : cluster.getDataNodes()) {
+      if (dn.getBalancerBandwidth() != limit) {
+        LOG.warn("bandwidith limit on dn(cluster1) is "
+            + dn.getBalancerBandwidth() + ", expect: " + limit);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @Test
+  public void testSetBalancerBandwidth() throws Exception {
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
+    long defaultBandwidth =
+        conf.getLong(DFSConfigKeys.DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_KEY,
+            DFSConfigKeys.DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_DEFAULT);
+    Assert.assertTrue(checkAllDnBalanderBandWidthLimit(defaultBandwidth));
+
+    long newBandwidth = 12 * 1024 * 1024;
+    dfs.setBalancerBandwidth(newBandwidth);
+
+    // Give it a few seconds to propogate new the value to the datanodes.
+    try {
+      Thread.sleep(10000);
+    } catch (Exception e) {
+    }
+
+    Assert.assertTrue(checkAllDnBalanderBandWidthLimit(newBandwidth));
+  }
+
+  boolean compairReports(DatanodeInfo[] report1, DatanodeInfo[] report2) {
+    if (report1.length != report2.length)
+      return false;
+    Map<String, DatanodeInfo> report1Map = new HashMap<String, DatanodeInfo>();
+    for (DatanodeInfo dn : report1) {
+      report1Map.put(dn.getInfoAddr(), dn);
+    }
+    for (DatanodeInfo dn : report2) {
+      String addr = dn.getInfoAddr();
+      if (!report1Map.containsKey(addr))
+        return false;
+      DatanodeInfo dn1 = report1Map.get(addr);
+      if (dn1.getXceiverCount() != dn.getXceiverCount())
+        return false;
+      if (dn1.getDfsUsed() != dn.getDfsUsed())
+        return false;
+    }
+    return true;
+  }
+
+  @Test
+  public void testDatanodeReports() throws Exception {
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
+    DatanodeInfo[] dnStats = dfs.getDataNodeStats();
+    DatanodeInfo[] dnStatsFs1 = ((DistributedFileSystem)fs1).getDataNodeStats();
+    DatanodeInfo[] dnStatsFs2 = ((DistributedFileSystem)fs2).getDataNodeStats();
+    Assert.assertTrue(compairReports(dnStatsFs1, dnStatsFs2));
+    Assert.assertTrue(compairReports(dnStats, dnStatsFs1));
+    Assert.assertTrue(compairReports(dnStats, dnStatsFs2));
+  }
+
+  @Test
+  public void testShellDnReports() throws Exception {
+    final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    final PrintStream out = new PrintStream(bytes);
+    final PrintStream oldOut = System.out;
+    final PrintStream oldErr = System.err;
+    System.setOut(out);
+    System.setErr(out);
+    final String results;
+    try {
+      DFSAdmin shell = new DFSAdmin(conf);
+      String[] argv = new String[] { "-report"};
+      Assert.assertEquals(0, shell.run(argv));
+      results = bytes.toString();
+      Assert.assertTrue(results.contains("Live datanodes"));
+    } finally {
+      IOUtils.closeStream(out);
+      System.setOut(oldOut);
+      System.setErr(oldErr);
+    }
   }
 }

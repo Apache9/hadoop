@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FilterFileSystem;
 import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.FsStatus;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -169,10 +170,16 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
         "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
   }
 
+  // Not support concat operation across multiple namenodes
+  // In that case will throw an WrongFs exception
   @Override
   public void concat(Path trg, Path[] psrcs) throws IOException {
-    // not support
-    viewFs.concat(convertToViewFsScheme(trg), psrcs);
+    DistributedFileSystem dfs = getTargetDFS(trg);
+    Path targetSrcPaths[] = new Path[psrcs.length];
+    for (int i = 0; i < psrcs.length; i++) {
+      targetSrcPaths[i] = getTargetPath(psrcs[i]);
+    }
+    dfs.concat(getTargetPath(trg), targetSrcPaths);
   }
 
   @Override
@@ -277,14 +284,15 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public QuotaSummary getQuotaSummary(Path f) throws IOException {
-    return viewFs.getQuotaSummary(convertToViewFsScheme(f));
+    DistributedFileSystem dfs = getTargetDFS(f);
+    return dfs.getQuotaSummary(getTargetPath(f));
   }
 
   @Override
   public void setQuota(Path src, long namespaceQuota, long diskspaceQuota)
       throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    DistributedFileSystem dfs = getTargetDFS(src);
+    dfs.setQuota(getTargetPath(src), namespaceQuota, diskspaceQuota);
   }
 
   private boolean isTrashPath(Path p) {
@@ -410,8 +418,8 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public boolean recoverLease(Path f) throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    DistributedFileSystem dfs = getTargetDFS(f);
+    return dfs.recoverLease(getTargetPath(f));
   }
 
   @Override
@@ -455,7 +463,15 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public FsStatus getStatus(Path p) throws IOException {
-    return viewFs.getStatus(convertToViewFsScheme(p));
+    if (p != null) {
+      return viewFs.getStatus(convertToViewFsScheme(p));
+    }
+
+    FileSystem[] childFs = viewFs.getChildFileSystems();
+    if (childFs.length == 0) {
+      throw new IOException("MountTable is empty!");
+    }
+    return childFs[0].getStatus(p);
   }
 
   @Override
@@ -478,20 +494,35 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public long getMissingBlocksCount() throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    long res = 0;
+    for (FileSystem fs : viewFs.getChildFileSystems()) {
+      if (fs instanceof DistributedFileSystem) {
+        res += ((DistributedFileSystem)fs).getMissingBlocksCount();
+      }
+    }
+    return res;
   }
 
   @Override
   public long getUnderReplicatedBlocksCount() throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    long res = 0;
+    for (FileSystem fs : viewFs.getChildFileSystems()) {
+      if (fs instanceof DistributedFileSystem) {
+        res += ((DistributedFileSystem)fs).getUnderReplicatedBlocksCount();
+      }
+    }
+    return res;
   }
 
   @Override
   public long getCorruptBlocksCount() throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    long res = 0;
+    for (FileSystem fs : viewFs.getChildFileSystems()) {
+      if (fs instanceof DistributedFileSystem) {
+        res += ((DistributedFileSystem)fs).getCorruptBlocksCount();
+      }
+    }
+    return res;
   }
 
   @Override
@@ -502,22 +533,26 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public DatanodeInfo[] getDataNodeStats() throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    return this.getDataNodeStats(HdfsConstants.DatanodeReportType.ALL);
   }
 
   @Override
   public DatanodeInfo[] getDataNodeStats(HdfsConstants.DatanodeReportType type)
       throws IOException {
+    for (FileSystem fs : viewFs.getChildFileSystems()) {
+      if (fs instanceof DistributedFileSystem) {
+        return ((DistributedFileSystem) fs).getDataNodeStats(type);
+      }
+    }
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+        "this operation is not supported on non DistributedFileSystem: "
+            + getMethodName());
   }
 
   @Override
   public boolean setSafeMode(HdfsConstants.SafeModeAction action)
       throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    return false;
   }
 
   @Override
@@ -710,8 +745,17 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public void setBalancerBandwidth(long bandwidth) throws IOException {
+    for (FileSystem fs : viewFs.getChildFileSystems()) {
+      if (fs instanceof DistributedFileSystem) {
+        // the setBalancerBandwidth will made the namenode update bandwidth
+        // on all datanodes by heartbeat command, so only need call once
+        ((DistributedFileSystem) fs).setBalancerBandwidth(bandwidth);
+        return;
+      }
+    }
     throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+        "this operation is not supported on non DistributedFileSystem: "
+            + getMethodName());
   }
 
   @Override
@@ -779,8 +823,8 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public boolean isFileClosed(Path src) throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    DistributedFileSystem dfs = getTargetDFS(src);
+    return dfs.isFileClosed(getTargetPath(src));
   }
 
   @Override
@@ -1003,6 +1047,15 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   public FileSystem getTargetFileSystem(Path path) throws IOException {
     return viewFs.getTargetFileSystem(convertToViewFsScheme(path));
+  }
+
+  private DistributedFileSystem getTargetDFS(Path path) throws IOException {
+    FileSystem fs = getTargetFileSystem(path);
+    fs = ((FilterFileSystem) fs).getRawFileSystem();
+    if (fs instanceof DistributedFileSystem) {
+      return (DistributedFileSystem)fs;
+    }
+    throw new IOException("Can't get DistributedFileSystem instance for path: " + path);
   }
 
   public Path getTargetPath(Path path) throws IOException {

@@ -476,6 +476,8 @@ public class DFSAdmin extends FsShell {
       throw new IllegalArgumentException("FileSystem " + fs.getUri() + 
       " is not an HDFS file system");
     }
+    if (fs.supportFederation())
+      return (FederatedDFSFileSystem) fs.getDistributedFileSystem();
     return (DistributedFileSystem) fs.getDistributedFileSystem();
   }
   
