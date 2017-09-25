@@ -109,7 +109,6 @@ public class RMAppImpl implements RMApp, Recoverable {
   private final Configuration conf;
   private final String user;
   private final String name;
-  private final ApplicationSubmissionContext submissionContext;
   private final Dispatcher dispatcher;
   private final YarnScheduler scheduler;
   private final ApplicationMasterService masterService;
@@ -134,6 +133,7 @@ public class RMAppImpl implements RMApp, Recoverable {
   private long startTime;
   private long finishTime = 0;
   private long storedFinishTime = 0;
+  private ApplicationSubmissionContext submissionContext;
   // This field isn't protected by readlock now.
   private volatile RMAppAttempt currentAttempt;
   private String queue;
@@ -741,6 +741,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.diagnostics.append(appState.getDiagnostics());
     this.storedFinishTime = appState.getFinishTime();
     this.startTime = appState.getStartTime();
+    this.submissionContext = appState.getApplicationSubmissionContext();
 
     for(int i=0; i<appState.getAttemptCount(); ++i) {
       // create attempt
