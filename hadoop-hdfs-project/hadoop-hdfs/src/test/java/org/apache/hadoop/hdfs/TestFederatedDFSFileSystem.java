@@ -29,6 +29,7 @@ import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
 import org.apache.hadoop.hdfs.tools.DFSAdmin;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -118,7 +119,7 @@ public class TestFederatedDFSFileSystem {
     fs2.mkdirs(new Path("/user"));
 
     // disable hdfs impl cache
-    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+    // conf.setBoolean("fs.hdfs.impl.disable.cache", true);
     conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
         "hdfs://test-cluster/");
     conf.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
@@ -165,8 +166,8 @@ public class TestFederatedDFSFileSystem {
           "test-cluster");
     }
 
-    Assert.assertEquals(dfs.getHomeDirectory().toString(), "hdfs://test-cluster/user/chen");
-    Assert.assertEquals(dfs.getWorkingDirectory().toString(), "hdfs://test-cluster/user/chen");
+    Assert.assertEquals(dfs.getHomeDirectory().toString(), "hdfs://test-cluster/user/" + UserGroupInformation.getLoginUser().getShortUserName());
+    Assert.assertEquals(dfs.getWorkingDirectory().toString(), "hdfs://test-cluster/user/" + UserGroupInformation.getLoginUser().getShortUserName());
   }
 
   private void addClusterToConf(Configuration config, String clusterName,

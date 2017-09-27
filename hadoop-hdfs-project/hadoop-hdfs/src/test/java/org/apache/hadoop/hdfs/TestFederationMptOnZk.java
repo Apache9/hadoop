@@ -52,7 +52,6 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
     CONF.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs:///");
     CONF.setLong(DFSConfigKeys.DFS_FEDERATION_RENAME_SOURCE_TIMEOUT, 10000);
     CONF.setLong(DFSConfigKeys.DFS_FEDERATION_RENAME_DEST_TIMEOUT, 10000);
-    CONF.setBoolean("fs.hdfs.impl.disable.cache", true);
     CONF.setLong(FS_TRASH_INTERVAL_KEY, 10); // 10 mins
     cluster =
         new MiniDFSCluster.Builder(CONF)
@@ -128,6 +127,7 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
     // step 2
     tmpCONF = new Configuration(CONF);
     ConfigUtil.addLink(tmpCONF, "zkmpt", "/fs3", fHdfs3.getUri());
+    tmpCONF.setBoolean("fs.hdfs.impl.disable.cache", true);
     admin = new DFSAdmin(tmpCONF);
     runUpdateMptOnZk(admin);
 
@@ -172,6 +172,7 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
     // step 2
     tmpCONF = new Configuration(CONF);
     ConfigUtil.addLink(tmpCONF, "zkmpt", "/fs4", fHdfs4.getUri());
+    tmpCONF.setBoolean("fs.hdfs.impl.disable.cache", true);
     admin = new DFSAdmin(tmpCONF);
     runUpdateMptOnZk(admin);
 

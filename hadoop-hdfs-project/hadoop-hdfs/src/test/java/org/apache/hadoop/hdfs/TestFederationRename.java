@@ -508,9 +508,9 @@ public class TestFederationRename {
   @Test
   public void testRenameOnSameNN() throws Exception {
     CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
-    CONF.setBoolean("fs.hdfs.impl.disable.cache", true);
     try {
       Configuration config = new Configuration(CONF);
+      config.setBoolean("fs.hdfs.impl.disable.cache", true);
       ConfigUtil.addLink(config, "/x/y/z",
           new URI(fHdfs2.getUri().toString() + "/x/y/z"));
       ConfigUtil.addLink(config, "/x/y/x",
