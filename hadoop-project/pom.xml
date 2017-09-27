@@ -552,7 +552,7 @@
       <dependency>
         <groupId>org.apache.hbase.thirdparty</groupId>
         <artifactId>hbase-shaded-netty</artifactId>
-        <version>1.0.1-mdh1.0</version>
+        <version>1.0.1-mdh1.1</version>
       </dependency>
 
       <dependency>

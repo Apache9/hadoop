@@ -127,7 +127,6 @@ public class TestReadBlockOverHttp2 {
     }
   }
 
-  @Ignore
   @Test
   public void test()
       throws IOException, InterruptedException, ExecutionException {
