@@ -57,7 +57,6 @@ import java.util.Random;
 
 public class FederatedHdfs extends AbstractFileSystem {
   private ViewFs viewFs;
-  private URI myUri;
 
   static {
     HdfsConfiguration.init();
@@ -65,11 +64,10 @@ public class FederatedHdfs extends AbstractFileSystem {
 
   public FederatedHdfs(final URI theUri, final Configuration conf)
       throws IOException, URISyntaxException {
-    super(theUri, HdfsConstants.HDFS_URI_SCHEME, true, NameNode.DEFAULT_PORT);
+    super(theUri, HdfsConstants.HDFS_URI_SCHEME, false, -1);
     if (!isUriCompatible(theUri, conf)) {
       throw new URISyntaxException(theUri.toString(), "not an federation uri");
     }
-    myUri = theUri;
     URI viewFsUri = convertToViewFsScheme(theUri);
     MountPointRenewer mpr =
         new MountPointRenewer(theUri.getAuthority(), conf, new RenewMpt() {
@@ -91,11 +89,6 @@ public class FederatedHdfs extends AbstractFileSystem {
     return NameNode.DEFAULT_PORT;
   }
   
-  @Override
-  public URI getUri() {
-    return myUri;
-  }
-
   @Override
   public FSDataOutputStream createInternal(Path f,
       EnumSet<CreateFlag> createFlag, FsPermission absolutePermission,

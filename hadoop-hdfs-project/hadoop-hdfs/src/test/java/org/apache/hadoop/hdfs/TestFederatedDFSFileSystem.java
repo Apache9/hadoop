@@ -11,6 +11,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FederatedHdfs;
+import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileSystemTestHelper;
@@ -431,5 +432,28 @@ public class TestFederatedDFSFileSystem {
       System.setOut(oldOut);
       System.setErr(oldErr);
     }
+  }
+
+  @Test
+  public void testFileContextRename() throws Exception {
+    // simulate the usage of yarn history server
+    Path testPathDir = new Path("/user/foo/intermediate");
+    Path testPath = FileContext.getFileContext(conf).makeQualified(testPathDir);
+    FileContext testFc = FileContext.getFileContext(
+            testPath.toUri(), conf);
+
+    Path intermediateFile = new Path(testPathDir, "tmp.log");
+    Path doneDir = testFc.makeQualified(new Path("/user/foo/done"));
+    Path doneFile = new Path(doneDir, "done.log");
+
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
+    dfs.mkdirs(testPathDir);
+    dfs.mkdirs(doneDir);
+    OutputStream out = dfs.create(intermediateFile);
+    out.write("hello world".getBytes());
+    out.close();
+
+    testFc.rename(intermediateFile, doneFile);
+    Assert.assertTrue(dfs.exists(doneFile));
   }
 }

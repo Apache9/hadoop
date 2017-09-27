@@ -66,7 +66,7 @@ public class TestDistCpFederatedDFS {
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY, 1000);
     conf.setLong(CommonConfigurationKeys.FS_TRASH_INTERVAL_KEY, 10000);
     // disable hdfs impl cache
-    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+    // conf.setBoolean("fs.hdfs.impl.disable.cache", true);
 
     try {
       cluster1 = setupNewDFSCluster();
