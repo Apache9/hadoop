@@ -57,6 +57,7 @@ import java.util.Random;
 
 public class FederatedHdfs extends AbstractFileSystem {
   private ViewFs viewFs;
+  private MountPointRenewer mpr;
 
   static {
     HdfsConfiguration.init();
@@ -69,8 +70,7 @@ public class FederatedHdfs extends AbstractFileSystem {
       throw new URISyntaxException(theUri.toString(), "not an federation uri");
     }
     URI viewFsUri = convertToViewFsScheme(theUri);
-    MountPointRenewer mpr =
-        new MountPointRenewer(theUri.getAuthority(), conf, new RenewMpt() {
+    mpr = new MountPointRenewer(theUri.getAuthority(), conf, new RenewMpt() {
           public void renewMpt(String viewName, Configuration conf)
               throws IOException {
             try {

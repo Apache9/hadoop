@@ -33,6 +33,7 @@ public class MountPointRenewer {
   private Random renewRand;
   private String lastMountPointTable = null;
   private RenewMpt renewMpt;
+  private Timer nextRenewTimer = null;
 
   public interface RenewMpt {
     public void renewMpt(String viewName, Configuration conf)
@@ -217,8 +218,8 @@ public class MountPointRenewer {
   }
   
 
-  public void scheduleRenewer(final long delay) {
-    Timer nextRenewTimer = new Timer();
+  synchronized public void scheduleRenewer(final long delay) {
+    nextRenewTimer = new Timer(true);
     nextRenewTimer.schedule(new TimerTask() {
       public void run() {
         long nextDelay;
@@ -257,6 +258,12 @@ public class MountPointRenewer {
             mptRetryInterval + renewRand.nextInt((int) mptRenewRandomFactor);
       }
       scheduleRenewer(initialDelay);
+    }
+  }
+
+  synchronized public void close() {
+    if (nextRenewTimer != null) {
+      nextRenewTimer.cancel();
     }
   }
 }
