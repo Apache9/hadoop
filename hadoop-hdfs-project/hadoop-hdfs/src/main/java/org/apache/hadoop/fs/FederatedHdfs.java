@@ -34,6 +34,7 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.util.Time;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -57,7 +58,6 @@ import java.util.Random;
 
 public class FederatedHdfs extends AbstractFileSystem {
   private ViewFs viewFs;
-  private MountPointRenewer mpr;
 
   static {
     HdfsConfiguration.init();
@@ -70,18 +70,26 @@ public class FederatedHdfs extends AbstractFileSystem {
       throw new URISyntaxException(theUri.toString(), "not an federation uri");
     }
     URI viewFsUri = convertToViewFsScheme(theUri);
-    mpr = new MountPointRenewer(theUri.getAuthority(), conf, new RenewMpt() {
-          public void renewMpt(String viewName, Configuration conf)
-              throws IOException {
-            try {
-              viewFs.renewFsState(conf, viewName);
-            } catch (URISyntaxException ue) {
-              throw new IOException(ue);
-            }
-          }
-        });
-    mpr.initMptFromZkAndKickoffRenewer();
     viewFs = AbstractFileSystem.newInstance(ViewFs.class, viewFsUri, conf);
+    MountPointRenewer.updateMptFromZkOnce(theUri.getAuthority(), conf);
+    viewFs.renewFsState(conf, theUri.getAuthority());
+    viewFs.setLastMptUpdateTime(Time.monotonicNow());
+    viewFs.setRenewCheckerCb(new ViewFs.FsStateRenewChecker() {
+      public boolean shouldRenew(long lastUpdateTime) {
+        // Since the creation of this class is random, do not need another
+        // random
+        long checkInterval =
+            conf.getLong(FederationConfigKeys.FEDFS_MOUNT_TABLE_RENEW_INTERVAL,
+                FederationConfigKeys.FEDFS_MOUNT_TABLE_RENEW_INTERVAL_DEFAULT);
+        System.out.println("checkInterval is " + checkInterval
+            + " lastUpdateTime " + lastUpdateTime + " now "
+            + Time.monotonicNow());
+        if (Time.monotonicNow() - lastUpdateTime > checkInterval) {
+          return true;
+        }
+        return false;
+      }
+    });
   }
 
   @Override

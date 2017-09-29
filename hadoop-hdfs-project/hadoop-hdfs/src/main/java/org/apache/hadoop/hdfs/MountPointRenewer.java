@@ -62,7 +62,7 @@ public class MountPointRenewer {
    * Return the mount point configuration in "key=value;key=value;key=value"
    * format.
    */
-  public String getMountPointConfig(final Configuration config,
+  public static String getMountPointConfig(final Configuration config,
       final String viewName) throws IOException {
     StringBuilder mpBuilder = new StringBuilder();
     String vName = viewName;
@@ -103,7 +103,7 @@ public class MountPointRenewer {
     return mpBuilder.toString();
   }
 
-  public void verifyNewMountPoints(Configuration conf, String kvConf,
+  public static void verifyNewMountPoints(Configuration conf, String kvConf,
       String viewName) throws IllegalArgumentException, IOException {
     String origKvConfig = getMountPointConfig(conf, viewName);
     String[] origKvs = origKvConfig.split(";");
@@ -124,22 +124,29 @@ public class MountPointRenewer {
     }
   }
 
-  private void updateMountPointConfig(Configuration conf, String kvConfig,
+  private static boolean updateMountPointConfig(Configuration conf,
+      String kvConfig,
       String viewName) throws IllegalArgumentException, IOException {
     if (kvConfig == null) {
-      return;
+      return false;
     }
+    boolean res = false;
     verifyNewMountPoints(conf, kvConfig, viewName);
     String[] kvs = kvConfig.split(";");
     for (String kv : kvs) {
       int splitIdx = kv.indexOf("=");
       String key = kv.substring(0, splitIdx);
       String val = kv.substring(splitIdx + 1);
-      conf.set(key, val);
+      if (conf.get(key) == null) {
+        res = true;
+        conf.set(key, val);
+      }
     }
+    return res;
   }
 
-  private String getMptConfFromZookeeper(String viewName, Configuration conf)
+  private static String getMptConfFromZookeeper(String viewName,
+      Configuration conf)
       throws IOException,
       IllegalArgumentException, KeeperException, InterruptedException {
     ZooKeeper zkClient = null;
@@ -168,6 +175,27 @@ public class MountPointRenewer {
         zkClient.close();
       }
     }
+  }
+
+  public static boolean updateMptFromZkOnce(String viewName, Configuration conf) {
+    String mptFromZk = null;
+    try {
+      mptFromZk = getMptConfFromZookeeper(viewName, conf);
+    } catch (Exception e) {
+      // Ignore, using whatever we have in the original configration
+      return false;
+    }
+    if (mptFromZk != null) {
+      // Renew the fsstate in viewfs if the mount table in zk changed. Otherwise
+      // do nothing.
+      try {
+        return updateMountPointConfig(conf, mptFromZk, viewName);
+      } catch (IOException ioe) {
+        // Ignore, using whatever we have in the original configration
+        return false;
+      }
+    }
+    return false;
   }
 
   public String getMptZnodePath() {

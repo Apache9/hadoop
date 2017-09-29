@@ -161,6 +161,9 @@ public class ViewFs extends AbstractFileSystem {
   InodeTree<AbstractFileSystem> fsState;  // the fs state; ie the mount table
   Path homeDir = null;
   ReentrantReadWriteLock fsStateLock = new ReentrantReadWriteLock();
+  private long lastMptUpdateTime = 0;
+  private FsStateRenewChecker fsRenewCkCb = null;
+  String viewName;
   
   static AccessControlException readOnlyMountTable(final String operation,
       final String p) {
@@ -210,8 +213,8 @@ public class ViewFs extends AbstractFileSystem {
     ugi = UserGroupInformation.getCurrentUser();
     config = conf;
     // Now build  client side view (i.e. client side mount table) from config.
-    String authority = theUri.getAuthority();
-    renewFsState(conf, authority);
+    viewName = theUri.getAuthority();
+    renewFsState(conf, viewName);
   }
 
   public void renewFsState(final Configuration conf, final String authority)
@@ -247,8 +250,8 @@ public class ViewFs extends AbstractFileSystem {
           // return MergeFs.createMergeFs(mergeFsURIList, config);
         }
       };
-
     } finally {
+      lastMptUpdateTime = Time.monotonicNow();
       fsStateLock.writeLock().unlock();
     }
   }
@@ -1146,6 +1149,15 @@ public class ViewFs extends AbstractFileSystem {
       final String p, final boolean resolveLastComponent)
       throws FileNotFoundException {
     fsStateLock.readLock().lock();
+    if (fsRenewCkCb != null && fsRenewCkCb.shouldRenew(lastMptUpdateTime)) {
+      fsStateLock.readLock().unlock();
+      try {
+        renewFsState(config, viewName);
+      } catch (Exception e) {
+        // For whatever issue, use what we have in the config
+      }
+      fsStateLock.readLock().lock();
+    }
     try {
       return fsState.resolve(p, resolveLastComponent);
     } finally {
@@ -1160,5 +1172,21 @@ public class ViewFs extends AbstractFileSystem {
     } finally {
       fsStateLock.readLock().unlock();
     }
+  }
+
+  public long getLastMptUpdateTime() {
+    return lastMptUpdateTime;
+  }
+
+  public void setLastMptUpdateTime(long time) {
+    lastMptUpdateTime = time;
+  }
+
+  public interface FsStateRenewChecker {
+    boolean shouldRenew(long lastUpdateTime);
+  }
+
+  public void setRenewCheckerCb(FsStateRenewChecker cb) {
+    this.fsRenewCkCb = cb;
   }
 }
