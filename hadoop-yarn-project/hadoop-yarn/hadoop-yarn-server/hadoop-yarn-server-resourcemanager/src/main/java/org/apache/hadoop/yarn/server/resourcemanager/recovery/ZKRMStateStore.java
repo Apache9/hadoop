@@ -670,7 +670,13 @@ public class ZKRMStateStore extends RMStateStore {
           + " at: " + nodeUpdatePath);
     }
     byte[] attemptStateData = attemptStateDataPB.getProto().toByteArray();
-
+    if (attemptStateData.length > 5 * 1024 * 1024) {
+      LOG.warn("Too large application attempt state: " + attemptStateData.length
+          + " Master container size: "+ attemptStateDataPB.getProto().getMasterContainer().getSerializedSize()
+          + " Credentials size: "+ attemptStateDataPB.getProto().getAppAttemptTokens().size()
+          + " Diagnostics size: "+ attemptStateDataPB.getProto().getDiagnosticsBytes().size()
+          );
+    }
     if (existsWithRetries(nodeUpdatePath, false) != null) {
       setDataWithRetries(nodeUpdatePath, attemptStateData, -1);
     } else {
