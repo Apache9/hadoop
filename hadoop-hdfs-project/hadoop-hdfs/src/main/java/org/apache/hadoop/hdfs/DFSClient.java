@@ -350,6 +350,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     final String http2EventLoopType;
     final long http2BlockReaderMaxBufferedDataSize;
     final boolean enableSharedDeadNodes;
+    public BlockReaderFactory.FailureInjector brfFailureInjector =
+      new BlockReaderFactory.FailureInjector();
     Configuration conf = null;
 
     public Conf(Configuration conf) {
