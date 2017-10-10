@@ -217,12 +217,20 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   
   private final byte[] oneByteBuf = new byte[1]; // used for 'int read()'
 
-  public void addToDeadNodes(DatanodeInfo dnInfo) {
-    dfsClient.addToDead(this, dnInfo);
+  public void addToLocalDeadNodes(DatanodeInfo dnInfo) {
+    deadNodes.put(dnInfo, dnInfo);
   }
 
-  public ConcurrentHashMap<DatanodeInfo, DatanodeInfo> getDeadNodes() {
+  public void removeFromLocalDeadNodes(DatanodeInfo dnInfo) {
+    deadNodes.remove(dnInfo);
+  }
+
+  public ConcurrentHashMap<DatanodeInfo, DatanodeInfo> getLocalDeadNodes() {
    return deadNodes;
+  }
+
+  public void clearLocalDeadNodes() {
+    deadNodes.clear();
   }
 
   public DFSClient getDfsClient () {
@@ -736,7 +744,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             DFSClient.LOG.warn("Failed to connect to " + targetAddr + " for block"
               + ", add to deadNodes and continue. " + ex, ex);
             // Put chosen node into dead list, continue
-            addToDeadNodes(chosenNode);
+            addToLocalDeadNodes(chosenNode);
+            dfsClient.addSuspectNodeToDetect(this, chosenNode);
           }
         }
       }
@@ -932,7 +941,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
            */ 
           sourceFound = seekToBlockSource(pos);
         } else {
-          addToDeadNodes(currentNode);
+          addToLocalDeadNodes(currentNode);
+          dfsClient.addSuspectNodeToDetect(this, currentNode);
           sourceFound = seekToNewSource(pos);
         }
         if (!sourceFound) {
@@ -985,7 +995,10 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             DFSClient.LOG.warn("DFS Read", e);
           }
           blockEnd = -1;
-          if (currentNode != null) { addToDeadNodes(currentNode); }
+          if (currentNode != null) {
+            addToLocalDeadNodes(currentNode);
+            dfsClient.addSuspectNodeToDetect(this, currentNode);
+          }
           if (--retries == 0) {
             throw e;
           }
@@ -1085,7 +1098,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           Thread.sleep((long)waitTime);
         } catch (InterruptedException iex) {
         }
-        dfsClient.clearDeadDatanodesOfDFSInputStream(this); //2nd option is to remove only nodes[blockId]
+        clearLocalDeadNodes(); //2nd option is to remove only nodes[blockId]
         openInfo();
         block = getBlockAt(block.getStartOffset(), false);
         failures++;
@@ -1153,7 +1166,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         // see T3714. Through we can throw exception here directly maybe.
         // for safety, let's play with deadNode&retry:)
         DFSClient.LOG.warn("", fnfe);
-        addToDeadNodes(addressPair.info);
+        addToLocalDeadNodes(addressPair.info);
       } catch (IOException e) {
         // Ignore. Already processed inside the function.
         // Loop through to try the next node.
@@ -1257,7 +1270,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         DFSClient.LOG.warn(msg);
         // we want to remember what we have tried
         addIntoCorruptedBlockMap(block.getBlock(), chosenNode, corruptedBlockMap);
-        addToDeadNodes(chosenNode);
+        addToLocalDeadNodes(chosenNode);
         throw new IOException(msg);
       } catch (IOException e) {
         if (e instanceof InvalidEncryptionKeyException && refetchEncryptionKey > 0) {
@@ -1281,7 +1294,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           String msg = "Failed to connect to " + targetAddr + " for file "
               + src + " for block " + block.getBlock() + ":" + e;
           DFSClient.LOG.warn("Connection failure: " + msg, e);
-          addToDeadNodes(chosenNode);
+          addToLocalDeadNodes(chosenNode);
+          dfsClient.addSuspectNodeToDetect(this, chosenNode);
           throw new IOException(msg);
         }
       } finally {
@@ -1671,13 +1685,13 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     rwLock.writeLock().lock();
     try {
       boolean markedDead = dfsClient.hasDeadNode(this, currentNode);
-      addToDeadNodes(currentNode);
+      addToLocalDeadNodes(currentNode);
       DatanodeInfo oldNode = currentNode;
       DatanodeInfo newNode = blockSeekTo(targetPos);
       if (!markedDead) {
         /* remove it from deadNodes. blockSeekTo could have cleared 
          * deadNodes and added currentNode again. Thats ok. */
-        dfsClient.removeFromDead(this, oldNode);
+        removeFromLocalDeadNodes(oldNode);
       }
       if (!oldNode.getDatanodeUuid().equals(newNode.getDatanodeUuid())) {
         currentNode = newNode;
