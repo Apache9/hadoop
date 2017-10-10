@@ -39,14 +39,18 @@ public class DeadNodeDetector implements Runnable {
 
   private ArrayList<DatanodeInfo> liveNodesProbeQueue = new ArrayList<DatanodeInfo>();
   private ArrayList<DatanodeInfo> deadNodesProbeQueue = new ArrayList<DatanodeInfo>();
+  private ArrayList<DatanodeInfo> suspectNodesProbeQueue = new ArrayList<DatanodeInfo>();
   private int maxLiveNodesProbeQueueLen = 0;
   private int maxDeadNodesProbeQueueLen = 0;
+  private int maxSuspectNodesProbeQueueLen = 0;
 
   private Thread probeLiveNodesSchedulerThr;
   private Thread probeDeadNodesSchedulerThr;
+  private Thread probeSuspectNodesSchedulerThr;
 
   private ExecutorService probeLiveNodesThreadPool;
   private ExecutorService probeDeadNodesThreadPool;
+  private ExecutorService probeSuspectNodesThreadPool;
 
   private boolean enableProbeLiveNodes = false;
 
@@ -60,7 +64,8 @@ public class DeadNodeDetector implements Runnable {
 
   private enum ProbeType {
     CHECK_ALIVE,
-    CHECK_DEAD
+    CHECK_DEAD,
+    CHECK_SUSPECT
   }
 
   private State state;
@@ -85,11 +90,15 @@ public class DeadNodeDetector implements Runnable {
         DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_QUEUE_MAX_DEFALT);
     maxDeadNodesProbeQueueLen = conf.getInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_KEY,
         DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_DEFALT);
+    maxSuspectNodesProbeQueueLen = conf.getInt(DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_QUEUE_MAX_KEY,
+        DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_QUEUE_MAX_DEFALT);
 
     int deadNodeDetectLiveThreads = conf.getInt(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_THREADS_KEY,
         DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_THREADS_DEFALT);
     int deadNodeDetectDeadThreads = conf.getInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_THREADS_KEY,
         DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_THREADS_DEFALT);
+    int suspectNodeDetectDeadThreads = conf.getInt(DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_THREADS_KEY,
+        DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_THREADS_DEFALT);
 
     enableProbeLiveNodes = conf.getBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY,
         DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_DEFALT);
@@ -99,6 +108,7 @@ public class DeadNodeDetector implements Runnable {
 
     probeLiveNodesThreadPool = Executors.newFixedThreadPool(deadNodeDetectLiveThreads);
     probeDeadNodesThreadPool = Executors.newFixedThreadPool(deadNodeDetectDeadThreads);
+    probeSuspectNodesThreadPool = Executors.newFixedThreadPool(suspectNodeDetectDeadThreads);
 
     probeDeadNodesSchedulerThr = new Thread(new ProbeScheduler(this, ProbeType.CHECK_DEAD));
     probeDeadNodesSchedulerThr.setDaemon(true);
@@ -107,6 +117,10 @@ public class DeadNodeDetector implements Runnable {
     probeLiveNodesSchedulerThr = new Thread(new ProbeScheduler(this, ProbeType.CHECK_ALIVE));
     probeLiveNodesSchedulerThr.setDaemon(true);
     probeLiveNodesSchedulerThr.start();
+
+    probeSuspectNodesSchedulerThr = new Thread(new ProbeScheduler(this, ProbeType.CHECK_SUSPECT));
+    probeSuspectNodesSchedulerThr.setDaemon(true);
+    probeSuspectNodesSchedulerThr.start();
 
     LOG.info("start dead node detector for DFSClient " + this.name);
     state = State.INIT;
@@ -127,6 +141,13 @@ public class DeadNodeDetector implements Runnable {
     deadNodesProbeQueue.add(datanodeInfo);
   }
 
+  private synchronized void addToSuspectNodesProbeQueue(DatanodeInfo datanodeInfo) {
+    if (suspectNodesProbeQueue.size() > maxSuspectNodesProbeQueueLen) {
+      return;
+    }
+    suspectNodesProbeQueue.add(datanodeInfo);
+  }
+
   private synchronized DatanodeInfo pollFromLiveNodesProbeQueue() {
     if (liveNodesProbeQueue.isEmpty()) {
       return null;
@@ -142,12 +163,23 @@ public class DeadNodeDetector implements Runnable {
     return deadNodesProbeQueue.remove(0);
   }
 
+  private synchronized DatanodeInfo pollFromSuspectNodesProbeQueue() {
+    if (suspectNodesProbeQueue.isEmpty()) {
+      return null;
+    }
+    return suspectNodesProbeQueue.remove(0);
+  }
+
   private synchronized boolean isLiveNodesProbeQueueFull () {
     return liveNodesProbeQueue.size() >= maxLiveNodesProbeQueueLen;
   }
 
   private synchronized boolean isDeadNodesProbeQueueFull () {
     return deadNodesProbeQueue.size() >= maxDeadNodesProbeQueueLen;
+  }
+
+  private synchronized boolean isSuspectNodesProbeQueueFull () {
+    return suspectNodesProbeQueue.size() >= maxSuspectNodesProbeQueueLen;
   }
 
   private void checkDeadNodes() {
@@ -238,7 +270,7 @@ public class DeadNodeDetector implements Runnable {
         removeFromDead(probe.getDatanodeInfo());
       }
     } else {
-      if (probe.getType() == ProbeType.CHECK_ALIVE) {
+      if (probe.getType() == ProbeType.CHECK_ALIVE || probe.getType() == ProbeType.CHECK_SUSPECT) {
         LOG.info("add the node to dead " + probe.getDatanodeInfo());
         addToDead(probe.getDatanodeInfo());
       }
@@ -265,6 +297,15 @@ public class DeadNodeDetector implements Runnable {
         probeInProg.put(datanodeInfo, datanodeInfo);
         Probe probe = new Probe(this, datanodeInfo, ProbeType.CHECK_DEAD);
         probeDeadNodesThreadPool.execute(probe);
+      }
+    } else if (type == ProbeType.CHECK_SUSPECT) {
+      while ((datanodeInfo = pollFromSuspectNodesProbeQueue()) != null) {
+        if (probeInProg.contains(datanodeInfo)) {
+          continue;
+        }
+        probeInProg.put(datanodeInfo, datanodeInfo);
+        Probe probe = new Probe(this, datanodeInfo, ProbeType.CHECK_SUSPECT);
+        probeSuspectNodesThreadPool.execute(probe);
       }
     }
   }
@@ -333,6 +374,14 @@ public class DeadNodeDetector implements Runnable {
     } else {
       datanodeInfos.add(datanodeInfo);
     }
+  }
+
+  public synchronized void addSuspectNodeToDetect(DatanodeInfo datanodeInfo) {
+    if (isSuspectNodesProbeQueueFull()) {
+      return;
+    }
+    // we enqueue the probe directly since it has higher priority
+    suspectNodesProbeQueue.add(datanodeInfo);
   }
 
   public synchronized void removeNodeFromDetect(DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {

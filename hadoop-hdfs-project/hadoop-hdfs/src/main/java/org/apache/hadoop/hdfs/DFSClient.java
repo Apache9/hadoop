@@ -3278,39 +3278,19 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   	return dfsClientConf.defaultChecksumOpt;
   }
 
-  public void addToDead(DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
-    if (clientContext.isEnableSharedDeadNodes()) {
-      clientContext.getDeadNodeDetector().addToDead(datanodeInfo);
-    } else {
-      dfsInputStream.getDeadNodes().put(datanodeInfo, datanodeInfo);
-    }
-  }
-
-
-  public void removeFromDead(DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
-    if (clientContext.isEnableSharedDeadNodes()) {
-      return;
-    } else {
-      dfsInputStream.getDeadNodes().remove(datanodeInfo);
-    }
-  }
-
-  public void clearDeadDatanodesOfDFSInputStream (DFSInputStream dfsInputStream) {
-    if (clientContext.isEnableSharedDeadNodes()) {
-      return;
-    } else {
-      dfsInputStream.getDeadNodes().clear();
-    }
-  }
 
   public ConcurrentHashMap<DatanodeInfo, DatanodeInfo> getDeadNodes (DFSInputStream dfsInputStream) {
     if (clientContext.isEnableSharedDeadNodes()) {
-      return clientContext.getDeadNodeDetector().getDeadNodes();
+      ConcurrentHashMap<DatanodeInfo, DatanodeInfo> deadNodes = new ConcurrentHashMap<DatanodeInfo, DatanodeInfo>();
+      if (dfsInputStream != null) {
+        deadNodes.putAll(dfsInputStream.getLocalDeadNodes());
+      }
+      deadNodes.putAll(clientContext.getDeadNodeDetector().getDeadNodes());
+      return deadNodes;
     } else {
-      return dfsInputStream.getDeadNodes();
+      return dfsInputStream.getLocalDeadNodes();
     }
   }
-
   // for the test
   public Set<DatanodeInfo> getLiveNodes() {
     if (clientContext.isEnableSharedDeadNodes()) {
@@ -3322,9 +3302,13 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
   public boolean hasDeadNode (DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
     if (clientContext.isEnableSharedDeadNodes()) {
-      return clientContext.getDeadNodeDetector().hasDeadNodes(datanodeInfo);
+      boolean isDeadNode = clientContext.getDeadNodeDetector().hasDeadNodes(datanodeInfo);
+      if (dfsInputStream != null) {
+        isDeadNode = isDeadNode || dfsInputStream.getLocalDeadNodes().contains(datanodeInfo);
+      }
+      return isDeadNode;
     } else {
-      return dfsInputStream.getDeadNodes().contains(datanodeInfo);
+      return dfsInputStream.getLocalDeadNodes().contains(datanodeInfo);
     }
   }
 
@@ -3345,5 +3329,13 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
   public boolean isEnableSharedDeadNodes() {
     return clientContext.isEnableSharedDeadNodes();
+  }
+
+  // the node from the local dead nodes, it needed to be checked if dead really
+  public void addSuspectNodeToDetect(DFSInputStream dfsInputStream, DatanodeInfo datanodeInfo) {
+    if (!clientContext.isEnableSharedDeadNodes()) {
+      return;
+    }
+    clientContext.getDeadNodeDetector().addSuspectNodeToDetect(datanodeInfo);
   }
 }
