@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -27,12 +29,10 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hdfs.MiniDFSCluster.DataNodeProperties;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.util.ThreadUtil;
 
 import org.junit.After;
@@ -545,6 +545,75 @@ public class TestDFSClientDetectDeadNodes {
 
     assertTrue(din.getDfsClient().getLiveNodes().size() == 0);
     assertTrue(din.getDfsClient().getDeadNodes(din).size() == 0);
+
+  }
+
+
+  @Test(timeout=60000000)
+  public void testDetectLocalDeadNodeOnly() throws IOException {
+    // Forgive nodes in under 2.5s for this test case.
+    conf.setBoolean(
+        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_KEY,
+        true);
+    conf.setLong(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_INTERVAL_KEY,
+        5000);
+    conf.setLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
+        5000);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 1);
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY, true);
+    conf.setInt(
+        DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY,
+        1);
+    // We'll be using a 512 bytes block size just for tests
+    // so making sure the checksum bytes too match it.
+    conf.setInt("io.bytes.per.checksum", 512);
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    ThreadUtil.sleepAtLeastIgnoreInterrupts(10 * 1000L);
+
+    List<DataNodeProperties> props = cluster.dataNodes;
+    FileSystem fs = cluster.getFileSystem();
+    Path filePath = new Path("/testNodeBecomeDead");
+
+    // 256 bytes data chunk for writes
+    byte[] bytes = new byte[256];
+    for (int index = 0; index < bytes.length; index++) {
+      bytes[index] = '0';
+    }
+
+    // File with a 512 bytes block size
+    FSDataOutputStream out = fs.create(filePath, true, 4096, (short) 1, 512);
+
+    // Write a block to all 3 DNs (2x256bytes).
+    out.write(bytes);
+    out.write(bytes);
+    out.hflush();
+    out.close();
+
+    FSDataInputStream in1 = fs.open(filePath);
+    DFSInputStream din = (DFSInputStream) in1.getWrappedStream();
+    FSDataInputStream in2 = fs.open(filePath);
+    DFSInputStream din2 = (DFSInputStream) in2.getWrappedStream();
+
+    cluster.stopDataNode(0);
+
+    try {
+      in1.read();
+    } catch (BlockMissingException e) {
+    }
+
+    assertTrue(din.getLocalDeadNodes().size() == 1);
+    assertTrue(din2.getLocalDeadNodes().size() == 0);
+
+
+    while (din.getDfsClient().getLiveNodes().size() != 0) {
+      ThreadUtil.sleepAtLeastIgnoreInterrupts(5 * 1000L);
+    }
+
+    assertTrue(din.getDfsClient().getDeadNodes(din).size() == 1);
+    assertTrue(din2.getDfsClient().getDeadNodes(din2).size() == 1);
+    assertTrue(din.getLocalDeadNodes().size() == 1);
+    assertTrue(din2.getLocalDeadNodes().size() == 0);
 
   }
 }

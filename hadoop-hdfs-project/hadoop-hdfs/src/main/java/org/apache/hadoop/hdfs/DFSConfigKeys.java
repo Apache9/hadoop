@@ -590,10 +590,14 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final int DFS_CLIENT_LIVE_NODE_DETECT_QUEUE_MAX_DEFALT = 1000;
   public static final String DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_KEY = "dfs.client.deadnode.detect.dead.queue.max";
   public static final int DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_DEFALT = 100;
+  public static final String DFS_CLIENT_SUSPECT_NODE_DETECT_QUEUE_MAX_KEY = "dfs.client.deadnode.detect.suspect.queue.max";
+  public static final int DFS_CLIENT_SUSPECT_NODE_DETECT_QUEUE_MAX_DEFALT = 1000;
   public static final String DFS_CLIENT_LIVE_NODE_DETECT_THREADS_KEY = "dfs.client.deadnode.detect.live.threads";
   public static final int DFS_CLIENT_LIVE_NODE_DETECT_THREADS_DEFALT = 100;
   public static final String DFS_CLIENT_DEAD_NODE_DETECT_THREADS_KEY = "dfs.client.deadnode.detect.dead.threads";
   public static final int DFS_CLIENT_DEAD_NODE_DETECT_THREADS_DEFALT = 10;
+  public static final String DFS_CLIENT_SUSPECT_NODE_DETECT_THREADS_KEY = "dfs.client.deadnode.detect.suspect.threads";
+  public static final int DFS_CLIENT_SUSPECT_NODE_DETECT_THREADS_DEFALT = 10;
   // property for fsimage compression
   public static final String DFS_IMAGE_COMPRESS_KEY = "dfs.image.compress";
   public static final boolean DFS_IMAGE_COMPRESS_DEFAULT = false;
