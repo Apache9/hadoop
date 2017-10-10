@@ -331,6 +331,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     final int failedDatanodeTimeout;
     final int failedDatanodeMaxRetry;
     final int slowConnWarningMs;
+    public BlockReaderFactory.FailureInjector brfFailureInjector =
+      new BlockReaderFactory.FailureInjector();
 
     public Conf(Configuration conf) {
       // The hdfsTimeout is currently the same as the ipc timeout 
