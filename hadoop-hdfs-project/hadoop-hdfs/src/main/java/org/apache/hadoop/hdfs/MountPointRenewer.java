@@ -145,6 +145,16 @@ public class MountPointRenewer {
     return res;
   }
 
+  private static String getZkQuorum(Configuration inconf) {
+    // If no observer is configured, fail back to ha quorum. The intention is to
+    // support smooth upgrading.
+    String zkQuorum = inconf.get(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER);
+    if (zkQuorum == null) {
+      zkQuorum = inconf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
+    }
+    return zkQuorum;
+  }
+
   private static String getMptConfFromZookeeper(String viewName,
       Configuration conf)
       throws IOException,
@@ -159,10 +169,14 @@ public class MountPointRenewer {
               + "/"
               + conf.get(FederationConfigKeys.FEDFS_ZK_MPT_NODE_KEY,
                   FederationConfigKeys.FEDFS_ZK_MPT_NODE_DEFAULT);
+      String zkQuorum = getZkQuorum(conf);
+      if (zkQuorum == null) {
+        return null;
+      }
       zkClient =
-          new ZooKeeper(conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY),
-              conf.getInt(CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
-                  CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT),
+          new ZooKeeper(zkQuorum, conf.getInt(
+              CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
+              CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT),
               new Watcher() {
                 public void process(WatchedEvent event) {
                   // Empty watcher handler
@@ -211,9 +225,13 @@ public class MountPointRenewer {
   }
 
   public ZooKeeper getZkClient() throws IOException {
-    return new ZooKeeper(conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY),
-        conf.getInt(CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
-            CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT), new Watcher() {
+    String zkQuorum = conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
+    if (zkQuorum == null) {
+      return null;
+    }
+    return new ZooKeeper(zkQuorum, conf.getInt(
+        CommonConfigurationKeys.ZK_SESSION_TIMEOUT_KEY,
+        CommonConfigurationKeys.ZK_SESSION_TIMEOUT_DEFAULT), new Watcher() {
           public void process(WatchedEvent event) {
             // Empty watcher handler
           }
