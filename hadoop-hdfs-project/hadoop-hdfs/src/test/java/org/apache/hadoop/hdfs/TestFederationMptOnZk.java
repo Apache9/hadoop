@@ -106,8 +106,9 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
     // 3. Verify that we can create files under the new mount point with the
     // same fs client in step 2
     String str = "testFederatedDFSFileSystem";
-    CONF.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
+    CONF.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER, hostPort);
     Configuration tmpCONF = new Configuration(CONF);
+    tmpCONF.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
     DFSAdmin admin = new DFSAdmin(tmpCONF);
     runUpdateMptOnZk(admin);
@@ -126,6 +127,7 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
 
     // step 2
     tmpCONF = new Configuration(CONF);
+    tmpCONF.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     ConfigUtil.addLink(tmpCONF, "zkmpt", "/fs3", fHdfs3.getUri());
     tmpCONF.setBoolean("fs.hdfs.impl.disable.cache", true);
     admin = new DFSAdmin(tmpCONF);
@@ -147,8 +149,9 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
     // 3. Verify that we can create files under the new mount point with the
     // same fs client in step 2
     String str = "testFederatedHDFS";
-    CONF.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
+    CONF.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER, hostPort);
     Configuration tmpCONF = new Configuration(CONF);
+    tmpCONF.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     DFSAdmin admin = new DFSAdmin(tmpCONF);
     runUpdateMptOnZk(admin);
     AbstractFileSystem afs =
@@ -171,6 +174,7 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
 
     // step 2
     tmpCONF = new Configuration(CONF);
+    tmpCONF.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     ConfigUtil.addLink(tmpCONF, "zkmpt", "/fs4", fHdfs4.getUri());
     tmpCONF.setBoolean("fs.hdfs.impl.disable.cache", true);
     admin = new DFSAdmin(tmpCONF);
