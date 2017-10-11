@@ -55,7 +55,6 @@ import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
-
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.MultithreadedTestUtil.TestContext;
@@ -101,6 +100,7 @@ public class TestDFSClientZKBasedFailover {
        * conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + nameservice,
        * hostPort);
        */
+      conf.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER, hostPort);
       conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
       conf.set(DFSConfigKeys.DFS_HA_FENCE_METHODS_KEY,
           AlwaysSucceedFencer.class.getName());
