@@ -63,7 +63,7 @@ class Http2BlockReader implements BlockReader {
 
   private long offsetInBlock;
 
-  private final Queue<ByteBuf> queue = new ArrayDeque<>();
+  private final Queue<ByteBuf> queue = new ArrayDeque<ByteBuf>();
 
   public Http2BlockReader(Http2BlockDataReceiverImpl receiver,
       long offsetInBlock, long endOffsetInBlock, boolean isLocal) {

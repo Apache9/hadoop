@@ -33,7 +33,7 @@ import org.apache.hadoop.security.token.SecretManager;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.UnsupportedEncodingException;
 
 import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
 import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
@@ -87,7 +87,14 @@ public class ExceptionHandler {
       s = INTERNAL_SERVER_ERROR;
     }
 
-    byte[] js = JsonUtil.toJsonString(e).getBytes(StandardCharsets.UTF_8);
+    // byte[] js = JsonUtil.toJsonString(e).getBytes("UTF-8");
+    byte[] js = null;
+    try {
+      js = JsonUtil.toJsonString(e).getBytes("UTF-8");
+    } catch (UnsupportedEncodingException uee) {
+      LOG.warn(e);
+    }
+
     DefaultFullHttpResponse resp =
       new DefaultFullHttpResponse(HTTP_1_1, s, Unpooled.wrappedBuffer(js));
 

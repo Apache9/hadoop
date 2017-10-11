@@ -63,7 +63,7 @@ class Http2BlockDataReceiverImpl implements Http2BlockDataReceiver, Closeable {
 
   private OpReadBlockFrameHeaderProto frameHeader;
 
-  private final Queue<ByteBuf> frameDatas = new ArrayDeque<>();
+  private final Queue<ByteBuf> frameDatas = new ArrayDeque<ByteBuf>();
 
   private long bufferedDataSize = 0L;
 

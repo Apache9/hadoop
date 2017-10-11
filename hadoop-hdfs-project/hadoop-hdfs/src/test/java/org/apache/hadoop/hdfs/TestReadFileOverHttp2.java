@@ -25,7 +25,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import org.apache.hadoop.conf.Configuration;
@@ -51,6 +51,8 @@ public class TestReadFileOverHttp2 {
 
   private static Path FILE = new Path("/test");
 
+  private static Random random = new Random();
+
   private static byte[] CONTENT;
 
   @Parameter
@@ -69,10 +71,16 @@ public class TestReadFileOverHttp2 {
     CLUSTER = new MiniDFSCluster.Builder(CONF).numDataNodes(1).build();
     CLUSTER.waitActive();
     CONTENT = new byte[4 * 1024 * 1024];
-    ThreadLocalRandom.current().nextBytes(CONTENT);
-    try (FSDataOutputStream out = CLUSTER.getFileSystem().create(FILE, true,
-        8 * 1024, (short) 3, 1024 * 1024)) {
+    random.nextBytes(CONTENT);
+    FSDataOutputStream out = null;
+    try {
+      out = CLUSTER.getFileSystem().create(FILE, true,
+        8 * 1024, (short) 3, 1024 * 1024);
       out.write(CONTENT);
+    } finally {
+      if (out != null) {
+        out.close();
+      }
     }
   }
 
@@ -92,18 +100,17 @@ public class TestReadFileOverHttp2 {
   @Test
   public void test() throws IOException {
     byte[] data = new byte[CONTENT.length];
-    try (FileSystem fs = getFileSystem()) {
-      try (FSDataInputStream in = fs.open(FILE)) {
-        in.readFully(data);
-      }
-    }
+    FileSystem fs = getFileSystem();
+    FSDataInputStream in = fs.open(FILE);
+    in.readFully(data);
+    fs.close();
+    in.close();
     assertArrayEquals(CONTENT, data);
   }
 
   private void pread(FSDataInputStream in) throws IOException {
-    int offset = ThreadLocalRandom.current().nextInt(CONTENT.length);
-    int length = ThreadLocalRandom.current().nextInt(1,
-        Math.min(64 * 1024, CONTENT.length - offset));
+    int offset = random.nextInt(CONTENT.length);
+    int length = random.nextInt(Math.min(64 * 1024, CONTENT.length - offset)) + 1;
     byte[] data = new byte[length];
     for (int totalRead = 0; totalRead < length;) {
       int read =
@@ -124,32 +131,37 @@ public class TestReadFileOverHttp2 {
       throws IOException, InterruptedException {
     int numThreads = 10;
     final AtomicReferenceArray<Throwable> error =
-        new AtomicReferenceArray<>(numThreads);
-    try (FileSystem fs = getFileSystem()) {
-      try (final FSDataInputStream in = fs.open(FILE)) {
-        Thread[] threads = new Thread[numThreads];
-        for (int i = 0; i < numThreads; i++) {
-          final int index = i;
-          threads[i] = new Thread("test-" + i) {
+        new AtomicReferenceArray<Throwable>(numThreads);
+    FileSystem fs = null;
+    try {
+      fs = getFileSystem();
+      final FSDataInputStream in = fs.open(FILE);
+      Thread[] threads = new Thread[numThreads];
+      for (int i = 0; i < numThreads; i++) {
+        final int index = i;
+        threads[i] = new Thread("test-" + i) {
 
-            @Override
-            public void run() {
-              try {
-                for (int i = 0; i < 100; i++) {
-                  pread(in);
-                }
-              } catch (Throwable t) {
-                error.set(index, t);
+          @Override
+          public void run() {
+            try {
+              for (int i = 0; i < 100; i++) {
+                pread(in);
               }
+            } catch (Throwable t) {
+              error.set(index, t);
             }
-          };
-        }
-        for (Thread t : threads) {
-          t.start();
-        }
-        for (Thread t : threads) {
-          t.join();
-        }
+          }
+        };
+      }
+      for (Thread t : threads) {
+        t.start();
+      }
+      for (Thread t : threads) {
+        t.join();
+      }
+    } finally {
+      if (fs != null) {
+        fs.close();
       }
     }
     for (int i = 0; i < numThreads; i++) {

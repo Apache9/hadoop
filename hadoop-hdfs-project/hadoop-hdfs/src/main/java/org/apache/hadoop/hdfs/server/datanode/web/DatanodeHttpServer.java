@@ -220,6 +220,6 @@ public class DatanodeHttpServer implements Closeable {
                              DFS_DATANODE_HTTPS_ADDRESS_DEFAULT);
     }
     InetSocketAddress inetSocker = NetUtils.createSocketAddr(addr);
-    return inetSocker.getHostString();
+    return inetSocker.getHostName();
   }
 }
