@@ -169,6 +169,11 @@ public class ContainersLauncher extends AbstractService
       return;
     }
 
+    if (getConfig().get(YarnConfiguration.NM_PRE_KILL_CONTAINER_SCRIPT_PATH) == null) {
+      LOG.debug("No pre-kill-container script configured");
+      return;
+    }
+
     File script = new File(getConfig().get(YarnConfiguration.NM_PRE_KILL_CONTAINER_SCRIPT_PATH));
     if (!script.exists()) {
       return;

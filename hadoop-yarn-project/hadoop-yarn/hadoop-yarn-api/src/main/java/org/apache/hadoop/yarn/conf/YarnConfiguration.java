@@ -804,7 +804,16 @@ public class YarnConfiguration extends Configuration {
       NM_PREFIX + "resource.percentage-physical-cpu-limit";
   public static final int DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT =
       100;
-  
+
+  /** overuse ratio of cpu-vcores and memory-mb for nodemanager */
+  public static final String NM_VCORES_OVERUSE_RATIO = NM_PREFIX + "resource.cpu-vcores.overuse-ratio";
+
+  public static final double DEFAULT_NM_VCORES_OVERUSE_RATIO = 1.0;
+
+  public static final String NM_PMEM_MB_OVERUSE_RATIO = NM_PREFIX + "resource.memory-mb.overuse-ratio";
+
+  public static final double DEFAULT_NM_PMEM_MB_OVERUSE_RATIO = 1.0;
+
   /** NM Webapp address.**/
   public static final String NM_WEBAPP_ADDRESS = NM_PREFIX + "webapp.address";
   public static final int DEFAULT_NM_WEBAPP_PORT = 8042;

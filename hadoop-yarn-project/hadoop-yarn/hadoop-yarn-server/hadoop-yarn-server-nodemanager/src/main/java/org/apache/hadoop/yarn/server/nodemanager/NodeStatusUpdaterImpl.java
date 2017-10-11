@@ -133,17 +133,26 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     int memoryMb = 
         conf.getInt(
             YarnConfiguration.NM_PMEM_MB, YarnConfiguration.DEFAULT_NM_PMEM_MB);
-    float vMemToPMem =             
+
+    double memoryMbOveruseRatio = conf.getDouble(YarnConfiguration.NM_PMEM_MB_OVERUSE_RATIO,
+        YarnConfiguration.DEFAULT_NM_PMEM_MB_OVERUSE_RATIO);
+    int overUseMemoryMb = (int)(memoryMb * memoryMbOveruseRatio);
+
+    float vMemToPMem =
         conf.getFloat(
             YarnConfiguration.NM_VMEM_PMEM_RATIO, 
             YarnConfiguration.DEFAULT_NM_VMEM_PMEM_RATIO); 
-    int virtualMemoryMb = (int)Math.ceil(memoryMb * vMemToPMem);
-    
+    int virtualMemoryMb = (int)Math.ceil(overUseMemoryMb * vMemToPMem);
+
     int virtualCores =
         conf.getInt(
             YarnConfiguration.NM_VCORES, YarnConfiguration.DEFAULT_NM_VCORES);
 
-    this.totalResource = Resource.newInstance(memoryMb, virtualCores);
+    double vCoresOveruseRatio = conf.getDouble(YarnConfiguration.NM_VCORES_OVERUSE_RATIO,
+        YarnConfiguration.DEFAULT_NM_VCORES_OVERUSE_RATIO);
+    int overUseVirtualCores = (int)(virtualCores * vCoresOveruseRatio);
+
+    this.totalResource = Resource.newInstance(overUseMemoryMb, overUseVirtualCores);
     metrics.addResource(totalResource);
     this.tokenKeepAliveEnabled = isTokenKeepAliveEnabled(conf);
     this.tokenRemovalDelayMs =
@@ -173,8 +182,10 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     }
     super.serviceInit(conf);
     LOG.info("Initialized nodemanager for " + nodeId + ":" +
-        " physical-memory=" + memoryMb + " virtual-memory=" + virtualMemoryMb +
-        " virtual-cores=" + virtualCores);
+        " physical-memory=" + memoryMb + " physical-memory-overuse-ratio" + memoryMbOveruseRatio +
+        " overuse-physical-memory=" + overUseMemoryMb + " virtual-memory=" + virtualMemoryMb +
+        " virtual-cores=" + virtualCores + " virtual-cores-overuse-ratio=" + vCoresOveruseRatio +
+        " overuse-virtual-cores=" + overUseVirtualCores);
   }
 
   @Override
