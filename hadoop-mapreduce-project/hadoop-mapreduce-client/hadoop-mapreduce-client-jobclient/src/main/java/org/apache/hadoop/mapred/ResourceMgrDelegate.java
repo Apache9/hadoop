@@ -336,6 +336,14 @@ public class ResourceMgrDelegate extends YarnClient {
     return client.getApplications(applicationTypes, applicationStates);
   }
 
+  public List<ApplicationReport> getApplications(
+      Set<String> applicationTypes,
+      EnumSet<YarnApplicationState> applicationStates,
+      Set<String> queues) throws YarnException,
+      IOException {
+    return client.getApplications(applicationTypes, applicationStates, queues);
+  }
+
   @Override
   public YarnClusterMetrics getYarnClusterMetrics() throws YarnException,
       IOException {

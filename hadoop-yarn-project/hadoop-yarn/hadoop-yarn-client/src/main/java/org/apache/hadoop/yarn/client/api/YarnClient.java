@@ -292,6 +292,31 @@ public abstract class YarnClient extends AbstractService {
 
   /**
    * <p>
+   * Get a report (ApplicationReport) of Applications matching the given
+   * application types, application states and queues in the cluster.
+   * </p>
+   *
+   * <p>
+   * If the user does not have <code>VIEW_APP</code> access for an application
+   * then the corresponding report will be filtered as described in
+   * {@link #getApplicationReport(ApplicationId)}.
+   * </p>
+   *
+   * @param applicationTypes
+   * @param applicationStates
+   * @param queues
+   * @return a list of reports of applications
+   * @throws YarnException
+   * @throws IOException
+   */
+  public abstract List<ApplicationReport> getApplications(
+      Set<String> applicationTypes,
+      EnumSet<YarnApplicationState> applicationStates,
+      Set<String> queues) throws YarnException,
+      IOException;
+
+  /**
+   * <p>
    * Get metrics ({@link YarnClusterMetrics}) about the cluster.
    * </p>
    * 

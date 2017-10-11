@@ -182,11 +182,13 @@ public abstract class GetApplicationsRequest {
   @Stable
   public static GetApplicationsRequest newInstance(
       Set<String> applicationTypes,
-      EnumSet<YarnApplicationState> applicationStates) {
+      EnumSet<YarnApplicationState> applicationStates,
+      Set<String> queues) {
     GetApplicationsRequest request =
         Records.newRecord(GetApplicationsRequest.class);
     request.setApplicationTypes(applicationTypes);
     request.setApplicationStates(applicationStates);
+    request.setQueues(queues);
     return request;
   }
 

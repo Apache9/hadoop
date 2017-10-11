@@ -442,8 +442,17 @@ public class YarnClientImpl extends YarnClient {
   public List<ApplicationReport> getApplications(Set<String> applicationTypes,
       EnumSet<YarnApplicationState> applicationStates) throws YarnException,
       IOException {
+    return getApplications(applicationTypes, applicationStates, null);
+  }
+
+  @Override
+  public List<ApplicationReport> getApplications(
+      Set<String> applicationTypes,
+      EnumSet<YarnApplicationState> applicationStates,
+      Set<String> queues) throws YarnException,
+      IOException {
     GetApplicationsRequest request =
-        GetApplicationsRequest.newInstance(applicationTypes, applicationStates);
+        GetApplicationsRequest.newInstance(applicationTypes, applicationStates, queues);
     GetApplicationsResponse response = rmClient.getApplications(request);
     return response.getApplicationList();
   }

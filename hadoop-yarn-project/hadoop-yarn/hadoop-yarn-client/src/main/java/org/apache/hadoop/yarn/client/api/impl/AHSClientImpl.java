@@ -107,7 +107,7 @@ public class AHSClientImpl extends AHSClient {
   public List<ApplicationReport> getApplications() throws YarnException,
       IOException {
     GetApplicationsRequest request = GetApplicationsRequest.newInstance(null,
-        null);
+        null, null);
     GetApplicationsResponse response = ahsClient.getApplications(request);
     return response.getApplicationList();
   }

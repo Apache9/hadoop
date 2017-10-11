@@ -90,12 +90,14 @@ public class ApplicationCLI extends YarnCLI {
       opts.addOption(LIST_CMD, false, "List applications. "
           + "Supports optional use of -appTypes to filter applications "
           + "based on application type, "
+          + "-queue to filter applications based on application queue, "
           + "and -appStates to filter applications based on application state.");
       opts.addOption(KILL_CMD, true, "Kills the application.");
       opts.addOption(MOVE_TO_QUEUE_CMD, true, "Moves the application to a "
           + "different queue.");
       opts.addOption(QUEUE_CMD, true, "Works with the movetoqueue command to"
-          + " specify which queue to move an application to.");
+          + " specify which queue to move an application to, "
+          + "and the list command to specify on which queue the applications should be listed.");
       opts.addOption(HELP_CMD, false, "Displays help for all commands.");
       Option appTypeOpt = new Option(APP_TYPE_CMD, true, "Works with -list to "
           + "filter applications based on "
@@ -196,7 +198,13 @@ public class ApplicationCLI extends YarnCLI {
             }
           }
         }
-        listApplications(appTypes, appStates);
+        Set<String> queues = new HashSet<String>();
+        if (cliParser.hasOption(QUEUE_CMD)) {
+          for(String queue: cliParser.getOptionValues(QUEUE_CMD)) {
+            queues.add(queue);
+          }
+        }
+        listApplications(appTypes, appStates, queues);
       } else if (args[0].equalsIgnoreCase(APPLICATION_ATTEMPT)) {
         if (args.length != 3) {
           printUsage(title, opts);
@@ -334,7 +342,7 @@ public class ApplicationCLI extends YarnCLI {
    * @throws IOException
    */
   private void listApplications(Set<String> appTypes,
-      EnumSet<YarnApplicationState> appStates) throws YarnException,
+      EnumSet<YarnApplicationState> appStates, Set<String> queues) throws YarnException,
       IOException {
     PrintWriter writer = new PrintWriter(sysout);
     if (allAppStates) {
@@ -350,7 +358,7 @@ public class ApplicationCLI extends YarnCLI {
     }
 
     List<ApplicationReport> appsReport = client.getApplications(appTypes,
-        appStates);
+        appStates, queues);
 
     writer.println("Total number of applications (application-types: "
         + appTypes + " and states: " + appStates + ")" + ":"
