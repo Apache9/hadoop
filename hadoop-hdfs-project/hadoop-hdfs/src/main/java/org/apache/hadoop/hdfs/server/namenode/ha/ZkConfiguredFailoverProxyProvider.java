@@ -113,11 +113,7 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
     if (nsId == null) {
       throw new RuntimeException("No nameservices is configured");
     }
-    String zkQuorum =
-        conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + nsId);
-    if (zkQuorum == null) {
-      zkQuorum = conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
-    }
+    String zkQuorum = getZkQuorum();
     if (zkQuorum == null) {
       noZkQuorum = true;
       currentProxyIndex = 0;
@@ -143,6 +139,24 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
         throw new RuntimeException(e);
       }
     }
+  }
+  
+  private String getZkQuorum() {
+    // If no observer is configured, fail back to ha quorum. The intention is to
+    // support smooth upgrading.
+    String zkQuorum = null;
+    zkQuorum =
+        conf.get(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER + "." + nsId);
+    if (zkQuorum == null) {
+      zkQuorum = conf.get(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER);
+    }
+    if (zkQuorum == null) {
+      zkQuorum = conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + nsId);
+    }
+    if (zkQuorum == null) {
+      zkQuorum = conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
+    }
+    return zkQuorum;
   }
 
   @Override
@@ -179,11 +193,7 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
     InetSocketAddress activeNN = null;
     ZooKeeper zkClient = null;
     try {
-      String zkQuorum =
-          conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + nsId);
-      if (zkQuorum == null) {
-        zkQuorum = conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
-      }
+      String zkQuorum = getZkQuorum();
       assert (zkQuorum != null);
       zkClient =
           new ZooKeeper(zkQuorum, conf.getInt(

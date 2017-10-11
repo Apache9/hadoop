@@ -850,4 +850,7 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_TRACER_WARN_TIME_RWPACKET_KEY = "dfs.tracer.span.warm.rwpacket.time";
   public static final long DFS_TRACER_WARN_TIME_RWBLOCK_DEFAULT = 60*1000; // 1 Minute
   public static final String DFS_TRACER_WARN_TIME_RWBLOCK_KEY = "dfs.tracer.span.warm.rwblock.time";
+
+  public static final String DFS_CLIENT_ZOOKEEPER_OBSERVER =
+      "dfs.client.zookeeper.observer";
 }
