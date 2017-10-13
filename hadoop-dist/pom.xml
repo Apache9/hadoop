@@ -133,6 +133,14 @@
                         fi
                       }
                       
+                      cp_fuse_dfs() {
+                        echo run cp_fuse_dfs
+                        if [ ${require.fuse} = true ]; then
+                          run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs/target/native/main/native/fuse-dfs .
+                          run cp -r $ROOT/hadoop-hdfs-project/hadoop-hdfs/src/main/native/fuse-dfs/fuse_dfs_wrapper.sh ./fuse-dfs
+                        fi
+                      }
+
                       ROOT=`cd ../..;pwd`
                       echo
                       echo "Current directory `pwd`"
@@ -149,6 +157,7 @@
                       run cp -r $ROOT/hadoop-mapreduce-project/target/hadoop-mapreduce-${project.version}/* .
                       run cp -r $ROOT/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist-${project.version}/* .
                       run cp $ROOT/hadoop-dist/target/hadoop-security-*.jar ./share/hadoop/common/lib/
+                      run cp_fuse_dfs
                       echo
                       echo "Hadoop dist layout available at: ${project.build.directory}/hadoop-${project.version}"
                       echo
