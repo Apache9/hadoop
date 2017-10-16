@@ -117,7 +117,9 @@ class SimpleHttpProxyHandler extends SimpleChannelInboundHandler<HttpRequest> {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
         if (future.isSuccess()) {
-          ctx.channel().pipeline().remove(HttpResponseEncoder.class);
+          if (ctx.channel().pipeline().get(HttpResponseEncoder.class) != null) {
+            ctx.channel().pipeline().remove(HttpResponseEncoder.class);
+          }
           HttpRequest newReq = new DefaultFullHttpRequest(HTTP_1_1,
             req.method(), req.uri());
           newReq.headers().add(req.headers());
