@@ -399,9 +399,10 @@ public abstract class FSQueue implements Queue, Schedulable {
 
   protected void preemptResourceBetweenChildren() {
     // warn or kill containers that has already been chosen to preempt
-    LOG.info("Trying to preempt resource under queue " + getName()
-        + " for resource " +
-        resourceToPreemptBetweenChildren);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Trying to preempt resource under queue "
+          + getName() + " for resource " + resourceToPreemptBetweenChildren);
+    }
 
     Iterator<RMContainer> warnedIter = warnedContainers.iterator();
     Resource toPreempt = Resources.clone(resourceToPreemptBetweenChildren);
