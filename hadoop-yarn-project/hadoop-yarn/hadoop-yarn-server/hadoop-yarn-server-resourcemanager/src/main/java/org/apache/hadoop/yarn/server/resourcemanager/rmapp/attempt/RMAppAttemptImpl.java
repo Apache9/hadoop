@@ -1163,6 +1163,12 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     default:
       break;
     }
+
+    if (diags != null && diags.length() > 5 * 1024 * 1024) {
+      LOG.info("Too large diags from event: " + event.getType() + " for app: " + applicationAttemptId + ". The full diags: " + diags);
+      diags = diags.substring(0, 10240);
+    }
+
     AggregateAppResourceUsage resUsage =
         this.attemptMetrics.getAggregateAppResourceUsage();
     RMStateStore rmStore = rmContext.getStateStore();
@@ -1175,7 +1181,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
             startTime, stateToBeStored, finalTrackingUrl, diags,
             finalStatus, exitStatus,
           getFinishTime(), resUsage.getMemorySeconds(),
-          resUsage.getVcoreSeconds(),pendingTime);
+          resUsage.getVcoreSeconds(), pendingTime);
     LOG.info("Updating application attempt " + applicationAttemptId
         + " with final state: " + targetedFinalState + ", and exit status: "
         + exitStatus);
