@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Constructor;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
@@ -35,6 +36,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.Stack;
@@ -341,31 +343,32 @@ public abstract class FileSystem extends Configured implements Closeable {
     return (LocalFileSystem)get(LocalFileSystem.NAME, conf);
   }
 
-  /**
-   * Returns the FileSystem for this URI's scheme and authority. The scheme of
-   * the URI determines a configuration property name,
-   * <tt>fs.<i>scheme</i>.class</tt> whose value names the FileSystem class. The
-   * entire URI is passed to the FileSystem instance's initialize method.
+  /** Returns the FileSystem for this URI's scheme and authority.  The scheme
+   * of the URI determines a configuration property name,
+   * <tt>fs.<i>scheme</i>.class</tt> whose value names the FileSystem class.
+   * The entire URI is passed to the FileSystem instance's initialize method.
    */
   public static FileSystem get(URI uri, Configuration conf) throws IOException {
     String scheme = uri.getScheme();
     String authority = uri.getAuthority();
 
-    if (scheme == null && authority == null) { // use default FS
+    conf = ConfigurationService.updateConfigurationWithNameService(uri, conf);
+
+    if (scheme == null && authority == null) {     // use default FS
       return get(conf);
     }
 
-    if (scheme != null && authority == null) { // no authority
+    if (scheme != null && authority == null) {     // no authority
       URI defaultUri = getDefaultUri(conf);
-      if (scheme.equals(defaultUri.getScheme()) // if scheme matches default
-          && defaultUri.getAuthority() != null) { // & default has authority
-        return get(defaultUri, conf); // return default
+      if (scheme.equals(defaultUri.getScheme())    // if scheme matches default
+              && defaultUri.getAuthority() != null) {  // & default has authority
+        return get(defaultUri, conf);              // return default
       }
     }
 
     String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
     if (conf.getBoolean(disableCacheName, false)) {
-      createFileSystemWithConfigurationService(uri, conf);
+      return createFileSystem(uri, conf);
     }
 
     return CACHE.get(uri, conf);
@@ -2643,23 +2646,6 @@ public abstract class FileSystem extends Configured implements Closeable {
     return clazz;
   }
 
-  private static FileSystem createFileSystemWithConfigurationService(URI uri,
-      Configuration conf) throws IOException {
-    return ConfigurationService.createTargetObjWithConfigurationService(
-        new ConfigurationService.Creator<FileSystem, IOException>() {
-          @Override
-          public FileSystem create(URI uri, Configuration configuration,
-              Object... params) throws IOException {
-            return createFileSystem(uri, configuration);
-          }
-
-          @Override
-          public boolean retryWithConfigurationService(Exception e) {
-            return e instanceof java.lang.IllegalArgumentException;
-          }
-        }, uri, conf);
-  }
-
   private static FileSystem createFileSystem(URI uri, Configuration conf
   ) throws IOException {
     Class<?> clazz = getFileSystemClass(uri.getScheme(), conf);
@@ -2725,7 +2711,7 @@ public abstract class FileSystem extends Configured implements Closeable {
         return fs;
       }
 
-      fs = createFileSystemWithConfigurationService(uri, conf);
+      fs = createFileSystem(uri, conf);
       synchronized (this) { // refetch the lock again
         FileSystem oldfs = map.get(key);
         if (oldfs != null) { // a file system is created while lock is releasing

@@ -119,7 +119,6 @@ import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.BlockStorageLocation;
 import org.apache.hadoop.fs.CacheFlag;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
-import org.apache.hadoop.fs.ConfigurationService;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
@@ -1218,7 +1217,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     public long renew(Token<?> token, Configuration conf) throws IOException {
       Token<DelegationTokenIdentifier> delToken = 
         (Token<DelegationTokenIdentifier>) token;
-      ClientProtocol nn = getNNProxyWithConfigurationService(delToken, conf);
+      ClientProtocol nn = getNNProxy(delToken, conf);
       try {
         return nn.renewDelegationToken(delToken);
       } catch (RemoteException re) {
@@ -1234,7 +1233,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
           (Token<DelegationTokenIdentifier>) token;
       LOG.info("Cancelling " + 
                DelegationTokenIdentifier.stringifyToken(delToken));
-      ClientProtocol nn = getNNProxyWithConfigurationService(delToken, conf);
+      ClientProtocol nn = getNNProxy(delToken, conf);
       try {
         nn.cancelDelegationToken(delToken);
       } catch (RemoteException re) {
@@ -1242,34 +1241,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
             AccessControlException.class);
       }
     }
-   
-    private static ClientProtocol getNNProxyWithConfigurationService(
-        Token<DelegationTokenIdentifier> token, Configuration conf)
-        throws IOException {
-      URI uri =
-          HAUtil.getServiceUriFromToken(HdfsConstants.HDFS_URI_SCHEME, token);
-      return ConfigurationService.createTargetObjWithConfigurationService(
-          new ConfigurationService.Creator<ClientProtocol, IOException>() {
-            @Override
-            public ClientProtocol create(URI uri, Configuration configuration,
-                Object... params) throws IOException {
-              return getNNProxy((Token<DelegationTokenIdentifier>) params[0],
-                  configuration);
-            }
-
-            @Override
-            public boolean retryWithConfigurationService(Exception e) {
-              // Problems such as NameNode no longer on service or Network
-              // crash will make creating proxy fail and cause a
-              // RunTimeException.
-              // Configuration problems will cause an IOException, so the only
-              // reason we go here is configuration problem， return value is
-              // true.
-              return true;
-            }
-          }, uri, conf, token);
-    }
- 
+    
     private static ClientProtocol getNNProxy(
         Token<DelegationTokenIdentifier> token, Configuration conf)
         throws IOException {

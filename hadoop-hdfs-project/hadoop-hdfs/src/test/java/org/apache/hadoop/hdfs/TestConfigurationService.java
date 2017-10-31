@@ -4,7 +4,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ConfigurationService;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.ZookeeperConfigurationService;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs;
@@ -27,7 +26,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Created by ljl on 17-7-25.
  */
-public class TestZookeeperConfigurationService {
+public class TestConfigurationService {
   private static final String ZK_BASE = "/configuration-service";
   private static final String NAMESERVICE = "testing-nameservice";
   private MiniDFSCluster dfsCluster;
@@ -88,7 +87,7 @@ public class TestZookeeperConfigurationService {
     System.setProperty(ConfigurationService.CONFIGURATION_SERVICE,
         "org.apache.hadoop.fs.ZookeeperConfigurationService");
     System.setProperty(
-        ZookeeperConfigurationService.CONFIGURATION_SERVICE_ZOOKEEPER_HOST, ZK_HOST);
+        ConfigurationService.CONFIGURATION_SERVICE_ZOOKEEPER_HOST, ZK_HOST);
     // create an empty configuration, and use it to create FileSystem
     Configuration defaultConf = new Configuration(false);
     FileSystem tstFs =
@@ -109,7 +108,7 @@ public class TestZookeeperConfigurationService {
     System.setProperty(ConfigurationService.CONFIGURATION_SERVICE,
         "org.apache.hadoop.fs.ZookeeperConfigurationService");
     System.setProperty(
-        ZookeeperConfigurationService.CONFIGURATION_SERVICE_ZOOKEEPER_HOST, ZK_HOST);
+        ConfigurationService.CONFIGURATION_SERVICE_ZOOKEEPER_HOST, ZK_HOST);
     // create an configuration with outdated NN address
     Configuration conf = new Configuration(false);
     conf.set("dfs.nameservices", NAMESERVICE);
