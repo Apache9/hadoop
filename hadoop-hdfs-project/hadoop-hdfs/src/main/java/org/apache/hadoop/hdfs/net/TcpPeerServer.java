@@ -112,6 +112,22 @@ public class TcpPeerServer implements PeerServer {
   }
 
   /**
+   * Create a non-secure TcpPeerServer.
+   *
+   * @param socketWriteTimeout    The Socket write timeout in ms.
+   * @param bindAddr              The address to bind to.
+   * @param backLog               The backlog of the server socket.
+   * @throws IOException
+   */
+  public TcpPeerServer(int socketWriteTimeout,
+                       InetSocketAddress bindAddr,
+                       int backLog) throws IOException {
+    this.serverSocket = (socketWriteTimeout > 0) ?
+        ServerSocketChannel.open().socket() : new ServerSocket();
+    Server.bind(serverSocket, bindAddr, backLog);
+  }
+
+  /**
    * Create a secure TcpPeerServer.
    *
    * @param secureResources   Security resources.
