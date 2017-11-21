@@ -133,13 +133,6 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.client.failover.get.active.namenode.duration.between.retryzk";
   public static final long DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_DURATION_BETWEEN_RETRYZK_DEFAULT =
       60000;
-  public static final String DFS_CLIENT_ZK_PROVIDER_INITIAL_DELAY =
-      "dfs.client.zk.provider.initial.delay";
-  public static final long DFS_CLIENT_ZK_PROVIDER_INITIAL_DELAY_DEFAULT = 0;
-  public static final String DFS_CLIENT_ZK_PROVIDER_MAPREDUCE_INITIAL_DELAY =
-      "dfs.client.zk.provider.mapreduce.initial.delay";
-  public static final long DFS_CLIENT_ZK_PROVIDER_MAPREDUCE_INITIAL_DELAY_DEFAULT =
-      0;
 
   public static final String  DFS_CLIENT_SOCKET_CACHE_EXPIRY_MSEC_KEY = "dfs.client.socketcache.expiryMsec";
   public static final long    DFS_CLIENT_SOCKET_CACHE_EXPIRY_MSEC_DEFAULT = 3000;

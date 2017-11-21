@@ -45,6 +45,9 @@ import org.apache.zookeeper.ZooKeeper;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY;
+
 /**
  * A FailoverProxyProvider implementation which inherit
  * ConfiguredFailoverProxyProvider. The extra functionality is to get active
@@ -59,7 +62,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
  * get the active namenode from zookeeper directly.
  */
 public class ZkConfiguredFailoverProxyProvider<T> extends
-    ConfiguredFailoverProxyProvider<T> implements Watcher {
+    RequestHedgingProxyProvider<T> implements Watcher {
 
   private static final Log LOG = LogFactory
       .getLog(ZkConfiguredFailoverProxyProvider.class);
@@ -70,12 +73,12 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
   private boolean useUnConfiguredNN;
   private boolean noZkQuorum;
   private long durationBetweenRetryZk;
-  private long initialDelay;
   private Random rand;
   private long lastUseZkTime;
+  private long failoversBeforeTryZk;
+  private int failoverAttempts = 0;
 
   private String nsId;
-  private long failoverFencePeriodInMs;
 
   public ZkConfiguredFailoverProxyProvider(Configuration conf, URI uri,
       Class<T> xface) {
@@ -95,6 +98,12 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
     if (durationBetweenRetryZk > 0) {
       durationBetweenRetryZk += calcRandomWithLowBound(durationBetweenRetryZk);
     }
+
+    long maxFailoverAttempts = conf.getInt(
+            DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY,
+            DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_DEFAULT);
+    failoversBeforeTryZk = calcRandomWithLowBound(maxFailoverAttempts);
+
     noZkQuorum = false;
     lastUseZkTime = -1;
     Collection<String> nsIds = DFSUtil.getNameServiceIds(conf);
@@ -106,31 +115,9 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
     String zkQuorum = getZkQuorum();
     if (zkQuorum == null) {
       noZkQuorum = true;
-      currentProxyIndex = 0;
-    } else {
-      initialDelay =
-          conf.getLong(DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_INITIAL_DELAY,
-              DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_INITIAL_DELAY_DEFAULT);
-      failoverFencePeriodInMs =
-          conf.getLong(DFSConfigKeys.DFS_CLIENT_ZK_FAILOVER_FENCE_PERIOD_INMS,
-              DFSConfigKeys.DFS_CLIENT_ZK_FAILOVER_FENCE_PERIOD_INMS_DEFAULT);
-      try {
-        if (initialDelay > 0) {
-          long sleepTime = calcRandomWithLowBound(initialDelay);
-          LOG.info("Sleep time is " + sleepTime);
-          Thread.sleep(initialDelay);
-        }
-        // Assign -1. If get info from zk fails, getActiveNNIndex will assign 0
-        // to it.
-        currentProxyIndex = -1;
-        currentProxyIndex = getActiveNNIndex();
-      } catch (Exception e) {
-        LOG.error("Fail to get initial active Namenode information", e);
-        throw new RuntimeException(e);
-      }
     }
   }
-  
+
   private String getZkQuorum() {
     // If no observer is configured, fail back to ha quorum. The intention is to
     // support smooth upgrading.
@@ -198,6 +185,9 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
         throw new KeeperException.RuntimeInconsistencyException();
       }
       if (activeNN == null) {
+        if (proxies.isEmpty()) {
+          throw new RuntimeException("No namenode rpc address available on both zk and configuration");
+        }
         // Will fall back to configuration
         throw new KeeperException.SystemErrorException();
       }
@@ -224,10 +214,10 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
       LOG.warn("Fail to get active namenode from zookeeper since " + ke
           + ",  will try to use addresses in local configuration file.");
 
-      if (currentProxyIndex == -1) {
-        checkProxies();
-        return 0;
-      } else {
+      if (proxies.size() == 0) {
+        if (ke.code() == KeeperException.Code.NONODE) {
+          throw new RuntimeException("No namenode rpc address available on both zk and configuration");
+        }
         throw ke;
       }
     } finally {
@@ -236,43 +226,35 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
       }
       lastUseZkTime = Time.now();
     }
-  }
-
-  private void checkProxies() throws RuntimeException {
-    if (proxies.size() == 0) {
-      throw new RuntimeException(
-          "Cannot find active namenode from zk, and no namenode addresses in local configuration file");
-    }
+    return -1;
   }
 
   @Override
   public synchronized void performFailover(T currentProxy) {
-    boolean useZk = (!queryZkOnce) && (!noZkQuorum);
+    failoverAttempts++;
+    boolean useZk = (!noZkQuorum) && (failoverAttempts > failoversBeforeTryZk);
+    if (useZk && queryZkOnce) {
+      // update failoversBeforeTryZk, then we will not try zk anymore
+      failoversBeforeTryZk = Integer.MAX_VALUE;
+    }
+
     if (useZk && lastUseZkTime > 0) {
       if (Time.now() - lastUseZkTime < durationBetweenRetryZk) {
         useZk = false;
       }
     }
-    try {
-      if (failoverFencePeriodInMs > 0) {
-        long sleepTime = calcRandomWithLowBound(failoverFencePeriodInMs);
-        Thread.sleep(sleepTime);
-      }
-    } catch (InterruptedException ie) {
-      Thread.currentThread().interrupt();
-    }
+
     if (useZk) {
-      try {
-        currentProxyIndex = getActiveNNIndex();
-      } catch (Exception e) {
-        checkProxies();
-        currentProxyIndex = (currentProxyIndex + 1) % proxies.size();
-      }
-    } else {
-      checkProxies();
-      currentProxyIndex = (currentProxyIndex + 1) % proxies.size();
+        try {
+          getActiveNNIndex();
+        } catch (Exception e) {
+          if (e instanceof RuntimeException) {
+            throw (RuntimeException)e;
+          }
+          LOG.warn("Get address from zk failed", e);
+        }
     }
-    LOG.info("Failover to namenode " + proxies.get(currentProxyIndex).address);
+    super.performFailover(currentProxy);
   }
 
   public void process(WatchedEvent event) {

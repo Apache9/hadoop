@@ -24,8 +24,12 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.TimeoutException;
@@ -42,15 +46,19 @@ import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.ha.HealthMonitor;
 import org.apache.hadoop.ha.TestNodeFencer.AlwaysSucceedFencer;
 import org.apache.hadoop.ha.ZKFCTestUtil;
+import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSecretManager;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
+import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.namenode.ha.ZkConfiguredFailoverProxyProvider;
 import org.apache.hadoop.hdfs.tools.DFSZKFailoverController;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.retry.FailoverProxyProvider;
+import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
@@ -117,6 +125,13 @@ public class TestDFSClientZKBasedFailover {
           DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_DURATION_BETWEEN_RETRYZK,
           0);
 
+
+      //Minimize the timecost of ut in default cases
+      conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY,
+              10);
+      conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_SLEEPTIME_MAX_KEY, 3000);
+      conf.setLong(DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_DURATION_BETWEEN_RETRYZK, 5000);
+
       //Change the failover retry times and interval
       if (configRetryTime) {
         conf.setInt(DFSConfigKeys.DFS_CLIENT_FAILOVER_MAX_ATTEMPTS_KEY,
@@ -175,6 +190,7 @@ public class TestDFSClientZKBasedFailover {
       cluster.getConfiguration(1).set(key, "127.0.0.1:" + port);
       cluster.restartNameNode(1);
       cluster.waitActive(1);
+      LOG.info("nn1 become active");
       ctx.addThread(thr2 = new ZKFCThread(cluster, ctx, 1));
       thr2.start();
       ZKFCTestUtil.waitForHealthState(thr2.zkfc,
@@ -200,19 +216,10 @@ public class TestDFSClientZKBasedFailover {
       conf.set("mapreduce.task.attempt.id", cname);
     }
 
-    public void setFailoverFencePeriod(long fp) {
-      conf.setLong(DFSConfigKeys.DFS_CLIENT_ZK_FAILOVER_FENCE_PERIOD_INMS, fp);
-    }
-
     public void setDurationBetweenZkRetry(long dbz) {
       conf.setLong(
           DFSConfigKeys.DFS_CLIENT_FAILOVER_GET_ACTIVE_NAMENODE_DURATION_BETWEEN_RETRYZK,
           dbz);
-    }
-
-    public void setInitialMRDelay(long delay) {
-      conf.setLong(
-          DFSConfigKeys.DFS_CLIENT_ZK_PROVIDER_MAPREDUCE_INITIAL_DELAY, delay);
     }
 
     public void setZkQuorum(String quorum) {
@@ -377,78 +384,6 @@ public class TestDFSClientZKBasedFailover {
   }
 
   @Test
-  public void testInitialZkDelay() throws Exception {
-    FailoverTest ft = new FailoverTest() {
-      public void runTest(FailoverTestContext ftc) throws IOException,
-          URISyntaxException {
-        FileSystem fs = ftc.fs;
-        Path testDir1 = new Path("/dir1");
-        fs.mkdirs(testDir1);
-        ftc.setClientName("mapreduce");
-        ftc.setInitialMRDelay(10000);
-        long start = Time.now();
-        ftc.resetFs();
-        // At least delay 100000/10
-        assertTrue(Time.now() - start > 1000);
-        assertTrue(Time.now() - start < 11000);
-        fs = ftc.fs;
-        assertTrue(fs.exists(testDir1));
-        ftc.setInitialMRDelay(0);
-        start = Time.now();
-        ftc.resetFs();
-        // No longer sleep, so it should not delay 500ms
-        assertTrue(Time.now() - start < 1000);
-        fs = ftc.fs;
-        assertTrue(fs.exists(testDir1));
-      }
-    };
-
-    FailoverTestContext ftc = new FailoverTestContext(ft);
-    ftc.setup(false);
-    ft.runTest(ftc);
-    ftc.shutdown();
-  }
-
-  @Test
-  public void testFailoverZkDelay() throws Exception {
-    FailoverTest ft = new FailoverTest() {
-      public void runTest(FailoverTestContext ftc) throws IOException,
-          URISyntaxException {
-        FileSystem fs = ftc.fs;
-        Path testDir1 = new Path("/dir1");
-        fs.mkdirs(testDir1);
-        ftc.setDurationBetweenZkRetry(0);
-        ftc.setFailoverFencePeriod(10000);
-        ftc.resetFs();
-        fs = ftc.fs;
-        assertTrue(fs.exists(testDir1));
-        ftc.cluster.shutdownNameNode(0);
-        ftc.waitForActive(1);
-        long start = Time.now();
-        assertTrue(fs.exists(testDir1));
-        assertTrue(Time.now() - start > 1000);
-        assertTrue(Time.now() - start < 11000);
-        ftc.setDurationBetweenZkRetry(0);
-        ftc.setFailoverFencePeriod(0);
-        ftc.cluster.restartNameNode(0, false);
-        ftc.resetFs();
-        fs = ftc.fs;
-        assertTrue(fs.exists(testDir1));
-        ftc.cluster.shutdownNameNode(1);
-        ftc.waitForActive(0);
-        start = Time.now();
-        assertTrue(fs.exists(testDir1));
-        assertTrue(Time.now() - start < 1000);
-      }
-    };
-
-    FailoverTestContext ftc = new FailoverTestContext(ft);
-    ftc.setup(false);
-    ft.runTest(ftc);
-    ftc.shutdown();
-  }
-
-  @Test
   public void testRetryZkDuration1() throws Exception {
     FailoverTest ft = new FailoverTest() {
       public void runTest(FailoverTestContext ftc) throws IOException,
@@ -458,7 +393,6 @@ public class TestDFSClientZKBasedFailover {
         Path testDir1 = new Path("/dir1");
         fs.mkdirs(testDir1);
         ftc.setDurationBetweenZkRetry(60000);
-        ftc.setFailoverFencePeriod(0);
         ftc.resetFs();
         fs = ftc.fs;
         assertTrue(fs.exists(testDir1));
@@ -495,12 +429,17 @@ public class TestDFSClientZKBasedFailover {
         }
         String origQuorum =
             fs.getConf().get(CommonConfigurationKeys.ZK_QUORUM_KEY);
-        fs.getConf().set(CommonConfigurationKeys.ZK_QUORUM_KEY,
+        Configuration tmpConf = new Configuration(fs.getConf());
+        tmpConf.set(CommonConfigurationKeys.ZK_QUORUM_KEY,
             "127.0.0.1:" + 80);
+        tmpConf.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER,
+            "127.0.0.1:" + 80);
+        tmpConf.setBoolean("fs.hdfs.impl.disable.cache", true);
+        FileSystem nfs = FileSystem.get(tmpConf);
         ftc.cluster.shutdownNameNode(0);
         ftc.waitForActive(1);
         try {
-          fs.exists(testDir1);
+          nfs.exists(testDir1);
           // we should not be able to access the hdfs
           assertTrue(false);
         } catch (Exception e) {
@@ -513,13 +452,77 @@ public class TestDFSClientZKBasedFailover {
         }
         long start = Time.now();
         assertTrue(fs.exists(testDir1));
-        assertTrue(Time.now() - start < 1000);
+        // max retry is 2, max interval is 3s, so it must succeed at 2nc retry
+        // because using hedging proxy, and we introduce random factors for
+        // trying to access zk, we could only guarantee the access would success
+        // at or before the last try
+        assertTrue(Time.now() - start < 4000);
       }
     };
 
     FailoverTestContext ftc = new FailoverTestContext(ft);
     ftc.setRetryTime(2, 8000);
-    ftc.setFailoverFencePeriod(0);
+    ftc.setup(true);
+    ft.runTest(ftc);
+    ftc.shutdown();
+  }
+
+  @Test
+  public void testNoRpcAddressConfigured() throws Exception {
+    FailoverTest ft = new FailoverTest() {
+      public void runTest(FailoverTestContext ftc) throws IOException,
+          URISyntaxException {
+        FileSystem fs = ftc.fs;
+        // Test basic failover
+        Path testDir1 = new Path("/dir1");
+        fs.mkdirs(testDir1);
+        assertTrue(fs.exists(testDir1));
+        try {
+          ftc.setupSecondNN(nnPort3);
+        } catch (Exception e) {
+          throw new IOException("Fail to setup second Namenode", e);
+        }
+
+        Configuration tmpConf = new Configuration(fs.getConf());
+        Collection<String> nameserviceIds = DFSUtil.getNameServiceIds(tmpConf);
+        for (String nsId : nameserviceIds) {
+          Collection<String> nnIds = DFSUtil.getNameNodeIds(tmpConf, nsId);
+          for (String nnid : nnIds) {
+            tmpConf.unset(DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY + "." + nsId + "." + nnid);
+          }
+        }
+        tmpConf.setBoolean("fs.hdfs.impl.disable.cache", true);
+        FileSystem fs1 = FileSystem.get(tmpConf);
+        ftc.cluster.shutdownNameNode(0);
+        ftc.waitForActive(1);
+        try {
+          fs1.exists(testDir1);
+          // should not success
+          Assert.assertTrue(false);
+        } catch (Exception e) {
+          Assert.assertTrue(e instanceof RuntimeException);
+        }
+
+        tmpConf.setBoolean(DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR, true);
+        FileSystem fs2 = FileSystem.get(tmpConf);
+        Assert.assertTrue(fs2.exists(testDir1));
+
+        // if no node on zk, and no addresses in configuration, should not do failover
+        ftc.thr1.interrupt();
+        ftc.thr2.interrupt();
+        FileSystem fs3 = FileSystem.get(tmpConf);
+        try {
+          fs3.exists(testDir1);
+          // should not success
+          Assert.assertTrue(false);
+        } catch (Exception e) {
+          Assert.assertTrue(e instanceof RuntimeException);
+        }
+      }
+    };
+
+    FailoverTestContext ftc = new FailoverTestContext(ft);
+    ftc.setRetryTime(2, 8000);
     ftc.setup(true);
     ft.runTest(ftc);
     ftc.shutdown();
