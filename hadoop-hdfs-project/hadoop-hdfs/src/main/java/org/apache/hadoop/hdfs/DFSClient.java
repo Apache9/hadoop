@@ -351,6 +351,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     final String http2EventLoopType;
     final long http2BlockReaderMaxBufferedDataSize;
     final boolean enableSharedDeadNodes;
+    final boolean createParent;
     public BlockReaderFactory.FailureInjector brfFailureInjector =
       new BlockReaderFactory.FailureInjector();
     Configuration conf = null;
@@ -515,6 +516,9 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       shortCircuitSharedMemoryWatcherInterruptCheckMs = conf.getInt(
           DFSConfigKeys.DFS_SHORT_CIRCUIT_SHARED_MEMORY_WATCHER_INTERRUPT_CHECK_MS,
           DFSConfigKeys.DFS_SHORT_CIRCUIT_SHARED_MEMORY_WATCHER_INTERRUPT_CHECK_MS_DEFAULT);
+
+      createParent = conf.getBoolean(DFS_CLIENT_CREATE_FILE_RECURSIVE,
+          DFS_CLIENT_CREATE_FILE_RECURSIVE_DEFAULT);
 
       datanodeRestartTimeout = conf.getLong(
           DFS_CLIENT_DATANODE_RESTART_TIMEOUT_KEY,
@@ -1701,8 +1705,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
   /**
    * Call {@link #create(String, FsPermission, EnumSet, boolean, short, 
-   * long, Progressable, int, ChecksumOpt)} with <code>createParent</code>
-   *  set to true.
+   * long, Progressable, int, ChecksumOpt)} and <code>createParent</code>
+   *  is set based on configuration, default is true.
    */
   public DFSOutputStream create(String src, 
                              FsPermission permission,
@@ -1713,7 +1717,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
                              int buffersize,
                              ChecksumOpt checksumOpt)
       throws IOException {
-    return create(src, permission, flag, true,
+    return create(src, permission, flag, dfsClientConf.createParent,
         replication, blockSize, progress, buffersize, checksumOpt, null);
   }
 

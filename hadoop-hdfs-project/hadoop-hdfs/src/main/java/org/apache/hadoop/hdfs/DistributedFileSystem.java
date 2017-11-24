@@ -400,8 +400,8 @@ public class DistributedFileSystem extends FileSystem {
         final DFSOutputStream out = dfs.create(getPathName(f), permission,
             overwrite ? EnumSet.of(CreateFlag.CREATE, CreateFlag.OVERWRITE)
                 : EnumSet.of(CreateFlag.CREATE),
-            true, replication, blockSize, progress, bufferSize, null,
-            favoredNodes);
+            dfs.getConf().createParent, replication, blockSize, progress,
+            bufferSize, null, favoredNodes);
         return dfs.createWrappedOutputStream(out, statistics);
       }
       @Override

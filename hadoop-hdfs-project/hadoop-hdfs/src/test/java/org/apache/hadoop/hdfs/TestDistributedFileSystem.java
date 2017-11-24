@@ -31,6 +31,7 @@ import static org.mockito.Mockito.mock;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketTimeoutException;
@@ -72,6 +73,7 @@ import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.DataChecksum;
+import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
 import org.junit.Assert;
@@ -112,6 +114,53 @@ public class TestDistributedFileSystem {
     conf.setLong(DFSConfigKeys.DFS_NAMENODE_MIN_BLOCK_SIZE_KEY, 0);
 
     return conf;
+  }
+
+  @Test
+  public void testCreateRecursiveConfigItem() throws IOException {
+    Configuration conf = getTestConfiguration();
+    // create file recursively is disabled.
+    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_CREATE_FILE_RECURSIVE, false);
+    MiniDFSCluster cluster = null;
+    Path f = new Path("/ljl/abc/helloworldFile");
+    FsPermission permission =
+        FsPermission.getFileDefault().applyUMask(FsPermission.getUMask(conf));
+    boolean overwrite = true;
+    int buffersize = conf.getInt("io.file.buffer.size", 4096);
+    short replication = 3;
+    long blockSize = conf.getLong("fs.local.block.size", 32 * 1024 * 1024);
+    Progressable progress = null;
+    InetSocketAddress arbitraryAddrs[] = new InetSocketAddress[1];
+    arbitraryAddrs[0] = new InetSocketAddress(InetAddress.getLocalHost(), 9090);
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+      DistributedFileSystem dfileSys = cluster.getFileSystem();
+      // All creating dfs file methods whose recursive depends on
+      // 'dfs.client.create.file.recursive' are tested below.
+      try {
+        dfileSys.create(f, permission, overwrite, buffersize, replication,
+            blockSize, progress);
+        assert false;// create should fail and throw an IOException
+      } catch (IOException e) {
+        assertTrue(e.getMessage().contains("Parent directory doesn't exist: /ljl/abc"));
+      }
+      try {
+        dfileSys.create(f, permission, overwrite, buffersize, replication,
+            blockSize, progress, null);
+        assert false;// create should fail and throw an IOException
+      } catch (IOException e) {
+        assertTrue(e.getMessage().contains("Parent directory doesn't exist: /ljl/abc"));
+      }
+      try {
+        dfileSys.create(f, permission, overwrite, buffersize, replication,
+            blockSize, progress, arbitraryAddrs);
+        assert false;// create should fail and throw an IOException
+      } catch (IOException e) {
+        assertTrue(e.getMessage().contains("Parent directory doesn't exist: /ljl/abc"));
+      }
+    } finally {
+      cluster.shutdown();
+    }
   }
 
   @Test
