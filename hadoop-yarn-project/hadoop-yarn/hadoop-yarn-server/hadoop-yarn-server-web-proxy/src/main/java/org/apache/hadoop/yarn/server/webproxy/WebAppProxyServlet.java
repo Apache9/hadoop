@@ -178,6 +178,7 @@ public class WebAppProxyServlet extends HttpServlet {
     config.setLocalAddress(localAddress);
     HttpMethod method = new GetMethod(uri.getEscapedURI());
     method.setRequestHeader("Connection","close");
+    method.setRequestHeader("yarn-proxy", localAddress.toString());
     @SuppressWarnings("unchecked")
     Enumeration<String> names = req.getHeaderNames();
     while(names.hasMoreElements()) {

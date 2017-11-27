@@ -136,10 +136,8 @@ public class ActiveStandbyElector implements StatCallback, StringCallback {
    * Name of the lock znode used by the library. Protected for access in test
    * classes
    */
-  @VisibleForTesting
-  protected static final String LOCK_FILENAME = "ActiveStandbyElectorLock";
-  @VisibleForTesting
-  protected static final String BREADCRUMB_FILENAME = "ActiveBreadCrumb";
+  public static final String LOCK_FILENAME = "ActiveStandbyElectorLock";
+  public static final String BREADCRUMB_FILENAME = "ActiveBreadCrumb";
 
   public static final Log LOG = LogFactory.getLog(ActiveStandbyElector.class);
 

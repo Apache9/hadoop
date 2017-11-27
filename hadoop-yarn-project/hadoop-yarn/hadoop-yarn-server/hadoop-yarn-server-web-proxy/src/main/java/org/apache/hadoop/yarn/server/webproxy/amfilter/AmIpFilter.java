@@ -135,7 +135,9 @@ public class AmIpFilter implements Filter {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Remote address for request is: " + httpReq.getRemoteAddr());
     }
-    if(!getProxyAddresses().contains(httpReq.getRemoteAddr())) {
+
+    if (httpReq.getHeader("yarn-proxy") == null
+        && !getProxyAddresses().contains(httpReq.getRemoteAddr())) {
       String redirectUrl = findRedirectUrl();
       redirectUrl = httpResp.encodeRedirectURL(redirectUrl +
           httpReq.getRequestURI());

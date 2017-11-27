@@ -182,7 +182,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     }
     super.serviceInit(conf);
     LOG.info("Initialized nodemanager for " + nodeId + ":" +
-        " physical-memory=" + memoryMb + " physical-memory-overuse-ratio" + memoryMbOveruseRatio +
+        " physical-memory=" + memoryMb + " physical-memory-overuse-ratio=" + memoryMbOveruseRatio +
         " overuse-physical-memory=" + overUseMemoryMb + " virtual-memory=" + virtualMemoryMb +
         " virtual-cores=" + virtualCores + " virtual-cores-overuse-ratio=" + vCoresOveruseRatio +
         " overuse-virtual-cores=" + overUseVirtualCores);
