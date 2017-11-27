@@ -452,4 +452,24 @@ public class ResourceMgrDelegate extends YarnClient {
       throws YarnException, IOException {
     return client.getClusterNodeLabels();
   }
+
+  @Override
+  public List<String> getUserQueues() throws YarnException, IOException {
+    return client.getUserQueues();
+  }
+
+  @Override
+  public List<String> getUserQueues(String user) throws YarnException, IOException {
+    return client.getUserQueues(user);
+  }
+
+  @Override
+  public boolean isSubmittable(String queueName) throws YarnException, IOException {
+    return client.isSubmittable(queueName);
+  }
+
+  @Override
+  public boolean isSubmittable(String user, String queueName) throws YarnException, IOException {
+    return client.isSubmittable(user, queueName);
+  }
 }

@@ -56,7 +56,8 @@ public abstract class QueueInfo {
       float maximumCapacity, float currentCapacity,
       List<QueueInfo> childQueues, List<ApplicationReport> applications,
       QueueState queueState, Set<String> accessibleNodeLabels,
-      String defaultNodeLabelExpression) {
+      String defaultNodeLabelExpression,
+      String submitAcls, String adminAcls) {
     QueueInfo queueInfo = Records.newRecord(QueueInfo.class);
     queueInfo.setQueueName(queueName);
     queueInfo.setCapacity(capacity);
@@ -67,6 +68,8 @@ public abstract class QueueInfo {
     queueInfo.setQueueState(queueState);
     queueInfo.setAccessibleNodeLabels(accessibleNodeLabels);
     queueInfo.setDefaultNodeLabelExpression(defaultNodeLabelExpression);
+    queueInfo.setSubmitAcls(submitAcls);
+    queueInfo.setAdminAcls(adminAcls);
     return queueInfo;
   }
 
@@ -185,4 +188,20 @@ public abstract class QueueInfo {
   @Stable
   public abstract void setDefaultNodeLabelExpression(
       String defaultLabelExpression);
+
+  @Public
+  @Stable
+  public abstract String getSubmitAcls();
+
+  @Public
+  @Stable
+  public abstract void setSubmitAcls(String submitAcls);
+
+  @Public
+  @Stable
+  public abstract String getAdminAcls();
+
+  @Public
+  @Stable
+  public abstract void setAdminAcls(String adminAcls);
 }

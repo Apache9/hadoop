@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.client.cli;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.DecimalFormat;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
@@ -38,6 +39,7 @@ import com.google.common.annotations.VisibleForTesting;
 @Private
 @Unstable
 public class QueueCLI extends YarnCLI {
+  public static final String USER_CMD = "user";
   public static final String QUEUE = "queue";
 
   public static void main(String[] args) throws Exception {
@@ -55,6 +57,8 @@ public class QueueCLI extends YarnCLI {
 
     opts.addOption(STATUS_CMD, true,
         "List queue information about given queue.");
+    opts.addOption(USER_CMD, true,
+        "List all submittable queue names for given user.");
     opts.addOption(HELP_CMD, false, "Displays help for all commands.");
     opts.getOption(STATUS_CMD).setArgName("Queue Name");
 
@@ -73,6 +77,12 @@ public class QueueCLI extends YarnCLI {
         return -1;
       }
       return listQueue(cliParser.getOptionValue(STATUS_CMD));
+    } else if (cliParser.hasOption(USER_CMD)) {
+      if (args.length != 2) {
+        printUsage(opts);
+        return -1;
+      }
+      return listUserQueues(cliParser.getOptionValue(USER_CMD));
     } else if (cliParser.hasOption(HELP_CMD)) {
       printUsage(opts);
       return 0;
@@ -118,6 +128,33 @@ public class QueueCLI extends YarnCLI {
     return rc;
   }
 
+  /**
+   * Lists all submittable queue names for the given user
+   *
+   * @param username
+   * @throws YarnException
+   * @throws IOException
+   */
+  private int listUserQueues(String username) throws YarnException, IOException {
+    int rc;
+    PrintWriter writer = new PrintWriter(sysout);
+
+    List<String> queues = client.getUserQueues(username);
+    if (queues != null) {
+      writer.println("Submittable Queues for user: " + username);
+      for (String queue: queues) {
+        writer.println("\t" + queue);
+      }
+      rc = 0;
+    } else {
+      writer.println("Cannot get submittable queues from RM for user = " + username
+          + ", please check.");
+      rc = -1;
+    }
+    writer.flush();
+    return rc;
+  }
+
   private void printQueueInfo(PrintWriter writer, QueueInfo queueInfo) {
     writer.print("Queue Name : ");
     writer.println(queueInfo.getQueueName());
@@ -148,5 +185,7 @@ public class QueueCLI extends YarnCLI {
       labelList.append(nodeLabel);
     }
     writer.println(labelList.toString());
+    writer.println("\tSubmit App ACL: " + queueInfo.getSubmitAcls());
+    writer.println("\tAdmin App ACL: " + queueInfo.getAdminAcls());
   }
 }

@@ -59,6 +59,7 @@ import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
+import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.QueueState;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
@@ -365,8 +366,12 @@ public class TestCapacityScheduler {
     conf.setQueues(CapacitySchedulerConfiguration.ROOT, new String[] {"a", "b"});
 
     conf.setCapacity(A, A_CAPACITY);
+    conf.setAcl(A, QueueACL.SUBMIT_APPLICATIONS, "user_a");
+    conf.setAcl(A, QueueACL.ADMINISTER_QUEUE, "admin_user_a");
     conf.setCapacity(B, B_CAPACITY);
-    
+    conf.setAcl(B, QueueACL.SUBMIT_APPLICATIONS, "user_b");
+    conf.setAcl(B, QueueACL.ADMINISTER_QUEUE, "admin_user_b");
+
     // Define 2nd-level queues
     conf.setQueues(A, new String[] {"a1", "a2"});
     conf.setCapacity(A1, A1_CAPACITY);
@@ -592,6 +597,8 @@ public class TestCapacityScheduler {
     QueueInfo queueInfo = resourceManager.getResourceScheduler().getQueueInfo("a", true, true);
     Assert.assertEquals(queueInfo.getQueueName(), "a");
     Assert.assertEquals(queueInfo.getChildQueues().size(), 2);
+    Assert.assertEquals("user_a ", queueInfo.getSubmitAcls());
+    Assert.assertEquals("admin_user_a ", queueInfo.getAdminAcls());
 
     List<QueueUserACLInfo> userACLInfo = resourceManager.getResourceScheduler().getQueueUserAclInfo();
     Assert.assertNotNull(userACLInfo);

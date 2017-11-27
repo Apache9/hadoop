@@ -25,9 +25,16 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.conf.Configuration;
@@ -38,6 +45,7 @@ import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptReportRequest;
@@ -128,6 +136,15 @@ public class YarnClientImpl extends YarnClient {
   protected boolean timelineServiceEnabled;
 
   private static final String ROOT = "root";
+
+  private LoadingCache<String, List<QueueInfo>> allQueuesCache = CacheBuilder.newBuilder()
+      .expireAfterAccess(5 * 60, TimeUnit.SECONDS)
+      .build(new CacheLoader<String, List<QueueInfo>>() {
+        @Override
+        public List<QueueInfo> load(String key) throws Exception {
+          return getAllQueues();
+        }
+      });
 
   public YarnClientImpl() {
     super(YarnClientImpl.class.getName());
@@ -708,5 +725,64 @@ public class YarnClientImpl extends YarnClient {
   public Set<String> getClusterNodeLabels() throws YarnException, IOException {
     return rmClient.getClusterNodeLabels(
         GetClusterNodeLabelsRequest.newInstance()).getNodeLabels();
+  }
+
+  @Override
+  public List<String> getUserQueues() throws YarnException, IOException {
+    List<QueueInfo> allQueues = null;
+    try {
+      allQueues = allQueuesCache.get("allQueues");
+    } catch (ExecutionException e) {
+      throw new YarnException("Failed to get all queue's infos", e);
+    }
+    List<String> queues = new ArrayList<String>();
+    for (QueueInfo queueInfo : allQueues) {
+      AccessControlList acl = new AccessControlList(queueInfo.getSubmitAcls());
+      if (acl.isUserAllowed(UserGroupInformation.getCurrentUser())) {
+        queues.add(queueInfo.getQueueName());
+      }
+    }
+    return queues;
+  }
+
+  @Override
+  public List<String> getUserQueues(String user) throws YarnException, IOException {
+    List<QueueInfo> allQueues = null;
+    try {
+      allQueues = allQueuesCache.get("allQueues");
+    } catch (ExecutionException e) {
+      throw new YarnException("Failed to get all queue's infos", e);
+    }
+    List<String> queues = new ArrayList<String>();
+    UserGroupInformation ugi = UserGroupInformation.createProxyUser(user,
+        UserGroupInformation.getCurrentUser());
+    for (QueueInfo queueInfo : allQueues) {
+      AccessControlList acl = new AccessControlList(queueInfo.getSubmitAcls());
+      if (acl.isUserAllowed(ugi)) {
+        queues.add(queueInfo.getQueueName());
+      }
+    }
+    return queues;
+  }
+
+  @Override
+  public boolean isSubmittable(String user, String queue) throws YarnException, IOException {
+    QueueInfo queueInfo = getQueueInfo(queue);
+    if (queueInfo == null) {
+      throw new YarnException("The queue: " + queue + " not exist");
+    }
+    AccessControlList acl = new AccessControlList(queueInfo.getSubmitAcls());
+    return acl.isUserAllowed(
+        UserGroupInformation.createProxyUser(user, UserGroupInformation.getCurrentUser()));
+  }
+
+  @Override
+  public boolean isSubmittable(String queue) throws YarnException, IOException {
+    QueueInfo queueInfo = getQueueInfo(queue);
+    if (queueInfo == null) {
+      throw new YarnException("The queue: " + queue + " not exist");
+    }
+    AccessControlList acl = new AccessControlList(queueInfo.getSubmitAcls());
+    return acl.isUserAllowed(UserGroupInformation.getCurrentUser());
   }
 }

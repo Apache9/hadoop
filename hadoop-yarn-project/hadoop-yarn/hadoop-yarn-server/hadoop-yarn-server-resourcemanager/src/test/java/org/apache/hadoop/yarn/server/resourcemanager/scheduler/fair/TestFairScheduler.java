@@ -572,6 +572,8 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     out.println("<weight>.25</weight>");
     out.println("</queue>");
     out.println("<queue name=\"queueB\">");
+    out.println("<aclSubmitApps>user_b</aclSubmitApps>");
+    out.println("<aclAdministerApps>admin_user_b</aclAdministerApps>");
     out.println("<weight>.75</weight>");
     out.println("</queue>");
     out.println("</allocations>");
@@ -601,9 +603,14 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     QueueInfo queueInfo = scheduler.getQueueInfo("queueA", false, false);
     Assert.assertEquals(0.25f, queueInfo.getCapacity(), 0.0f);
     Assert.assertEquals(0.0f, queueInfo.getCurrentCapacity(), 0.0f);
+    Assert.assertEquals("*", queueInfo.getSubmitAcls());
+    Assert.assertEquals("*", queueInfo.getAdminAcls());
+
     queueInfo = scheduler.getQueueInfo("queueB", false, false);
     Assert.assertEquals(0.75f, queueInfo.getCapacity(), 0.0f);
     Assert.assertEquals(0.0f, queueInfo.getCurrentCapacity(), 0.0f);
+    Assert.assertEquals("user_b ", queueInfo.getSubmitAcls());
+    Assert.assertEquals("admin_user_b ", queueInfo.getAdminAcls());
 
     // Each NodeUpdate Event will only assign one container.
     // To assign two containers, call handle NodeUpdate Event twice.

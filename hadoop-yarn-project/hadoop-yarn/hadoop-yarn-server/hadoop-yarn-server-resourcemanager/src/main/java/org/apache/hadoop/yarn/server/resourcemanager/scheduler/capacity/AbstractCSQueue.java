@@ -319,7 +319,7 @@ public abstract class AbstractCSQueue implements CSQueue {
     
     this.reservationsContinueLooking = reservationContinueLooking;
   }
-  
+
   protected QueueInfo getQueueInfo() {
     QueueInfo queueInfo = recordFactory.newRecordInstance(QueueInfo.class);
     queueInfo.setQueueName(queueName);
@@ -329,6 +329,12 @@ public abstract class AbstractCSQueue implements CSQueue {
     queueInfo.setQueueState(state);
     queueInfo.setDefaultNodeLabelExpression(defaultLabelExpression);
     queueInfo.setCurrentCapacity(getUsedCapacity());
+
+    AccessControlList submitAcls = acls.get(QueueACL.SUBMIT_APPLICATIONS);
+    queueInfo.setSubmitAcls(submitAcls.getAclString());
+
+    AccessControlList adminAcls = acls.get(QueueACL.ADMINISTER_QUEUE);
+    queueInfo.setAdminAcls(adminAcls.getAclString());
     return queueInfo;
   }
   

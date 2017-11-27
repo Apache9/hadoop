@@ -47,6 +47,7 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
@@ -62,6 +63,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.GetContainerReportRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerReportResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainersResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.GetQueueInfoRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.GetQueueInfoResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationDeleteRequest;
@@ -83,6 +86,8 @@ import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
+import org.apache.hadoop.yarn.api.records.QueueInfo;
+import org.apache.hadoop.yarn.api.records.QueueState;
 import org.apache.hadoop.yarn.api.records.ReservationDefinition;
 import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.ReservationRequest;
@@ -91,12 +96,14 @@ import org.apache.hadoop.yarn.api.records.ReservationRequests;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.YarnApplicationAttemptState;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
+import org.apache.hadoop.yarn.api.records.impl.pb.QueueInfoPBImpl;
 import org.apache.hadoop.yarn.client.api.TimelineClient;
 import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.client.api.YarnClientApplication;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.ApplicationIdNotProvidedException;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.proto.YarnProtos;
 import org.apache.hadoop.yarn.security.client.TimelineDelegationTokenIdentifier;
 import org.apache.hadoop.yarn.server.MiniYARNCluster;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
@@ -210,6 +217,20 @@ public class TestYarnClient {
     client.killApplication(app.getApplicationId());
     verify(((MockYarnClient) client).getRMClient(), times(2))
       .forceKillApplication(any(KillApplicationRequest.class));
+  }
+
+  @Test
+  public void testIsSubmittable() throws Exception {
+    Configuration conf = new Configuration();
+    @SuppressWarnings("resource")
+    final YarnClient client = new MockYarnClient();
+    client.init(conf);
+    client.start();
+
+    Assert.assertTrue(client.isSubmittable("user_a", "root.default"));
+    Assert.assertFalse(client.isSubmittable("user_a", "root"));
+    Assert.assertTrue(client.isSubmittable("user_a", "root.A"));
+    Assert.assertFalse(client.isSubmittable("user_a", "root.B"));
   }
 
   @Test(timeout = 30000)
@@ -614,6 +635,33 @@ public class TestYarnClient {
     public ContainerReport getContainer(ContainerId containerId) {
       return containers.get(containerId.getApplicationAttemptId()).get(0);
     }
+
+    @Override
+    public QueueInfo getQueueInfo(String queue) {
+      if (queue.equals("root.default")) {
+        YarnProtos.QueueInfoProto queueInfo = YarnProtos.QueueInfoProto.newBuilder()
+            .setQueueName("root.default")
+            .setSubmitAcls("*")
+            .setAdminAcls("*").build();
+        return new QueueInfoPBImpl(queueInfo);
+      } else if (queue.equals("root.A")) {
+        YarnProtos.QueueInfoProto queueInfo = YarnProtos.QueueInfoProto.newBuilder()
+            .setQueueName("root.A")
+            .setSubmitAcls("user_a")
+            .setAdminAcls("*").build();
+        return new QueueInfoPBImpl(queueInfo);
+      } else if (queue.equals("root.B")) {
+        YarnProtos.QueueInfoProto queueInfo = YarnProtos.QueueInfoProto.newBuilder()
+            .setQueueName("root.B")
+            .setSubmitAcls("user_b")
+            .setAdminAcls("*").build();
+        return new QueueInfoPBImpl(queueInfo);
+      } else {
+        YarnProtos.QueueInfoProto queueInfo = YarnProtos.QueueInfoProto.newBuilder()
+            .setQueueName(queue).build();
+        return new QueueInfoPBImpl(queueInfo);
+      }
+    }
   }
 
   @Test(timeout = 30000)
@@ -967,4 +1015,5 @@ public class TestYarnClient {
             ReservationSystemTestUtil.reservationQ);
     return request;
   }
+
 }

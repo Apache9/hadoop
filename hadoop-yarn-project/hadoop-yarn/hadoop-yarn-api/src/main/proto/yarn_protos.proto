@@ -338,6 +338,8 @@ message QueueInfoProto {
   repeated ApplicationReportProto applications = 7;
   repeated string accessibleNodeLabels = 8;
   optional string defaultNodeLabelExpression = 9;
+  optional string adminAcls = 20;
+  optional string submitAcls = 21;
 }
 
 enum QueueACLProto {

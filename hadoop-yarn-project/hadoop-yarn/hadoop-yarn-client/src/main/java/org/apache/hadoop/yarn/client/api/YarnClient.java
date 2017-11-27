@@ -634,4 +634,60 @@ public abstract class YarnClient extends AbstractService {
   @Unstable
   public abstract Set<String> getClusterNodeLabels()
       throws YarnException, IOException;
+
+  /**
+   * <p>
+   * Get all queues that the current user can submit the app to
+   * </p>
+   *
+   * @return all queues that the current user can submit the app to
+   * @throws YarnException
+   * @throws IOException
+   */
+  @Public
+  @Unstable
+  public abstract List<String> getUserQueues() throws YarnException, IOException;
+
+  /**
+   * <p>
+   * Get all queues that the user can submit the app to
+   * </p>
+   *
+   * @param user The specified user
+   * @return all queues that the user can submit the app to
+   * @throws YarnException
+   * @throws IOException
+   */
+  @Public
+  @Unstable
+  public abstract List<String> getUserQueues(String user) throws YarnException, IOException;
+
+  /**
+   * <p>
+   * Check if the current user has the permission to submit a app to the queue
+   * </p>
+   *
+   * @param queueName The queue name to check
+   * @return true if user can submit application to the queue
+   * @throws YarnException
+   * @throws IOException
+   */
+  @Public
+  @Unstable
+  public abstract boolean isSubmittable(String queueName) throws YarnException, IOException;
+
+  /**
+   * <p>
+   * Check if the user has the permission to submit a app to the queue
+   * </p>
+   *
+   * @param user The specified user
+   * @param queueName The queue name to check
+   * @return true if user can submit application to the queue
+   * @throws YarnException
+   * @throws IOException
+   */
+  @Public
+  @Unstable
+  public abstract boolean isSubmittable(String user, String queueName) throws YarnException, IOException;
 }

@@ -147,6 +147,12 @@ public class FifoScheduler extends
       queueInfo.setMaximumCapacity(1.0f);
       queueInfo.setChildQueues(new ArrayList<QueueInfo>());
       queueInfo.setQueueState(QueueState.RUNNING);
+
+      AccessControlList submitAcls = getQueueAcls().get(QueueACL.SUBMIT_APPLICATIONS);
+      queueInfo.setSubmitAcls(submitAcls.getAclString());
+
+      AccessControlList adminAcls = getQueueAcls().get(QueueACL.ADMINISTER_QUEUE);
+      queueInfo.setAdminAcls(adminAcls.getAclString());
       return queueInfo;
     }
 

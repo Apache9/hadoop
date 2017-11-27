@@ -138,6 +138,8 @@ public class TestFifoScheduler {
     FifoScheduler scheduler = new FifoScheduler();
     QueueInfo queueInfo = scheduler.getQueueInfo(null, false, false);
     Assert.assertEquals(0.0f, queueInfo.getCurrentCapacity(), 0.0f);
+    Assert.assertEquals("*", queueInfo.getSubmitAcls());
+    Assert.assertEquals("*", queueInfo.getAdminAcls());
   }
   
   @Test(timeout=5000)

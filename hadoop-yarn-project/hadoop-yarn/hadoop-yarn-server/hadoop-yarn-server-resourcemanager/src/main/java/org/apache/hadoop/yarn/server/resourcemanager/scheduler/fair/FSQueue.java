@@ -31,6 +31,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.QueueACL;
@@ -165,9 +166,16 @@ public abstract class FSQueue implements Queue, Schedulable {
     }
     queueInfo.setChildQueues(childQueueInfos);
     queueInfo.setQueueState(QueueState.RUNNING);
+
+    AllocationConfiguration allocConf = scheduler.getAllocationConfiguration();
+    AccessControlList submitAcls = allocConf.getQueueAcl(getQueueName(), QueueACL.SUBMIT_APPLICATIONS);
+    queueInfo.setSubmitAcls(submitAcls.getAclString());
+
+    AccessControlList adminAcls = allocConf.getQueueAcl(getQueueName(), QueueACL.ADMINISTER_QUEUE);
+    queueInfo.setAdminAcls(adminAcls.getAclString());
     return queueInfo;
   }
-  
+
   @Override
   public FSQueueMetrics getMetrics() {
     return metrics;

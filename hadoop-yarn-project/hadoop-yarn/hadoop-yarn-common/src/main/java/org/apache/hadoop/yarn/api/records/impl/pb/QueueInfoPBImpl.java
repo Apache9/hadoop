@@ -24,7 +24,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
+import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
@@ -47,7 +49,7 @@ public class QueueInfoPBImpl extends QueueInfo {
   List<ApplicationReport> applicationsList;
   List<QueueInfo> childQueuesList;
   Set<String> accessibleNodeLabels;
-  
+
   public QueueInfoPBImpl() {
     builder = QueueInfoProto.newBuilder();
   }
@@ -367,5 +369,29 @@ public class QueueInfoPBImpl extends QueueInfo {
       return;
     }
     builder.setDefaultNodeLabelExpression(defaultNodeLabelExpression);
+  }
+
+  @Override
+  public String getSubmitAcls() {
+    QueueInfoProtoOrBuilder p = viaProto ? proto : builder;
+    return (p.hasSubmitAcls()) ? p.getSubmitAcls() : "";
+  }
+
+  @Override
+  public void setSubmitAcls(String submitAcls) {
+    maybeInitBuilder();
+    builder.setSubmitAcls(submitAcls);
+  }
+
+  @Override
+  public String getAdminAcls() {
+    QueueInfoProtoOrBuilder p = viaProto ? proto : builder;
+    return (p.hasAdminAcls()) ? p.getAdminAcls() : "";
+  }
+
+  @Override
+  public void setAdminAcls(String adminAcls) {
+    maybeInitBuilder();
+    builder.setAdminAcls(adminAcls);
   }
 }
