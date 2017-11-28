@@ -20,11 +20,9 @@ package org.apache.hadoop.hdfs.server.ttlmanager;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Stack;
 
 import org.apache.commons.logging.Log;
@@ -38,7 +36,6 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.server.ttlmanager.TtlPolicy.TtlTaskResult;
 
 import com.google.common.annotations.VisibleForTesting;
-
 
 
 /**
@@ -92,6 +89,8 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
 
     Path rootDir = new Path("/");
     try {
+      LOG.info("Starting traverse dirrectory tree, roundIntervalMs="
+        + roundIntervalMs);
     	traverseDirectoryTree(rootDir);
     } catch (Throwable t) {
     	LOG.fatal("Fail to run ttl policy", t);
@@ -116,6 +115,7 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
     
     metrics.addTtlDurationInMs(consumedTime);
     // Enable the next round
+    LOG.info("Enable next round, delayMs=" + delayMs);
     enable();
   }
 
@@ -131,7 +131,59 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
   private boolean isInTrash(Path path) {
     return fs.makeQualified(path).toString().startsWith(trash.toString());
   }
-  
+
+  public interface IDeepthFirstFilter {
+    public void addPath(Path path);
+    public void removePath(Path path);
+    public void prcess(Path path);
+  }
+
+  class TTLFilter implements IDeepthFirstFilter {
+    private List<TtlInfo> ttlInfos;
+    long procesedCount = 0;
+    long maxDeepth = 0;
+    long CHECK_COUNT = 1000000;
+
+    TTLFilter () {
+      ttlInfos = new LinkedList<TtlInfo>();
+      procesedCount = 0;
+      maxDeepth = 0;
+    }
+
+    public void addPath(Path path) {
+      ttlInfos.add(getTtlInfo(path));
+      if (ttlInfos.size() > maxDeepth) {
+        maxDeepth = ttlInfos.size();
+      }
+    }
+
+    public void removePath(Path path) {
+      ttlInfos.remove(ttlInfos.size() - 1);
+    }
+
+    public void prcess(Path path) {
+      ProcessTtlInfos(path, ttlInfos);
+      procesedCount++;
+      if (0 ==(procesedCount + CHECK_COUNT) % CHECK_COUNT) {
+        LOG.info(getStatus());
+      }
+    }
+
+    public String getStatus() {
+      StringBuilder builder = new StringBuilder();
+      builder.append("TTLFilter Status:");
+      builder.append(" ProceessedCount(").append(procesedCount).append(")");
+      builder.append(" MaxDeepth(").append(maxDeepth).append(")");
+      builder.append(" CurrentDeepth(").append(ttlInfos.size()).append(")");
+      Runtime run = Runtime.getRuntime();
+      builder.append(" Memory Status:");
+      builder.append(" total(").append(run.totalMemory()).append(")");
+      builder.append(" free(").append(run.freeMemory()).append(")");
+      builder.append(" used(").append(run.totalMemory()-run.freeMemory()).append(")");
+      return builder.toString();
+    }
+  }
+
   /**
    * Depth first traverse the specified directory tree, and process the ttl
    * for each of the files and directories. Note that here we can't guarantee
@@ -141,14 +193,17 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
    * @param rootDir The directory tree root.
    */
   void traverseDirectoryTree(Path rootDir) {
-    Stack<Path> stack = new Stack<Path>();
-    List<TtlInfo> ttlInfos = new LinkedList<TtlInfo>();
-    Map<Path, ChildrenInfo> childrenInfos = new HashMap<Path, ChildrenInfo>();
-    Set<Path> visited = new HashSet<Path>();
+    TTLFilter filter = new TTLFilter();
+    LOG.info(filter.getStatus());
+    deepFirsttraverseDirectoryTree(rootDir, filter);
+    LOG.info(filter.getStatus());
+  }
 
+  void deepFirsttraverseDirectoryTree(Path rootDir, IDeepthFirstFilter filter) {
+    Stack<Path> stack = new Stack<Path>();
+    Map<Path, ChildrenInfo> childrenInfos = new HashMap<Path, ChildrenInfo>();
     stack.add(rootDir);
-    visited.add(rootDir);
-    ttlInfos.add(getTtlInfo(rootDir));
+    filter.addPath(rootDir);
     while (!stack.isEmpty()) {
       Path path = null;
       try {
@@ -160,24 +215,22 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
           childrenInfo = new ChildrenInfo(children);
           childrenInfos.put(path, childrenInfo);
         }
-
         if (fs.isDirectory(path) && childrenInfo.hasNextChild()) {
           // Process the next child
           FileStatus nextChild = childrenInfo.nextChild();
-          if (!visited.contains(nextChild.getPath()) && !isInTrash(nextChild.getPath())) {
-            ttlInfos.add(getTtlInfo(nextChild.getPath()));
-            visited.add(nextChild.getPath());
+          if (!isInTrash(nextChild.getPath())) {
+            filter.addPath(nextChild.getPath());
             stack.push(nextChild.getPath());
           }
         } else {
-          ProcessTtlInfos(path, ttlInfos);
-          ttlInfos.remove(ttlInfos.size() - 1);
+          filter.prcess(path);
+          filter.removePath(path);
           stack.pop();
           childrenInfos.remove(path);
         }
       } catch (IOException e) {
         // The current path is error, just remove from the stack
-        ttlInfos.remove(ttlInfos.size() - 1);
+        filter.removePath(path);
         stack.pop();
         LOG.warn("Error occurred during processing path " + path, e);
       }

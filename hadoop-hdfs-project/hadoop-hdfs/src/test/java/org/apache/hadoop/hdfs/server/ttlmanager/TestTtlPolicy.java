@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.ttlmanager;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -28,6 +29,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.server.ttlmanager.TtlPolicy.TtlInfo;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -354,5 +356,46 @@ public class TestTtlPolicy {
           args.contains("-keepEmptyDir") || args.contains("-keepEmptySubDir");
       Assert.assertTrue((exitCode == 0) || dirOpt);
     }
+  }
+
+  class TestFilter implements TtlPolicy.IDeepthFirstFilter {
+    List<Path> pathList;
+    List<Path> processList;
+
+    TestFilter () {
+      pathList = new ArrayList<Path>();
+      processList = new ArrayList<Path>();
+    }
+    public void addPath(Path path) {
+      pathList.add(path);
+    }
+    public void removePath(Path path) {
+      pathList.remove(pathList.size() - 1);
+    }
+    public void prcess(Path path) {
+      processList.add(path);
+    }
+  }
+
+  @Test
+  public void testDeepFirsttraverseDirectoryTree() throws Exception {
+    DefaultMetricsSystem.initialize("ttlmanager");
+    TtlManager ttlManager = new TtlManager(conf);
+    TtlPolicy pl = new TtlPolicy(conf, ttlManager.getMetrics());
+
+    createTestDirectoryTree();
+
+    TestFilter filter = new TestFilter();
+    pl.deepFirsttraverseDirectoryTree(new Path("/"), filter);
+    Assert.assertTrue(filter.processList.get(0).toString().contains("/user/test1/dir"));
+    Assert.assertTrue(filter.processList.get(1).toString().contains("/user/test1/file"));
+    Assert.assertTrue(filter.processList.get(2).toString().contains("/user/test1"));
+    Assert.assertTrue(filter.processList.get(3).toString().contains("/user/test2"));
+    Assert.assertTrue(filter.processList.get(4).toString().contains("/user/test3"));
+    Assert.assertTrue(filter.processList.get(5).toString().contains("/user"));
+    Assert.assertTrue(filter.processList.get(5).toString().contains("/"));
+    Assert.assertEquals(0, filter.pathList.size());
+
+    cleanupTestDirectoryTree();
   }
 }
