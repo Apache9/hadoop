@@ -26,8 +26,12 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DOMAIN_SOCKET_PATH_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SHORT_CIRCUIT_SHARED_MEMORY_WATCHER_INTERRUPT_CHECK_MS;
 import static org.hamcrest.CoreMatchers.equalTo;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.channels.ClosedByInterruptException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -43,12 +47,22 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.UnregisteredNodeException;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos;
+import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
+import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
+import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.shortcircuit.DfsClientShmManager.PerDatanodeVisitorInfo;
 import org.apache.hadoop.hdfs.shortcircuit.DfsClientShmManager.Visitor;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitCache;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitReplicaInfo;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.net.unix.DomainSocket;
 import org.apache.hadoop.net.unix.TemporarySocketDirectory;
 import org.junit.After;
@@ -528,5 +542,248 @@ public class TestBlockReaderFactory {
     dfs.close();
     cluster.shutdown();
     sockDir.close();
+  }
+
+  private void moveBlock(MiniDFSCluster cluster, DatanodeInfo source,
+                         DatanodeInfo target, ExtendedBlock block,
+                         int sourceBlocks, int targetBlocks) throws UnregisteredNodeException {
+    DatanodeManager dnManager = cluster.getNameNode().getNamesystem().getBlockManager().getDatanodeManager();
+
+    //move the block
+    try {
+      Socket sock = new Socket();
+      sock.connect(
+          NetUtils.createSocketAddr(target.getXferAddr()),
+          HdfsServerConstants.READ_TIMEOUT);
+      sock.setSoTimeout(30000);
+
+      sock.setKeepAlive(true);
+
+      DataOutputStream out = new DataOutputStream(sock.getOutputStream());
+      new Sender(out).replaceBlock(block, StorageType.DEFAULT, BlockTokenSecretManager.DUMMY_TOKEN,
+          source.getDatanodeUuid(), source);
+      out.flush();
+      // receiveResponse
+      DataInputStream reply = new DataInputStream(sock.getInputStream());
+
+      DataTransferProtos.BlockOpResponseProto proto =
+          DataTransferProtos.BlockOpResponseProto.parseDelimitedFrom(reply);
+    } catch (IOException e) {
+      LOG.warn("Failed to move " + block + ": " + e.getMessage());
+      Assert.assertTrue(false);
+    }
+
+
+    // wait for the block being removed
+    while (dnManager.getDatanode(target).numBlocks() != targetBlocks || dnManager.getDatanode(source).numBlocks() != sourceBlocks) {
+      try {
+        Thread.sleep(2000);
+      } catch (InterruptedException e) {
+
+      }
+    }
+  }
+
+  @Test(timeout=6000000)
+  public void testShortCircuitCacheWithBlockInValidIOException()
+      throws Exception {
+    BlockReaderTestUtil.enableBlockReaderFactoryTracing();
+
+    TemporarySocketDirectory sockDir = new TemporarySocketDirectory();
+    Configuration conf = createShortCircuitConf(
+        "testShortCircuitCacheWithBlockInValidIOException", sockDir);
+    conf.setLong("dfs.blockreport.intervalMsec", 5000);
+    final MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+    cluster.waitActive();
+    final DistributedFileSystem dfs = cluster.getFileSystem();
+    final String TEST_FILE = "/test_file";
+    final String TEST_FILE2 = "/test_file2";
+    final int TEST_FILE_LEN = 4000;
+    final int SEED = 0xFADED;
+
+    DFSTestUtil.createFile(dfs, new Path(TEST_FILE), TEST_FILE_LEN,
+        (short)1, SEED);
+    DFSTestUtil.createFile(dfs, new Path(TEST_FILE2), TEST_FILE_LEN,
+        (short)2, SEED);
+
+    try {
+      List<LocatedBlock> locatedBlocks =
+          cluster.getNameNode().getRpcServer().getBlockLocations(
+              TEST_FILE, 0, TEST_FILE_LEN).getLocatedBlocks();
+      LocatedBlock lblock = locatedBlocks.get(0); // first block
+      ExtendedBlock block =  cluster.getNameNode().getRpcServer().getBlockLocations(
+          TEST_FILE, 0, TEST_FILE_LEN).getLocatedBlocks().get(0).getBlock();
+      ExtendedBlock block2 = cluster.getNameNode().getRpcServer().getBlockLocations(
+          TEST_FILE2, 0, TEST_FILE_LEN).getLocatedBlocks().get(0).getBlock();
+      DatanodeInfo source = lblock.getLocations()[0];
+      DatanodeInfo[] dataNodes = cluster.getNameNode().getRpcServer().getDatanodeReport(HdfsConstants.DatanodeReportType.LIVE);
+      DatanodeInfo[] nodes = lblock.getLocations();
+      DatanodeInfo target = null;
+      BlockReader blockReader = null;
+      InetSocketAddress targetAddr = null;
+      targetAddr = NetUtils.createSocketAddr(nodes[0].getXferAddr());
+
+      final DistributedFileSystem fs = cluster.getFileSystem();
+
+      for (DatanodeInfo dn : dataNodes) {
+        if (!dn.getDatanodeUuid().equals(source.getDatanodeUuid())) {
+          target = dn;
+          break;
+        }
+      }
+
+      //move the block from source to target
+      moveBlock(cluster, source, target, block, 1, 2);
+
+
+      // the building should fail but domain socket should not be disabled
+      try {
+        blockReader = new BlockReaderFactory(fs.getClient().getConf()).
+            setInetSocketAddress(targetAddr).
+            setBlock(block).
+            setFileName(targetAddr.toString() + ":" + block.getBlockId()).
+            setBlockToken(lblock.getBlockToken()).
+            setStartOffset(0).
+            setLength(TEST_FILE_LEN).
+            setVerifyChecksum(true).
+            setClientName("BlockReaderTestUtil").
+            setDatanodeInfo(nodes[0]).
+            setClientCacheContext(ClientContext.getFromConf(fs.getConf())).
+            setCachingStrategy(CachingStrategy.newDefaultStrategy()).
+            setConfiguration(fs.getConf()).
+            setAllowShortCircuitLocalReads(true).
+            setRemotePeerFactory(fs.getClient()).
+            build();
+      } catch (IOException e) {
+        LOG.info(e);
+      }
+
+      //move back the block from target to source
+      moveBlock(cluster, target, source, block, 1, 2);
+
+      blockReader = new BlockReaderFactory(fs.getClient().getConf()).
+          setInetSocketAddress(targetAddr).
+          setBlock(block2).
+          setFileName(targetAddr.toString()+ ":" + block2.getBlockId()).
+          setBlockToken(lblock.getBlockToken()).
+          setStartOffset(0).
+          setLength(TEST_FILE_LEN).
+          setVerifyChecksum(true).
+          setClientName("BlockReaderTestUtil").
+          setDatanodeInfo(nodes[0]).
+          setClientCacheContext(ClientContext.getFromConf(fs.getConf())).
+          setCachingStrategy(CachingStrategy.newDefaultStrategy()).
+          setConfiguration(fs.getConf()).
+          setAllowShortCircuitLocalReads(true).
+          setRemotePeerFactory(fs.getClient()).
+          build();
+
+      Assert.assertTrue(blockReader instanceof  BlockReaderLocal);
+    } catch (Throwable t) {
+      LOG.error("getBlockReader failure", t);
+      Assert.assertTrue(false);
+    }
+
+    cluster.shutdown();
+    sockDir.close();
+
+  }
+
+  @Test(timeout=6000000)
+  public void testShortCircuitCacheWithMetaFileNotFoundIOException()
+      throws Exception {
+    BlockReaderTestUtil.enableBlockReaderFactoryTracing();
+
+    TemporarySocketDirectory sockDir = new TemporarySocketDirectory();
+    Configuration conf = createShortCircuitConf(
+        "testShortCircuitCacheWithBlockInValidIOException", sockDir);
+    conf.setLong("dfs.blockreport.intervalMsec", 5000);
+    final MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    final DistributedFileSystem dfs = cluster.getFileSystem();
+    final String TEST_FILE = "/test_file";
+    final String TEST_FILE2 = "/test_file2";
+    final int TEST_FILE_LEN = 4000;
+    final int SEED = 0xFADED;
+
+    DFSTestUtil.createFile(dfs, new Path(TEST_FILE), TEST_FILE_LEN,
+        (short)1, SEED);
+    DFSTestUtil.createFile(dfs, new Path(TEST_FILE2), TEST_FILE_LEN,
+        (short)1, SEED);
+
+    try {
+      List<LocatedBlock> locatedBlocks =
+          cluster.getNameNode().getRpcServer().getBlockLocations(
+              TEST_FILE, 0, TEST_FILE_LEN).getLocatedBlocks();
+      LocatedBlock lblock = locatedBlocks.get(0); // first block
+      ExtendedBlock block =  cluster.getNameNode().getRpcServer().getBlockLocations(
+          TEST_FILE, 0, TEST_FILE_LEN).getLocatedBlocks().get(0).getBlock();
+      ExtendedBlock block2 = cluster.getNameNode().getRpcServer().getBlockLocations(
+          TEST_FILE2, 0, TEST_FILE_LEN).getLocatedBlocks().get(0).getBlock();
+      DatanodeInfo[] nodes = lblock.getLocations();
+      BlockReader blockReader = null;
+      InetSocketAddress targetAddr = null;
+      targetAddr = NetUtils.createSocketAddr(nodes[0].getXferAddr());
+
+      final DistributedFileSystem fs = cluster.getFileSystem();
+
+
+
+      File[] blockfiles = cluster.getAllBlockFiles(block);
+      File metaFile = new File(blockfiles[0].getAbsoluteFile() + "_" + block.getGenerationStamp() + ".meta");
+      metaFile.delete();
+
+
+      // the building should fail but domain socket should not be disabled
+      try {
+        blockReader = new BlockReaderFactory(fs.getClient().getConf()).
+            setInetSocketAddress(targetAddr).
+            setBlock(block).
+            setFileName(targetAddr.toString() + ":" + block.getBlockId()).
+            setBlockToken(lblock.getBlockToken()).
+            setStartOffset(0).
+            setLength(TEST_FILE_LEN).
+            setVerifyChecksum(true).
+            setClientName("BlockReaderTestUtil").
+            setDatanodeInfo(nodes[0]).
+            setClientCacheContext(ClientContext.getFromConf(fs.getConf())).
+            setCachingStrategy(CachingStrategy.newDefaultStrategy()).
+            setConfiguration(fs.getConf()).
+            setAllowShortCircuitLocalReads(true).
+            setRemotePeerFactory(fs.getClient()).
+            build();
+      } catch (IOException e) {
+        LOG.info(e);
+      }
+
+
+      blockReader = new BlockReaderFactory(fs.getClient().getConf()).
+          setInetSocketAddress(targetAddr).
+          setBlock(block2).
+          setFileName(targetAddr.toString()+ ":" + block2.getBlockId()).
+          setBlockToken(lblock.getBlockToken()).
+          setStartOffset(0).
+          setLength(TEST_FILE_LEN).
+          setVerifyChecksum(true).
+          setClientName("BlockReaderTestUtil").
+          setDatanodeInfo(nodes[0]).
+          setClientCacheContext(ClientContext.getFromConf(fs.getConf())).
+          setCachingStrategy(CachingStrategy.newDefaultStrategy()).
+          setConfiguration(fs.getConf()).
+          setAllowShortCircuitLocalReads(true).
+          setRemotePeerFactory(fs.getClient()).
+          build();
+
+      Assert.assertTrue(blockReader instanceof  BlockReaderLocal);
+    } catch (Throwable t) {
+      LOG.error("getBlockReader failure", t);
+      Assert.assertTrue(false);
+    }
+
+    cluster.shutdown();
+    sockDir.close();
+
   }
 }
