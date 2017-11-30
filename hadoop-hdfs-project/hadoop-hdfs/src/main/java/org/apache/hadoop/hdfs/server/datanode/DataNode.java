@@ -59,6 +59,7 @@ import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.datanode.SecureDataNodeStarter.SecureResources;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.LengthInputStream;
 import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetrics;
 import org.apache.hadoop.hdfs.server.datanode.web.resources.DatanodeWebHdfsMethods;
 import org.apache.hadoop.hdfs.server.namenode.FileChecksumServlets;
@@ -1155,7 +1156,11 @@ public class DataNode extends Configured
     
     try {
       fis[0] = (FileInputStream)data.getBlockInputStream(blk, 0);
-      fis[1] = (FileInputStream)data.getMetaDataInputStream(blk).getWrappedStream();
+      LengthInputStream lin = data.getMetaDataInputStream(blk);
+      if (lin == null) {
+        throw new FileNotFoundException("Meta file for " + blk + " not found.");
+      }
+      fis[1] = (FileInputStream)lin.getWrappedStream();
     } catch (ClassCastException e) {
       LOG.debug("requestShortCircuitFdsForRead failed", e);
       throw new ShortCircuitFdsUnsupportedException("This DataNode's " +
