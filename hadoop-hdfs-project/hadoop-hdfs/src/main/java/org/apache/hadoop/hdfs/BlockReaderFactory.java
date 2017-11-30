@@ -596,6 +596,12 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
       LOG.warn(this + ": unknown response code " + resp.getStatus() +
           " while attempting to set up short-circuit access. " +
           resp.getMessage());
+      // when block and its meta file can not be found, we should not disable the SCR
+      // this is a tmp fix since there is some argument in committee.
+      if ((resp.getMessage().contains("Block") && resp.getMessage().contains("is not valid"))
+          || (resp.getMessage().contains("Meta file for") && resp.getMessage().contains(" not found"))) {
+        return null;
+      }
       clientContext.getDomainSocketFactory()
           .disableShortCircuitForPath(pathInfo.getPath());
       return null;
