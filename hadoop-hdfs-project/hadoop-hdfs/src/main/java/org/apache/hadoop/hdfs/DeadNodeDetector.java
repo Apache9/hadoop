@@ -16,6 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_KEY;
+
 /**
  * Created by xiegang1 on 17-7-28.
  */
@@ -75,33 +77,36 @@ public class DeadNodeDetector implements Runnable {
     this.DFSInputStreamNodesMap = new ConcurrentHashMap<DFSInputStream, HashSet<DatanodeInfo>>();
 
     this.name = name;
-    this.conf = conf;
+    this.conf =  new Configuration(conf);
 
     deadNodeDetectTimeout = conf.getInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_TIMEOUT_KEY,
-        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_TIMEOUT_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_TIMEOUT_DEFAULT);
     deadNodeDetectInterval = conf.getLong(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_INTERVAL_KEY,
-        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_INTERVAL_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_INTERVAL_DEFAULT);
     aliveNodeDetectInterval = conf.getLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
-        DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_DEFAULT);
     retries = conf.getInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY,
-        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_DEFAULT);
 
     maxLiveNodesProbeQueueLen = conf.getInt(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_QUEUE_MAX_KEY,
-        DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_QUEUE_MAX_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_QUEUE_MAX_DEFAULT);
     maxDeadNodesProbeQueueLen = conf.getInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_KEY,
-        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_QUEUE_MAX_DEFAULT);
     maxSuspectNodesProbeQueueLen = conf.getInt(DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_QUEUE_MAX_KEY,
-        DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_QUEUE_MAX_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_QUEUE_MAX_DEFAULT);
 
     int deadNodeDetectLiveThreads = conf.getInt(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_THREADS_KEY,
-        DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_THREADS_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_THREADS_DEFAULT);
     int deadNodeDetectDeadThreads = conf.getInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_THREADS_KEY,
-        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_THREADS_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_THREADS_DEFAULT);
     int suspectNodeDetectDeadThreads = conf.getInt(DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_THREADS_KEY,
-        DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_THREADS_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_SUSPECT_NODE_DETECT_THREADS_DEFAULT);
 
     enableProbeLiveNodes = conf.getBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY,
-        DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_DEFALT);
+        DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_DEFAULT);
+
+    this.conf.setInt(IPC_CLIENT_CONNECT_MAX_RETRIES_KEY,
+        this.conf.getInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RPC_RETRIES_KEY, DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RPC_RETRIES_DEFAULT));
 
     lastDetectLiveTS = Time.monotonicNow();
     lastDetectDeadTS = Time.monotonicNow();
@@ -341,6 +346,7 @@ public class DeadNodeDetector implements Runnable {
               deadNodeDetectTimeout,
               true
           );
+
           DatanodeLocalInfo localInfo = proxy.getDatanodeInfo();
           deadNodeDetector.probeCallBack(this, true);
           return ;

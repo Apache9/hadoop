@@ -471,7 +471,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
         DFS_FORCE_DELETE_TO_TRASH_DEFAULT);
 
       enableSharedDeadNodes = conf.getBoolean(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_KEY,
-          DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_DEFALT);
+          DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_DEFAULT);
 
       TracerLog.initClient(conf);
       if (enableSharedDeadNodes) {

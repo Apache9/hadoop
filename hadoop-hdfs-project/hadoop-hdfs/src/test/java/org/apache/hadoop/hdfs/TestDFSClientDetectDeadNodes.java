@@ -150,7 +150,7 @@ public class TestDFSClientDetectDeadNodes {
         5000);
     conf.setLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
         5000);
-    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 1);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 3);
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY, true);
     // We'll be using a 512 bytes block size just for tests
     // so making sure the checksum bytes too match it.
@@ -215,7 +215,7 @@ public class TestDFSClientDetectDeadNodes {
         5000);
     conf.setLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
         5000);
-    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 1);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 3);
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY, true);
     // We'll be using a 512 bytes block size just for tests
     // so making sure the checksum bytes too match it.
@@ -287,7 +287,7 @@ public class TestDFSClientDetectDeadNodes {
         5000);
     conf.setLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
         5000);
-    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 1);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 3);
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY, false);
     // We'll be using a 512 bytes block size just for tests
     // so making sure the checksum bytes too match it.
@@ -350,7 +350,7 @@ public class TestDFSClientDetectDeadNodes {
         5000);
     conf.setLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
         5000);
-    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 1);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 3);
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY, true);
     // We'll be using a 512 bytes block size just for tests
     // so making sure the checksum bytes too match it.
@@ -421,7 +421,7 @@ public class TestDFSClientDetectDeadNodes {
         5000);
     conf.setLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
         5000);
-    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 1);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 3);
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY, true);
     // We'll be using a 512 bytes block size just for tests
     // so making sure the checksum bytes too match it.
@@ -480,7 +480,7 @@ public class TestDFSClientDetectDeadNodes {
         5000);
     conf.setLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
         5000);
-    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 1);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 3);
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY, true);
     // We'll be using a 512 bytes block size just for tests
     // so making sure the checksum bytes too match it.
@@ -559,7 +559,7 @@ public class TestDFSClientDetectDeadNodes {
         5000);
     conf.setLong(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_INTERVAL_KEY,
         5000);
-    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 1);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_RETRIES_KEY, 3);
     conf.setBoolean(DFSConfigKeys.DFS_CLIENT_LIVE_NODE_DETECT_ENABLE_KEY, true);
     conf.setInt(
         DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY,
