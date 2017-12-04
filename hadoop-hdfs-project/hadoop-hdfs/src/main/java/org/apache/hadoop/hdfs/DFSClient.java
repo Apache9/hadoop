@@ -513,7 +513,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
           DFSConfigKeys.DFS_CLIENT_SLOW_CONN_WARNING_MS_DEFAULT);
 
       enableSharedDeadNodes = conf.getBoolean(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_KEY,
-          DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_DEFALT);
+          DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_DEFAULT);
       if (enableSharedDeadNodes) {
         this.conf = conf;
       }
