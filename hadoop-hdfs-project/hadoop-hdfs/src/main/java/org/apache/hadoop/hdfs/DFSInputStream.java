@@ -732,7 +732,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           if (ex instanceof InvalidEncryptionKeyException && refetchEncryptionKey > 0) {
             DFSClient.LOG.info("Will fetch a new encryption key and retry, " 
                 + "encryption key was invalid when connecting to " + targetAddr
-                + " : " + ex);
+                + " : " + ex.getMessage());
             // The encryption key used is invalid.
             refetchEncryptionKey--;
             dfsClient.clearDataEncryptionKey();
@@ -1276,7 +1276,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         if (e instanceof InvalidEncryptionKeyException && refetchEncryptionKey > 0) {
           DFSClient.LOG.info("Will fetch a new encryption key and retry, " 
               + "encryption key was invalid when connecting to " + targetAddr
-              + " : " + e);
+              + " : " + e.getMessage());
           // The encryption key used is invalid.
           refetchEncryptionKey--;
           dfsClient.clearDataEncryptionKey();

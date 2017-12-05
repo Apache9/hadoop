@@ -741,7 +741,7 @@ public class ShortCircuitCache implements Closeable {
     }
     if (info.getInvalidTokenException() != null) {
       LOG.warn(this + ": could not get " + key + " due to InvalidToken " +
-            "exception.", info.getInvalidTokenException());
+            "exception." + info.getInvalidTokenException().getMessage());
       return info;
     }
     ShortCircuitReplica replica = info.getReplica();
@@ -800,7 +800,7 @@ public class ShortCircuitCache implements Closeable {
         if (waitableInMap == newWaitable) replicaInfoMap.remove(key);
         if (info.getInvalidTokenException() != null) {
           LOG.warn(this + ": could not load " + key + " due to InvalidToken " +
-              "exception.", info.getInvalidTokenException());
+              "exception." + info.getInvalidTokenException().getMessage());
         } else {
           LOG.warn(this + ": failed to load " + key);
         }
