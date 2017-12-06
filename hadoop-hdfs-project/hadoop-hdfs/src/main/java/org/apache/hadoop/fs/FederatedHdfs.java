@@ -153,12 +153,22 @@ public class FederatedHdfs extends AbstractFileSystem {
 
   @Override
   public FsStatus getFsStatus() throws IOException {
-    return viewFs.getFsStatus();
+    AbstractFileSystem[] fsList = viewFs.getChildFileSystems();
+    if (fsList.length > 0) {
+      return fsList[0].getFsStatus();
+    } else {
+      return viewFs.getFsStatus();
+    }
   }
 
   @Override
   public FsServerDefaults getServerDefaults() throws IOException {
-    return viewFs.getServerDefaults();
+    AbstractFileSystem[] fsList = viewFs.getChildFileSystems();
+    if (fsList.length > 0) {
+      return fsList[0].getServerDefaults();
+    } else {
+      return viewFs.getServerDefaults();
+    }
   }
 
   @Override

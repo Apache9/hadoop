@@ -45,11 +45,9 @@ import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
 import org.apache.hadoop.fs.viewfs.ViewFsFileStatus;
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
-import org.apache.hadoop.hdfs.MountPointRenewer;
 import org.apache.hadoop.hdfs.MountPointRenewer.RenewMpt;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
@@ -77,12 +75,10 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Set;
 
 public class FederatedDFSFileSystem extends DistributedFileSystem {
   private ViewFileSystem viewFs = null;
@@ -284,15 +280,75 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public QuotaSummary getQuotaSummary(Path f) throws IOException {
-    DistributedFileSystem dfs = getTargetDFS(f);
-    return dfs.getQuotaSummary(getTargetPath(f));
+    boolean internalPath = false;
+    DistributedFileSystem dfs = null;
+    FileSystem fs = getTargetFileSystem(f);
+    if (fs instanceof ViewFileSystem.InternalDirOfViewFs) {
+      internalPath = true;
+      // if it's internal node, try to resolve to default mountpoint
+      fs = getAncestorMountPointFilesystem(f);
+      if (fs == null) {
+        throw new IOException("Can't get quota of internal path in mounttable");
+      }
+    }
+
+    Path targetPath = getTargetPath(f);
+    if (internalPath) {
+      targetPath = new Path(fs.getUri().getPath(), f.toUri().getPath());
+    }
+
+    FileSystem rfs = ((FilterFileSystem) fs).getRawFileSystem();
+    if (rfs instanceof DistributedFileSystem) {
+      dfs = (DistributedFileSystem)rfs;
+    } else {
+      throw new IOException("Can't get DistributedFileSystem instance for path: " + f);
+    }
+
+    try {
+      return dfs.getQuotaSummary(targetPath);
+    } catch (FileNotFoundException e) {
+      if (internalPath) {
+        throw new IOException("Can't get quota of internal path in mounttable");
+      }
+      throw e;
+    }
   }
 
   @Override
   public void setQuota(Path src, long namespaceQuota, long diskspaceQuota)
       throws IOException {
-    DistributedFileSystem dfs = getTargetDFS(src);
-    dfs.setQuota(getTargetPath(src), namespaceQuota, diskspaceQuota);
+    boolean internalPath = false;
+    DistributedFileSystem dfs = null;
+    FileSystem fs = getTargetFileSystem(src);
+    if (fs instanceof ViewFileSystem.InternalDirOfViewFs) {
+      internalPath = true;
+      // if it's internal node, try to resolve to default mountpoint
+      fs = getAncestorMountPointFilesystem(src);
+      if (fs == null) {
+        throw new IOException("Can't get quota of internal path in mounttable");
+      }
+    }
+
+    Path targetPath = getTargetPath(src);
+    if (internalPath) {
+      targetPath = new Path(fs.getUri().getPath(), src.toUri().getPath());
+    }
+
+    FileSystem rfs = ((FilterFileSystem) fs).getRawFileSystem();
+    if (rfs instanceof DistributedFileSystem) {
+      dfs = (DistributedFileSystem)rfs;
+    } else {
+      throw new IOException("Can't get DistributedFileSystem instance for path: " + src);
+    }
+
+    try {
+      dfs.setQuota(targetPath, namespaceQuota, diskspaceQuota);
+    } catch (FileNotFoundException e) {
+      if (internalPath) {
+        throw new IOException("Can't get quota of internal path in mounttable");
+      }
+      throw e;
+    }
   }
 
   private boolean isTrashPath(Path p) {
@@ -621,9 +677,12 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public FsServerDefaults getServerDefaults() throws IOException {
-    // using the implementation of DistributedFileSystem
-    // ViewFileSystem didn't implement this interface
-    return super.getServerDefaults();
+    FileSystem[] fsList = viewFs.getChildFileSystems();
+    if (fsList.length > 0) {
+      return fsList[0].getServerDefaults();
+    } else {
+      return viewFs.getServerDefaults();
+    }
   }
 
   @Override
@@ -1043,6 +1102,21 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public short getDefaultReplication(Path f) {
     return viewFs.getDefaultReplication(convertToViewFsScheme(f));
+  }
+
+  public FileSystem getAncestorMountPointFilesystem(Path path) throws IOException {
+    FileSystem fs = null;
+    Path ancestorPath = path.getParent();
+    while (ancestorPath != null) {
+      FileSystem resFs = getTargetFileSystem(ancestorPath);
+      if (resFs instanceof ViewFileSystem.InternalDirOfViewFs) {
+        ancestorPath = ancestorPath.getParent();
+        continue;
+      }
+      fs = resFs;
+      break;
+    }
+    return fs;
   }
 
   public FileSystem getTargetFileSystem(Path path) throws IOException {

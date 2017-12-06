@@ -26,9 +26,11 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -1188,5 +1190,16 @@ public class ViewFs extends AbstractFileSystem {
 
   public void setRenewCheckerCb(FsStateRenewChecker cb) {
     this.fsRenewCkCb = cb;
+  }
+
+  public AbstractFileSystem[] getChildFileSystems() {
+    List<InodeTree.MountPoint<AbstractFileSystem>> mountPoints =
+            fsStateGetMountPoints();
+    Set<AbstractFileSystem> children = new HashSet<AbstractFileSystem>();
+    for (InodeTree.MountPoint<AbstractFileSystem> mountPoint : mountPoints) {
+      AbstractFileSystem targetFs = mountPoint.target.getFileSystem();
+      children.add(targetFs);
+    }
+    return children.toArray(new AbstractFileSystem[]{});
   }
 }

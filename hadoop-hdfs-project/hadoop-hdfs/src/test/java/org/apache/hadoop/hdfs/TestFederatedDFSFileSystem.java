@@ -63,8 +63,10 @@ public class TestFederatedDFSFileSystem {
   private static MiniDFSCluster cluster;
   private static FileSystem fs1;
   private static FileSystem fs2;
+  private static FileSystem fs3;
   private static String nn1Address;
   private static String nn2Address;
+  private static String nn3Address;
 
   @BeforeClass
   public static void setup() throws IOException {
@@ -101,7 +103,7 @@ public class TestFederatedDFSFileSystem {
     */
 
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(new Configuration(conf))
-        .nnTopology(MiniDFSNNTopology.simpleHAFederatedTopology(2))
+        .nnTopology(MiniDFSNNTopology.simpleHAFederatedTopology(3))
         .numDataNodes(5).format(true).build();
     cluster.waitClusterUp();
     return cluster;
@@ -111,9 +113,11 @@ public class TestFederatedDFSFileSystem {
     // make the 1st nn of namespace 1 and namespace 2 to active
     cluster.transitionToActive(0);
     cluster.transitionToActive(2);
+    cluster.transitionToActive(4);
 
     fs1 = cluster.getFileSystem(0);
     fs2 = cluster.getFileSystem(2);
+    fs3 = cluster.getFileSystem(4);
     fs1.mkdirs(new Path("/home"));
     // make sure fs1 and fs2 is not connect to same namespace
     assert(!fs2.exists(new Path("/home")));
@@ -130,10 +134,13 @@ public class TestFederatedDFSFileSystem {
         "hdfs://" + cluster.getNameNode(0).getHostAndPort();
     nn2Address =
         "hdfs://" + cluster.getNameNode(2).getHostAndPort();
+    nn3Address =
+        "hdfs://" + cluster.getNameNode(4).getHostAndPort();
     ConfigUtil.addLink(conf, "test-cluster", "/home",
         new URI(nn1Address+ "/home"));
     ConfigUtil.addLink(conf, "test-cluster", "/user",
         new URI(nn2Address+ "/user"));
+    ConfigUtil.addLink(conf, "test-cluster", "/", new URI(nn3Address + "/"));
   }
 
   @Test
@@ -167,8 +174,12 @@ public class TestFederatedDFSFileSystem {
           "test-cluster");
     }
 
-    Assert.assertEquals(dfs.getHomeDirectory().toString(), "hdfs://test-cluster/user/" + UserGroupInformation.getLoginUser().getShortUserName());
-    Assert.assertEquals(dfs.getWorkingDirectory().toString(), "hdfs://test-cluster/user/" + UserGroupInformation.getLoginUser().getShortUserName());
+    Assert.assertEquals(dfs.getHomeDirectory().toString(),
+        "hdfs://test-cluster/user/"
+            + UserGroupInformation.getLoginUser().getShortUserName());
+    Assert.assertEquals(dfs.getWorkingDirectory().toString(),
+        "hdfs://test-cluster/user/"
+            + UserGroupInformation.getLoginUser().getShortUserName());
   }
 
   private void addClusterToConf(Configuration config, String clusterName,
@@ -287,6 +298,23 @@ public class TestFederatedDFSFileSystem {
   }
 
   @Test
+  public void testFederatedHdfsReplicationFactor() throws Exception {
+    String testText = "hello, federation";
+    AbstractFileSystem afs = AbstractFileSystem.get(new URI("hdfs://test-cluster"), conf);
+    final Options.CreateOpts[] opts =
+            { Options.CreateOpts.perms(FILE_DEFAULT_PERM) };
+    EnumSet<CreateFlag> createFlag = EnumSet.of(CreateFlag.CREATE);
+    Path filePath = new Path("/user/foo/bar-file");
+    afs.mkdir(new Path("/user/foo"), null, false);
+    OutputStream out = afs.create(filePath, createFlag, opts);
+    out.write(testText.getBytes());
+    out.close();
+
+    FileStatus status = afs.getFileStatus(filePath);
+    Assert.assertEquals(3, status.getReplication());
+  }
+
+  @Test
   public void testShellCopy() throws Exception {
     FsShell shell = new FsShell(conf);
     File out = new File("testfile");
@@ -348,6 +376,59 @@ public class TestFederatedDFSFileSystem {
 
     // cleanup
     dfs.delete(p, true);
+  }
+  
+  @Test
+  public void testCreateOnDefaultMountpoint() throws Exception {
+    FileSystem fs = FileSystem.get(conf);
+    Path p = new Path("/non-exists");
+    fs.mkdirs(p);
+    Assert.assertTrue(fs3.exists(p));
+  }
+
+  @Test
+  public void testQuotaOfInternalNode() throws Exception {
+    fs1.mkdirs(new Path("/work/project1"));
+    fs2.mkdirs(new Path("/work/project2"));
+    Configuration config = new Configuration(conf);
+    ConfigUtil.addLink(config, "test-cluster", "/work/project1",
+            new URI(nn1Address+ "/work/project1"));
+    ConfigUtil.addLink(config, "test-cluster", "/work/project2",
+            new URI(nn2Address+ "/work/project2"));
+
+    FileSystem fs = FileSystem.get(config);
+    DistributedFileSystem dfs = (DistributedFileSystem) fs;
+    try {
+      dfs.setQuota(new Path("/work"), 1000, 2000);
+      Assert.assertTrue(false);
+    } catch (IOException e) {
+      // should not success, since the path is not available on default mountpoint
+    }
+
+    try {
+      fs.getQuotaSummary(new Path("/work"));
+      Assert.assertTrue(false);
+    } catch (IOException e) {
+      // should not success, since the path is not available on default mountpoint
+    }
+
+    fs.mkdirs(new Path("/work/project3"));
+
+    dfs.setQuota(new Path("/work"), 1000, 2000);
+    QuotaSummary summary = fs.getQuotaSummary(new Path("/work"));
+    Assert.assertEquals(1000, summary.getQuota());
+    Assert.assertEquals(2000, summary.getSpaceQuota());
+    summary = fs.getQuotaSummary(new Path("/work"));
+    Assert.assertEquals(1000, summary.getQuota());
+    Assert.assertEquals(2000, summary.getSpaceQuota());
+    summary = fs3.getQuotaSummary(new Path("/work"));
+    Assert.assertEquals(1000, summary.getQuota());
+    Assert.assertEquals(2000, summary.getSpaceQuota());
+
+    // test path with schema
+    summary = fs.getQuotaSummary(new Path("hdfs://test-cluster/work"));
+    Assert.assertEquals(1000, summary.getQuota());
+    Assert.assertEquals(2000, summary.getSpaceQuota());
   }
 
   boolean checkAllDnBalanderBandWidthLimit(long limit) {
