@@ -591,8 +591,17 @@ public class FSEditLogLoader {
     case OP_TIMES: {
       TimesOp timesOp = (TimesOp)op;
 
+      // suspect that log order is disturbed
+      String path = renameReservedPathsOnUpgrade(timesOp.path, logVersion);
+      INodesInPath i = fsDir.getLastINodeInPath(path);
+      INode inode = i.getLastINode();
+      if (inode == null) {
+        LOG.warn("could not get inode when log relay " + path);
+        break;
+      }
+
       fsDir.unprotectedSetTimes(
-          renameReservedPathsOnUpgrade(timesOp.path, logVersion),
+          path,
           timesOp.mtime, timesOp.atime, true);
       break;
     }
