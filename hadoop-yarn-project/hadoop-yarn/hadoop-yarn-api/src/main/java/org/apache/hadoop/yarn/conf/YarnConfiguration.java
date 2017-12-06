@@ -1075,7 +1075,9 @@ public class YarnConfiguration extends Configuration {
   public static final int DEFAULT_PROXY_PORT = 9099;
   public static final String DEFAULT_PROXY_ADDRESS =
     "0.0.0.0:" + DEFAULT_PROXY_PORT;
-  
+
+  public static final String PROXY_BIND_HOST = PROXY_PREFIX
+      + "bind-host";
   /**
    * YARN Service Level Authorization
    */

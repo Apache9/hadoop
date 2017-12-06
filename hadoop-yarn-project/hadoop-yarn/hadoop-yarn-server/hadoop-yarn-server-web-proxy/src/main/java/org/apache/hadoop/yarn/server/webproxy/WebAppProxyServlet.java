@@ -175,7 +175,7 @@ public class WebAppProxyServlet extends HttpServlet {
     if (LOG.isDebugEnabled()) {
       LOG.debug("local InetAddress for proxy host: " + localAddress.toString());
     }
-    config.setLocalAddress(localAddress);
+    // config.setLocalAddress(localAddress);
     HttpMethod method = new GetMethod(uri.getEscapedURI());
     method.setRequestHeader("Connection","close");
     method.setRequestHeader("yarn-proxy", localAddress.toString());

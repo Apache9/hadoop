@@ -82,7 +82,8 @@ public class WebAppProxyServer extends CompositeService {
    * @return InetSocketAddress
    */
   public static InetSocketAddress getBindAddress(Configuration conf) {
-    return conf.getSocketAddr(YarnConfiguration.PROXY_ADDRESS,
+    return conf.getSocketAddr(YarnConfiguration.PROXY_BIND_HOST,
+      YarnConfiguration.PROXY_ADDRESS,
       YarnConfiguration.DEFAULT_PROXY_ADDRESS,
       YarnConfiguration.DEFAULT_PROXY_PORT);
   }

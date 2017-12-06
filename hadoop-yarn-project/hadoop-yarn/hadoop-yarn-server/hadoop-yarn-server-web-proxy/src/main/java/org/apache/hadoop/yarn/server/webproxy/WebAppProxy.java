@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.webproxy;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 
 import org.apache.commons.logging.Log;
@@ -70,19 +71,15 @@ public class WebAppProxy extends AbstractService {
     proxyHost = proxyParts[0];
 
     fetcher = new AppReportFetcher(conf);
-    bindAddress = conf.get(YarnConfiguration.PROXY_ADDRESS);
+    InetSocketAddress socAddr = WebAppProxyServer.getBindAddress(conf);
+    bindAddress = socAddr.getHostName();
+    port = socAddr.getPort();
     if(bindAddress == null || bindAddress.isEmpty()) {
       throw new YarnRuntimeException(YarnConfiguration.PROXY_ADDRESS + 
           " is not set so the proxy will not run.");
     }
     LOG.info("Instantiating Proxy at " + bindAddress);
-    String[] parts = StringUtils.split(bindAddress, ':');
-    port = 0;
-    if (parts.length == 2) {
-      bindAddress = parts[0];
-      port = Integer.parseInt(parts[1]);
-    }
-    acl = new AccessControlList(conf.get(YarnConfiguration.YARN_ADMIN_ACL, 
+    acl = new AccessControlList(conf.get(YarnConfiguration.YARN_ADMIN_ACL,
         YarnConfiguration.DEFAULT_YARN_ADMIN_ACL));
     super.serviceInit(conf);
   }
