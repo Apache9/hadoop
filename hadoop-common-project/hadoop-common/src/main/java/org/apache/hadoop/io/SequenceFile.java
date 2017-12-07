@@ -1069,7 +1069,9 @@ public class SequenceFile {
           blockSizeOption.getValue();
         Progressable progress = progressOption == null ? null :
           progressOption.getValue();
-        out = fs.create(p, true, bufferSize, replication, blockSize, progress);
+
+        boolean overwrite = conf.getBoolean("hadoop.sequencefile.create.overwrite", true);
+        out = fs.create(p, overwrite, bufferSize, replication, blockSize, progress);
       } else {
         out = streamOption.getValue();
       }

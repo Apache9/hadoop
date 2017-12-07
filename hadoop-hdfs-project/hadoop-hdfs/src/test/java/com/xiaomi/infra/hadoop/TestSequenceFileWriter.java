@@ -11,10 +11,7 @@ import java.util.Random;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.ContentSummary;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
@@ -102,5 +99,61 @@ public class TestSequenceFileWriter {
 
     assertTrue(c.getSpaceConsumed() < quotaSize + st.getBlockSize()
         * st.getReplication());
+  }
+
+  @Test
+  public void testOverWriteConfig() throws Exception {
+    conf.setBoolean("hadoop.sequencefile.create.overwrite", true);
+    fs.mkdirs(new Path("/test"));
+    SequenceFileWriter writer = new SequenceFileWriter("/test/file1", "BLOCK", "default", conf);
+    // The data is compressed, so we do not know exactly how many writes would make the quota exceeded. Just set a big up-limit.
+    int writeNum = 0;
+    int lastWriteNum = 0;
+
+    try {
+      do {
+        String key = getRandomString();
+        String val = getRandomString();
+        writer.append(key.getBytes(), val.getBytes());
+
+        if (writeNum - lastWriteNum > 100) {
+          lastWriteNum = writeNum;
+          writer.hflush(true);
+        }
+        writeNum++;
+      } while (writeNum < 80 * BLOCK_SIZE);
+      writer.close();
+    } catch (Exception exp) {
+      assertTrue(false);
+    }
+
+    writer = new SequenceFileWriter("/test/file1", "BLOCK", "default", conf);
+
+    try {
+      do {
+        String key = getRandomString();
+        String val = getRandomString();
+        writer.append(key.getBytes(), val.getBytes());
+
+        if (writeNum - lastWriteNum > 100) {
+          lastWriteNum = writeNum;
+          writer.hflush(true);
+        }
+        writeNum++;
+      } while (writeNum < 80 * BLOCK_SIZE);
+      writer.close();
+    } catch (Exception exp) {
+      assertTrue(false);
+    }
+
+    conf.setBoolean("hadoop.sequencefile.create.overwrite", false);
+
+    try {
+      writer = new SequenceFileWriter("/test/file1", "BLOCK", "default", conf);
+    } catch (Exception e) {
+      assertTrue(e instanceof FileAlreadyExistsException);
+    }
+
+
   }
 }
