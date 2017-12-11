@@ -368,7 +368,15 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
           Path realPath = new Path(vfs.getPath().toUri().getPath());
           res[i] = makeFileStatusQualified(vfs.getRawFileStatus(), realPath);
         } else {
-          res[i] = fsList[i];
+          FileStatus status = fsList[i];
+          URI fileUri = status.getPath().toUri();
+          // InternalDirOfViewFs may return FileStatus with viewfs scheme
+          if (!fileUri.getScheme().equals("hdfs")) {
+            res[i] =
+                makeFileStatusQualified(status, new Path(fileUri.getPath()));
+          } else {
+            res[i] = fsList[i];
+          }
         }
       }
       return res;

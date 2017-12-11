@@ -537,4 +537,25 @@ public class TestFederatedDFSFileSystem {
     testFc.rename(intermediateFile, doneFile);
     Assert.assertTrue(dfs.exists(doneFile));
   }
+
+  @Test
+  public void testSchemeIssueWhenListStatusOnInternalNode() throws Exception {
+    // prepare the mounttable
+    fs1.mkdirs(new Path("/internal/dir1"));
+    fs2.mkdirs(new Path("/internal/dir2"));
+    Configuration config = new Configuration(conf);
+    ConfigUtil.addLink(config, "test-cluster", "/internal/dir1",
+            new URI(nn1Address + "/internal/dir1"));
+    ConfigUtil.addLink(config, "test-cluster", "/internal/dir2",
+            new URI(nn2Address + "/internal/dir2"));
+
+    FileSystem fs = FileSystem.get(config);
+    fs.mkdirs(new Path("/internal/dir3"));
+
+    //start the case
+    FileStatus[] res = fs.listStatus(new Path("/internal"));
+    for (FileStatus status : res) {
+      Assert.assertEquals("hdfs", status.getPath().toUri().getScheme());
+    }
+  }
 }
