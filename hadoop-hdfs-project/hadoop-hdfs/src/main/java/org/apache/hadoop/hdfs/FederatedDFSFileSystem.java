@@ -401,6 +401,8 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
               }
             }
             if (!exist) {
+              // remove the namespace prefix
+              s.setPath(new Path(s.getPath().toUri().getPath()));
               fsList.add(s);
             }
           }
@@ -1157,6 +1159,9 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   Path convertToViewFsScheme(Path p) {
     URI uri = p.toUri();
     if (uri.getScheme() != null && uri.getScheme().equals("hdfs")) {
+      // for the path without authority, like hdfs:///foo/bar
+      // should convert to path with default authority first
+      uri = makeQualified(p).toUri();
       try {
         return new Path(new URI("viewfs", uri.getUserInfo(), uri.getHost(),
             uri.getPort(), uri.getPath(), uri.getQuery(), uri.getFragment()));

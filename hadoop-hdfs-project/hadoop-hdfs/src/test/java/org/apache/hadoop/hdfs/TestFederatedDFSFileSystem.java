@@ -23,12 +23,15 @@ import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.Trash;
+import org.apache.hadoop.fs.TrashPolicy;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
 import org.apache.hadoop.hdfs.tools.DFSAdmin;
+import org.apache.hadoop.hdfs.util.ByteBufferOutputStream;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.After;
@@ -41,6 +44,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -321,8 +325,10 @@ public class TestFederatedDFSFileSystem {
     PrintWriter pw = new PrintWriter(new FileWriter(out));
     pw.println("foobar");
     pw.close();
-    String[] argv = new String[] { "-copyFromLocal", "testfile", "/user/" };
+    String[] argv = new String[] { "-copyFromLocal", "testfile", "hdfs:///user/" };
     shell.run(argv);
+    FileSystem fs = FileSystem.get(conf);
+    Assert.assertTrue(fs.exists(new Path("/user/testfile")));
   }
 
   @Test
@@ -556,6 +562,23 @@ public class TestFederatedDFSFileSystem {
     FileStatus[] res = fs.listStatus(new Path("/internal"));
     for (FileStatus status : res) {
       Assert.assertEquals("hdfs", status.getPath().toUri().getScheme());
+    }
+  }
+
+  @Test
+  public void testSchemeIssueOnTrashDir() throws Exception {
+    FileSystem fs = FileSystem.get(conf);
+    Path p = new Path("/user/foo/test_data");
+    fs.mkdirs(p);
+    Trash.moveToAppropriateTrash(fs, p, conf);
+    Path trashPath = new Path(
+        "/user/" + System.getProperty("user.name") + "/.Trash/Current/");
+    FileStatus[] statuses = fs.listStatus(trashPath);
+    Assert.assertTrue(statuses.length > 0);
+    String defaultAuthority = fs.getUri().getAuthority();
+    for (FileStatus status : statuses) {
+      String authority = status.getPath().toUri().getAuthority();
+      Assert.assertTrue(authority == null || authority == defaultAuthority);
     }
   }
 }
