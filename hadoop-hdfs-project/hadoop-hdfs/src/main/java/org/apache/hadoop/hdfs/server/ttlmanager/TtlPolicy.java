@@ -31,6 +31,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.Trash;
+import org.apache.hadoop.fs.viewfs.NotInMountpointException;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.server.ttlmanager.TtlPolicy.TtlTaskResult;
@@ -261,6 +262,8 @@ public class TtlPolicy extends Policy<TtlTaskResult> {
       }
     } catch (IOException e) {
       LOG.warn("Get ttl failed for path " + path);
+    } catch (NotInMountpointException nme) {
+      LOG.debug("Got NotInMountpointException", nme);
     }
     return null;
   }
