@@ -1452,7 +1452,7 @@ public class Client {
       throw new IOException("connection has been closed", e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      LOG.warn("interrupted waiting to send rpc request to server", e);
+      // LOG.warn("interrupted waiting to send rpc request to server", e);
       throw new IOException(e);
     }
 
