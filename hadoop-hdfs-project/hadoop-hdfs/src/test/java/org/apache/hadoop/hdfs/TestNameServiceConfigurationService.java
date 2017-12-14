@@ -26,6 +26,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.concurrent.Executors;
 
 import static org.junit.Assert.assertFalse;
@@ -114,6 +115,31 @@ public class TestNameServiceConfigurationService {
   public void cleanup() {
     dfsCluster.shutdown();
     httpServer.stop(0);
+  }
+
+  @Test
+  public void testCache() throws URISyntaxException, IOException {
+    Configuration conf = new Configuration(false);
+    conf.set("dfs.nameservices", NAMESERVICE);
+    conf.set("dfs.ha.namenodes." + NAMESERVICE, "host0,host1");
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host0",
+            "localhost:57200");
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host1",
+            "localhost:57000");
+    conf.set("dfs.client.failover.proxy.provider." + NAMESERVICE,
+            "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+    conf.set("fs.hdfs.impl","org.apache.hadoop.hdfs.DistributedFileSystem");
+
+    conf.set("fs.hdfs.impl.disable.cache","true");
+    URI uri = new URI("hdfs://"+NAMESERVICE+"");
+    FileSystem fs1 = FileSystem.get(uri,conf);
+    FileSystem fs2 = FileSystem.get(uri,conf);
+    assertTrue(fs1!=fs2);
+    
+    conf.set("fs.hdfs.impl.disable.cache","false");
+    fs1 = FileSystem.get(uri,conf);
+    fs2 = FileSystem.get(uri,conf);
+    assertTrue(fs1==fs2);
   }
 
   @Test
