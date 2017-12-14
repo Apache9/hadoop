@@ -97,6 +97,8 @@ import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import static org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppStateChangeLogger.logAppStateChange;
+
 @SuppressWarnings({ "rawtypes", "unchecked" })
 public class RMAppImpl implements RMApp, Recoverable {
 
@@ -724,6 +726,9 @@ public class RMAppImpl implements RMApp, Recoverable {
       if (oldState != getState()) {
         LOG.info(appID + " State change from " + oldState + " to "
             + getState());
+
+        RMApp app = this.rmContext.getRMApps().get(appID);
+        logAppStateChange(app, event, oldState, getState());
       }
     } finally {
       this.writeLock.unlock();
