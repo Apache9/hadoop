@@ -736,6 +736,10 @@ public class HistoryFileManager extends AbstractService {
       PathFilter pathFilter) throws IOException {
     path = fc.makeQualified(path);
     List<FileStatus> jhStatusList = new ArrayList<FileStatus>();
+    if (!fc.util().exists(path)) {
+      LOG.info("Path: " + path + " doesn't exists");
+      return jhStatusList;
+    }
     RemoteIterator<FileStatus> fileStatusIter = fc.listStatus(path);
     while (fileStatusIter.hasNext()) {
       FileStatus fileStatus = fileStatusIter.next();
@@ -1047,6 +1051,7 @@ public class HistoryFileManager extends AbstractService {
         }
       }
       if (!halted) {
+        LOG.info("Delete serial done dir:" + serialDir);
         deleteDir(serialDir);
         removeDirectoryFromSerialNumberIndex(serialDir.getPath());
         existingDoneSubdirs.remove(serialDir.getPath());
