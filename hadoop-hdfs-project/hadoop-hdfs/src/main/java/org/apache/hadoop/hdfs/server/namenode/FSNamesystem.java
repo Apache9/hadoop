@@ -104,6 +104,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_KE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SUPPORT_APPEND_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SUPPORT_APPEND_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_DEFAULT;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_DEPTH;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_LENGTH;
 import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.SECURITY_XATTR_UNREADABLE_BY_SUPERUSER;
@@ -340,6 +342,12 @@ import com.google.common.collect.Lists;
 public class FSNamesystem implements Namesystem, FSClusterStats,
     FSNamesystemMBean, NameNodeMXBean {
   public static final Log LOG = LogFactory.getLog(FSNamesystem.class);
+
+  private static final Path CURRENT = new Path("Current");
+  private static final Path TRASH = new Path(".Trash/");
+  private static final FsPermission PERMISSION =
+          new FsPermission(FsAction.ALL, FsAction.READ_EXECUTE, FsAction.EXECUTE);
+  public static boolean forceToTrash = false;
 
   private static final ThreadLocal<StringBuilder> auditBuffer =
     new ThreadLocal<StringBuilder>() {
@@ -600,6 +608,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private final Condition cond;
 
   private final FSImage fsImage;
+
+  private TrashPathConfigMgr trashPathConfigMgr;
 
   private long logLockDurationThreshold;
   private long logLockMinInterval;
@@ -981,6 +991,12 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       this.enableGetfileinfoAuditlog =
           conf.getBoolean(DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED,
               DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED_DEFAULT);
+      if (conf.getBoolean(DFS_NAMENODE_FORCE_TO_TRASH_KEY,
+              DFS_NAMENODE_FORCE_TO_TRASH_DEFAULT)) {
+        LOG.info("Enabling force to trash");
+        forceToTrash = true;
+      }
+      trashPathConfigMgr = new TrashPathConfigMgr(conf);
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -4071,6 +4087,20 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   boolean delete(String src, boolean recursive)
       throws AccessControlException, SafeModeException,
       UnresolvedLinkException, IOException {
+
+    Path path = new Path(src);
+
+    if (forceToTrash || trashPathConfigMgr.needMoveToTrash(src)) {
+      if (!isInTrash(path)) {
+        return moveToTrash(src, recursive);
+      } else {
+        if (!superuser.equals(getRemoteUser().getShortUserName()) &&
+                !fsOwner.getShortUserName().equals(getRemoteUser().getShortUserName())) {
+          throw new IOException("Only super user could delete the trash file");
+        }
+      }
+    }
+
     CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);
     if (cacheEntry != null && cacheEntry.isSuccess()) {
       return true; // Return previous response
@@ -10071,5 +10101,125 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       return 0;
     }
     return calcUnfinishedRenameBlocksInternal(node);
+  }
+
+  boolean isInTrash (Path path) { return path.toUri().getPath().toString().contains(".Trash"); }
+
+  private String mkdirForTrash (String src, PermissionStatus permissions) throws IOException, UnresolvedLinkException {
+    src = FSDirectory.normalizePath(src);
+    String[] names = INode.getPathNames(src);
+    byte[][] components = INode.getPathComponents(names);
+    StringBuilder pathbuilder = null;
+
+    dir.writeLock();
+    try {
+      INodesInPath iip = dir.getExistingPathINodes(components);
+
+      INode[] inodes = iip.getINodes();
+
+      pathbuilder = new StringBuilder();
+
+      for (int i = 1; i < names.length; i++) {
+        if (i < inodes.length && inodes[i] != null && inodes[i].isFile()) {
+          // if there is file with the same as the dir in the path,
+          // we append the TS to the dir to avoid conflicting.
+          pathbuilder.append(Path.SEPARATOR).append(names[i]+Time.now());
+        } else {
+          pathbuilder.append(Path.SEPARATOR).append(names[i]);
+        }
+      }
+
+    } finally {
+      dir.writeUnlock();
+    }
+    String trashPath = pathbuilder.toString();
+    boolean result = mkdirs(trashPath, permissions, true);
+
+    if (!result) {
+      return null;
+    }
+
+    return trashPath;
+  }
+
+  private boolean moveToTrash(String src, boolean recursive) throws AccessControlException, SafeModeException,
+          UnresolvedLinkException, IOException {
+    byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
+    FSPermissionChecker pc = getPermissionChecker();
+    // do the same check as deleting
+    writeLock();
+    try {
+      checkOperation(OperationCategory.WRITE);
+      checkNameNodeSafeMode("Cannot delete " + src);
+      src = resolvePath(src, pathComponents);
+      if (!recursive && dir.isNonEmptyDirectory(src)) {
+        throw new PathIsNotEmptyDirectoryException(src + " is non empty");
+      }
+      if (isPermissionEnabled) {
+        checkPermission(pc, src, false, null, FsAction.WRITE, null,
+                FsAction.ALL, true, false);
+      }
+
+    } finally {
+      writeUnlock();
+    }
+
+    Path path = new Path(src);
+
+    if (getFileInfo(path.toUri().getPath().toString(), false) == null) {
+      LOG.warn("path doesn't exist " + path.toUri().getPath().toString());
+      return false;
+    }
+
+    if (isInTrash(path)) {
+      LOG.error("path already in trash" + path.toUri().getPath().toString());
+      return false;                               // already in trash
+    }
+
+    Path trashPath = new Path("/user/" + getRemoteUser().getShortUserName() + "/" + TRASH);
+    Path trashCurrentPath = new Path (trashPath, CURRENT);
+
+    Path baseTrashPath = Path.mergePaths(trashCurrentPath, path.getParent());
+    Path targetTrashPath = Path.mergePaths(trashCurrentPath, path);
+
+    IOException cause = null;
+
+    PermissionStatus permissionStatus = new PermissionStatus(getRemoteUser().getShortUserName(), supergroup, PERMISSION);
+    // try twice, in case checkpoint between the mkdirs() & rename()
+    for (int i = 0; i < 2; i++) {
+      String newBaseTrashPath = null;
+      try {
+        if ((newBaseTrashPath = mkdirForTrash(baseTrashPath.toUri().toString(), permissionStatus)) == null) {      // create current
+          LOG.warn("Can't create(mkdir) trash directory: "+baseTrashPath);
+          return false;
+        }
+      } catch (IOException e) {
+        LOG.warn("Can't create trash directory: " + baseTrashPath);
+        cause = e;
+        break;
+      }
+
+
+      if (!baseTrashPath.equals(newBaseTrashPath)) {
+        targetTrashPath = new Path(newBaseTrashPath, path.getName());
+      }
+
+      try {
+        // if the target path in Trash already exists, then append with
+        // a current time in millisecs.
+        String orig = targetTrashPath.toUri().getPath().toString();
+
+        while(getFileInfo(targetTrashPath.toUri().getPath().toString(), false) != null) {
+          targetTrashPath = new Path(orig + Time.now());
+        }
+
+        if (renameTo(path.toUri().getPath().toString(), targetTrashPath.toUri().getPath().toString()))           // move to current trash
+          return true;
+      } catch (IOException e) {
+        cause = e;
+      }
+    }
+    throw (IOException)
+            new IOException("Failed to move to trash: "+path).initCause(cause);
   }
 }

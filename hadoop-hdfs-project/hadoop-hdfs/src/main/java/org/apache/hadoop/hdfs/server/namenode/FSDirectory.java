@@ -682,6 +682,12 @@ public class FSDirectory implements Closeable {
     final INode dstInode = dstIIP.getLastINode();
     List<INodeDirectory> snapshottableDirs = new ArrayList<INodeDirectory>();
     if (dstInode != null) { // Destination exists
+      if (FSNamesystem.forceToTrash && overwrite) {
+        error = "rename to existing file or dir is not allowed. src: "
+            + src + " dst: " + dst;
+        NameNode.LOG.warn(error);
+        throw new FileAlreadyExistsException(error);
+      }
       validateRenameOverwrite(src, dst, overwrite, srcInode, dstInode);
       checkSnapshot(dstInode, snapshottableDirs);
     }
