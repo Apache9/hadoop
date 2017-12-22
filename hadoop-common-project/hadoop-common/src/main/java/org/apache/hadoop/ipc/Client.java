@@ -35,6 +35,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.nio.channels.ClosedByInterruptException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.Hashtable;
@@ -680,8 +681,14 @@ public class Client {
               throw (IOException) new IOException(msg).initCause(ex);
             }
           } else {
-            LOG.warn("Exception encountered while connecting to "
-                + "the server : " + ex);
+            // With RequestHedgingProxyProvider, one rpc call will send multiple
+            // requests to all namenodes, after one request return successfully,
+            // all other requests will be interrupted. It's not a big problem,
+            // should not print a warning log
+            if (!(ex instanceof ClosedByInterruptException)) {
+              LOG.warn("Exception encountered while connecting to "
+                      + "the server : " + ex);
+            }
           }
           if (ex instanceof RemoteException)
             throw (RemoteException) ex;
