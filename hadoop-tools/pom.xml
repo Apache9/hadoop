@@ -35,6 +35,7 @@
     <module>hadoop-distcp</module>
     <module>hadoop-fedmv</module>
     <module>hadoop-archives</module>
+    <module>hadoop-archive-logs</module>
     <module>hadoop-rumen</module>
     <module>hadoop-gridmix</module>
     <module>hadoop-datajoin</module>

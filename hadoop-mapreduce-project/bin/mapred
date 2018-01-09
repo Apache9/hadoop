@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 bin=`which $0`
 bin=`dirname ${bin}`
 bin=`cd "$bin"; pwd`
@@ -39,6 +40,7 @@ function print_usage(){
   echo "  distcp <srcurl> <desturl> copy file or directories recursively"
   echo "  archive -archiveName NAME -p <parent path> <src>* <dest> create a hadoop archive"
   echo "  hsadmin              job history server admin interface"
+  echo "  archive-logs         combine aggregated logs into hadoop archives"
   echo ""
   echo "Most commands print help when invoked w/o parameters."
 }
@@ -97,6 +99,9 @@ elif [ "$COMMAND" = "archive" ] ; then
   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
 elif [ "$COMMAND" = "hsadmin" ] ; then
   CLASS=org.apache.hadoop.mapreduce.v2.hs.client.HSAdmin
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "archive-logs" ] ; then
+  CLASS=org.apache.hadoop.tools.HadoopArchiveLogs
   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
 else
   echo $COMMAND - invalid command
