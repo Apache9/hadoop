@@ -581,4 +581,25 @@ public class TestFederatedDFSFileSystem {
       Assert.assertTrue(authority == null || authority == defaultAuthority);
     }
   }
+
+  @Test
+  public void testListStatusOnMountPointParent() throws Exception {
+    // prepare the mounttable
+    fs1.mkdirs(new Path("/internal1/dir1"));
+    fs1.setOwner(new Path("/internal1/dir1"), "foo", "hadoop");
+    fs2.mkdirs(new Path("/internal1/dir2"));
+    fs2.setOwner(new Path("/internal1/dir2"), "foo", "hadoop");
+    Configuration config = new Configuration(conf);
+    ConfigUtil.addLink(config, "test-cluster", "/internal1/dir1",
+            new URI(nn1Address + "/internal1/dir1"));
+    ConfigUtil.addLink(config, "test-cluster", "/internal1/dir2",
+            new URI(nn2Address + "/internal1/dir2"));
+
+    FileSystem fs = FileSystem.get(conf);
+    FileStatus[] statuses = fs.listStatus(new Path("/internal1"));
+    for (FileStatus status : statuses) {
+      Assert.assertEquals(status.getOwner(), "foo");
+      Assert.assertEquals(status.getGroup(), "hadoop");
+    }
+  }
 }

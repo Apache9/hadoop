@@ -960,29 +960,42 @@ public class ViewFileSystem extends FileSystem {
       } else {
         grp = user;
       }
-      for (Entry<String, INode<FileSystem>> iEntry : 
-                                          theInternalDir.getChildren().entrySet()) {
+      for (Entry<String, INode<FileSystem>> iEntry : theInternalDir
+          .getChildren().entrySet()) {
         INode<FileSystem> inode = iEntry.getValue();
-        if (inode instanceof INodeLink ) {
+        Path quoalifiedFullPath =
+            new Path(inode.fullPath).makeQualified(myUri, null);
+        if (inode instanceof INodeLink) {
           INodeLink<FileSystem> link = (INodeLink<FileSystem>) inode;
 
-          result[i++] =
-              new FileStatus(0, false, 0, 0, creationTime, creationTime,
-                  PERMISSION_555, user, grp, link.getTargetLink(),
-                  new Path(inode.fullPath).makeQualified(myUri, null));
+          FileStatus status = link.getFileSystem().getFileStatus(new Path("/"));
+          status.setPath(quoalifiedFullPath);
+          status.setSymlink(link.getTargetLink());
+          result[i++] = status;
         } else if (inode instanceof MergedInodeTree.INodeMerge
             && ((MergedInodeTree.INodeMerge) inode).getChildren().isEmpty()) {
           MergedInodeTree.INodeMerge<FileSystem> curNode =
               (MergedInodeTree.INodeMerge<FileSystem>) inode;
-          result[i++] = new FileStatus(0, false, 0, 0, creationTime,
-              creationTime, PERMISSION_555, user, grp,
-              curNode.getTargetUri() == null ? null : new Path(curNode.getTargetUri()),
-              new Path(inode.fullPath).makeQualified(myUri, null));
+          Path remainingPath = new Path("/");
+          Path symlink = null;
+          if (curNode.getTargetUri() != null) {
+            symlink = new Path(curNode.getTargetUri().getPath());
+          }
+          if (curNode.getTargetUri() != null
+              && curNode.getFileSystem().exists(remainingPath)) {
+            FileStatus status =
+                curNode.getFileSystem().getFileStatus(remainingPath);
+            status.setPath(quoalifiedFullPath);
+            status.setSymlink(symlink);
+            result[i++] = status;
+          } else {
+            result[i++] =
+                new FileStatus(0, false, 0, 0, creationTime, creationTime,
+                    PERMISSION_555, user, grp, symlink, quoalifiedFullPath);
+          }
         } else {
-          result[i++] =
-              new FileStatus(0, true, 0, 0, creationTime, creationTime,
-                  PERMISSION_555, user, grp,
-                  new Path(inode.fullPath).makeQualified(myUri, null));
+          result[i++] = new FileStatus(0, true, 0, 0, creationTime,
+              creationTime, PERMISSION_555, user, grp, quoalifiedFullPath);
         }
       }
       return result;

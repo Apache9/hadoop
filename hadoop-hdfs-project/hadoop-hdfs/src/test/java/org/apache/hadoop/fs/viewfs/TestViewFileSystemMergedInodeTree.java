@@ -380,10 +380,9 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
     // not including the children in mountable
     assertEquals(summary.getDirectoryCount(), 2);
 
-    // treat leaf mountpoint as symlink, treat internal node as directory
     summary = fsView.getContentSummary(new Path("/"));
-    assertEquals(summary.getFileCount(), 6);
-    assertEquals(summary.getDirectoryCount(), 3);
+    assertEquals(summary.getFileCount(), 2);
+    assertEquals(summary.getDirectoryCount(), 7);
 
     // After add a mountpoint on root, the content summary not including the children
     // in mounttable
