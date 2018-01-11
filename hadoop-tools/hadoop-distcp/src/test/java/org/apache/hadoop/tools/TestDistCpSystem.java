@@ -18,18 +18,23 @@
 
 package org.apache.hadoop.tools;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import junit.framework.TestCase;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.AclEntry;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -138,6 +143,137 @@ public class TestDistCpSystem extends TestCase {
       deldir(fs, testRoot);
     } finally {
       if (cluster != null) { cluster.shutdown(); }
+    }
+  }
+
+  private MiniDFSCluster setupNewDFSCluster(Configuration conf) throws IOException {
+    Configuration tmpConf = new Configuration(conf);
+    File baseDir = new File("./target/test-dir-"
+            + UUID.randomUUID().toString().substring(0, 4) + "/").getAbsoluteFile();
+    FileUtil.fullyDelete(baseDir);
+    tmpConf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, baseDir.getAbsolutePath());
+
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(tmpConf).numDataNodes(3)
+            .format(true).build();
+    cluster.waitClusterUp();
+    return cluster;
+  }
+
+  public void testTargetParentMirror() throws Exception {
+    FileEntry[] srcfiles = { new FileEntry(SRCDAT, true),
+        new FileEntry(SRCDAT + "/a", false), new FileEntry(SRCDAT + "/b", true),
+        new FileEntry(SRCDAT + "/b/c", false) };
+
+    final String testSrc = "/testdir/";
+    MiniDFSCluster cluster1 = null;
+    MiniDFSCluster cluster2 = null;
+    try {
+      Configuration conf = new Configuration();
+      conf.set("dfs.namenode.acls.enabled", "true");
+      cluster1 = setupNewDFSCluster(conf);
+      cluster2 = setupNewDFSCluster(conf);
+
+      FileSystem srcFs = cluster1.getFileSystem();
+      FileSystem dstFs = cluster2.getFileSystem();
+      srcFs.mkdirs(new Path(testSrc));
+      createFiles(srcFs, testSrc, srcfiles);
+
+      Path testSrcPath = new Path(testSrc);
+      srcFs.mkdirs(testSrcPath);
+      srcFs.setOwner(testSrcPath, "u_li", "g_li");
+      srcFs.setPermission(testSrcPath, new FsPermission((short) 504));
+      List<AclEntry> list = srcFs.getAclStatus(testSrcPath).getEntries();
+      list.add(AclEntry.parseAclEntry("user:u_wei:rwx", true));
+      srcFs.modifyAclEntries(testSrcPath, list);
+
+      String[] args = new String[] { "-Parent", "mirror", srcFs.getUri()+""+testSrc + SRCDAT,
+          dstFs.getUri()+testSrc + DSTDAT };
+      ToolRunner.run(conf, new DistCp(), args);
+
+      FileStatus status = dstFs.getFileStatus(testSrcPath);
+      assertTrue(status.getOwner().equals("u_li"));
+      assertTrue(status.getGroup().equals("g_li"));
+      assertTrue(status.getPermission().equals(new FsPermission((short) 504)));
+      assertTrue(dstFs.getAclStatus(testSrcPath).getEntries()
+          .contains(AclEntry.parseAclEntry("user:u_wei:rwx", true)));
+
+      for (FileEntry entry : srcfiles) {
+        Path path = new Path(
+            entry.getPath().replaceAll(SRCDAT, testSrc + DSTDAT));
+        assertTrue(dstFs.exists(path));
+        if (entry.isDir) {
+          assertTrue(dstFs.isDirectory(path));
+        } else {
+          assertTrue(dstFs.isFile(path));
+        }
+      }
+    } finally {
+      if (cluster1 != null) {
+        cluster1.shutdown();
+      }
+      if (cluster2 != null) {
+        cluster2.shutdown();
+      }
+    }
+  }
+
+  public void testTargetParentSpecify() throws Exception {
+    FileEntry[] srcfiles = { new FileEntry(SRCDAT, true),
+        new FileEntry(SRCDAT + "/a", false), new FileEntry(SRCDAT + "/b", true),
+        new FileEntry(SRCDAT + "/b/c", false) };
+
+    final String testSrc = "/testdir/";
+    MiniDFSCluster cluster = null;
+    try {
+      Configuration conf = new Configuration();
+      conf.set("dfs.namenode.acls.enabled", "true");
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+
+      String nnUri = FileSystem.getDefaultUri(conf).toString();
+      FileSystem fs = FileSystem.get(URI.create(nnUri), conf);
+      fs.mkdirs(new Path(testSrc));
+      createFiles(fs, testSrc, srcfiles);
+
+      String[] args = new String[] { "-Parent",
+          "owner=u_li,group=g_li,permission=504,acl=user:u_wei:rwx,acl=user:u_lun:rwx",
+          "/testdir/" + SRCDAT, "/testdir/aha/bee/" + DSTDAT };
+      ToolRunner.run(conf, new DistCp(), args);
+
+      Path path = new Path("/testdir/aha");
+      assertTrue(
+          fs.getFileStatus(path).getOwner().equals("u_li"));
+      assertTrue(fs.getFileStatus(path).getGroup().equals("g_li"));
+      assertTrue(fs.getFileStatus(path).getPermission().equals(new FsPermission((short)504)));
+      assertTrue(fs.getAclStatus(path).getEntries()
+          .contains(AclEntry.parseAclEntry("user:u_wei:rwx", true)));
+      assertTrue(fs.getAclStatus(path).getEntries()
+          .contains(AclEntry.parseAclEntry("user:u_lun:rwx", true)));
+      path = new Path("/testdir/aha/bee");
+      assertTrue(
+              fs.getFileStatus(path).getOwner().equals("u_li"));
+      assertTrue(fs.getFileStatus(path).getGroup().equals("g_li"));
+      assertTrue(fs.getFileStatus(path).getPermission().equals(new FsPermission((short)504)));
+      assertTrue(fs.getAclStatus(path).getEntries()
+              .contains(AclEntry.parseAclEntry("user:u_wei:rwx", true)));
+      assertTrue(fs.getAclStatus(path).getEntries()
+              .contains(AclEntry.parseAclEntry("user:u_lun:rwx", true)));
+
+      for (FileEntry entry : srcfiles) {
+        path = new Path(
+            entry.getPath().replaceAll(SRCDAT, "/testdir/aha/bee/" + DSTDAT));
+        assertTrue(fs.exists(path));
+        if (entry.isDir) {
+          assertTrue(fs.isDirectory(path));
+        } else {
+          assertTrue(fs.isFile(path));
+        }
+      }
+
+      deldir(fs, testSrc);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
     }
   }
 

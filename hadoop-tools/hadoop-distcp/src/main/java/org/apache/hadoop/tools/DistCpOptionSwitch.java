@@ -28,6 +28,19 @@ import org.apache.hadoop.conf.Configuration;
 public enum DistCpOptionSwitch {
 
   /**
+   * Set attribute to target path's non-existed parent. Use -Parent mirror to
+   * enable mirror mode which uses attribute from src parent path. Use
+   * -Parent owner=?,group=?,permission=?,acl=? to manually specify path's
+   * attribute.
+   */
+  TARGET_PARENT(DistCpConstants.CONF_LABEL_TARGET_PARENT, new Option("Parent",
+      true,
+      "Set attribute to target path's non-existed parent. Use -Parent "
+          + "mirror to enable mirror mode which uses attribute from src parent "
+          + "path. Use -Parent owner=?,group=?,permission=?,acl=? to manually "
+          + "specify path's attribute.")),
+
+  /**
    * Ignores any failures during copy, and continues with rest.
    * Logs failures in a file
    */

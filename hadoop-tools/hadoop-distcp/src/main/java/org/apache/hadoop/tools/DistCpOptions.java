@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.tools.util.DistCpUtils;
 import org.mortbay.log.Log;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
@@ -45,6 +46,11 @@ public class DistCpOptions {
   private boolean append = false;
   private boolean skipCRC = false;
   private boolean blocking = true;
+  private TARGET_PARENT targetParent = TARGET_PARENT.DEFAULT;
+  private String parentOwner = null;
+  private String parentGroup = null;
+  private String parentPermission = null;
+  private List<String> parentAcl = new ArrayList<String>();
 
   private int maxMaps = DistCpConstants.DEFAULT_MAPS;
   private int mapBandwidth = DistCpConstants.DEFAULT_BANDWIDTH_MB;
@@ -385,6 +391,53 @@ public class DistCpOptions {
    */
   public Iterator<FileAttribute> preserveAttributes() {
     return preserveStatus.iterator();
+  }
+
+  public static enum TARGET_PARENT {
+    DEFAULT, SPECIFY, MIRROR
+  }
+
+  /**
+   * Returns flag of creating target path's parent.
+   */
+  public TARGET_PARENT getTargetParent() {
+    return targetParent;
+  }
+
+  public String getParentOwner() {
+    return parentOwner;
+  }
+
+  public String getParentGroup() {
+    return parentGroup;
+  }
+
+  public String getParentPermission() {
+    return parentPermission;
+  }
+
+  public List<String> getParentAcl() {
+    return parentAcl;
+  }
+
+  public void setTargetParent(TARGET_PARENT createParent) {
+    this.targetParent = createParent;
+  }
+
+  public void setParentOwner(String parentOwner) {
+    this.parentOwner = parentOwner;
+  }
+
+  public void setParentGroup(String parentGroup) {
+    this.parentGroup = parentGroup;
+  }
+
+  public void setParentPermission(String parentPermission) {
+    this.parentPermission = parentPermission;
+  }
+
+  public void setParentAcl(List<String> parentAcl) {
+    this.parentAcl = parentAcl;
   }
 
   /**
