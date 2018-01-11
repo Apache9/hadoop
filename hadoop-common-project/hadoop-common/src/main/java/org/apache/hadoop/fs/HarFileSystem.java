@@ -585,7 +585,7 @@ public class HarFileSystem extends FileSystem {
   private class HarStatus {
     boolean isDir;
     String name;
-    List<String> children;
+    // List<String> children;
     String partName;
     long startIndex;
     long length;
@@ -615,10 +615,10 @@ public class HarFileSystem extends FileSystem {
         if (version == 3){
           propSplits = decodeString(this.partName).split(" ");
         }
-        children = new ArrayList<String>();
-        for (int i = 5; i < splits.length; i++) {
-          children.add(decodeFileName(splits[i]));
-        }
+//        children = new ArrayList<String>();
+//        for (int i = 5; i < splits.length; i++) {
+//          children.add(decodeFileName(splits[i]));
+//        }
       } else if (version == 3) {
         propSplits = decodeString(splits[5]).split(" ");
       }
@@ -1181,6 +1181,7 @@ public class HarFileSystem extends FileSystem {
         IOUtils.cleanup(LOG, lin, in);
       }
 
+      archive.put(new Path("/"), new HarStatus("/ dir none 0 0"));
       FSDataInputStream aIn = fs.open(archiveIndexPath);
       try {
         FileStatus archiveStat = fs.getFileStatus(archiveIndexPath);
@@ -1199,6 +1200,7 @@ public class HarFileSystem extends FileSystem {
             String[] parsed = lineFeed.split(" ");
             parsed[0] = decodeFileName(parsed[0]);
             archive.put(new Path(parsed[0]), new HarStatus(lineFeed));
+            LOG.info("Add path: " + new Path(parsed[0]));
             line.clear();
           }
         }

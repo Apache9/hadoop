@@ -173,6 +173,7 @@ public class AggregatedLogsBlock extends HtmlBlock {
 
           foundLog = readContainerLogs(html, logReader, logLimits,
               desiredLogType, logUploadedTime);
+          if (foundLog) break;
         } catch (IOException ex) {
           LOG.error("Error getting logs for " + logEntity, ex);
           continue;
