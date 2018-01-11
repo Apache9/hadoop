@@ -82,7 +82,14 @@ public class AggregatedLogDeletionService extends AbstractService {
         for (FileStatus userDir : fs.listStatus(remoteRootLogDir)) {
           if (userDir.isDirectory()) {
             Path userDirPath = new Path(userDir.getPath(), suffix);
-            deleteOldLogDirsFrom(userDirPath, cutoffMillis, fs, rmClient);
+            String username = userDir.getPath().getName();
+            int userLogRetainSeconds = conf.getInt("yarn.log-aggregation.retain-seconds." + username, -1);
+            if (userLogRetainSeconds != -1) {
+              LOG.info("Using user specified log retain time: " + userLogRetainSeconds + "s for path: " + userDirPath);
+              deleteOldLogDirsFrom(userDirPath, System.currentTimeMillis() - userLogRetainSeconds * 1000, fs, rmClient);
+            } else {
+              deleteOldLogDirsFrom(userDirPath, cutoffMillis, fs, rmClient);
+            }
           }
         }
       } catch (IOException e) {
@@ -98,7 +105,7 @@ public class AggregatedLogDeletionService extends AbstractService {
         FileSystem fs, ApplicationClientProtocol rmClient) {
       try {
         for(FileStatus appDir : fs.listStatus(dir)) {
-          if(appDir.isDirectory() && 
+          if(appDir.isDirectory() &&
               appDir.getModificationTime() < cutoffMillis) {
             boolean appTerminated =
                 isApplicationTerminated(ConverterUtils.toApplicationId(appDir
