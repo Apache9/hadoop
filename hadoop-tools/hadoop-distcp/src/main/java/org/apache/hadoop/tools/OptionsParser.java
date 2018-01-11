@@ -253,6 +253,33 @@ public class OptionsParser {
               " option. Ignoring.");
     }
 
+    if (command.hasOption(DistCpOptionSwitch.TARGET_PARENT.getSwitch())) {
+      String value = getVal(command, DistCpOptionSwitch.TARGET_PARENT.getSwitch());
+      if (value != null) {
+        if (value.equals("mirror")) {
+          option.setTargetParent(DistCpOptions.TARGET_PARENT.MIRROR);
+        } else {
+          option.setTargetParent(DistCpOptions.TARGET_PARENT.SPECIFY);
+          String[] split = value.split(",");
+          for (String s : split) {
+            String[] kv = s.split("=");
+            if (kv.length!=2) {
+              continue;
+            }
+            if (kv[0].equals("owner")) {
+              option.setParentOwner(kv[1]);
+            } else if(kv[0].equals("group")) {
+              option.setParentGroup(kv[1]);
+            } else if(kv[0].equals("permission")) {
+              option.setParentPermission(kv[1]);
+            } else if(kv[0].equals("acl")) {
+              option.getParentAcl().add(kv[1]);
+            }
+          }
+        }
+      }
+    }
+
     return option;
   }
 

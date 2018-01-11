@@ -22,13 +22,19 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.AclEntry;
+import org.apache.hadoop.fs.permission.AclUtil;
+import org.apache.hadoop.fs.permission.FsAction;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.JobSubmissionFiles;
 import org.apache.hadoop.mapreduce.Cluster;
+import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.tools.CopyListing.*;
 import org.apache.hadoop.tools.mapred.CopyMapper;
 import org.apache.hadoop.tools.mapred.CopyOutputFormat;
@@ -38,6 +44,12 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Random;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -105,9 +117,10 @@ public class DistCp extends Configured implements Tool {
       OptionsParser.usage();
       return DistCpConstants.INVALID_ARGUMENT;
     }
-    
+
     try {
       inputOptions = (OptionsParser.parse(argv));
+      createParentTargetPath();
       setTargetPathExists();
       LOG.info("Input Options: " + inputOptions);
     } catch (Throwable e) {
@@ -361,6 +374,107 @@ public class DistCp extends Configured implements Tool {
       LOG.info("DistCp job log path: " + logPath);
     }
     CopyOutputFormat.setOutputPath(job, logPath);
+  }
+
+  protected void createParentTargetPath()
+      throws IOException, URISyntaxException {
+    Path target = inputOptions.getTargetPath();
+    Path parent = target.getParent();
+    FileSystem dstFs = target.getFileSystem(getConf());
+    try {
+      dstFs.access(new Path("/"), FsAction.ALL);
+    } catch (AccessControlException e) {
+      throw new IOException(
+          "Only super user can preserve attributeds for parent path.");
+    }
+    if (inputOptions
+        .getTargetParent() == DistCpOptions.TARGET_PARENT.DEFAULT) {
+      return;
+    } else if (inputOptions
+        .getTargetParent() == DistCpOptions.TARGET_PARENT.SPECIFY) {
+      String owner = inputOptions.getParentOwner();
+      String group = inputOptions.getParentGroup();
+      Short permission = null;
+      if (inputOptions.getParentPermission()!=null) {
+        permission = Short.parseShort(inputOptions.getParentPermission());
+      }
+      List<String> acls = inputOptions.getParentAcl();
+
+      LinkedList<Path> nonExistedPaths = new LinkedList<Path>();
+      Path nonExistedPath = parent;
+      while (!dstFs.exists(nonExistedPath)) {
+        nonExistedPaths.addFirst(nonExistedPath);
+        nonExistedPath = nonExistedPath.getParent();
+      }
+
+      if (!dstFs.exists(parent)) {
+        dstFs.mkdirs(parent);
+        for (Path path : nonExistedPaths) {
+          if (owner!=null&&!owner.equals("")) {
+            dstFs.setOwner(path, owner, null);
+          }
+          if (group!=null&&!group.equals("")) {
+            dstFs.setOwner(path,null,group);
+          }
+          if (permission!=null) {
+            dstFs.setPermission(path,new FsPermission(permission));
+          }
+          if (acls!=null && acls.size()>0) {
+            List<AclEntry> aclEntries = new ArrayList<AclEntry>();
+            aclEntries = AclUtil.getAclFromPermAndEntries(
+                dstFs.getFileStatus(path).getPermission(), aclEntries);
+            for (String acl : acls) {
+              if (acl != null && !acl.equals("")) {
+                aclEntries.add(AclEntry.parseAclEntry(acl, true));
+              }
+            }
+            dstFs.setAcl(path, aclEntries);
+          }
+        }
+      }
+    } else if (inputOptions
+        .getTargetParent() == DistCpOptions.TARGET_PARENT.MIRROR) {
+      if (inputOptions.getSourcePaths().size()!=1) {
+        throw new IOException("mirror parent error,source path should one,got "
+            + inputOptions.getSourcePaths().size());
+      }
+      Path srcPath = inputOptions.getSourcePaths().get(0);
+      Path tarPath = inputOptions.getTargetPath();
+      FileSystem srcFs = srcPath.getFileSystem(getConf());
+      if (!srcPath.getParent().toUri().getPath()
+          .equals(tarPath.getParent().toUri().getPath())) {
+        throw new IOException(String.format(
+            "mirror parent error,src path [%s] doesn't equal to target path [%s]",
+            srcPath, tarPath));
+      }
+      if (!dstFs.exists(parent)) {
+        LinkedList<Path> nonExistedPaths = new LinkedList<Path>();
+        Path nonExistedPath = parent;
+        while (!dstFs.exists(nonExistedPath)) {
+          nonExistedPaths.addFirst(nonExistedPath);
+          nonExistedPath = nonExistedPath.getParent();
+        }
+        dstFs.mkdirs(parent);
+
+        while (!nonExistedPaths.isEmpty()) {
+          Path path = new Path(nonExistedPaths.pollLast().toUri().getPath());
+          // USER, GROUP, PERMISSION, ACL
+          FileStatus srcStatus = srcFs.getFileStatus(path);
+          List<AclEntry> aclEntries =
+                  srcFs.getAclStatus(path).getEntries();
+          aclEntries = AclUtil.getAclFromPermAndEntries(
+                  srcStatus.getPermission(), aclEntries != null ? aclEntries
+                          : Collections.<AclEntry>emptyList());
+          dstFs.setOwner(path, srcStatus.getOwner(),
+                  srcStatus.getGroup());
+          dstFs.setPermission(path, srcStatus.getPermission());
+          dstFs.setAcl(path, aclEntries);
+        }
+      }
+    } else {
+      throw new IOException(
+          "Unknown option:" + inputOptions.getTargetParent());
+    }
   }
 
   /**

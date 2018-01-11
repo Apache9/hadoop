@@ -37,6 +37,8 @@ public class DistCpConstants {
   /**
    *  Constants mapping to command line switches/input options
    */
+  public static final String CONF_LABEL_TARGET_PARENT =
+      "distcp.target.parent";
   public static final String CONF_LABEL_ATOMIC_COPY = "distcp.atomic.copy";
   public static final String CONF_LABEL_WORK_PATH = "distcp.work.path";
   public static final String CONF_LABEL_LOG_PATH = "distcp.log.path";
