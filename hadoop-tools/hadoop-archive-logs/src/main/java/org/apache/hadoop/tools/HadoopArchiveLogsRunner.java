@@ -136,8 +136,8 @@ public class HadoopArchiveLogsRunner implements Tool {
         + File.separator + suffix + File.separator + appId;
     // Run 'hadoop archives' command in local mode
     conf.set("mapreduce.framework.name", "local");
-    // Set the umask so we get 640 files and 750 dirs
-    conf.set("fs.permissions.umask-mode", "027");
+    // Set the umask so we get 644 files and 755 dirs
+    conf.set("fs.permissions.umask-mode", "022");
     String harName = appId + ".har";
     String[] haArgs = {
         "-archiveName",
