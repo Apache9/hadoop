@@ -286,6 +286,10 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
     }
 
     @Override
+    public void releaseAllBytesReserved() {
+    }
+
+    @Override
     synchronized public long getBytesOnDisk() {
       if (finalized) {
         return theBlock.getNumBytes();
