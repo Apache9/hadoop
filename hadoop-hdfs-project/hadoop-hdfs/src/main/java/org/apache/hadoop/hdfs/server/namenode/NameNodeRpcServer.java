@@ -156,6 +156,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
+import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.ipc.WritableRpcEngine;
 import org.apache.hadoop.ipc.RefreshRegistry;
 import org.apache.hadoop.ipc.RefreshResponse;
@@ -1785,6 +1786,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
     }
     try {
       return namesystem.federationRenameSrcPhase1(src, srcId, dst, dstId);
+    } catch (StandbyException e) {
+      throw e;
     } catch (Exception e) {
       throw new FederationRenameException(e);
     }
@@ -1795,6 +1798,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
       throws IOException {
     try {
       return namesystem.federationRenameSrcPhase2(renameId, toCancel);
+    } catch (StandbyException e) {
+      throw e;
     } catch (Exception e) {
       throw new FederationRenameException(e);
     }
@@ -1807,6 +1812,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
     try {
       return namesystem.federationRenameDestPhase1(src, srcId, dst, dstId,
           subTree);
+    } catch (StandbyException e) {
+      throw e;
     } catch (Exception e) {
       throw new FederationRenameException(e);
     }
@@ -1817,6 +1824,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
       throws IOException {
     try {
       return namesystem.federationRenameDestPhase2(renameId, srcId);
+    } catch (StandbyException e) {
+      throw e;
     } catch (Exception e) {
       throw new FederationRenameException(e);
     }
