@@ -26,8 +26,11 @@ import org.apache.hadoop.fs.FileSystemTestHelper;
 import org.apache.hadoop.fs.FsConstants;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
+import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.test.PathUtils;
 import org.junit.AfterClass;
@@ -418,5 +421,35 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
         new Path("/log_collector/foo/bar/newfile"));
     assertFalse(FS_HDFS[1].exists(new Path("/log_collector/foo/chen/newfile")));
     assertTrue(FS_HDFS[2].exists(new Path("/log_collector/foo/bar/newfile")));
+  }
+
+  @Test
+  public void testRenameOnStandbyNN() throws Exception {
+    MiniDFSCluster cluster = null;
+    try {
+      cluster = new MiniDFSCluster.Builder(new Configuration(conf))
+              .nnTopology(MiniDFSNNTopology.simpleHAFederatedTopology(2))
+              .numDataNodes(3).format(true).build();
+      cluster.waitClusterUp();
+      cluster.transitionToActive(0);
+      cluster.transitionToActive(2);
+      DistributedFileSystem standbyNameNodeFs = cluster.getFileSystem(1);;
+
+      try {
+        standbyNameNodeFs.renameSrcPhase1("/log_collector/foo/chen/newfile",
+            standbyNameNodeFs.getUri().toString(),
+            "/log_collector/foo/chen/newfile",
+            cluster.getFileSystem(2).getUri().toString());
+      } catch (Exception e) {
+        assertTrue(e instanceof RemoteException);
+        Exception unwrapped = ((RemoteException) e).unwrapRemoteException(
+                StandbyException.class);
+        assertTrue(unwrapped instanceof StandbyException);
+      }
+    } finally {
+      if (cluster!=null) {
+        cluster.shutdown();
+      }
+    }
   }
 }
