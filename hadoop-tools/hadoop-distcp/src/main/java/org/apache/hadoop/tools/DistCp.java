@@ -44,7 +44,6 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -379,14 +378,16 @@ public class DistCp extends Configured implements Tool {
   protected void createParentTargetPath()
       throws IOException, URISyntaxException {
     Path target = inputOptions.getTargetPath();
-    Path parent = target.getParent();
-    FileSystem dstFs = target.getFileSystem(getConf());
+    FileSystem tgtFs = target.getFileSystem(getConf());
     try {
-      dstFs.access(new Path("/"), FsAction.ALL);
+      tgtFs.access(new Path("/"), FsAction.ALL);
     } catch (AccessControlException e) {
       throw new IOException(
           "Only super user can preserve attributeds for parent path.");
     }
+
+    final boolean syncOrOverwrite =
+        inputOptions.shouldSyncFolder() || inputOptions.shouldOverwrite();
     if (inputOptions
         .getTargetParent() == DistCpOptions.TARGET_PARENT.DEFAULT) {
       return;
@@ -400,61 +401,86 @@ public class DistCp extends Configured implements Tool {
       }
       List<String> acls = inputOptions.getParentAcl();
 
+      Path tgtPath = inputOptions.getTargetPath();
+      Path tgtParent = null;
+      if (syncOrOverwrite) {
+        tgtParent = new Path(tgtPath.toUri().getPath());
+      } else if (inputOptions.getSourcePaths().size()>1) {
+        tgtParent = new Path(tgtPath.toUri().getPath());
+      } else if (!tgtFs.exists(tgtPath)) {
+        tgtParent = new Path(tgtPath.getParent().toUri().getPath());
+      } else {
+        tgtParent = new Path(tgtPath.toUri().getPath());
+      }
+
       LinkedList<Path> nonExistedPaths = new LinkedList<Path>();
-      Path nonExistedPath = parent;
-      while (!dstFs.exists(nonExistedPath)) {
+      Path nonExistedPath = tgtParent;
+      while (!tgtFs.exists(nonExistedPath)) {
         nonExistedPaths.addFirst(nonExistedPath);
         nonExistedPath = nonExistedPath.getParent();
       }
 
-      if (!dstFs.exists(parent)) {
-        dstFs.mkdirs(parent);
+      if (!tgtFs.exists(tgtParent)) {
+        tgtFs.mkdirs(tgtParent);
         for (Path path : nonExistedPaths) {
           if (owner!=null&&!owner.equals("")) {
-            dstFs.setOwner(path, owner, null);
+            tgtFs.setOwner(path, owner, null);
           }
           if (group!=null&&!group.equals("")) {
-            dstFs.setOwner(path,null,group);
+            tgtFs.setOwner(path,null,group);
           }
           if (permission!=null) {
-            dstFs.setPermission(path,new FsPermission(permission));
+            tgtFs.setPermission(path,new FsPermission(permission));
           }
           if (acls!=null && acls.size()>0) {
             List<AclEntry> aclEntries = new ArrayList<AclEntry>();
             aclEntries = AclUtil.getAclFromPermAndEntries(
-                dstFs.getFileStatus(path).getPermission(), aclEntries);
+                tgtFs.getFileStatus(path).getPermission(), aclEntries);
             for (String acl : acls) {
               if (acl != null && !acl.equals("")) {
                 aclEntries.add(AclEntry.parseAclEntry(acl, true));
               }
             }
-            dstFs.setAcl(path, aclEntries);
+            tgtFs.setAcl(path, aclEntries);
           }
         }
       }
     } else if (inputOptions
         .getTargetParent() == DistCpOptions.TARGET_PARENT.MIRROR) {
       if (inputOptions.getSourcePaths().size()!=1) {
-        throw new IOException("mirror parent error,source path should one,got "
-            + inputOptions.getSourcePaths().size());
+        throw new IOException(
+            "mirror parent error,source path should be one,got "
+                + inputOptions.getSourcePaths().size());
       }
       Path srcPath = inputOptions.getSourcePaths().get(0);
-      Path tarPath = inputOptions.getTargetPath();
+      Path tgtPath = inputOptions.getTargetPath();
+      Path srcParent = null;
+      Path tgtParent = null;
+      if (syncOrOverwrite) {
+        srcParent = new Path(srcPath.toUri().getPath());
+        tgtParent = new Path(tgtPath.toUri().getPath());
+      } else if (!tgtFs.exists(tgtPath)) {
+        srcParent = new Path(srcPath.getParent().toUri().getPath());
+        tgtParent = new Path(tgtPath.getParent().toUri().getPath());
+      } else {
+        srcParent = new Path(srcPath.getParent().toUri().getPath());
+        tgtParent = new Path(tgtPath.toUri().getPath());
+      }
+
       FileSystem srcFs = srcPath.getFileSystem(getConf());
-      if (!srcPath.getParent().toUri().getPath()
-          .equals(tarPath.getParent().toUri().getPath())) {
+      if (!srcParent.equals(tgtParent)) {
         throw new IOException(String.format(
             "mirror parent error,src path [%s] doesn't equal to target path [%s]",
-            srcPath, tarPath));
+            srcPath, tgtPath));
       }
-      if (!dstFs.exists(parent)) {
+      if (!tgtFs.exists(tgtParent)) {
         LinkedList<Path> nonExistedPaths = new LinkedList<Path>();
-        Path nonExistedPath = parent;
-        while (!dstFs.exists(nonExistedPath)) {
+        Path nonExistedPath = tgtParent;
+        while (!tgtFs.exists(nonExistedPath)) {
           nonExistedPaths.addFirst(nonExistedPath);
           nonExistedPath = nonExistedPath.getParent();
         }
-        dstFs.mkdirs(parent);
+        tgtFs.mkdirs(tgtParent);
 
         while (!nonExistedPaths.isEmpty()) {
           Path path = new Path(nonExistedPaths.pollLast().toUri().getPath());
@@ -465,10 +491,10 @@ public class DistCp extends Configured implements Tool {
           aclEntries = AclUtil.getAclFromPermAndEntries(
                   srcStatus.getPermission(), aclEntries != null ? aclEntries
                           : Collections.<AclEntry>emptyList());
-          dstFs.setOwner(path, srcStatus.getOwner(),
+          tgtFs.setOwner(path, srcStatus.getOwner(),
                   srcStatus.getGroup());
-          dstFs.setPermission(path, srcStatus.getPermission());
-          dstFs.setAcl(path, aclEntries);
+          tgtFs.setPermission(path, srcStatus.getPermission());
+          tgtFs.setAcl(path, aclEntries);
         }
       }
     } else {
