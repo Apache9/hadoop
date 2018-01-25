@@ -23,7 +23,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import junit.framework.TestCase;
@@ -163,6 +165,9 @@ public class TestDistCpSystem extends TestCase {
     FileEntry[] srcfiles = { new FileEntry(SRCDAT, true),
         new FileEntry(SRCDAT + "/a", false), new FileEntry(SRCDAT + "/b", true),
         new FileEntry(SRCDAT + "/b/c", false) };
+    FileEntry[] dstfiles = { new FileEntry(DSTDAT, true),
+        new FileEntry(DSTDAT + "/a", false), new FileEntry(DSTDAT + "/b", true),
+        new FileEntry(DSTDAT + "/b/c", false) };
 
     final String testSrc = "/testdir/";
     MiniDFSCluster cluster1 = null;
@@ -178,41 +183,79 @@ public class TestDistCpSystem extends TestCase {
       srcFs.mkdirs(new Path(testSrc));
       createFiles(srcFs, testSrc, srcfiles);
 
-      Path testSrcPath = new Path(testSrc);
-      srcFs.mkdirs(testSrcPath);
-      srcFs.setOwner(testSrcPath, "u_li", "g_li");
-      srcFs.setPermission(testSrcPath, new FsPermission((short) 504));
-      List<AclEntry> list = srcFs.getAclStatus(testSrcPath).getEntries();
-      list.add(AclEntry.parseAclEntry("user:u_wei:rwx", true));
-      srcFs.modifyAclEntries(testSrcPath, list);
+      String owner = "u_li";
+      String group = "g_li";
+      FsPermission perm = new FsPermission((short) 00777);
+      List<AclEntry> aclEntries = srcFs.getAclStatus(new Path(testSrc)).getEntries();
+      aclEntries.add(AclEntry.parseAclEntry("user:u_wei:rwx", true));
 
-      String[] args = new String[] { "-Parent", "mirror", srcFs.getUri()+""+testSrc + SRCDAT,
+      srcFs.mkdirs(new Path(testSrc));
+      srcFs.setOwner(new Path(testSrc), "u_li", "g_li");
+      srcFs.setPermission(new Path(testSrc), new FsPermission((short) 00777));
+      srcFs.modifyAclEntries(new Path(testSrc), aclEntries);
+      srcFs.setOwner(new Path(testSrc+SRCDAT), "u_li", "g_li");
+      srcFs.setPermission(new Path(testSrc+SRCDAT), new FsPermission((short) 00777));
+      srcFs.modifyAclEntries(new Path(testSrc+SRCDAT), aclEntries);
+
+      // test copy with update, parent should be /testdir and /testdir/dstdat
+      String[] args = new String[] { "-Parent", "mirror", "-update", srcFs.getUri()+""+testSrc + SRCDAT,
+              dstFs.getUri()+testSrc + SRCDAT };
+      ToolRunner.run(conf, new DistCp(), args);
+      testDirPreserve(dstFs,testSrc,owner,group,perm,aclEntries,true);
+      testDirPreserve(dstFs,testSrc+SRCDAT,owner,group,perm,aclEntries,true);
+      isDistCpSuccess(dstFs,testSrc,srcfiles);
+
+      // test copy to a non-exited target path, parent should be /testdir
+      dstFs.delete(new Path(testSrc),true);
+      args = new String[] { "-Parent", "mirror", srcFs.getUri()+""+testSrc + SRCDAT,
           dstFs.getUri()+testSrc + DSTDAT };
       ToolRunner.run(conf, new DistCp(), args);
+      testDirPreserve(dstFs,testSrc,owner,group,perm,aclEntries,true);
+      testDirPreserve(dstFs,testSrc+DSTDAT,owner,group,perm,aclEntries,false);
+      isDistCpSuccess(dstFs,testSrc,dstfiles);
 
-      FileStatus status = dstFs.getFileStatus(testSrcPath);
-      assertTrue(status.getOwner().equals("u_li"));
-      assertTrue(status.getGroup().equals("g_li"));
-      assertTrue(status.getPermission().equals(new FsPermission((short) 504)));
-      assertTrue(dstFs.getAclStatus(testSrcPath).getEntries()
-          .contains(AclEntry.parseAclEntry("user:u_wei:rwx", true)));
-
-      for (FileEntry entry : srcfiles) {
-        Path path = new Path(
-            entry.getPath().replaceAll(SRCDAT, testSrc + DSTDAT));
-        assertTrue(dstFs.exists(path));
-        if (entry.isDir) {
-          assertTrue(dstFs.isDirectory(path));
-        } else {
-          assertTrue(dstFs.isFile(path));
-        }
-      }
+      // test copy to an existed target path, parent should be /testdir
+      dstFs.delete(new Path(testSrc),true);
+      dstFs.mkdirs(new Path(testSrc));
+      args = new String[] { "-Parent", "mirror", srcFs.getUri()+""+testSrc + SRCDAT,
+              dstFs.getUri()+testSrc };
+      ToolRunner.run(conf, new DistCp(), args);
+      testDirPreserve(dstFs,testSrc,owner,group,perm,aclEntries,false);
+      testDirPreserve(dstFs,testSrc+SRCDAT,owner,group,perm,aclEntries,false);
+      isDistCpSuccess(dstFs,testSrc,srcfiles);
     } finally {
       if (cluster1 != null) {
         cluster1.shutdown();
       }
       if (cluster2 != null) {
         cluster2.shutdown();
+      }
+    }
+  }
+
+  private void testDirPreserve(FileSystem dstFs, String parent, String owner,
+      String group, FsPermission perm, List<AclEntry> entries, boolean hopeTrue) throws IOException {
+    FileStatus status = dstFs.getFileStatus(new Path(parent));
+    Set<AclEntry> set = new HashSet<>(dstFs.getAclStatus(new Path(parent)).getEntries());
+    if (hopeTrue) {
+      assertTrue(status.getOwner().equals(owner));
+      assertTrue(status.getGroup().equals(group));
+      assertTrue(status.getPermission().equals(perm));
+      assertTrue(set.containsAll(entries));
+    } else {
+      assertFalse(status.getPermission().equals(perm));
+      assertFalse(set.containsAll(entries));
+    }
+  }
+
+  private void isDistCpSuccess(FileSystem fs, String topdir,
+      FileEntry[] entries) throws IOException {
+    for (FileEntry entry : entries) {
+      Path newpath = new Path(topdir + "/" + entry.getPath());
+      if (entry.isDirectory()) {
+        assertTrue(fs.getFileStatus(newpath).isDirectory());
+      } else {
+        assertTrue(fs.getFileStatus(newpath).isFile());
       }
     }
   }
@@ -234,42 +277,57 @@ public class TestDistCpSystem extends TestCase {
       fs.mkdirs(new Path(testSrc));
       createFiles(fs, testSrc, srcfiles);
 
+      String owner = "u_li";
+      String group = "g_li";
+      FsPermission perm = new FsPermission((short) 511);//511==00777
+      List<AclEntry> aclEntries = fs.getAclStatus(new Path(testSrc)).getEntries();
+      aclEntries.add(AclEntry.parseAclEntry("user:u_wei:rwx", true));
+
+      // test copy with update, parent should be /testdir，/testdir/aha，/testdir/aha/srcdat
+      fs.delete(new Path(testSrc+"aha"),true);
       String[] args = new String[] { "-Parent",
-          "owner=u_li,group=g_li,permission=504,acl=user:u_wei:rwx,acl=user:u_lun:rwx",
-          "/testdir/" + SRCDAT, "/testdir/aha/bee/" + DSTDAT };
+          "owner=u_li,group=g_li,permission=511,acl=user:u_wei:rwx,acl=user:u_lun:rwx",
+          "-update", "/testdir/" + SRCDAT, testSrc + "aha/" + SRCDAT };
       ToolRunner.run(conf, new DistCp(), args);
+      testDirPreserve(fs,testSrc,owner,group,perm,aclEntries,false);// doesn't modify for existed parent
+      testDirPreserve(fs,testSrc+"aha/",owner,group,perm,aclEntries,true);
+      testDirPreserve(fs,testSrc+"aha/"+SRCDAT,owner,group,perm,aclEntries,true);
+      isDistCpSuccess(fs,testSrc+"aha",srcfiles);
 
-      Path path = new Path("/testdir/aha");
-      assertTrue(
-          fs.getFileStatus(path).getOwner().equals("u_li"));
-      assertTrue(fs.getFileStatus(path).getGroup().equals("g_li"));
-      assertTrue(fs.getFileStatus(path).getPermission().equals(new FsPermission((short)504)));
-      assertTrue(fs.getAclStatus(path).getEntries()
-          .contains(AclEntry.parseAclEntry("user:u_wei:rwx", true)));
-      assertTrue(fs.getAclStatus(path).getEntries()
-          .contains(AclEntry.parseAclEntry("user:u_lun:rwx", true)));
-      path = new Path("/testdir/aha/bee");
-      assertTrue(
-              fs.getFileStatus(path).getOwner().equals("u_li"));
-      assertTrue(fs.getFileStatus(path).getGroup().equals("g_li"));
-      assertTrue(fs.getFileStatus(path).getPermission().equals(new FsPermission((short)504)));
-      assertTrue(fs.getAclStatus(path).getEntries()
-              .contains(AclEntry.parseAclEntry("user:u_wei:rwx", true)));
-      assertTrue(fs.getAclStatus(path).getEntries()
-              .contains(AclEntry.parseAclEntry("user:u_lun:rwx", true)));
+      // test copy to a non-exited target path, parent should be /testdir,/testdir/aha
+      fs.delete(new Path(testSrc+"aha"),true);
+      args = new String[] { "-Parent",
+          "owner=u_li,group=g_li,permission=511,acl=user:u_wei:rwx,acl=user:u_lun:rwx",
+          "/testdir/" + SRCDAT, testSrc + "aha/" + SRCDAT };
+      ToolRunner.run(conf, new DistCp(), args);
+      testDirPreserve(fs,testSrc,owner,group,perm,aclEntries,false);
+      testDirPreserve(fs,testSrc+"aha/",owner,group,perm,aclEntries,true);
+      testDirPreserve(fs,testSrc+"aha/"+SRCDAT,owner,group,perm,aclEntries,false);
+      isDistCpSuccess(fs,testSrc+"aha/",srcfiles);
 
-      for (FileEntry entry : srcfiles) {
-        path = new Path(
-            entry.getPath().replaceAll(SRCDAT, "/testdir/aha/bee/" + DSTDAT));
-        assertTrue(fs.exists(path));
-        if (entry.isDir) {
-          assertTrue(fs.isDirectory(path));
-        } else {
-          assertTrue(fs.isFile(path));
-        }
-      }
+      // test copy to an existed target path, parent should be /testdir,/testdir/dstdat
+      fs.delete(new Path(testSrc+"aha"),true);
+      fs.mkdirs(new Path(testSrc+DSTDAT));
+      args = new String[] { "-Parent",
+          "owner=u_li,group=g_li,permission=511,acl=user:u_wei:rwx,acl=user:u_lun:rwx",
+          "/testdir/" + SRCDAT, testSrc + DSTDAT };
+      ToolRunner.run(conf, new DistCp(), args);
+      testDirPreserve(fs,testSrc,owner,group,perm,aclEntries,false);
+      testDirPreserve(fs,testSrc+DSTDAT,owner,group,perm,aclEntries,false);
+      testDirPreserve(fs,testSrc+DSTDAT+"/"+SRCDAT,owner,group,perm,aclEntries,false);
+      isDistCpSuccess(fs,testSrc+DSTDAT,srcfiles);
 
-      deldir(fs, testSrc);
+      // test copy to an existed target path, parent should be /testdir,/testdir/dstdat
+      fs.delete(new Path(testSrc+DSTDAT),true);
+      fs.mkdirs(new Path(testSrc+"src2/aha"));
+      args = new String[] { "-Parent",
+              "owner=u_li,group=g_li,permission=511,acl=user:u_wei:rwx,acl=user:u_lun:rwx",
+              "/testdir/" + SRCDAT, testSrc+"src2", testSrc + DSTDAT };
+            ToolRunner.run(conf, new DistCp(), args);
+      testDirPreserve(fs,testSrc,owner,group,perm,aclEntries,false);
+      testDirPreserve(fs,testSrc+DSTDAT,owner,group,perm,aclEntries,true);
+      testDirPreserve(fs,testSrc+DSTDAT+"/"+SRCDAT,owner,group,perm,aclEntries,false);
+      testDirPreserve(fs,testSrc+DSTDAT+"/src2/aha",owner,group,perm,aclEntries,false);
     } finally {
       if (cluster != null) {
         cluster.shutdown();
