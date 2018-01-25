@@ -2755,6 +2755,14 @@ public abstract class FileSystem extends Configured implements Closeable {
         return fs;
       }
 
+      if (conf.getBoolean("dfs.client.filesystem.leak.debug", false)) {
+        try {
+          throw new IllegalThreadStateException("New file system instance is created");
+        } catch (IllegalThreadStateException e) {
+          LOG.error("Create a new file system for key: " + key + " cache size: " + map.size(), e);
+        }
+      }
+
       fs = createFileSystemWithConfigurationService(uri, conf);
       synchronized (this) { // refetch the lock again
         FileSystem oldfs = map.get(key);
