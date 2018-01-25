@@ -97,12 +97,13 @@ public class LinuxContainerExecutor extends ContainerExecutor {
   }
 
   String getRunAsUser(String user) {
-    if (UserGroupInformation.isSecurityEnabled() ||
-       !containerLimitUsers) {
-      return user;
-    } else {
-      return nonsecureLocalUser;
-    }
+    return nonsecureLocalUser;
+//    if (UserGroupInformation.isSecurityEnabled() ||
+//       !containerLimitUsers) {
+//      return user;
+//    } else {
+//      return nonsecureLocalUser;
+//    }
   }
 
 
