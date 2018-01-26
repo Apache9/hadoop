@@ -857,8 +857,10 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   @Override
   public Resource assignContainer(FSSchedulerNode node) {
     if (isOverAMShareLimit()) {
-      LOG.info("Skipping allocation because maxAMShare limit would " +
-          "be exceeded in queue: " + getQueueName() + ", application: " + getApplicationAttemptId());
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Skipping allocation because maxAMShare limit would " +
+                "be exceeded in queue: " + getQueueName() + ", application: " + getApplicationAttemptId());
+      }
       return Resources.none();
     }
     return assignContainer(node, false);
