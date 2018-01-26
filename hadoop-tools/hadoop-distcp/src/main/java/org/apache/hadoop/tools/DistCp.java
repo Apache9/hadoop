@@ -379,15 +379,8 @@ public class DistCp extends Configured implements Tool {
       throws IOException, URISyntaxException {
     Path target = inputOptions.getTargetPath();
     FileSystem tgtFs = target.getFileSystem(getConf());
-    try {
-      tgtFs.access(new Path("/"), FsAction.ALL);
-    } catch (AccessControlException e) {
-      throw new IOException(
-          "Only super user can preserve attributeds for parent path.");
-    }
+    checkParentOptionEnable(tgtFs,inputOptions.getTargetParent());
 
-    final boolean syncOrOverwrite =
-        inputOptions.shouldSyncFolder() || inputOptions.shouldOverwrite();
     if (inputOptions
         .getTargetParent() == DistCpOptions.TARGET_PARENT.DEFAULT) {
       return;
@@ -402,16 +395,7 @@ public class DistCp extends Configured implements Tool {
       List<String> acls = inputOptions.getParentAcl();
 
       Path tgtPath = inputOptions.getTargetPath();
-      Path tgtParent = null;
-      if (syncOrOverwrite) {
-        tgtParent = new Path(tgtPath.toUri().getPath());
-      } else if (inputOptions.getSourcePaths().size()>1) {
-        tgtParent = new Path(tgtPath.toUri().getPath());
-      } else if (!tgtFs.exists(tgtPath)) {
-        tgtParent = new Path(tgtPath.getParent().toUri().getPath());
-      } else {
-        tgtParent = new Path(tgtPath.toUri().getPath());
-      }
+      Path tgtParent = getTargetParentPath(tgtPath,tgtFs);
 
       LinkedList<Path> nonExistedPaths = new LinkedList<Path>();
       Path nonExistedPath = tgtParent;
@@ -454,18 +438,8 @@ public class DistCp extends Configured implements Tool {
       }
       Path srcPath = inputOptions.getSourcePaths().get(0);
       Path tgtPath = inputOptions.getTargetPath();
-      Path srcParent = null;
-      Path tgtParent = null;
-      if (syncOrOverwrite) {
-        srcParent = new Path(srcPath.toUri().getPath());
-        tgtParent = new Path(tgtPath.toUri().getPath());
-      } else if (!tgtFs.exists(tgtPath)) {
-        srcParent = new Path(srcPath.getParent().toUri().getPath());
-        tgtParent = new Path(tgtPath.getParent().toUri().getPath());
-      } else {
-        srcParent = new Path(srcPath.getParent().toUri().getPath());
-        tgtParent = new Path(tgtPath.toUri().getPath());
-      }
+      Path srcParent = getSourceParentPath(tgtPath,tgtFs,srcPath);
+      Path tgtParent = getTargetParentPath(tgtPath,tgtFs);
 
       FileSystem srcFs = srcPath.getFileSystem(getConf());
       if (!srcParent.equals(tgtParent)) {
@@ -497,9 +471,57 @@ public class DistCp extends Configured implements Tool {
           tgtFs.setAcl(path, aclEntries);
         }
       }
+    } else if (inputOptions
+            .getTargetParent() == DistCpOptions.TARGET_PARENT.CREATE) {
+      Path tgtParent = getTargetParentPath(inputOptions.getTargetPath(),tgtFs);
+      tgtFs.mkdirs(tgtParent);
     } else {
       throw new IOException(
           "Unknown option:" + inputOptions.getTargetParent());
+    }
+  }
+
+  private Path getTargetParentPath(Path tgtPath,FileSystem tgtFs) throws IOException {
+    final boolean syncOrOverwrite =
+            inputOptions.shouldSyncFolder() || inputOptions.shouldOverwrite();
+    Path tgtParent = null;
+    if (syncOrOverwrite) {
+      tgtParent = new Path(tgtPath.toUri().getPath());
+    } else if (inputOptions.getSourcePaths().size()>1) {
+      tgtParent = new Path(tgtPath.toUri().getPath());
+    } else if (!tgtFs.exists(tgtPath)) {
+      tgtParent = new Path(tgtPath.getParent().toUri().getPath());
+    } else {
+      tgtParent = new Path(tgtPath.toUri().getPath());
+    }
+    return tgtParent;
+  }
+
+  private Path getSourceParentPath(Path tgtPath,FileSystem tgtFs,Path srcPath) throws IOException {
+    if (inputOptions.getSourcePaths().size()>1) return null;
+    final boolean syncOrOverwrite =
+            inputOptions.shouldSyncFolder() || inputOptions.shouldOverwrite();
+    Path srcParent = null;
+    if (syncOrOverwrite) {
+      srcParent = new Path(srcPath.toUri().getPath());
+    } else if (!tgtFs.exists(tgtPath)) {
+      srcParent = new Path(srcPath.getParent().toUri().getPath());
+    } else {
+      srcParent = new Path(srcPath.getParent().toUri().getPath());
+    }
+    return srcParent;
+  }
+
+  private void checkParentOptionEnable(FileSystem fs,
+      DistCpOptions.TARGET_PARENT option) throws IOException {
+    if (option == DistCpOptions.TARGET_PARENT.MIRROR
+        || option == DistCpOptions.TARGET_PARENT.SPECIFY) {
+      try {
+        fs.access(new Path("/"), FsAction.ALL);
+      } catch (AccessControlException e) {
+        throw new IOException(
+            "Only super user can use -Parent <specified option> and -Parent mirror");
+      }
     }
   }
 
