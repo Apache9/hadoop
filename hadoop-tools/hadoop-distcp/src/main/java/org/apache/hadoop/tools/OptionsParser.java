@@ -258,6 +258,8 @@ public class OptionsParser {
       if (value != null) {
         if (value.equals("mirror")) {
           option.setTargetParent(DistCpOptions.TARGET_PARENT.MIRROR);
+        } else if (value.equals("create")) {
+          option.setTargetParent(DistCpOptions.TARGET_PARENT.CREATE);
         } else {
           option.setTargetParent(DistCpOptions.TARGET_PARENT.SPECIFY);
           String[] split = value.split(",");

@@ -394,7 +394,7 @@ public class DistCpOptions {
   }
 
   public static enum TARGET_PARENT {
-    DEFAULT, SPECIFY, MIRROR
+    DEFAULT, SPECIFY, MIRROR, CREATE
   }
 
   /**

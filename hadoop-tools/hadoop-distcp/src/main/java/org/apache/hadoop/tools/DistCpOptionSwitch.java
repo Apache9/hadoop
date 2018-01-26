@@ -31,14 +31,17 @@ public enum DistCpOptionSwitch {
    * Set attribute to target path's non-existed parent. Use -Parent mirror to
    * enable mirror mode which uses attribute from src parent path. Use
    * -Parent owner=?,group=?,permission=?,acl=? to manually specify path's
-   * attribute.
+   * attribute. Use -Parent create to create parent dirs before submit mapreduce
+   * job.
    */
   TARGET_PARENT(DistCpConstants.CONF_LABEL_TARGET_PARENT, new Option("Parent",
       true,
       "Set attribute to target path's non-existed parent. Use -Parent "
           + "mirror to enable mirror mode which uses attribute from src parent "
           + "path. Use -Parent owner=?,group=?,permission=?,acl=? to manually "
-          + "specify path's attribute.")),
+          + "specify path's attribute. Use -Parent create to create parent dirs " +
+              "before submit mapreduce job. Only superuser can use option " +
+              "<mirror> and <specified>")),
 
   /**
    * Ignores any failures during copy, and continues with rest.

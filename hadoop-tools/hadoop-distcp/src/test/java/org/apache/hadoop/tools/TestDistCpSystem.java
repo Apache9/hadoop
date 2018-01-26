@@ -21,6 +21,8 @@ package org.apache.hadoop.tools;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -317,7 +319,7 @@ public class TestDistCpSystem extends TestCase {
       testDirPreserve(fs,testSrc+DSTDAT+"/"+SRCDAT,owner,group,perm,aclEntries,false);
       isDistCpSuccess(fs,testSrc+DSTDAT,srcfiles);
 
-      // test copy to an existed target path, parent should be /testdir,/testdir/dstdat
+      // test multi src paths, parent should be /testdir,/testdir/dstdat
       fs.delete(new Path(testSrc+DSTDAT),true);
       fs.mkdirs(new Path(testSrc+"src2/aha"));
       args = new String[] { "-Parent",
@@ -328,6 +330,57 @@ public class TestDistCpSystem extends TestCase {
       testDirPreserve(fs,testSrc+DSTDAT,owner,group,perm,aclEntries,true);
       testDirPreserve(fs,testSrc+DSTDAT+"/"+SRCDAT,owner,group,perm,aclEntries,false);
       testDirPreserve(fs,testSrc+DSTDAT+"/src2/aha",owner,group,perm,aclEntries,false);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  public void testTargetParentCreate() throws Exception {
+    final String testSrc = "/testdir/";
+    MiniDFSCluster cluster = null;
+    try {
+      Configuration conf = new Configuration();
+      conf.set("dfs.namenode.acls.enabled", "true");
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+
+      String nnUri = FileSystem.getDefaultUri(conf).toString();
+      FileSystem fs = FileSystem.get(URI.create(nnUri), conf);
+
+      DistCp distCp = new DistCp();
+      distCp.setConf(conf);
+      Field inputOptions = DistCp.class.getDeclaredField("inputOptions");
+      Method createParentTargetPath = DistCp.class.getDeclaredMethod("createParentTargetPath");
+      inputOptions.setAccessible(true);
+      createParentTargetPath.setAccessible(true);
+      // test copy with update, parent should be /testdir，/testdir/aha，/testdir/aha/srcdat
+      fs.delete(new Path(testSrc + "aha"), true);
+      String[] args = new String[] { "-Parent", "create", "-update",
+          "/testdir/" + SRCDAT, testSrc + "aha/" + SRCDAT };
+      inputOptions.set(distCp,(OptionsParser.parse(args)));
+      createParentTargetPath.invoke(distCp);
+      assertTrue(fs.exists(new Path(testSrc+"aha/"+SRCDAT)));
+
+      // test copy to a non-exited target path, parent should be /testdir,/testdir/aha
+      fs.delete(new Path(testSrc + "aha"), true);
+      args = new String[] { "-Parent", "create", "/testdir/" + SRCDAT,
+          testSrc + "aha/" + SRCDAT };
+      inputOptions.set(distCp,(OptionsParser.parse(args)));
+      createParentTargetPath.invoke(distCp);
+      assertTrue(fs.exists(new Path(testSrc+"aha/")));
+      assertFalse(fs.exists(new Path(testSrc+"aha/"+SRCDAT)));
+
+      // test copy to an existed target path, parent should be /testdir,/testdir/dstdat
+      // do nothing
+
+      // test multi src paths target paths, parent should be /testdir,/testdir/dstdat
+      fs.delete(new Path(testSrc + DSTDAT), true);
+      args = new String[] { "-Parent", "create", "/testdir/" + SRCDAT,
+          testSrc + "src2", testSrc + DSTDAT };
+      inputOptions.set(distCp,(OptionsParser.parse(args)));
+      createParentTargetPath.invoke(distCp);
+      assertTrue(fs.exists(new Path(testSrc+DSTDAT)));
     } finally {
       if (cluster != null) {
         cluster.shutdown();
