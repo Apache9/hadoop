@@ -602,4 +602,13 @@ public class TestFederatedDFSFileSystem {
       Assert.assertEquals(status.getGroup(), "hadoop");
     }
   }
+
+  @Test
+  public void testFsCacheCleanup() throws Exception {
+    FileSystem fsa = FileSystem.get(conf);
+    fsa.close();
+    FileSystem fsb = FileSystem.get(conf);
+    fsb.close();
+    Assert.assertNotSame(fsa, fsb);
+  }
 }

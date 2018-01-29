@@ -1057,10 +1057,24 @@ public class DistributedFileSystem extends FileSystem {
   @Override
   public void close() throws IOException {
     try {
-      dfs.closeOutputStreams(false);
+      try {
+        // if closeOutputStreams failed and don't process exceptions, will skip
+        // super.close(), this instance will left in FileSystem.CACHE
+        dfs.closeOutputStreams(false);
+      } catch (Exception e) {
+        // no need to throw e, since in the finally block, dfs.close() will call
+        // the same method again
+        if (supportFederation() && dfs == null) {
+          //don't need to process
+        } else {
+          LOG.warn("FileSystem close Exception. when closing output streams ", e);
+        }
+      }
       super.close();
     } finally {
-      dfs.close();
+      if (dfs != null) {
+        dfs.close();
+      }
     }
   }
 

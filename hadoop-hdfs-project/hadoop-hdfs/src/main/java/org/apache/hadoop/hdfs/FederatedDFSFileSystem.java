@@ -519,7 +519,11 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public void close() throws IOException {
+    try {
       viewFs.close();
+    } finally {
+      super.close();
+    }
   }
 
   @Override
