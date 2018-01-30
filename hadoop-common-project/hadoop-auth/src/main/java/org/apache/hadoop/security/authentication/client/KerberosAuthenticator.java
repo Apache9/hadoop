@@ -265,11 +265,21 @@ public class KerberosAuthenticator implements Authenticator {
           GSSContext gssContext = null;
           try {
             GSSManager gssManager = GSSManager.getInstance();
-            String servicePrincipal = KerberosUtil.getServicePrincipal("HTTP",
+            String servicePrincipal = null;
+            String kerberosInstanceName = System.getProperty("kerberos.instance");
+
+            if (kerberosInstanceName == null) {
+                servicePrincipal = KerberosUtil.getServicePrincipal("HTTP",
                 KerberosAuthenticator.this.url.getHost());
+                } else {
+                servicePrincipal = KerberosUtil.getServicePrincipal("HTTP",
+                  kerberosInstanceName);
+
+            }
             Oid oid = KerberosUtil.getOidInstance("NT_GSS_KRB5_PRINCIPAL");
             GSSName serviceName = gssManager.createName(servicePrincipal,
                                                         oid);
+            LOG.debug("servicePrincipal " + servicePrincipal + ", GSSName " + serviceName);
             oid = KerberosUtil.getOidInstance("GSS_KRB5_MECH_OID");
             gssContext = gssManager.createContext(serviceName, oid, null,
                                                   GSSContext.DEFAULT_LIFETIME);
