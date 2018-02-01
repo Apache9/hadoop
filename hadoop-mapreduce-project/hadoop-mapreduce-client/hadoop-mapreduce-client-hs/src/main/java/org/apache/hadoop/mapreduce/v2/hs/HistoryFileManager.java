@@ -910,11 +910,15 @@ public class HistoryFileManager extends AbstractService {
     }
     for (String timestampPart : dateStringSet) {
       Path logDir = canonicalHistoryLogPath(jobId, timestampPart);
-      List<FileStatus> fileStatusList = scanDirectoryForHistoryFiles(logDir,
-          doneDirFc);
-      HistoryFileInfo fileInfo = getJobFileInfo(fileStatusList, jobId);
-      if (fileInfo != null) {
-        return fileInfo;
+      try {
+        List<FileStatus> fileStatusList = scanDirectoryForHistoryFiles(logDir,
+                doneDirFc);
+        HistoryFileInfo fileInfo = getJobFileInfo(fileStatusList, jobId);
+        if (fileInfo != null) {
+          return fileInfo;
+        }
+      } catch (FileNotFoundException e) {
+        LOG.error("Failed to scan log dir: " + logDir, e);
       }
     }
     return null;
