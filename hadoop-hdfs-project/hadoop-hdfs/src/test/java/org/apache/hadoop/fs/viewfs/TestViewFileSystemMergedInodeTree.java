@@ -452,4 +452,14 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
       }
     }
   }
+
+  @Test
+  public void testCloseViewFs() throws Exception {
+    FileSystem[] childs = fsView.getChildFileSystems();
+    fsView.close();
+    for (FileSystem child:childs) {
+      FileSystem tFs = FileSystem.get(child.getUri(),CONF);
+      assertTrue(tFs!=child);
+    }
+  }
 }
