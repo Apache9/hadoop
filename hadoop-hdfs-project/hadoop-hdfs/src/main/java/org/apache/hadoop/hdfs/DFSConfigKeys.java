@@ -436,6 +436,8 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final long    DFS_NAMENODE_LEASE_RECHECK_INTERVAL_MS_DEFAULT = 2000;
   public static final String  DFS_NAMENODE_MAX_LOCK_HOLD_TO_RELEASE_LEASE_MS_KEY = "dfs.namenode.max-lock-hold-to-release-lease-ms";
   public static final long    DFS_NAMENODE_MAX_LOCK_HOLD_TO_RELEASE_LEASE_MS_DEFAULT = 25;
+  public static final boolean DFS_NAMENODE_QUOTA_FOR_OWNER_DEFAULT = true;
+  public static final String  DFS_NAMENODE_QUOTA_FOR_OWNER_KEY = "dfs.namenode.quota.for.owner";
 
   // Much code in hdfs is not yet updated to use these keys.
   public static final String  DFS_CLIENT_BLOCK_WRITE_LOCATEFOLLOWINGBLOCK_RETRIES_KEY = "dfs.client.block.write.locateFollowingBlock.retries";

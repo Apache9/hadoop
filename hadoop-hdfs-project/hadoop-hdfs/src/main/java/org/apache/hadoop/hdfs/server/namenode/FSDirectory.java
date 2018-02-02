@@ -101,8 +101,8 @@ import org.apache.hadoop.hdfs.util.ReadOnlyList;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-
 import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.mortbay.log.Log;
 
 /**
@@ -3718,5 +3718,46 @@ public class FSDirectory implements Closeable {
       writeUnlock();
     }
     return true;
+  }
+
+  /** Check if a given path is valid to set quota */
+  public void checkQuotaForOwner(String path, long nsQuota, long dsQuota) throws IOException {
+    byte[][] dstComponents = INode.getPathComponents(path);
+    INodesInPath dstIIP = getExistingPathINodes(dstComponents);
+    INode[] nodes = dstIIP.getINodes();
+    int i = nodes.length -2;
+    QuotaSummary qs =null;
+    while(i > 0) {
+      qs = nodes[i].asDirectory().getQuotaSummary();
+      if ((HdfsConstants.QUOTA_RESET != qs.getQuota()) ||
+        (HdfsConstants.QUOTA_RESET != qs.getSpaceQuota())) {
+        break;
+      }
+      --i;
+    }
+    if (i <= 0) {
+      StringBuilder builder =  new StringBuilder();
+      builder.append("Failed! can't find quota information from any parent dir of path ");
+      builder.append(path);
+      throw new IOException(builder.toString());
+    }
+    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+    String owner = nodes[i].getUserName();
+    if (!owner.equals(ugi.getShortUserName())) {
+      StringBuilder builder =  new StringBuilder();
+      builder.append("Failed! current user is different with parent folder owner!");
+      builder.append(" current user is ").append(ugi.getShortUserName());
+      builder.append(" owner of ").append(nodes[i].getFullPathName()).append(" is ").append(owner);
+      throw new IOException(builder.toString());
+    }
+    if ((HdfsConstants.QUOTA_DONT_SET != nsQuota && nsQuota > qs.getQuota()) ||
+      (HdfsConstants.QUOTA_DONT_SET != dsQuota && dsQuota > qs.getSpaceQuota())) {
+      StringBuilder builder =  new StringBuilder();
+      builder.append("Failed! quata is bigger than parent! (")
+        .append(nodes[i].getFullPathName()).append(") ");
+      builder.append("nsQuota=").append(qs.getQuota())
+        .append(" dsQuota=").append(qs.getSpaceQuota());
+      throw new IOException(builder.toString());
+    }
   }
 }
