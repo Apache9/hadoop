@@ -373,6 +373,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final boolean DFS_NAMENODE_FORCE_TO_TRASH_DEFAULT = false;
   public static final String  DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_KEY = "dfs.namenode.trashPathConfRefreshInterval";
   public static final long DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_DEFAULT = 600000; //ms
+  public static final boolean DFS_NAMENODE_QUOTA_FOR_OWNER_DEFAULT = true;
+  public static final String  DFS_NAMENODE_QUOTA_FOR_OWNER_KEY = "dfs.namenode.quota.for.owner";
+
 
   // Much code in hdfs is not yet updated to use these keys.
   public static final String  DFS_CLIENT_BLOCK_WRITE_LOCATEFOLLOWINGBLOCK_RETRIES_KEY = "dfs.client.block.write.locateFollowingBlock.retries";

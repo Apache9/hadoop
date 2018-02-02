@@ -1057,4 +1057,120 @@ public class TestQuota {
       cluster.shutdown();
     }
   }
+
+  @Test
+  public void testSetQuotaWithUserOwner() throws Exception {
+    final Configuration conf = new HdfsConfiguration();
+    final int DEFAULT_BLOCK_SIZE = 512;
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
+    conf.setInt(DFSConfigKeys.DFS_CONTENT_SUMMARY_LIMIT_KEY, 2);
+    final MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+    final FileSystem fs = cluster.getFileSystem();
+    assertTrue("Not a HDFS: "+fs.getUri(),
+      fs instanceof DistributedFileSystem);
+    final DistributedFileSystem dfs = (DistributedFileSystem)fs;
+    DFSAdmin admin = new DFSAdmin(conf);
+    try {
+      final int fileLen = 1024;
+      final short replication = 5;
+      final long spaceQuota = fileLen * replication * 15 / 8;
+
+      final String userName = "user1";
+      final String groupName = "hadoop";
+
+      // 1: create a directory /test and set its quota to be 3
+      final Path parentDir = new Path("/parent#,^");
+      assertTrue(dfs.mkdirs(parentDir));
+      dfs.setOwner(parentDir, userName, groupName);
+
+      final Path subDir = new Path("/parent#,^/subdir");
+      assertTrue(dfs.mkdirs(subDir));
+      dfs.setOwner(subDir, userName, groupName);
+
+      // 1. will failed if there is no quota info in parent
+      UserGroupInformation ugi1 =
+        UserGroupInformation.createUserForTesting(userName,
+          new String[]{groupName});
+      ugi1.doAs(new PrivilegedExceptionAction<Object>() {
+        @Override
+        public Object run() throws Exception {
+          assertEquals("Not running as new user", userName,
+            UserGroupInformation.getCurrentUser().getShortUserName());
+          DFSAdmin userAdmin = new DFSAdmin(conf);
+
+          String[] args2 = new String[]{"-setQuota", "5", subDir.toString()};
+          runCommand(userAdmin, args2, true);
+          args2 = new String[]{"-setSpaceQuota", "64", subDir.toString()};
+          runCommand(userAdmin, args2, true);
+          return null;
+        }
+      });
+
+      String[] args = new String[]{"-setQuota", "10", parentDir.toString()};
+      runCommand(admin, args, false);
+      args = new String[]{"-setSpaceQuota", "128", parentDir.toString()};
+      runCommand(admin, args, false);
+      UserGroupInformation ugi2 =
+        UserGroupInformation.createUserForTesting(userName,
+          new String[]{groupName});
+      ugi2.doAs(new PrivilegedExceptionAction<Object>() {
+        @Override
+        public Object run() throws Exception {
+          assertEquals("Not running as new user", userName,
+            UserGroupInformation.getCurrentUser().getShortUserName());
+          DFSAdmin userAdmin = new DFSAdmin(conf);
+
+          // 2. mormal case
+          String[] args2 = new String[]{"-setQuota", "5", subDir.toString()};
+          runCommand(userAdmin, args2, false);
+          args2 = new String[]{"-setSpaceQuota", "64", subDir.toString()};
+          runCommand(userAdmin, args2, false);
+          QuotaSummary summary = dfs.getQuotaSummary(subDir);
+          assertEquals("Not same with setting quota",
+            5, summary.getQuota());
+          assertEquals("Not same with settin space quota",
+            64, summary.getSpaceQuota());
+          args2 = new String[]{"-clrQuota", subDir.toString()};
+          runCommand(userAdmin, args2, false);
+          args2 = new String[]{"-clrSpaceQuota", subDir.toString()};
+          runCommand(userAdmin, args2, false);
+          summary = dfs.getQuotaSummary(subDir);
+          assertEquals("Not clean quota",
+            -1, summary.getQuota());
+          assertEquals("Not clean space quota",
+            -1, summary.getSpaceQuota());
+
+          // 3. bigger than parent quota
+          args2 = new String[]{"-setQuota", "20", subDir.toString()};
+          runCommand(userAdmin, args2, true);
+          args2 = new String[]{"-setSpaceQuota", "256", subDir.toString()};
+          runCommand(userAdmin, args2, true);
+
+          return null;
+        }
+      });
+
+      // 4. other user
+      final String otherUser = "otheruser";
+      UserGroupInformation ugi3 =
+        UserGroupInformation.createUserForTesting(otherUser,
+          new String[]{groupName});
+      ugi3.doAs(new PrivilegedExceptionAction<Object>() {
+        @Override
+        public Object run() throws Exception {
+          assertEquals("Not running as new user", otherUser,
+            UserGroupInformation.getCurrentUser().getShortUserName());
+          DFSAdmin userAdmin = new DFSAdmin(conf);
+
+          String[] args2 = new String[]{"-setQuota", "5", subDir.toString()};
+          runCommand(userAdmin, args2, true);
+          args2 = new String[]{"-setSpaceQuota", "64", subDir.toString()};
+          runCommand(userAdmin, args2, true);
+          return null;
+        }
+      });
+    } finally {
+      cluster.shutdown();
+    }
+  }
 }

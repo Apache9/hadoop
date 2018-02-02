@@ -68,6 +68,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOG_LOCK_MININTE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_OBJECTS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_OBJECTS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_FOR_OWNER_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_FOR_OWNER_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPL_QUEUE_THRESHOLD_PCT_KEY;
@@ -388,6 +390,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private final String supergroup;
   private final String superuser;
   private final boolean standbyShouldCheckpoint;
+  private final boolean quotaForOwner;
   
   // Scan interval is not configurable.
   private static final long DELEGATION_TOKEN_REMOVER_SCAN_INTERVAL =
@@ -793,6 +796,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       
       this.standbyShouldCheckpoint = conf.getBoolean(
           DFS_HA_STANDBY_CHECKPOINTS_KEY, DFS_HA_STANDBY_CHECKPOINTS_DEFAULT);
+      this.quotaForOwner = conf.getBoolean(
+        DFS_NAMENODE_QUOTA_FOR_OWNER_KEY, DFS_NAMENODE_QUOTA_FOR_OWNER_DEFAULT);
       // # edit autoroll threshold is a multiple of the checkpoint threshold 
       this.editLogRollerThreshold = (long)
           (conf.getFloat(
@@ -4010,12 +4015,22 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    */
   void setQuota(String path, long nsQuota, long dsQuota) 
       throws IOException, UnresolvedLinkException {
-    checkSuperuserPrivilege();
     checkOperation(OperationCategory.WRITE);
+    final FSPermissionChecker pc = isPermissionEnabled ?
+      getPermissionChecker() : null;
     writeLock();
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot set quota on " + path);
+      if (pc != null) {
+        if (quotaForOwner) {
+          if (!pc.isSuperUser()) {
+            dir.checkQuotaForOwner(path, nsQuota, dsQuota);
+          }
+        } else {
+          pc.checkSuperuserPrivilege();
+        }
+      }
       dir.setQuota(path, nsQuota, dsQuota);
     } finally {
       writeUnlock();
