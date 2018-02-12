@@ -587,7 +587,6 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   private boolean isOverAMShareLimit() {
     // Check the AM resource usage for the leaf queue
     if (!isAmRunning() && !getUnmanagedAM()) {
-      // LOG.info(getApplicationAttemptId() + " AM is not running");
       List<ResourceRequest> ask = appSchedulingInfo.getAllResourceRequests();
       if (ask.isEmpty() || !getQueue().canRunAppAM(
           ask.get(0).getCapability())) {
@@ -859,7 +858,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     if (isOverAMShareLimit()) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Skipping allocation because maxAMShare limit would " +
-                "be exceeded in queue: " + getQueueName() + ", application: " + getApplicationAttemptId());
+            "be exceeded in queue: " + getQueueName() + ", application: " + getApplicationAttemptId());
       }
       return Resources.none();
     }

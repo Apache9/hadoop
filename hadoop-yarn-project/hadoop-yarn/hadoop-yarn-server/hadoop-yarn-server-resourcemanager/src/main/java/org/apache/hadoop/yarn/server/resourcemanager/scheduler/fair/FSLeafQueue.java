@@ -504,13 +504,8 @@ public class FSLeafQueue extends FSQueue {
     }
     Resource maxAMResource = Resources.multiply(getFairShare(), maxAMShare);
     Resource ifRunAMResource = Resources.add(amResourceUsage, amResource);
-    boolean ret = !policy
+    return !policy
         .checkIfAMResourceUsageOverLimit(ifRunAMResource, maxAMResource);
-    if (!ret) {
-      LOG.info("maxAMResource: " + maxAMResource + " amResourceUsage: " + amResourceUsage
-          + " amResource: " + amResource + " queue: " + getQueueName());
-    }
-    return ret;
   }
 
   public void addAMResourceUsage(Resource amResource) {

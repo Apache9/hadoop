@@ -110,8 +110,8 @@ public class Cluster {
           }
         } 
         catch (Exception e) {
-          LOG.info("Failed to use " + provider.getClass().getName()
-              + " due to error: " + e.getMessage());
+          LOG.error("Failed to use " + provider.getClass().getName()
+              + " due to error: " + e.getMessage(), e);
         }
       }
     }
