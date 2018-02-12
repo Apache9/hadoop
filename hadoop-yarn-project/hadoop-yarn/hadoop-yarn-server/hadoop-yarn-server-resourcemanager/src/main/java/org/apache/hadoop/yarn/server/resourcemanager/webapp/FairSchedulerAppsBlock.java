@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
+import org.apache.hadoop.yarn.server.resourcemanager.RMServerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
@@ -116,6 +117,7 @@ public class FairSchedulerAppsBlock extends HtmlBlock {
         // FairScheduler#applications don't have the entry. Skip it.
         continue;
       }
+      String actualQueue = RMServerUtils.getFullQueueName(appInfo.getQueue());
       //AppID numerical value parsed by parseHadoopID in yarn.dt.plugins.js
       appsTableData.append("[\"<a href='")
       .append(url("app", appInfo.getAppId())).append("'>")
@@ -126,8 +128,9 @@ public class FairSchedulerAppsBlock extends HtmlBlock {
         appInfo.getName()))).append("\",\"")
       .append(StringEscapeUtils.escapeJavaScript(StringEscapeUtils.escapeHtml(
         appInfo.getApplicationType()))).append("\",\"")
-      .append(StringEscapeUtils.escapeJavaScript(StringEscapeUtils.escapeHtml(
-        appInfo.getQueue()))).append("\",\"")
+      .append("<a href='" + url(RMServerUtils.getFSQueueLink(actualQueue)) + "'>"
+          + StringEscapeUtils.escapeJavaScript(StringEscapeUtils.escapeHtml(appInfo.getQueue())) + "</a>")
+        .append("\",\"")
       .append(fairShare).append("\",\"")
       .append(appInfo.getStartTime()).append("\",\"")
       .append(appInfo.getFinishTime()).append("\",\"")

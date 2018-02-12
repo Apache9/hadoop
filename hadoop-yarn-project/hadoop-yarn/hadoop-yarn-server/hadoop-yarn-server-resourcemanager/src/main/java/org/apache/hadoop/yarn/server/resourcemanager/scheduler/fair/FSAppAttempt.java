@@ -561,6 +561,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
       if (!isAmRunning() && !getUnmanagedAM()) {
         setAMResource(container.getResource());
         getQueue().addAMResourceUsage(container.getResource());
+        LOG.info("Allocate resource for app master. Container: " + container + " app attempt: " + this.getApplicationAttemptId());
         setAmRunning(true);
       }
 
