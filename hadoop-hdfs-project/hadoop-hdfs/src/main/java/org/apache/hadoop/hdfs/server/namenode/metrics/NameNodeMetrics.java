@@ -30,6 +30,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
@@ -129,6 +130,10 @@ public class NameNodeMetrics {
   MutableGaugeInt inProgressFedRenameSrc;
   @Metric("Items in dest list of FederationInProgressRenameMap")
   MutableGaugeInt inProgressFedRenameDest;
+  @Metric("Oldest item in src list of FederationInProgressRenameMap in msec")
+  MutableGaugeLong oldestItemFedRenameSrc;
+  @Metric("Oldest item in dest list of FederationInProgressRenameMap in msec")
+  MutableGaugeLong oldestItemFedRenameDest;
 
   JvmMetrics jvmMetrics = null;
   
@@ -388,5 +393,13 @@ public class NameNodeMetrics {
 
   public void decrInProgressFedRenameDest() {
     inProgressFedRenameDest.decr();
+  }
+
+  public void setOldestItemFedRenameSrc(long elapsed) {
+    oldestItemFedRenameSrc.set((int) elapsed);
+  }
+
+  public void setOldestItemFedRenameDest(long elapsed) {
+    oldestItemFedRenameDest.set((int) elapsed);
   }
 }

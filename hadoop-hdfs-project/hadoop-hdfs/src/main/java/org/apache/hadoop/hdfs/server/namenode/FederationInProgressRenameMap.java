@@ -128,13 +128,23 @@ public class FederationInProgressRenameMap {
     } else {
       list = destInProgress;
     }
+    long maxDuration = 0;
     for (int idx = 0; idx < list.size(); idx++) {
       RenameRecord rr = list.get(idx);
-      if (now - rr.getStartTime() >= timeout) {
+      long duration = now - rr.getStartTime();
+      if (duration > maxDuration) {
+        maxDuration = duration;
+      }
+      if (duration >= timeout) {
         res.add(rr);
       } else {
         break;
       }
+    }
+    if (isSource) {
+      NameNode.getNameNodeMetrics().setOldestItemFedRenameSrc(maxDuration);
+    } else {
+      NameNode.getNameNodeMetrics().setOldestItemFedRenameDest(maxDuration);
     }
     return res;
   }

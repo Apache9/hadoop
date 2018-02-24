@@ -18,14 +18,19 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystemTestHelper;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
+import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
 import org.apache.hadoop.hdfs.server.namenode.FederationRenameException;
 import org.apache.hadoop.ipc.RemoteException;
-
+import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -45,6 +50,8 @@ public class TestFederationRename {
     CONF.setLong(DFSConfigKeys.DFS_FEDERATION_RENAME_SOURCE_TIMEOUT, 10000);
     CONF.setLong(DFSConfigKeys.DFS_FEDERATION_RENAME_DEST_TIMEOUT, 10000);
     CONF.setBoolean("dfs.namenode.acls.enabled", true);
+    final int DEFAULT_BLOCK_SIZE = 512;
+    CONF.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     cluster =
         new MiniDFSCluster.Builder(CONF)
             .nnTopology(MiniDFSNNTopology.simpleFederatedTopology(2))
@@ -93,7 +100,10 @@ public class TestFederationRename {
       DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
       Assert.assertTrue(dfs instanceof DistributedFileSystem);
       Assert.assertTrue(dfs instanceof FederatedDFSFileSystem);
-      OutputStream out = dfs.create(new Path("/home/a/b/testfile"));
+      OutputStream out = dfs.create(new Path("/home/a/b/afile"));
+      // out.write(str.getBytes());
+      out.close();
+      out = dfs.create(new Path("/home/a/b/testfile"));
       out.write(str.getBytes());
       out.close();
       FileStatus sFstatus = dfs.getFileStatus(new Path("/home/a/b/testfile"));
@@ -146,6 +156,217 @@ public class TestFederationRename {
     } finally {
       CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
     }
+  }
+
+  @Test
+  public void testQuotaUsage() throws IOException {
+    final long sQuota = 10 * 1024 * 1024; // 10M
+    String str = "testQuotaUsage";
+    fHdfs1.mkdirs(new Path("/q1"));
+    fHdfs1.mkdirs(new Path("/q1/q2"));
+    fHdfs1.mkdirs(new Path("/q1/q2"));
+    fHdfs2.mkdirs(new Path("/dest"));
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+      dfs.setQuota(new Path("/home/q1"), 100, sQuota);
+      dfs.setQuota(new Path("/user/dest"), 100, sQuota);
+      OutputStream out = dfs.create(new Path("/home/q1/q2/afile"));
+      out.write(str.getBytes());
+      out.close();
+      out = dfs.create(new Path("/home/q1/q2/bfile"));
+      out.write(str.getBytes());
+      out.close();
+      FileStatus fs = dfs.getFileStatus(new Path("/home/q1/q2/afile"));
+      QuotaSummary oSrc = dfs.getQuotaSummary(new Path("/home/q1"));
+      QuotaSummary oDst = dfs.getQuotaSummary(new Path("/user/dest"));
+      boolean rename =
+          dfs.rename(new Path("/home/q1/q2"), new Path("/user/dest/q"));
+      Assert.assertTrue(rename);
+      QuotaSummary nSrc = dfs.getQuotaSummary(new Path("/home/q1"));
+      QuotaSummary nDst = dfs.getQuotaSummary(new Path("/user/dest"));
+      Assert.assertEquals(nSrc.getNameCount() + 3, oSrc.getNameCount());
+      Assert.assertEquals(
+          nSrc.getSpaceConsumed() + fs.getReplication() * fs.getLen() * 2,
+          oSrc.getSpaceConsumed());
+      Assert.assertEquals(nDst.getNameCount(), oDst.getNameCount() + 3);
+      Assert.assertEquals(nDst.getSpaceConsumed(),
+          oDst.getSpaceConsumed() + fs.getReplication() * fs.getLen() * 2);
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
+  }
+
+  @Test
+  public void testQuotaException() throws IOException {
+    final long sQuota = 10 * 1024 * 1024; // 10M
+    String str = "testQuotaUsage";
+    fHdfs1.mkdirs(new Path("/qe"));
+    fHdfs1.mkdirs(new Path("/qe/q2"));
+    fHdfs1.mkdirs(new Path("/qe/q2"));
+    fHdfs2.mkdirs(new Path("/qedst"));
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+      dfs.setQuota(new Path("/home/qe"), 100, sQuota);
+      dfs.setQuota(new Path("/user/qedst"), 3, sQuota);
+      OutputStream out = dfs.create(new Path("/home/qe/q2/afile"));
+      out.write(str.getBytes());
+      out.close();
+      out = dfs.create(new Path("/home/qe/q2/bfile"));
+      out.write(str.getBytes());
+      out.close();
+      FileStatus fs = dfs.getFileStatus(new Path("/home/qe/q2/afile"));
+      boolean nsEx = false;
+      QuotaSummary oSrc = dfs.getQuotaSummary(new Path("/home/qe"));
+      QuotaSummary oDst = dfs.getQuotaSummary(new Path("/user/qedst"));
+      try {
+        boolean rename =
+            dfs.rename(new Path("/home/qe/q2"), new Path("/user/qedst/qe"));
+      } catch (Exception e) {
+        Assert.assertTrue(e.getMessage().contains("NSQuotaExceededException"));
+        nsEx = true;
+      }
+      Assert.assertTrue(nsEx);
+      Assert.assertTrue(dfs.exists(new Path("/home/qe/q2")));
+      Assert.assertTrue(dfs.exists(new Path("/home/qe/q2/afile")));
+      Assert.assertTrue(dfs.exists(new Path("/home/qe/q2/bfile")));
+      Assert.assertFalse(dfs.exists(new Path("/user/qedst/qe")));
+      QuotaSummary nSrc = dfs.getQuotaSummary(new Path("/home/qe"));
+      QuotaSummary nDst = dfs.getQuotaSummary(new Path("/user/qedst"));
+      Assert.assertEquals(nSrc.getNameCount(), oSrc.getNameCount());
+      Assert.assertEquals(nSrc.getSpaceConsumed(), oSrc.getSpaceConsumed());
+      Assert.assertEquals(nDst.getNameCount(), oDst.getNameCount());
+      Assert.assertEquals(nDst.getSpaceConsumed(), oDst.getSpaceConsumed());
+      dfs.setQuota(new Path("/user/qedst"), 100, 10);
+      boolean dsEx = false;
+      try {
+        boolean rename =
+            dfs.rename(new Path("/home/qe/q2"), new Path("/user/qedst/qe"));
+      } catch (Exception e) {
+        Assert.assertTrue(e.getMessage().contains("DSQuotaExceededException"));
+        dsEx = true;
+      }
+      Assert.assertTrue(dsEx);
+      Assert.assertTrue(dfs.exists(new Path("/home/qe/q2")));
+      Assert.assertTrue(dfs.exists(new Path("/home/qe/q2/afile")));
+      Assert.assertTrue(dfs.exists(new Path("/home/qe/q2/bfile")));
+      Assert.assertFalse(dfs.exists(new Path("/user/qedst/qe")));
+      nSrc = dfs.getQuotaSummary(new Path("/home/qe"));
+      nDst = dfs.getQuotaSummary(new Path("/user/qedst"));
+      Assert.assertEquals(nSrc.getNameCount(), oSrc.getNameCount());
+      Assert.assertEquals(nSrc.getSpaceConsumed(), oSrc.getSpaceConsumed());
+      Assert.assertEquals(nDst.getNameCount(), oDst.getNameCount());
+      Assert.assertEquals(nDst.getSpaceConsumed(), oDst.getSpaceConsumed());
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
+  }
+
+  @Test
+  public void testPermDenied() throws IOException, InterruptedException {
+    fHdfs1.mkdirs(new Path("/spd/pd"));
+    fHdfs2.mkdirs(new Path("/pddst"));
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    final Random RAN = new Random();
+    final String USER_NAME = "user" + RAN.nextInt();
+    final String[] GROUP_NAMES = { "group1", "group2" };
+    try {
+      String str = "testSrcPermDenied";
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+      OutputStream out = dfs.create(new Path("/home/spd/pd/afile"));
+      out.write(str.getBytes());
+      out.close();
+      out = dfs.create(new Path("/home/spd/pd/bfile"));
+      out.write(str.getBytes());
+      out.close();
+      // case 1: source side permission denied
+      dfs.setPermission(new Path("/home/spd"), new FsPermission("755"));
+      UserGroupInformation userGroupInfo =
+          UserGroupInformation.createUserForTesting(USER_NAME, GROUP_NAMES);
+      DistributedFileSystem userfs =
+          (DistributedFileSystem) DFSTestUtil.getFileSystemAs(userGroupInfo,
+              CONF);
+      boolean acEx = false;
+      try {
+        boolean rename =
+            userfs.rename(new Path("/home/spd/pd"), new Path("/user/pddst/pd"));
+      } catch (Exception e) {
+        Assert.assertTrue(e.getMessage().contains("AccessControlException"));
+        acEx = true;
+      }
+      Assert.assertTrue(acEx);
+      Assert.assertTrue(dfs.exists(new Path("/home/spd/pd")));
+      Assert.assertTrue(dfs.exists(new Path("/home/spd/pd/afile")));
+      Assert.assertTrue(dfs.exists(new Path("/home/spd/pd/bfile")));
+      Assert.assertFalse(dfs.exists(new Path("/user/pddst/pd")));
+      // case 2: dest side permission denied
+      dfs.setPermission(new Path("/home/spd"), new FsPermission("777"));
+      dfs.setPermission(new Path("/user/pddst"), new FsPermission("755"));
+      acEx = false;
+      try {
+        boolean rename =
+            userfs.rename(new Path("/home/spd/pd"), new Path("/user/pddst/pd"));
+      } catch (Exception e) {
+        Assert.assertTrue(e.getMessage().contains("AccessControlException"));
+        Assert.assertTrue(e.getMessage().contains("pddst"));
+        acEx = true;
+      }
+      Assert.assertTrue(acEx);
+      Assert.assertTrue(dfs.exists(new Path("/home/spd/pd")));
+      Assert.assertTrue(dfs.exists(new Path("/home/spd/pd/afile")));
+      Assert.assertTrue(dfs.exists(new Path("/home/spd/pd/bfile")));
+      Assert.assertFalse(dfs.exists(new Path("/user/pddst/pd")));
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
+  }
+
+  private void graftExpTestEnvSetup(String str) throws IOException {
+    fHdfs1.mkdirs(new Path("/ges"), null);
+    OutputStream out = fHdfs1.create(new Path("/ges/testfile1"));
+    out.write(str.getBytes());
+    out.close();
+    out = fHdfs1.create(new Path("/ges/testfile2"));
+    out.write(str.getBytes());
+    out.close();
+    fHdfs2.mkdirs(new Path("/ged"));
+  }
+
+  @Test
+  public void testGraftExp() throws IOException {
+    String str = "testGraftExp";
+    graftExpTestEnvSetup(str);
+    DistributedFileSystem dfs1 =
+        (DistributedFileSystem) fHdfs1.getDistributedFileSystem();
+    DistributedFileSystem dfs2 =
+        (DistributedFileSystem) fHdfs2.getDistributedFileSystem();
+
+    DirectorySubTree sp =
+        dfs1.renameSrcPhase1("/ges", dfs1.getUri().toString(), "/ged/sp", dfs2
+            .getUri().toString());
+    Assert.assertTrue(sp != null);
+    Assert.assertTrue(sp.getSize() == 3);
+    Assert.assertTrue(sp.get(0).getFileStatus().isDir());
+    Assert.assertTrue(sp.get(0).getFileStatus().getLocalName().equals("ges"));
+    Assert.assertTrue(sp.get(0).getFileStatus().getChildrenNum() == 2);
+    DirectorySubTree newSp = new DirectorySubTree(2);
+    newSp.addItem(sp.get(0));
+    newSp.addItem(sp.get(1));
+    boolean gep = false;
+    try {
+      BlocksToDup dpBlksToDup =
+          dfs2.renameDestPhase1("/ges", dfs1.getUri().toString(), "/ged/sp",
+              dfs2.getUri().toString(), newSp);
+    } catch (Exception e) {
+      Assert.assertTrue(e.getMessage().contains("NullPointerException"));
+      gep = true;
+    }
+    Assert.assertTrue(gep);
+    Assert.assertTrue(fHdfs1.exists(new Path("/ges")));
+    Assert.assertTrue(fHdfs1.exists(new Path("/ges/testfile1")));
+    Assert.assertTrue(fHdfs1.exists(new Path("/ges/testfile2")));
+    Assert.assertFalse(fHdfs2.exists(new Path("/ged/sp")));
   }
 
   private void aclTestEnvSetup() throws IOException {

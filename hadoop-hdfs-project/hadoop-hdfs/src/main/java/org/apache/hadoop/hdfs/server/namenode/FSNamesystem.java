@@ -9939,11 +9939,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       res =
           federationRenameDestPhase1Internal(pc, src, srcId, dst, dstId,
               subTree, blks, logRetryCache);
-
       resultingStat = getAuditFileInfo(dst, false);
-    } catch (AccessControlException e) {
-      logAuditEvent(false, "renameDestPhase1", src, dst, resultingStat);
-      throw e;
     } finally {
       writeUnlock();
     }
@@ -10006,6 +10002,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(dstRecord);
     boolean res = false;
     checkOperation(OperationCategory.WRITE);
+    HdfsFileStatus resultingStat = null;
     writeLock();
     try {
       checkOperation(OperationCategory.WRITE);
@@ -10016,11 +10013,14 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
             rr.getDstId(), false);
         getEditLog().logFederationRenameDestPhase2(renameId, srcId,
             logRetryCache);
+        resultingStat = getAuditFileInfo(dst, false);
       }
     } finally {
       writeUnlock();
     }
     getEditLog().logSync();
+    logAuditEvent(res, "renameDestPhase2", rr.getSrc(), dstRecord,
+        resultingStat);
     return res;
   }
 

@@ -3453,7 +3453,6 @@ public class FSDirectory implements Closeable {
           subTree.addItem(subTree.new HdfsExtendedFileStatus(curFstatus,
               curAstatus));
           newBlockLimit -= blocks;
-          return;
         } else {
           INodesInPath newIip = INodesInPath.fromINode(cur);
           buildDirectorySubTree(subTree, cur, newBlockLimit, snapshot,
@@ -3519,7 +3518,6 @@ public class FSDirectory implements Closeable {
       throws IOException {
     INode child;
     HdfsFileStatus fstatus = status.getFileStatus();
-    AclStatus astatus = status.getAclStatus();
     long inodeid;
     if (blks == null) {
       inodeid = fstatus.getFileId();
@@ -3597,33 +3595,41 @@ public class FSDirectory implements Closeable {
       BlocksToDup blks, int snapshot)
       throws IOException {
     // TBD: Add MAX_PATH_LENGTH MAX_PATH_DEPTH check
-    HdfsExtendedFileStatus status = subTree.consumeItem();
-    if (status.getFileStatus().isDir()) {
-      INode addedNode = graftToNameSpace(status, destChildName, parent, blks, snapshot);
-      if (addedNode == null) {
-        return null;
-      }
-      for (int i = 0; i < status.getFileStatus().getChildrenNum(); i++) {
-        HdfsExtendedFileStatus childStatus = subTree.nextItemToConsume();
-        if (childStatus.getFileStatus().isDir()) {
-          if (graftDirectorySubTree(addedNode,
-              childStatus.getFileStatus().getLocalNameInBytes(), subTree, blks,
-              snapshot) == null) {
-            return null;
-          }
-        } else {
-          childStatus = subTree.consumeItem();
-          if (graftToNameSpace(childStatus,
-              childStatus.getFileStatus().getLocalNameInBytes(), addedNode,
-              blks, snapshot) == null) {
-            return null;
+    INode addedNode = null;
+    try {
+      HdfsExtendedFileStatus status = subTree.consumeItem();
+      if (status.getFileStatus().isDir()) {
+        addedNode =
+            graftToNameSpace(status, destChildName, parent, blks, snapshot);
+        if (addedNode == null) {
+          return null;
+        }
+        for (int i = 0; i < status.getFileStatus().getChildrenNum(); i++) {
+          HdfsExtendedFileStatus childStatus = subTree.nextItemToConsume();
+          if (childStatus.getFileStatus().isDir()) {
+            if (graftDirectorySubTree(addedNode, childStatus.getFileStatus()
+                .getLocalNameInBytes(), subTree, blks, snapshot) == null) {
+              return null;
+            }
+          } else {
+            childStatus = subTree.consumeItem();
+            if (graftToNameSpace(childStatus, childStatus.getFileStatus()
+                .getLocalNameInBytes(), addedNode, blks, snapshot) == null) {
+              return null;
+            }
           }
         }
+        return addedNode;
+      } else {
+        addedNode =
+            graftToNameSpace(status, destChildName, parent, blks, snapshot);
+        return addedNode;
       }
-      return addedNode;
-    } else {
-      INode addedNode = graftToNameSpace(status, destChildName, parent, blks, snapshot);
-      return addedNode;
+    } catch (Exception e) {
+      if (addedNode != null) {
+        ((INodeDirectory) parent).removeChild(addedNode);
+      }
+      throw e;
     }
   }
 
@@ -3694,13 +3700,14 @@ public class FSDirectory implements Closeable {
         updateCount(dstIIP, fileNum, spaceNum, false);
         return (res != null);
       } catch (Throwable t) {
+        // If fail, let source side fixer handle it. Should never happen, may
+        // need human involves.
         NameNode.stateChangeLog.fatal("Graft sub tree to namespace failed", t);
-        assert (false);
+        throw t;
       }
     } finally {
       writeUnlock();
     }
-    return true;
   }
 
   boolean federationRenameRemoveFeature(String path, boolean resolveLink)

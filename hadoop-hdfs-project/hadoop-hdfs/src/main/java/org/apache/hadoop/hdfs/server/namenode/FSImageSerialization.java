@@ -776,7 +776,7 @@ public class FSImageSerialization {
               numBytes, genStamp)), (DatanodeInfo[]) null));
         }
         LocatedBlocks lblks =
-            new LocatedBlocks(length, false, blkList, blkList.get(numBlks - 1),
+            new LocatedBlocks(length, false, blkList, (numBlks != 0) ? blkList.get(numBlks - 1) : null,
                 true, null);
         fstatus =
             new HdfsLocatedFileStatus(length, isDir, replication, blkSize,

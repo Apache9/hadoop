@@ -92,11 +92,18 @@ public class TestFederationRenameWithFailover {
     // create source dirs
     for (int i = 0; i < TEST_RENAME_COUNT; i++) {
       String name = pathPrefix + i;
-      String fname = name + "/testfile";
       fHdfs1.mkdirs(new Path(name), null);
+      String fname = name + "/afile";
       OutputStream out = fHdfs1.create(new Path(fname));
+      out.close();
+      fname = name + "/testfile";
+      out = fHdfs1.create(new Path(fname));
       out.write(str.getBytes());
       out.close();
+      fname = name + "/testfile1";
+      out=fHdfs1.create(new Path(fname));
+      out.close();
+      
       out = fHdfs1.create(new Path("/spmodify/testfile"));
       out.write(str.getBytes());
       out.close();
