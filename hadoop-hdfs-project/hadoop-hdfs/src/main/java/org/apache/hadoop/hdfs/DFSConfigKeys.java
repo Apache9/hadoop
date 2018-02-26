@@ -940,4 +940,23 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.balancer.keytab.file";
   public static final String DFS_BALANCER_KERBEROS_PRINCIPAL =
       "dfs.balancer.kerberos.principal";
+
+  public static final boolean DFS_NAMENODE_BACKUP_FSIMAGE_ENABLE_DEFAULT = false;
+  public static final String DFS_NAMENODE_BACKUP_FSIMAGE_ENABLE_KEY = "dfs.namenode.fsimage.backup.enable";
+  public static final String DFS_NAMENODE_BACKUP_FSIMAGE_CLUSTER_KEY = "dfs.namenode.fsimage.backup.cluster";
+
+  public static final String DFS_NAMENODE_BACKUP_FSIMAGE_MAX_BACKUP_KEY = "dfs.namenode.fsimage.backup.maxBackup";
+  public static final int DFS_NAMENODE_BACKUP_FSIMAGE_MAX_BACKUP_DEFAULT = 3;
+
+  public static final String DFS_NAMENODE_BACKUP_FSIMAGE_CHECK_INTERVAL_KEY = "dfs.namenode.fsimage.backup.checkInterval";
+  public static final long DFS_NAMENODE_BACKUP_FSIMAGE_CHECK_INTERVAL_DEFAULT = 60000;
+
+  public static final String DFS_NAMENODE_BACKUP_FSIMAGE_DIR_KEY = "dfs.namenode.fsimage.backup.dir";
+  public static final String DFS_NAMENODE_BACKUP_FSIMAGE_DIR_DEFAULT = "FSImageBackup";
+
+  public static final String DFS_NAMENODE_BACKUP_FSIMAGE_BANDWIDTH_KEY = "dfs.namenode.fsimage.backup.bandwidth";
+  public static final long DFS_NAMENODE_BACKUP_FSIMAGE_BANDWIDTH_DEFAULT = 10 * 1024 * 1024; // 10MB
+
+  public static final String DFS_NAMENODE_BACKUP_FSIMAGE_UPLOAD_BUFFER_SIZE_KEY = "dfs.namenode.fsimage.backup.bufferSize";
+  public static final int DFS_NAMENODE_BACKUP_FSIMAGE_UPLOAD_BUFFER_SIZE_DEFAULT = 8192;
 }
