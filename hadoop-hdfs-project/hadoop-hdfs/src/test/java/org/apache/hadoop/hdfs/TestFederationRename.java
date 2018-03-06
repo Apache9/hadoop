@@ -55,7 +55,7 @@ public class TestFederationRename {
     cluster =
         new MiniDFSCluster.Builder(CONF)
             .nnTopology(MiniDFSNNTopology.simpleFederatedTopology(2))
-            .numDataNodes(2).build();
+            .numDataNodes(5).build();
     cluster.waitClusterUp();
 
     fHdfs1 = cluster.getFileSystem(0);
@@ -743,6 +743,32 @@ public class TestFederationRename {
       FileSystemTestHelper.createFile(dfs, new Path("/x/y/z/dir/file"));
       dfs.rename(new Path("/x/y/z/dir"), new Path("/x/y/x/dir"));
     } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
+  }
+
+  // Test for a bugfix
+  // In the FederationRenameBlockCollector.linkBlocksToNewPool(), the older code
+  // use SynchronousQueue as the BlockingQueue implementation of ThreadPoolExecutor,
+  // which capacity is 0. And if dn number(the dn that needs do linkblock
+  // operations) greater than thread num, executor.submit will throw a reject
+  // exception
+  @Test
+  public void testRenameWithSmallLinkBlocksThreadPool() throws Exception {
+    CONF.setInt(DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD, 2);
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+        FileSystem fs = FileSystem.get(CONF);
+        Path src = new Path("/user/foo");
+        fs.mkdirs(src);
+        OutputStream os = fs.create(new Path(src, "testfile"));
+        os.write("hello world".getBytes());
+        os.close();
+        // expects no exception
+        fs.rename(src, new Path("/home/foo"));
+    } finally {
+      CONF.setInt(DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD,
+          DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD_DEFAULT);
       CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
     }
   }

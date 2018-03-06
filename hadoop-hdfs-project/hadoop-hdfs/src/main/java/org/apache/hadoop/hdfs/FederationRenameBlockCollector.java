@@ -9,6 +9,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -99,10 +100,10 @@ public class FederationRenameBlockCollector {
     };
   }
 
-  private Executor initExecutor(int threads) {
+  private Executor initExecutor(int threads, int queueSize) {
     return
         new ThreadPoolExecutor(1, threads, 1, TimeUnit.MILLISECONDS,
-            new SynchronousQueue<Runnable>(), new Daemon.DaemonFactory() {
+            new LinkedBlockingDeque<Runnable>(queueSize), new Daemon.DaemonFactory() {
               private final AtomicInteger threadIndex = new AtomicInteger(0);
 
               @Override
@@ -135,6 +136,11 @@ public class FederationRenameBlockCollector {
         conf.getInt(DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD,
             DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD_DEFAULT);
     int numThreads = (numDns > maxThreads) ? maxThreads : numDns;
+    int executorQueueSize = conf.getInt(
+        DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_EXECUTOR_QUEUE_SIZE,
+        DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_EXECUTOR_QUEUE_SIZE_DEFAULT);
+    executorQueueSize = numDns > executorQueueSize ? executorQueueSize : numDns;
+
     long linkTimeout =
         conf.getLong(
             DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_TIMEOUT_MS,
@@ -153,7 +159,7 @@ public class FederationRenameBlockCollector {
         }
       }
     }
-    Executor linkExecutor = initExecutor(numThreads);
+    Executor linkExecutor = initExecutor(numThreads, executorQueueSize);
     CompletionService<Block[]> linkService =
         new ExecutorCompletionService<Block[]>(linkExecutor);
     List<Future<Block[]>> futures = new LinkedList<Future<Block[]>>();

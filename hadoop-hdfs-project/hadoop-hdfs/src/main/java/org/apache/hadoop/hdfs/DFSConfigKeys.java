@@ -1002,7 +1002,11 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD =
       "dfs.federation.client.linkblocks.max.thread";
   public static final int DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD_DEFAULT =
-      32;
+      256;
+  public static final String DFS_FEDERATION_CLIENT_LINK_BLOCKS_EXECUTOR_QUEUE_SIZE =
+      "dfs.federation.client.linkblocks.executor.queue.size";
+  public static final int DFS_FEDERATION_CLIENT_LINK_BLOCKS_EXECUTOR_QUEUE_SIZE_DEFAULT =
+      10240;
 
   public static final String DFS_NAMENODE_GETFILEINFO_AUDITLOG_ENABLED =
           "dfs.namenode.getfileinfo.auditlog.enabled";
