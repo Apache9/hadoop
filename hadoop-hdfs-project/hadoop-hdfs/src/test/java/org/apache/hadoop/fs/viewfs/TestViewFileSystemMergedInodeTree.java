@@ -455,8 +455,11 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
 
   @Test
   public void testCloseViewFs() throws Exception {
-    FileSystem[] childs = fsView.getChildFileSystems();
-    fsView.close();
+    Configuration configuration = new Configuration(conf);
+    configuration.set("fs.hdfs.impl.disable.cache","true");
+    FileSystem fileSystem = FileSystem.get(FsConstants.VIEWFS_URI, configuration);
+    FileSystem[] childs = fileSystem.getChildFileSystems();
+    fileSystem.close();
     for (FileSystem child:childs) {
       FileSystem tFs = FileSystem.get(child.getUri(),CONF);
       assertTrue(tFs!=child);
