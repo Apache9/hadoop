@@ -160,11 +160,9 @@ public class ViewFileSystem extends FileSystem {
   @Override
   public void initialize(final URI theUri, final Configuration conf)
       throws IOException {
-    Configuration configuration = new Configuration(conf);
-    super.initialize(theUri, configuration);
-    setConf(configuration);
-    config = configuration;
-    config.setBoolean("fs.hdfs.impl.disable.cache", true);
+    super.initialize(theUri, conf);
+    setConf(conf);
+    config = conf;
     // Now build  client side view (i.e. client side mount table) from config.
     final String authority = theUri.getAuthority();
     try {

@@ -56,6 +56,7 @@ public class MountPointRenewer {
             FederationConfigKeys.FEDFS_MOUNT_TABLE_RENEW_RETRY_INTERVAL_DEFAULT);
     renewRand = new Random();
     renewMpt = rm;
+    nextRenewTimer = new Timer(true);// create a daemon thread
   }
   
   /*
@@ -262,10 +263,8 @@ public class MountPointRenewer {
     }
     return true;
   }
-  
 
-  synchronized public void scheduleRenewer(final long delay) {
-    nextRenewTimer = new Timer(true);
+  private void scheduleRenewer(final long delay) {
     nextRenewTimer.schedule(new TimerTask() {
       public void run() {
         long nextDelay;
