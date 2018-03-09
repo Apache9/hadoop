@@ -224,4 +224,34 @@ public class TestNameServiceConfigurationService {
     method.setAccessible(true);
     method.invoke(name,"zjy");
   }
+
+  @Test
+  public void testDFSNameService() throws Exception {
+    // create an configuration containing all accessing items to c4tst-nonexisting but dfs.nameservices
+    Configuration conf = new Configuration(false);
+    conf.set("dfs.nameservices", "");
+    conf.set("dfs.ha.namenodes." + NAMESERVICE, "host0,host1");
+    conf.set("dfs.client.failover.proxy.provider." + NAMESERVICE,
+            "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host0",
+            "localhost:57200");
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host1",
+            "localhost:57000");
+    conf.set("configuration.service.unit.test","unit.test");
+    conf.set(ConfigurationService.CONFIGURATION_SERVICE,
+            "org.apache.hadoop.fs.NameServiceConfigurationService");
+    conf.setInt(
+            NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
+            8080);
+    FileSystem tstFs =
+            FileSystem.get(new URI("hdfs://" + NAMESERVICE + "/"), conf);
+    // test writing files to hdfs
+    assertFalse(tstFs.exists(new Path("hdfs://" + NAMESERVICE + "/abc")));
+    BufferedOutputStream bos = new BufferedOutputStream(
+            tstFs.create(new Path("hdfs://" + NAMESERVICE + "/abc"), true));
+    byte[] bytes = "hello world".getBytes();
+    bos.write(bytes);
+    bos.close();
+    assertTrue(tstFs.exists(new Path("hdfs://" + NAMESERVICE + "/abc")));
+  }
 }
