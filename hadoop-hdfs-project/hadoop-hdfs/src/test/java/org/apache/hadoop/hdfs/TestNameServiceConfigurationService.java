@@ -27,6 +27,7 @@ import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.util.concurrent.Executors;
 
 import static org.junit.Assert.assertFalse;
@@ -223,5 +224,53 @@ public class TestNameServiceConfigurationService {
     Method method = NameServiceConfigurationService.class.getDeclaredMethod("getClusterIDCName",String.class);
     method.setAccessible(true);
     method.invoke(name,"zjy");
+  }
+
+  @Test
+  public void testDFSNameService() throws Exception {
+    Configuration conf = new Configuration(false);
+    // HA case
+    conf.set("dfs.client.failover.proxy.provider." + NAMESERVICE,
+            "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+    // exclude nameservice from dfs.nameservices
+    conf.set("dfs.nameservices", "");
+    boolean gotException = false;
+    try {
+      FileSystem.get(new URI("hdfs://" + NAMESERVICE),conf);
+    } catch (IllegalArgumentException e) {
+      gotException = true;
+    }
+    assertTrue(gotException);
+    // test get FileSystem with NameService
+    conf.set("configuration.service.unit.test","unit.test");
+    conf.set(ConfigurationService.CONFIGURATION_SERVICE,
+            "org.apache.hadoop.fs.NameServiceConfigurationService");
+    conf.setInt(
+            NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
+            8080);
+    FileSystem fs = FileSystem.get(new URI("hdfs://" + NAMESERVICE),conf);
+    assertTrue(testWriteWithFileSystem(fs));
+  }
+
+  @Test
+  public void testConnectToNNWithIpAddr() throws Exception {
+    URI uri = null;
+    if (dfsCluster.getNameNode(0).isActiveState()) {
+      uri = new URI("hdfs://localhost:" + dfsCluster.getNameNodePort(0));
+    } else {
+      uri = new URI("hdfs://localhost:" + dfsCluster.getNameNodePort(1));
+    }
+    FileSystem fs = FileSystem.get(uri,new Configuration(false));
+    assertTrue(testWriteWithFileSystem(fs));
+  }
+
+  private boolean testWriteWithFileSystem(FileSystem fs) throws Exception {
+    Path path = new Path("/abc");
+    if (fs.exists(path)) {
+      fs.delete(path);
+    }
+    OutputStream out = fs.create(path);
+    out.close();
+    return fs.exists(path);
   }
 }
