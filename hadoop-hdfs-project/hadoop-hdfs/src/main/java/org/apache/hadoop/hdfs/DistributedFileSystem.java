@@ -154,9 +154,6 @@ public class DistributedFileSystem extends FileSystem {
     String host = uri.getHost();
     if (host == null) {
       throw new IOException("Incomplete HDFS URI, no host: "+ uri);
-    } else if (!DFSUtil.getNameServiceIds(conf).contains(host)) {
-      throw new IllegalArgumentException("URI host is illegal! Couldn't find "
-          + host + " in " + DFSConfigKeys.DFS_NAMESERVICES);
     }
     homeDirPrefix = conf.get(
         DFSConfigKeys.DFS_USER_HOME_DIR_PREFIX_KEY,

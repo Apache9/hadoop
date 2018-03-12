@@ -33,7 +33,6 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -533,9 +532,7 @@ public class NameNodeProxies {
       return null;
     }
     String host = nameNodeUri.getHost();
-    if (!DFSUtil.getNameServiceIds(conf).contains(host)) {
-      return null;
-    }
+  
     String configKey = DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "."
         + host;
     try {
