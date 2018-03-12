@@ -532,7 +532,7 @@ public class NameNodeProxies {
       return null;
     }
     String host = nameNodeUri.getHost();
-  
+
     String configKey = DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "."
         + host;
     try {
@@ -566,6 +566,13 @@ public class NameNodeProxies {
       failoverProxyProviderClass = getFailoverProxyProviderClass(conf,
           nameNodeUri);
       if (failoverProxyProviderClass == null) {
+        return null;
+      } else if (!DFSUtil.getNameServiceIds(conf)
+          .contains(nameNodeUri.getAuthority())) {
+        LOG.warn(
+            "URI authority is illegal! It's HA case(FailoverProxyProvider is configured),"
+                + " but couldn't find " + nameNodeUri.getAuthority() + " in "
+                + DFSConfigKeys.DFS_NAMESERVICES);
         return null;
       }
       // Create a proxy provider instance.
