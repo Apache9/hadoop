@@ -25,7 +25,9 @@ import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.fs.TrashPolicy;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
+import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
@@ -59,6 +61,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.apache.hadoop.fs.FileContext.FILE_DEFAULT_PERM;
+import static org.junit.Assert.assertTrue;
 
 public class TestFederatedDFSFileSystem {
   private static final Log LOG =
@@ -610,5 +613,81 @@ public class TestFederatedDFSFileSystem {
     FileSystem fsb = FileSystem.get(conf);
     fsb.close();
     Assert.assertNotSame(fsa, fsb);
+  }
+
+  @Test
+  public void testMultiFedConfigCase() throws Exception {
+    // Set two federation cluster config in one configuration.
+    // Test whether it could be used to access both two clusters.
+    String NAMESERVICE = "simple-cluster";
+    MiniDFSNNTopology topology = new MiniDFSNNTopology()
+        .addNameservice(new MiniDFSNNTopology.NSConf(NAMESERVICE)
+            .addNN(new MiniDFSNNTopology.NNConf("host1")));
+    MiniDFSCluster dfsCluster = new MiniDFSCluster.Builder(new Configuration())
+        .nnTopology(topology).numDataNodes(1).build();
+    dfsCluster.waitActive();
+    int port = dfsCluster.getNameNodePort(0);
+    dfsCluster.getFileSystem(0).mkdirs(new Path("/user"));
+
+    Configuration config = new Configuration(conf);
+    config.set("dfs.nameservices",
+        conf.get("dfs.nameservices") + "," + NAMESERVICE);
+    config.set(
+        Constants.CONFIG_VIEWFS_PREFIX + "." + NAMESERVICE + ".link./user",
+        "hdfs://localhost:" + port + "/user");
+
+    // test FederatdDFSFileSystem
+    FederatedDFSFileSystem ffs = (FederatedDFSFileSystem) FileSystem
+        .get(new URI("hdfs://" + NAMESERVICE), config);
+    ffs.mkdirs(new Path("/user/abc"));
+    assertTrue(dfsCluster.getFileSystem(0).exists(new Path("/user/abc")));
+
+    ffs = (FederatedDFSFileSystem) FileSystem
+        .get(new URI("hdfs://test-cluster/"), config);
+    ffs.mkdirs(new Path("/home/abc"));
+    if (cluster.getNameNode(0).isActiveState()) {
+      assertTrue(cluster.getFileSystem(0).exists(new Path("/home/abc")));
+    } else {
+      assertTrue(cluster.getFileSystem(1).exists(new Path("/home/abc")));
+    }
+
+    // test FederatedHdfs
+    FileSystem destFs = null;
+    FileContext context = FileContext.getFileContext(new URI("hdfs://"+NAMESERVICE),config);
+    destFs = dfsCluster.getFileSystem(0);
+    if (destFs.exists(new Path("/user/abc"))) {
+      destFs.delete(new Path("/user/abc"));
+    }
+    context.mkdir(new Path("/user/abc"), FsPermission.getDefault(),false);
+    assertTrue(destFs.exists(new Path("/user/abc")));
+
+    context = FileContext.getFileContext(new URI("hdfs://test-cluster/"),config);
+    if (cluster.getNameNode(0).isActiveState()) {
+      destFs = cluster.getFileSystem(0);
+    } else {
+      destFs = cluster.getFileSystem(1);
+    }
+    if (destFs.exists(new Path("/home/abc"))) {
+      destFs.delete(new Path("/home/abc"));
+    }
+    context.mkdir(new Path("/home/abc"), FsPermission.getDefault(),false);
+    assertTrue(destFs.exists(new Path("/home/abc")));
+
+    dfsCluster.shutdown();
+  }
+
+  @Test
+  public void testIsFedrationUri() throws Exception {
+    Configuration conf = new Configuration(false);
+    conf.set(Constants.CONFIG_VIEWFS_PREFIX + ".fed-1.link./user",
+        "hdfs://cluster-0/user");
+    conf.set(Constants.CONFIG_VIEWFS_PREFIX + ".fed-1.link./home",
+        "hdfs://cluster-1/home");
+    conf.set(Constants.CONFIG_VIEWFS_PREFIX + ".fed-2.link./foo",
+        "hdfs://cluster-2/foo");
+    conf.set(Constants.CONFIG_VIEWFS_PREFIX + ".fed-2.link./",
+        "hdfs://cluster-3/");
+    assertTrue(HAUtil.isFederationUri(conf,new URI("hdfs://fed-1")));
+    assertTrue(HAUtil.isFederationUri(conf,new URI("hdfs://fed-2")));
   }
 }
