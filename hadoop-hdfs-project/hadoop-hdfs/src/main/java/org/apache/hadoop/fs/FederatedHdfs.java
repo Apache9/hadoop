@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.fs.viewfs.ViewFs;
 import org.apache.hadoop.fs.viewfs.ViewFsFileStatus;
 import org.apache.hadoop.hdfs.FederationConfigKeys;
+import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MountPointRenewer;
 import org.apache.hadoop.hdfs.MountPointRenewer.RenewMpt;
@@ -393,23 +394,6 @@ public class FederatedHdfs extends AbstractFileSystem {
   }
 
   public boolean isUriCompatible(URI uri, Configuration config) {
-    if (uri.getAuthority() == null) {
-      return true;
-    }
-
-    String mountTable = null;
-    for (Map.Entry<String, String> si : config) {
-      final String key = si.getKey();
-      if (key.startsWith(Constants.CONFIG_VIEWFS_PREFIX)) {
-        String substr =
-            key.substring(Constants.CONFIG_VIEWFS_PREFIX.length() + 1);
-        mountTable = substr.substring(0, substr.indexOf('.'));
-        break;
-      }
-    }
-    if (mountTable != null && uri.getAuthority().equals(mountTable)) {
-      return true;
-    }
-    return false;
+    return HAUtil.isFederationUri(config, uri);
   }
 }
