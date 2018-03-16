@@ -29,6 +29,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.DF;
@@ -70,13 +71,11 @@ class FsVolumeImpl implements FsVolumeSpi {
       Configuration conf, StorageType storageType) throws IOException {
     this.dataset = dataset;
     this.storageID = storageID;
-    this.reserved = conf.getLong(
-        DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY,
-        DFSConfigKeys.DFS_DATANODE_DU_RESERVED_DEFAULT);
     this.currentDir = currentDir; 
     File parent = currentDir.getParentFile();
     this.usage = new DF(parent, conf);
     this.storageType = storageType;
+    this.reserved = getReservedFromConf(conf);
     final int maxNumThreads = dataset.datanode.getConf().getInt(
         DFSConfigKeys.DFS_DATANODE_FSDATASETCACHE_MAX_THREADS_PER_VOLUME_KEY,
         DFSConfigKeys.DFS_DATANODE_FSDATASETCACHE_MAX_THREADS_PER_VOLUME_DEFAULT
@@ -336,6 +335,26 @@ class FsVolumeImpl implements FsVolumeSpi {
   
   DatanodeStorage toDatanodeStorage() {
     return new DatanodeStorage(storageID, DatanodeStorage.State.NORMAL, storageType);
+  }
+
+  private long getReservedFromConf (Configuration conf) {
+    long reserve = 0;
+    double reservePct = conf.getDouble(DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENT_KEY,
+        DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENT_DEFAULT);
+    if (reservePct >= 0 && reservePct <= 100) {
+      reserve = (long)(usage.getCapacity() * reservePct / 100);
+      return reserve;
+    } else {
+      reserve = conf.getLong(
+          DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY,
+          DFSConfigKeys.DFS_DATANODE_DU_RESERVED_DEFAULT);
+    }
+
+    return reserve;
+  }
+  @VisibleForTesting
+  public long getFsCapacity() {
+    return usage.getCapacity();
   }
 
 }
