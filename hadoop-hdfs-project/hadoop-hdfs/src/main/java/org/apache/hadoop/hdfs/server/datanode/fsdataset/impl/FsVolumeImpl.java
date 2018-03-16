@@ -83,14 +83,12 @@ public class FsVolumeImpl implements FsVolumeSpi {
       Configuration conf, StorageType storageType) throws IOException {
     this.dataset = dataset;
     this.storageID = storageID;
-    this.reserved = conf.getLong(
-        DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY,
-        DFSConfigKeys.DFS_DATANODE_DU_RESERVED_DEFAULT);
     this.reservedForRbw = new AtomicLong(0L);
     this.currentDir = currentDir; 
     File parent = currentDir.getParentFile();
     this.usage = new DF(parent, conf);
     this.storageType = storageType;
+    this.reserved = getReservedFromConf(conf);
     this.configuredCapacity = -1;
     cacheExecutor = initializeCacheExecutor(parent);
   }
@@ -429,6 +427,26 @@ public class FsVolumeImpl implements FsVolumeSpi {
   
   DatanodeStorage toDatanodeStorage() {
     return new DatanodeStorage(storageID, DatanodeStorage.State.NORMAL, storageType);
+  }
+
+  private long getReservedFromConf (Configuration conf) {
+    long reserve = 0;
+    double reservePct = conf.getDouble(DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENT_KEY,
+        DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENT_DEFAULT);
+    if (reservePct >= 0 && reservePct <= 100) {
+      reserve = (long)(usage.getCapacity() * reservePct / 100);
+      return reserve;
+    } else {
+      reserve = conf.getLong(
+          DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY,
+          DFSConfigKeys.DFS_DATANODE_DU_RESERVED_DEFAULT);
+    }
+
+    return reserve;
+  }
+  @VisibleForTesting
+  public long getFsCapacity() {
+    return usage.getCapacity();
   }
 }
 
