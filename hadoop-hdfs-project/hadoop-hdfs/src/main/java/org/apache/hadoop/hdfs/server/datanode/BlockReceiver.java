@@ -60,6 +60,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.htrace.Trace;
 
 /** A class that receives a block and writes to its own disk, meanwhile
  * may copies it to another site. If a throttler is provided,
@@ -525,6 +526,18 @@ class BlockReceiver implements Closeable {
       } catch (IOException e) {
         handleMirrorOutError(e);
       }
+      if (Trace.isTracing()) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("BlockReceiver.receivePacketr: write to mirror done!");
+        builder.append(" block=").append(block.getLocalBlock());
+        builder.append(" in=").append(inAddr);
+        builder.append(" my=").append(myAddr);
+        builder.append(" mirrorAddr=").append(mirrorAddr);
+        builder.append(" offset=").append(header.getOffsetInBlock());
+        builder.append(" seqno=").append(header.getSeqno());
+        builder.append(" len=").append(header.getDataLen());
+        Trace.addTimelineAnnotation(builder.toString());
+      }
     }
     
     ByteBuffer dataBuf = packetReceiver.getDataSlice();
@@ -537,6 +550,17 @@ class BlockReceiver implements Closeable {
       // sync block if requested
       if (syncBlock) {
         flushOrSync(true);
+        if (Trace.isTracing()) {
+          StringBuilder builder = new StringBuilder();
+          builder.append("BlockReceiver.receivePacketr: sync block done!");
+          builder.append(" block=").append(block.getLocalBlock());
+          builder.append(" in=").append(inAddr);
+          builder.append(" my=").append(myAddr);
+          builder.append(" offset=").append(header.getOffsetInBlock());
+          builder.append(" seqno=").append(header.getSeqno());
+          builder.append(" len=").append(header.getDataLen());
+          Trace.addTimelineAnnotation(builder.toString());
+        }
       }
     } else {
       final int checksumLen = diskChecksum.getChecksumSize(len);
@@ -625,6 +649,17 @@ class BlockReceiver implements Closeable {
           if (duration > datanodeSlowLogThresholdMs) {
             LOG.warn("Slow BlockReceiver write data to disk cost:" + duration
                 + "ms (threshold=" + datanodeSlowLogThresholdMs + "ms)");
+          }
+          if (Trace.isTracing()) {
+            StringBuilder builder = new StringBuilder();
+            builder.append("BlockReceiver.receivePacketr: write to disk done!");
+            builder.append(" block=").append(block.getLocalBlock());
+            builder.append(" in=").append(inAddr);
+            builder.append(" my=").append(myAddr);
+            builder.append(" offset=").append(header.getOffsetInBlock());
+            builder.append(" seqno=").append(header.getSeqno());
+            builder.append(" len=").append(header.getDataLen());
+            Trace.addTimelineAnnotation(builder.toString());
           }
 
           final byte[] lastCrc;

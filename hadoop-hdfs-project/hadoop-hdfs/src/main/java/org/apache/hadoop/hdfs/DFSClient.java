@@ -563,6 +563,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
               DFS_CLIENT_HTTP2_MAX_BUFFERED_DATA_SIZE_DEFAULT);
       enableSharedDeadNodes = conf.getBoolean(DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_KEY,
           DFSConfigKeys.DFS_CLIENT_DEAD_NODE_DETECT_ENABLE_DEFAULT);
+      TracerMgr.initClient(conf);
       if (enableSharedDeadNodes) {
         this.conf = conf;
       }

@@ -87,6 +87,7 @@ import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
+import org.htrace.Trace;
 
 
 /**
@@ -349,6 +350,13 @@ class DataXceiver extends Receiver implements Runnable {
             " blockid: %s, srvID: %s, success: %b",
             blk.getBlockId(), dnR.getDatanodeUuid(), success));
       }
+      if (Trace.isTracing()) {
+        DatanodeRegistration dnR = datanode.getDNRegistrationForBP(blk
+          .getBlockPoolId());
+        Trace.addTimelineAnnotation(String.format("DataXceiver.requestShortCircuitFds: ",
+            " blockid=%s, srvID=%s, success=%b",
+             blk.getBlockId(), dnR.getDatanodeUuid(), success));
+      }
       if (fis != null) {
         IOUtils.cleanup(LOG, fis);
       }
@@ -387,6 +395,12 @@ class DataXceiver extends Receiver implements Runnable {
             " shmId: %016x%016x, slotIdx: %d, srvID: %s, success: %b",
             slotId.getShmId().getHi(), slotId.getShmId().getLo(),
             slotId.getSlotIdx(), datanode.getDatanodeUuid(), success));
+      }
+      if (Trace.isTracing()) {
+        Trace.addTimelineAnnotation(String.format("DataXceiver.releaseShortCircuitFds:" +
+            " shmId=%016x%016x, slotIdx=%d, srvID=%s, success=%b",
+          slotId.getShmId().getHi(), slotId.getShmId().getLo(),
+          slotId.getSlotIdx(), datanode.getDatanodeUuid(), success));
       }
     }
   }
@@ -444,11 +458,18 @@ class DataXceiver extends Receiver implements Runnable {
       if (ClientTraceLog.isInfoEnabled()) {
         if (success) {
           BlockSender.ClientTraceLog.info(String.format(
-              "cliID: %s, src: 127.0.0.1, dest: 127.0.0.1, " +
+            "cliID: %s, src: 127.0.0.1, dest: 127.0.0.1, " +
               "op: REQUEST_SHORT_CIRCUIT_SHM," +
               " shmId: %016x%016x, srvID: %s, success: true",
+            clientName, shmInfo.shmId.getHi(), shmInfo.shmId.getLo(),
+            datanode.getDatanodeUuid()));
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation(String.format(
+              "DataXceiver.requestShortCircuitShm: " +
+              "cliID=%s shmId=%016x%016x, srvID=%s, success=true",
               clientName, shmInfo.shmId.getHi(), shmInfo.shmId.getLo(),
               datanode.getDatanodeUuid()));
+          }
         } else {
           BlockSender.ClientTraceLog.info(String.format(
               "cliID: %s, src: 127.0.0.1, dest: 127.0.0.1, " +
@@ -515,7 +536,11 @@ class DataXceiver extends Receiver implements Runnable {
         blockSender = new BlockSender(block, blockOffset, length,
             true, false, sendChecksum, datanode, clientTraceFmt,
             cachingStrategy);
-      } catch(IOException e) {
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("DataXceiver.readBlock: created BlockSender done, offset=" +
+            blockOffset + " length=" + length + " blockid=" + block.getLocalBlock().getBlockId());
+          }
+        } catch(IOException e) {
         String msg = "opReadBlock " + block + " received exception " + e; 
         LOG.info(msg);
         sendResponse(ERROR, msg);
@@ -566,7 +591,14 @@ class DataXceiver extends Receiver implements Runnable {
     } finally {
       IOUtils.closeStream(blockSender);
     }
-
+    if (Trace.isTracing()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("DataXceiver.readBlock: done.");
+      builder.append(" clientName=").append(clientName);
+      builder.append(" local=").append(localAddress);
+      builder.append(" remote=").append(remoteAddress);
+      Trace.addTimelineAnnotation(builder.toString());
+    }
     //update metrics
     datanode.metrics.addReadBlockOp(elapsed());
     datanode.metrics.incrReadsFromClient(peer.isLocal());
@@ -712,7 +744,14 @@ class DataXceiver extends Receiver implements Runnable {
                        firstBadLink);
             }
           }
-
+          if (Trace.isTracing()) {
+            StringBuilder builder = new StringBuilder();
+            builder.append("DataXceiver.writeBlock: write mirror done.");
+            builder.append(" block=").append(block.getLocalBlock());
+            builder.append(" remote=").append(remoteAddress);
+            builder.append(" local=").append(localAddress);
+            Trace.addTimelineAnnotation(builder.toString());
+          }
         } catch (IOException e) {
           if (isClient) {
             BlockOpResponseProto.newBuilder()
@@ -801,7 +840,13 @@ class DataXceiver extends Receiver implements Runnable {
       IOUtils.closeStream(blockReceiver);
       blockReceiver = null;
     }
-
+    if (Trace.isTracing()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("DataXceiver.writeBlock: done.");
+      builder.append(" block=").append(block.getLocalBlock());
+      builder.append(" local=").append(localAddress);
+      Trace.addTimelineAnnotation(builder.toString());
+    }
     //update metrics
     datanode.metrics.addWriteBlockOp(elapsed());
     datanode.metrics.incrWritesFromClient(peer.isLocal());

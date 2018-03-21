@@ -36,6 +36,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.ReconfigurationTaskStatus;
 import org.apache.hadoop.conf.ReconfigurationUtil.PropertyChange;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.hdfs.TracerMgr;
 import org.apache.hadoop.hdfs.protocol.BlockLocalPathInfo;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
@@ -73,6 +74,7 @@ import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
+import org.htrace.Trace;
 
 /**
  * This class is the client side translator to translate the requests made on
@@ -179,10 +181,17 @@ public class ClientDatanodeProtocolTranslatorPB implements
   public long getReplicaVisibleLength(ExtendedBlock b) throws IOException {
     GetReplicaVisibleLengthRequestProto req = GetReplicaVisibleLengthRequestProto
         .newBuilder().setBlock(PBHelper.convert(b)).build();
+    long visibleLength = 0;
     try {
-      return rpcProxy.getReplicaVisibleLength(NULL_CONTROLLER, req).getLength();
+      visibleLength = rpcProxy.getReplicaVisibleLength(NULL_CONTROLLER, req).getLength();
+      return visibleLength;
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerMgr.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: getReplicaVisibleLength done. block="
+          + b.getLocalBlock() + " visibleLength=" + visibleLength);
+      }
     }
   }
 
@@ -192,6 +201,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       rpcProxy.refreshNamenodes(NULL_CONTROLLER, VOID_REFRESH_NAMENODES);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerMgr.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: refreshNamenodes done.");
+      }
     }
   }
 
@@ -203,6 +216,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       rpcProxy.deleteBlockPool(NULL_CONTROLLER, req);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerMgr.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: deleteBlockPool done. bpid=" + bpid);
+      }
     }
   }
 
@@ -218,6 +235,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       resp = rpcProxy.getBlockLocalPathInfo(NULL_CONTROLLER, req);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    }
+    if (TracerMgr.isClientTracing()) {
+      Trace.addTimelineAnnotation("HDFS: getBlockLocalPathInfo done. block=" +
+        block.getLocalBlock());
     }
     return new BlockLocalPathInfo(PBHelper.convert(resp.getBlock()),
         resp.getLocalPath(), resp.getLocalMetaPath());
@@ -266,6 +287,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
     }
     // Array of indexes into the list of volumes, one per block
     List<Integer> volumeIndexes = response.getVolumeIndexesList();
+    if (TracerMgr.isClientTracing()) {
+      Trace.addTimelineAnnotation("HDFS: getHdfsBlocksMetadata done. blockIds=" +
+        blockIds);
+    }
     // Parsed HdfsVolumeId values, one per block
     return new HdfsBlocksMetadata(blockPoolId, blockIds,
         volumeIds, volumeIndexes);
@@ -279,6 +304,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       rpcProxy.shutdownDatanode(NULL_CONTROLLER, request);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
+    } finally {
+      if (TracerMgr.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: shutdownDatanode done.");
+      }
     }
   }
 

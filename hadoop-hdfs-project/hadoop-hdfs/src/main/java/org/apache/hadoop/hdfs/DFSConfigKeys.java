@@ -1069,7 +1069,6 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
   public static final String  DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_KEY = "dfs.namenode.trashPathConfRefreshInterval";
   public static final long DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_DEFAULT = 600000; //ms
 
-
   public static final boolean DFS_NAMENODE_BACKUP_FSIMAGE_ENABLE_DEFAULT = false;
   public static final String DFS_NAMENODE_BACKUP_FSIMAGE_ENABLE_KEY = "dfs.namenode.fsimage.backup.enable";
   public static final String DFS_NAMENODE_BACKUP_FSIMAGE_CLUSTER_KEY = "dfs.namenode.fsimage.backup.cluster";
@@ -1088,4 +1087,9 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
 
   public static final String DFS_NAMENODE_BACKUP_FSIMAGE_UPLOAD_BUFFER_SIZE_KEY = "dfs.namenode.fsimage.backup.bufferSize";
   public static final int DFS_NAMENODE_BACKUP_FSIMAGE_UPLOAD_BUFFER_SIZE_DEFAULT = 8192;
+
+  public static final int TRACE_WARN_TIME_DEFAULT = 200; // Millis
+  public static final String TRACE_WARN_TIME_KEY = "trace.span.warm.time";
+  public static final String DFS_CLIENT_ENABLE_TRACE_LOG= "dfs.client.enable.trace.log";
+  public static final boolean DFS_CLIENT_ENABLE_TRACE_LOG_DEFAULT = true;
 }

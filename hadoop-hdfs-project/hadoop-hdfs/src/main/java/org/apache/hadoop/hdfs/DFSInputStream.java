@@ -79,6 +79,7 @@ import org.apache.hadoop.util.IdentityHashStore;
 import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.htrace.Trace;
 
 /****************************************************************
  * DFSInputStream provides bytes from a named file.  It handles 
@@ -657,7 +658,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       chosenNode = retval.info;
       InetSocketAddress targetAddr = retval.addr;
       StorageType storageType = retval.storageType;
-
+      if (TracerMgr.isClientTracing()) {
+        Trace.addTimelineAnnotation("HDFS: chosen datanode " + chosenNode);
+      }
       try {
         ExtendedBlock blk = targetBlock.getBlock();
         Token<BlockTokenIdentifier> accessToken = targetBlock.getBlockToken();
@@ -679,6 +682,12 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             setUserGroupInformation(dfsClient.ugi).
             setConfiguration(dfsClient.getConfiguration()).
             build();
+        if (TracerMgr.isClientTracing()) {
+          StringBuilder builder = new StringBuilder();
+          builder.append("HDFS: created reader in blockSeekTo().");
+          builder.append(" block=").append(blk.getLocalBlock());
+          Trace.addTimelineAnnotation(builder.toString());
+        }
         if(connectFailedOnce) {
           DFSClient.LOG.info("Successfully connected to " + targetAddr +
                              " for " + blk);
@@ -850,6 +859,14 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         if (cost > dfsclientSlowLogThresholdMs) {
           DFSClient.LOG.info("Slow readBuffer. Cost: " + cost + " ms from "
               + currentNode);
+        }
+        if (TracerMgr.isClientTracing()) {
+          StringBuilder builder = new StringBuilder();
+          builder.append("HDFS: read done.");
+          builder.append(" offset=").append(off);
+          builder.append(" len=").append(len);
+          builder.append(" nread=").append(nread);
+          Trace.addTimelineAnnotation(builder.toString());
         }
         return nread;
       } catch ( ChecksumException ce ) {
@@ -1183,10 +1200,23 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             setUserGroupInformation(dfsClient.ugi).
             setConfiguration(dfsClient.getConfiguration()).
             build();
+        if (TracerMgr.isClientTracing()) {
+          StringBuilder builder = new StringBuilder();
+          builder.append("HDFS: created reader in actualGetFromOneDataNode().");
+          builder.append(" chosenNode=").append(chosenNode);
+          builder.append(" block=").append(block.getBlock().getLocalBlock());
+          Trace.addTimelineAnnotation(builder.toString());
+        }
         long startTS = Time.monotonicNow();
         int nread = reader.readAll(buf, offset, len);
         updateReadStatistics(readStatistics, nread, reader);
-
+        if (TracerMgr.isClientTracing()) {
+          StringBuilder builder = new StringBuilder();
+          builder.append("HDFS: read done.");
+          builder.append(" len=").append(len);
+          builder.append(" nread=").append(nread);
+          Trace.addTimelineAnnotation(builder.toString());
+        }
         if (nread != len) {
           throw new IOException("truncated return from reader.read(): " +
                                 "excpected " + len + ", got " + nread);
