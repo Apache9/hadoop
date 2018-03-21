@@ -55,6 +55,7 @@ import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.util.Time;
+import org.htrace.Trace;
 
 /**
  * This is a wrapper around connection to datanode
@@ -215,6 +216,15 @@ public class RemoteBlockReader2  implements BlockReader {
     if (!curHeader.sanityCheck(lastSeqNo)) {
          throw new IOException("BlockReader: error in packet header " +
                                curHeader);
+    }
+
+    if (TracerMgr.isClientTracing()) {
+      StringBuilder builder = new StringBuilder();
+      builder.append("HDFS: received a packet.");
+      builder.append(" offset=").append(curHeader.getOffsetInBlock());
+      builder.append(" len=").append(curHeader.getDataLen());
+      builder.append(" seqno=").append(curHeader.getSeqno());
+      Trace.addTimelineAnnotation(builder.toString());
     }
     
     if (curHeader.getDataLen() > 0) {

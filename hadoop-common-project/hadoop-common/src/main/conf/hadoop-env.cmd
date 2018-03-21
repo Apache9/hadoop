@@ -52,9 +52,12 @@ if not defined HADOOP_SECURITY_LOGGER (
 if not defined HDFS_AUDIT_LOGGER (
   set HDFS_AUDIT_LOGGER=INFO,NullAppender
 )
+if not defined HDFS_TRACER_LOGGER (
+  set HDFS_TRACER_LOGGER=INFO,RFATRACER
+)
 
 set HADOOP_NAMENODE_OPTS=-Dhadoop.security.logger=%HADOOP_SECURITY_LOGGER% -Dhdfs.audit.logger=%HDFS_AUDIT_LOGGER% %HADOOP_NAMENODE_OPTS%
-set HADOOP_DATANODE_OPTS=-Dhadoop.security.logger=ERROR,RFAS %HADOOP_DATANODE_OPTS%
+set HADOOP_DATANODE_OPTS=-Dhadoop.security.logger=ERROR,RFAS -Dhdfs.tracer.logger=INFO,RFATRACER %HADOOP_DATANODE_OPTS%
 set HADOOP_SECONDARYNAMENODE_OPTS=-Dhadoop.security.logger=%HADOOP_SECURITY_LOGGER% -Dhdfs.audit.logger=%HDFS_AUDIT_LOGGER% %HADOOP_SECONDARYNAMENODE_OPTS%
 
 @rem The following applies to multiple commands (fs, dfs, fsck, distcp etc)

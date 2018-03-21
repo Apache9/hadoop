@@ -48,6 +48,7 @@ import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.htrace.Trace;
 
 /**
  * Reads a block from the disk and sends it to a recipient.
@@ -579,6 +580,15 @@ class BlockSender implements java.io.Closeable {
               + (end - endOfWriteHeader) + "ns");
         }
         blockInPosition += dataLen;
+        if (Trace.isTracing()) {
+          StringBuilder builder = new StringBuilder();
+          builder.append("BlockSender.sendPacket: transfer done!");
+          builder.append("block=").append(block.getLocalBlock());
+          builder.append(" offset=").append(offset);
+          builder.append(" len=").append(dataLen);
+          builder.append(" seqno=").append(seqno);
+          Trace.addTimelineAnnotation(builder.toString());
+        }
       } else {
         // normal transfer
         long begin = System.nanoTime();
@@ -586,6 +596,15 @@ class BlockSender implements java.io.Closeable {
         long end = System.nanoTime();
         if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
           LOG.info("BlockSender normal transfer2 cost:" + (end - begin) + "ns");
+        }
+        if (Trace.isTracing()) {
+          StringBuilder builder = new StringBuilder();
+          builder.append("BlockSender.sendPacket: write done!");
+          builder.append("block=").append(block.getLocalBlock());
+          builder.append(" offset=").append(offset);
+          builder.append(" len=").append(dataLen);
+          builder.append(" seqno=").append(seqno);
+          Trace.addTimelineAnnotation(builder.toString());
         }
       }
     } catch (IOException e) {
