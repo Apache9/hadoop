@@ -412,6 +412,7 @@ public abstract class FSQueue implements Queue, Schedulable {
           + getName() + " for resource " + resourceToPreemptBetweenChildren);
     }
 
+    long start = System.currentTimeMillis();
     Iterator<RMContainer> warnedIter = warnedContainers.iterator();
     Resource toPreempt = Resources.clone(resourceToPreemptBetweenChildren);
     while (warnedIter.hasNext()) {
@@ -432,14 +433,18 @@ public abstract class FSQueue implements Queue, Schedulable {
       }
     }
 
+    int maxContainerToPreempt = scheduler.getConf().getMaxContainersPerPreemption();
+    int preemptedContainers = 0;
+    Resource totalToPreempt = Resources.clone(toPreempt);
     // preempt from children for remaining preemption request
     while (Resources.greaterThan(scheduler.getResourceCalculator(),
         scheduler.getClusterResource(),
-        toPreempt, Resources.none())) {
+        toPreempt, Resources.none()) && preemptedContainers < maxContainerToPreempt) {
       RMContainer container = preemptContainer();
       if (container == null) {
         break;
       } else {
+        preemptedContainers++;
         scheduler.warnOrKillContainer(container);
         warnedContainers.add(container); // mark container on this queue
         Resources.subtractFrom(
@@ -447,6 +452,14 @@ public abstract class FSQueue implements Queue, Schedulable {
         LOG.info("Succeeded preempt resource under queue " + getName()
             + " from container: " + container);
       }
+    }
+
+    long cost = (System.currentTimeMillis() - start) / 1000;
+    if (cost > 5) {
+      LOG.warn("Preempt resource: " + totalToPreempt + " between " + getQueueName()
+              + "'s children tasks costs too long: " + cost + " s"
+              + ", preempted containers: " + preemptedContainers
+              + "with max containers to preempt: " + maxContainerToPreempt);
     }
   }
 

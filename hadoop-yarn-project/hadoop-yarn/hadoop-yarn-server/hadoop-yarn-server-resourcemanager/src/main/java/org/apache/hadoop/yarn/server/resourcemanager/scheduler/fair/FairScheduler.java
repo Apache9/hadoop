@@ -166,7 +166,7 @@ public class FairScheduler extends
   protected float preemptionUtilizationThreshold;
 
   // How often tasks are preempted
-  protected long preemptionInterval; 
+  protected long preemptionInterval;
   
   // ms to wait before force killing stuff (must be longer than a couple
   // of heartbeats to give task-kill commands a chance to act).
@@ -391,8 +391,6 @@ public class FairScheduler extends
     if (curTime - lastPreemptCheckTime < preemptionInterval) {
       return;
     }
-    lastPreemptCheckTime = curTime;
-
     // clear parent's resToPreempt
     queueMgr.getRootQueue().clearPreemptedResources();
 
@@ -407,7 +405,11 @@ public class FairScheduler extends
         Resources.none())) {
       preemptResource();
     }
-
+    lastPreemptCheckTime = getClock().getTime();
+    long cost = (getClock().getTime() - curTime) / 1000;
+    if (cost > 10) {
+      LOG.warn("Preempt tasks costs too long: " + cost + " s");
+    }
   }
 
   private void preemptResource() {

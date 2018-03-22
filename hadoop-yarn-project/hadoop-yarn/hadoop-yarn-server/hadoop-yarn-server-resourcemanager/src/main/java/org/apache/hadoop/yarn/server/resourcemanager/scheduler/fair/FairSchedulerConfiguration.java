@@ -51,7 +51,7 @@ public class FairSchedulerConfiguration extends Configuration {
   public static final String RM_SCHEDULER_INCREMENT_ALLOCATION_VCORES =
     YarnConfiguration.YARN_PREFIX + "scheduler.increment-allocation-vcores";
   public static final int DEFAULT_RM_SCHEDULER_INCREMENT_ALLOCATION_VCORES = 1;
-  
+
   private static final String CONF_PREFIX =  "yarn.scheduler.fair.";
 
   public static final String ALLOCATION_FILE = CONF_PREFIX + "allocation.file";
@@ -147,6 +147,10 @@ public class FairSchedulerConfiguration extends Configuration {
   public static final String UPDATE_RESOURCE_USAGE_INTERVAL_MS =
       CONF_PREFIX + "resourceusage.update-interval-ms";
   public static final int DEFAULT_UPDATE_RESOURCE_USAGE_INTERVAL_MS = 100;
+
+  public static final String MAX_CONTAINERS_PER_PREEMPTION =
+          CONF_PREFIX + "preemption.containers.max";
+  public static final int DEFAULT_CONTAINERS_PER_PREEMPTION = Integer.MAX_VALUE;
 
   public FairSchedulerConfiguration() {
     super();
@@ -283,6 +287,10 @@ public class FairSchedulerConfiguration extends Configuration {
 
   public long getUpdateResourceUsageInterval() {
     return getLong(UPDATE_RESOURCE_USAGE_INTERVAL_MS, DEFAULT_UPDATE_RESOURCE_USAGE_INTERVAL_MS);
+  }
+
+  public int getMaxContainersPerPreemption() {
+      return getInt(MAX_CONTAINERS_PER_PREEMPTION, DEFAULT_CONTAINERS_PER_PREEMPTION);
   }
 
   public ResourceCalculator getResourceCalculator() {

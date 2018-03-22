@@ -875,13 +875,15 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
       LOG.debug("App " + getName() + " is going to preempt a running " +
           "container");
     }
-
+    long start = System.currentTimeMillis();
     RMContainer toBePreempted = null;
-    for (RMContainer container : getLiveContainers()) {
+    Collection<RMContainer> liveContainers = getLiveContainers();
+    Set<RMContainer> preemptionContainers = getPreemptionContainers();
+    for (RMContainer container : liveContainers) {
       if (container.isAMContainer() && !enableAMPreemption) {
         continue;
       }
-      if (!getPreemptionContainers().contains(container) &&
+      if (!preemptionContainers.contains(container) &&
           (toBePreempted == null ||
               comparator.compare(toBePreempted, container) > 0)) {
         toBePreempted = container;
@@ -890,6 +892,12 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     if (toBePreempted != null) {
       LOG.info("App " + getName() + " is going to preempt a running " +
           "container: " + toBePreempted.getContainerId());
+    }
+    long cost = System.currentTimeMillis() - start;
+    if (cost > 100) {
+      LOG.warn("Preempt container costs too long: " + cost + " ms in app: " + getApplicationId()
+              + ", preemption container size: " + getPreemptionContainers().size()
+              + ", live container size: " + liveContainers.size());
     }
     return toBePreempted;
   }
