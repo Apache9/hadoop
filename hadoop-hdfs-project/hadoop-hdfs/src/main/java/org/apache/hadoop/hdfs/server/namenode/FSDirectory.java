@@ -3495,6 +3495,7 @@ public class FSDirectory implements Closeable {
           snapshot, isRawPath, srcIIP);
     } catch (Exception e) {
       res = null;
+      Log.warn("Fail to buildDirectorySubTree ", e);
     } finally {
       readUnlock();
     }

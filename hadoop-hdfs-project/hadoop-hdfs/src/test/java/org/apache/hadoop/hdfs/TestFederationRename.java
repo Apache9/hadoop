@@ -27,6 +27,7 @@ import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
 import org.apache.hadoop.hdfs.server.namenode.FederationRenameException;
 import org.apache.hadoop.ipc.RemoteException;
@@ -367,6 +368,40 @@ public class TestFederationRename {
     Assert.assertTrue(fHdfs1.exists(new Path("/ges/testfile1")));
     Assert.assertTrue(fHdfs1.exists(new Path("/ges/testfile2")));
     Assert.assertFalse(fHdfs2.exists(new Path("/ged/sp")));
+  }
+
+  @Test
+  public void testCorruptBlks() throws IOException {
+    String str = "testCorruptBlks";
+    fHdfs1.mkdirs(new Path("/cblk"), null);
+    OutputStream out = fHdfs1.create(new Path("/cblk/testfile1"));
+    out.write(str.getBytes());
+    out.close();
+
+    CONF.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    try {
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+      DistributedFileSystem dfs1 =
+          (DistributedFileSystem) fHdfs1.getDistributedFileSystem();
+
+      dfs1.dfs.reportBadBlocks(dfs1.dfs.getLocatedBlocks("/cblk/testfile1", 0)
+          .getLocatedBlocks().toArray(new LocatedBlock[0]));
+      boolean exp = false;
+      try {
+        boolean rename =
+            dfs.rename(new Path("/home/cblk"), new Path("/user/cblkd"));
+      } catch (Exception e) {
+        Assert.assertTrue(e.getMessage().contains(
+            "There are corrupt blocks in source directory"));
+        exp = true;
+      }
+      Assert.assertTrue(exp);
+      Assert.assertTrue(fHdfs1.exists(new Path("/cblk")));
+      Assert.assertFalse(fHdfs2.exists(new Path("/cblkd")));
+      Assert.assertTrue(fHdfs1.delete(new Path("/cblk/testfile1")));
+    } finally {
+      CONF.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
+    }
   }
 
   private void aclTestEnvSetup() throws IOException {

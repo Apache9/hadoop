@@ -3,14 +3,11 @@ package org.apache.hadoop.hdfs;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,6 +27,7 @@ import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocolPB.FederationClientDatanodeProtocolTranslatorPB;
+import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Daemon;
@@ -95,17 +93,18 @@ public class FederationRenameBlockCollector {
         FederationClientDatanodeProtocol fcdp =
             FederationClientDatanodeProtocolTranslatorPB
                 .createFederationClientDatanodeProtocolProxy(dnAddr, ugi, conf);
-        return fcdp.addBlocksToNewPool(srcPool, item.getValue());
+        Block[] res = fcdp.addBlocksToNewPool(srcPool, item.getValue());
+        RPC.stopProxy(fcdp);
+        return res;
       }
     };
   }
 
   private Executor initExecutor(int threads, int queueSize) {
-    return
-        new ThreadPoolExecutor(1, threads, 1, TimeUnit.MILLISECONDS,
-            new LinkedBlockingDeque<Runnable>(queueSize), new Daemon.DaemonFactory() {
+    return new ThreadPoolExecutor(threads, threads, 1, TimeUnit.MILLISECONDS,
+        new LinkedBlockingDeque<Runnable>(queueSize),
+        new Daemon.DaemonFactory() {
               private final AtomicInteger threadIndex = new AtomicInteger(0);
-
               @Override
               public Thread newThread(Runnable r) {
                 Thread t = super.newThread(r);
@@ -114,6 +113,16 @@ public class FederationRenameBlockCollector {
                 return t;
               }
             });
+  }
+
+  private void shutDownExecutor(final Executor exc) {
+    Thread t = new Daemon(new Runnable() {
+      @Override
+      public void run() {
+        ((ThreadPoolExecutor) exc).shutdownNow();
+      }
+    });
+    t.start();
   }
 
   class BlkReplicaInfo {
@@ -160,61 +169,73 @@ public class FederationRenameBlockCollector {
       }
     }
     Executor linkExecutor = initExecutor(numThreads, executorQueueSize);
-    CompletionService<Block[]> linkService =
-        new ExecutorCompletionService<Block[]>(linkExecutor);
-    List<Future<Block[]>> futures = new LinkedList<Future<Block[]>>();
-    Exception lastExp = null;
-    // TBD: Assert unlinkedBlks contain a src blk only once
-    for (Map.Entry<DatanodeInfo, BlocksToDup> item : dnBlkMap.entrySet()) {
-      Callable<Block[]> oneDnTsk =
-          getLinkBlocksTskForOneDataNode(item, connectViaHostName, ugi);
-      Future<Block[]> tskFuture = linkService.submit(oneDnTsk);
-      futures.add(tskFuture);
-    }
-    long leftTimeout = linkTimeout;
-    while (!futures.isEmpty() && (leftTimeout > 0)) {
-      Future<Block[]> finishedTsk = null;
-      try {
-        long start = Time.monotonicNow();
-        finishedTsk = linkService.poll(leftTimeout, TimeUnit.MILLISECONDS);
-        if (finishedTsk == null) {
-          // Timed out
-          for (Future<Block[]> f : futures) {
-            if (!f.isDone()) {
-              f.cancel(true);
+    try {
+      CompletionService<Block[]> linkService =
+          new ExecutorCompletionService<Block[]>(linkExecutor);
+      List<Future<Block[]>> futures = new LinkedList<Future<Block[]>>();
+      Exception lastExp = null;
+      // TBD: Assert unlinkedBlks contain a src blk only once
+      for (Map.Entry<DatanodeInfo, BlocksToDup> item : dnBlkMap.entrySet()) {
+        Callable<Block[]> oneDnTsk =
+            getLinkBlocksTskForOneDataNode(item, connectViaHostName, ugi);
+        Future<Block[]> tskFuture = linkService.submit(oneDnTsk);
+        futures.add(tskFuture);
+      }
+      long leftTimeout = linkTimeout;
+      boolean allDone = false;
+      while (!futures.isEmpty() && (leftTimeout > 0)) {
+        Future<Block[]> finishedTsk = null;
+        try {
+          long start = Time.monotonicNow();
+          finishedTsk = linkService.poll(leftTimeout, TimeUnit.MILLISECONDS);
+          if (finishedTsk == null) {
+            // Timed out
+            for (Future<Block[]> f : futures) {
+              if (!f.isDone()) {
+                f.cancel(true);
+              }
+            }
+            break;
+          }
+          leftTimeout -= (Time.monotonicNow() - start);
+          Block[] blks = finishedTsk.get();
+          futures.remove(finishedTsk);
+          for (Block b : blks) {
+            if (notFinishedBlks.containsKey(b.getBlockId())) {
+              int linked = notFinishedBlks.get(b.getBlockId()).linked + 1;
+              int total = notFinishedBlks.get(b.getBlockId()).total;
+              if (linked == total || linked >= minLinks) {
+                notFinishedBlks.remove(b.getBlockId());
+              } else {
+                notFinishedBlks.get(b.getBlockId()).linked += 1;
+              }
+            }
+            if (notFinishedBlks.isEmpty()) {
+              allDone = true;
+              break;
             }
           }
-          break;
+          if (allDone) {
+            break;
+          }
+        } catch (Exception e) {
+          if (finishedTsk != null) {
+            futures.remove(finishedTsk);
+          }
+          lastExp = e;
         }
-        leftTimeout -= (Time.monotonicNow() - start);
-        Block[] blks = finishedTsk.get();
-        futures.remove(finishedTsk);
-        for (Block b : blks) {
-          notFinishedBlks.get(b.getBlockId()).linked += 1;
+      }
+
+      if (!allDone) {
+        if (lastExp != null) {
+          throw new IOException(lastExp);
+        } else {
+          throw new IOException(
+              "Cannot move all blocks for the rename operation in different namenodes");
         }
-      } catch (Exception e) {
-        if (finishedTsk != null) {
-          futures.remove(finishedTsk);
-        }
-        lastExp = e;
       }
-    }
-    boolean allDone = true;
-    for (Long blkId : notFinishedBlks.keySet()) {
-      int total = notFinishedBlks.get(blkId).total;
-      int linked = notFinishedBlks.get(blkId).linked;
-      if (linked < total && linked < minLinks) {
-        allDone = false;
-        break;
-      }
-    }
-    if (!allDone) {
-      if (lastExp != null) {
-        throw new IOException(lastExp);
-      } else {
-        throw new IOException(
-            "Cannot move all blocks for the rename operation in different namenodes");
-      }
+    } finally {
+      shutDownExecutor(linkExecutor);
     }
   }
 }
