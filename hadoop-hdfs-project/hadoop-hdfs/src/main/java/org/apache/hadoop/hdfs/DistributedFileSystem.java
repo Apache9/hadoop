@@ -2299,6 +2299,22 @@ public class DistributedFileSystem extends FileSystem {
     return dfs.renameDestPhase2(renameId, srcId);
   }
 
+  public boolean containCorruptBlk(DirectorySubTree subTree) {
+    for (int i = 0; i < subTree.getSize(); i++) {
+      HdfsFileStatus st = subTree.get(i).getFileStatus();
+      if (!st.isDir() && !st.isSymlink()) {
+        LocatedBlocks blks = ((HdfsLocatedFileStatus) st).getBlockLocations();
+        List<LocatedBlock> lblks = blks.getLocatedBlocks();
+        for (LocatedBlock lblk : lblks) {
+          if (lblk.isCorrupt()) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   @Override
   public boolean federationRename(FileSystem srcFs, Path srcArg,
       FileSystem dstFs,
@@ -2322,6 +2338,11 @@ public class DistributedFileSystem extends FileSystem {
         dsrcFs.renameSrcPhase1(src, dsrcFs.getUri().toString(), dst, ddstFs
             .getUri().toString());
     if (subTree != null && subTree.getSize() > 0) {
+      if (containCorruptBlk(subTree)) {
+        dsrcFs.renameSrcPhase2(subTree.getRenameId(), true);
+        throw new IOException(
+            "There are corrupt blocks in source directory, cannot rename to another namespace.");
+      }
       try {
         blksToDup =
             ddstFs.renameDestPhase1(src, dsrcFs.getUri().toString(), dst,
