@@ -53,6 +53,17 @@ import com.google.common.collect.Sets;
  */
 public abstract class GenericTestUtils {
 
+  /**
+   * system property for test data: {@value}
+   */
+  public static final String SYSPROP_TEST_DATA_DIR = "test.build.data";
+
+  /**
+   * Default path for test data: {@value}
+   */
+  public static final String DEFAULT_TEST_DATA_DIR =
+      "target" + File.separator + "test" + File.separator + "data";
+
   private static final AtomicInteger sequence = new AtomicInteger();
 
   /**
@@ -367,5 +378,29 @@ public abstract class GenericTestUtils {
             Joiner.on("\n").join(info.getStackTrace()));
       }
     }
+  }
+
+  /**
+   * Get the (created) base directory for tests.
+   * @return the absolute directory
+   */
+  public static File getTestDir() {
+    String prop = System.getProperty(SYSPROP_TEST_DATA_DIR, DEFAULT_TEST_DATA_DIR);
+    if (prop.isEmpty()) {
+      // corner case: property is there but empty
+      prop = DEFAULT_TEST_DATA_DIR;
+    }
+    File dir = new File(prop).getAbsoluteFile();
+    dir.mkdirs();
+    assertExists(dir);
+    return dir;
+  }
+
+  /**
+   * Get an uncreated directory for tests.
+   * @return the absolute directory for tests. Caller is expected to create it.
+   */
+  public static File getTestDir(String subdir) {
+    return new File(getTestDir(), subdir).getAbsoluteFile();
   }
 }
