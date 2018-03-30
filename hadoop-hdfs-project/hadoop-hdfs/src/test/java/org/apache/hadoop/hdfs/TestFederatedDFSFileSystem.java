@@ -612,6 +612,13 @@ public class TestFederatedDFSFileSystem {
     fsa.close();
     FileSystem fsb = FileSystem.get(conf);
     fsb.close();
+
+    // Because (ViewFileSystem)fsb.close() will close all child FileSystem,
+    // We need re-get.
+    fs1 = cluster.getFileSystem(0);
+    fs2 = cluster.getFileSystem(2);
+    fs3 = cluster.getFileSystem(4);
+
     Assert.assertNotSame(fsa, fsb);
   }
 
@@ -619,11 +626,17 @@ public class TestFederatedDFSFileSystem {
   public void testMultiFedConfigCase() throws Exception {
     // Set two federation cluster config in one configuration.
     // Test whether it could be used to access both two clusters.
+
+    Configuration configuration = new Configuration();
+    File baseDir = new File("./target/test/" + "testMultiFedConfigCase").getAbsoluteFile();
+    FileUtil.fullyDelete(baseDir);
+    configuration.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, baseDir.getAbsolutePath());
+
     String NAMESERVICE = "simple-cluster";
     MiniDFSNNTopology topology = new MiniDFSNNTopology()
         .addNameservice(new MiniDFSNNTopology.NSConf(NAMESERVICE)
             .addNN(new MiniDFSNNTopology.NNConf("host1")));
-    MiniDFSCluster dfsCluster = new MiniDFSCluster.Builder(new Configuration())
+    MiniDFSCluster dfsCluster = new MiniDFSCluster.Builder(configuration)
         .nnTopology(topology).numDataNodes(1).build();
     dfsCluster.waitActive();
     int port = dfsCluster.getNameNodePort(0);
