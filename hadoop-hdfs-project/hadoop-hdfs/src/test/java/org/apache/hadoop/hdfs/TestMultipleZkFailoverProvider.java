@@ -56,17 +56,9 @@ public class TestMultipleZkFailoverProvider {
     private int retryTimes;
     private int durationBetweenRetryZk;
     private String nameservice;
-    private int nnPort1;
-    private int nnPort2;
-    private int zkfcPort1;
-    private int zkfcPort2;
 
-    public ZkProviderTestContext(int nnP1, int nnP2, int zkfcP1, int zkfcP2) {
+    public ZkProviderTestContext() {
       conf = new Configuration();
-      nnPort1 = nnP1;
-      nnPort2 = nnP2;
-      zkfcPort1 = zkfcP1;
-      zkfcPort2 = zkfcP2;
       nameservice = "ha-nn-uri-" + MiniDFSCluster.nextInstanceId();
     }
 
@@ -99,15 +91,15 @@ public class TestMultipleZkFailoverProvider {
       }
 
       conf.setInt(DFSConfigKeys.DFS_HA_ZKFC_PORT_KEY + "." + nameservice
-          + ".nn1", zkfcPort1);
+          + ".nn1", 0);
       conf.setInt(DFSConfigKeys.DFS_HA_ZKFC_PORT_KEY + "." + nameservice
-          + ".nn2", zkfcPort2);
+          + ".nn2", 0);
 
       MiniDFSNNTopology topology =
           new MiniDFSNNTopology().addNameservice(new MiniDFSNNTopology.NSConf(
               nameservice).addNN(
-              new MiniDFSNNTopology.NNConf("nn1").setIpcPort(nnPort1)).addNN(
-              new MiniDFSNNTopology.NNConf("nn2").setIpcPort(nnPort2)));
+              new MiniDFSNNTopology.NNConf("nn1")).addNN(
+              new MiniDFSNNTopology.NNConf("nn2")));
       cluster =
           new MiniDFSCluster.Builder(conf).nnTopology(topology).numDataNodes(0)
               .build();
@@ -211,11 +203,11 @@ public class TestMultipleZkFailoverProvider {
   @Test
   public void testBasicMultipleZkProvider() throws Exception {
     ZkProviderTestContext ctx1 =
-        new ZkProviderTestContext(10011, 10012, 10023, 10024);
+        new ZkProviderTestContext();
     ctx1.setRetryTime(2, 0);
     ctx1.setup();
     ZkProviderTestContext ctx2 =
-        new ZkProviderTestContext(10013, 10014, 10025, 10026);
+        new ZkProviderTestContext();
     ctx2.setRetryTime(2, 0);
     ctx2.setup();
     FileSystem fs1 =
@@ -234,8 +226,10 @@ public class TestMultipleZkFailoverProvider {
     FileSystem fs2 = null;
     try {
       fs2 = FileSystem.get(t2.toUri(), fs1.getConf());
+      fs2.exists(t2);
       // Neither zk quorum nor namenodes in local configuration. FS can not be
       // created successfully.
+      // fix: FS can be created successfully, but can't be called.
       assertTrue(false);
     } catch (Exception e) {
     }
@@ -244,6 +238,8 @@ public class TestMultipleZkFailoverProvider {
         + ctx2.getNameService());
     fs1.getConf().set(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + ns2,
         ctx2.getHostPort());
+    fs1.getConf().setBoolean(DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR, true);
+    fs1.getConf().setBoolean("fs.hdfs.impl.disable.cache", true);
     fs2 = FileSystem.get(t2.toUri(), fs1.getConf());
     assertTrue(fs1.exists(t1));
     fs2.mkdirs(t2);
