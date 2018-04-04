@@ -473,6 +473,7 @@ public class TestDFSUpgradeFromImage {
     MiniDFSCluster cluster = null;
     // Try it once without setting the upgrade flag to ensure it fails
     final Configuration conf = new Configuration();
+    conf.set(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY, "0.0.0.0:0");
     try {
       cluster =
           new MiniDFSCluster.Builder(conf)
@@ -488,7 +489,9 @@ public class TestDFSUpgradeFromImage {
         cluster.shutdown();
       }
     }
+
     // Try it again with a custom rename string
+    conf.set(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY, "0.0.0.0:0");
     try {
       FSImageFormat.setRenameReservedPairs(
           ".snapshot=.user-snapshot," +
