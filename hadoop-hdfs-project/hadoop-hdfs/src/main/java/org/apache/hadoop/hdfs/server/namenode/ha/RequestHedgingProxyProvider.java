@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -80,6 +81,9 @@ public class RequestHedgingProxyProvider<T> extends
     public Object
     invoke(Object proxy, final Method method, final Object[] args)
             throws Throwable {
+      if (successfulProxy != null) {
+        return method.invoke(successfulProxy.proxy,args);
+      }
       if (targetProxies.isEmpty()) {
         if (tolerateNoNn) {
           // will trigger failover
