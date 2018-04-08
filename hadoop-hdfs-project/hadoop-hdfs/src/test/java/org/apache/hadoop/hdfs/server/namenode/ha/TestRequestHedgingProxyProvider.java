@@ -32,6 +32,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider.ProxyFactory;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
+import org.apache.hadoop.io.retry.FailoverProxyProvider;
 import org.apache.hadoop.io.retry.MultiException;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
@@ -49,6 +50,8 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import com.google.common.collect.Lists;
+
+import static junit.framework.TestCase.assertTrue;
 
 public class TestRequestHedgingProxyProvider {
 
@@ -75,6 +78,39 @@ public class TestRequestHedgingProxyProvider {
     conf.set(
         DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY + "." + ns + ".nn2",
         "machine2.foo.bar:8020");
+  }
+
+  @Test
+  public void testHedgingWhenOneSuccess() throws Exception {
+    final AtomicInteger count = new AtomicInteger(0);
+    // good Mock
+    final NamenodeProtocols goodMock = Mockito.mock(NamenodeProtocols.class);
+    Mockito.when(goodMock.getStats()).thenAnswer(new Answer<long[]>() {
+      @Override
+      public long[] answer(InvocationOnMock invocation) throws Throwable {
+        count.incrementAndGet();
+        Thread.sleep(1000);// sleep so bad mock could be called.
+        return new long[]{1};
+      }
+    });
+    // bad Mock
+    final NamenodeProtocols badMock = Mockito.mock(NamenodeProtocols.class);
+    Mockito.when(badMock.getStats()).thenAnswer(new Answer<long[]>() {
+      @Override
+      public long[] answer(InvocationOnMock invocation) throws Throwable {
+        count.incrementAndGet();
+        throw new IOException("Bad Mock! This is Standby!");
+      }
+    });
+
+    RequestHedgingProxyProvider<NamenodeProtocols> provider =
+        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+            createFactory(badMock,goodMock,goodMock,badMock));
+    NamenodeProtocols proxy = provider.getProxy().proxy;
+    long[] stats = proxy.getStats();
+    assertTrue(count.get()==2);
+    proxy.getStats();
+    assertTrue(count.get()==3);
   }
 
   @Test
