@@ -1796,6 +1796,12 @@ public class DataNode extends Configured
       } catch (IOException ie) {
         LOG.warn(bpReg + ":Failed to transfer " + b + " to " +
             targets[0] + " got ", ie);
+
+        if (ie instanceof DiskFileCorruptException) {
+          BPOfferService bpos = getBPOSForBlock(b);
+          reportBadBlock(bpos, b, "Can't replicate block " + b
+              + " because the possible disk error: " + ie.getMessage());
+        }
         // check if there are any disk problem
         try{
           checkDiskError(ie);
