@@ -567,13 +567,6 @@ public class NameNodeProxies {
           nameNodeUri);
       if (failoverProxyProviderClass == null) {
         return null;
-      } else if (!DFSUtil.getNameServiceIds(conf)
-          .contains(nameNodeUri.getAuthority())) {
-        LOG.warn(
-            "URI authority is illegal! It's HA case(FailoverProxyProvider is configured),"
-                + " but couldn't find " + nameNodeUri.getAuthority() + " in "
-                + DFSConfigKeys.DFS_NAMESERVICES);
-        return null;
       }
       // Create a proxy provider instance.
       Constructor<FailoverProxyProvider<T>> ctor = failoverProxyProviderClass

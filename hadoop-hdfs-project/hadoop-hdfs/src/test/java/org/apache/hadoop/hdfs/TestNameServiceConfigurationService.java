@@ -10,10 +10,11 @@ import org.apache.hadoop.fs.ConfigurationService;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.NameServiceConfigurationService;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.server.quorum.QuorumPeerConfig;
-import org.junit.After;
-import org.junit.Before;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.BufferedOutputStream;
@@ -27,16 +28,19 @@ import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 import java.util.concurrent.Executors;
 
+import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class TestNameServiceConfigurationService {
   private static final String NAMESERVICE = "c4tst-nonexisting";
-  private MiniDFSCluster dfsCluster;
-  private HttpServer httpServer;
+  private static String address1;
+  private static String address2;
+  private static MiniDFSCluster dfsCluster;
+  private static HttpServer httpServer;
 
   static class GetHandler implements HttpHandler {
     String content;
@@ -74,17 +78,31 @@ public class TestNameServiceConfigurationService {
     }
   }
 
-  @Before
-  public void setup() throws IOException, QuorumPeerConfig.ConfigException,
+  @BeforeClass
+  public static void setup()
+      throws IOException, QuorumPeerConfig.ConfigException,
       KeeperException, InterruptedException {
+
+    // start minidfscluster
+    MiniDFSNNTopology topology = new MiniDFSNNTopology().addNameservice(
+        new MiniDFSNNTopology.NSConf(NAMESERVICE)
+            .addNN(new MiniDFSNNTopology.NNConf("host0").setIpcPort(0))
+            .addNN(new MiniDFSNNTopology.NNConf("host1").setIpcPort(0)));
+    dfsCluster =
+        new MiniDFSCluster.Builder(new Configuration()).nnTopology(topology)
+            .numDataNodes(1).build();
+    dfsCluster.transitionToActive(0);
+    dfsCluster.waitActive();
+
+    address1 = dfsCluster.getNameNode(0).getHostAndPort();
+    address2 = dfsCluster.getNameNode(0).getHostAndPort();
+
     // config data in HttpServer
     Configuration conf = new Configuration(false);
     conf.set("dfs.nameservices", NAMESERVICE);
     conf.set("dfs.ha.namenodes." + NAMESERVICE, "host0,host1");
-    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host0",
-        "localhost:57200");
-    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host1",
-        "localhost:57000");
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host0", address1);
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host1", address2);
     conf.set("dfs.client.failover.proxy.provider." + NAMESERVICE,
         "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
 
@@ -95,25 +113,14 @@ public class TestNameServiceConfigurationService {
     out.close();
 
     String content = new String(Base64.encodeBase64(bytes));
-    httpServer = HttpServer.create(new InetSocketAddress(8080), 0);
+    httpServer = HttpServer.create(new InetSocketAddress(0), 0);
     httpServer.createContext("/", new GetHandler(content));
     httpServer.setExecutor(Executors.newCachedThreadPool());
     httpServer.start();
-
-    // start minidfscluster
-    MiniDFSNNTopology topology = new MiniDFSNNTopology()
-        .addNameservice(new MiniDFSNNTopology.NSConf(NAMESERVICE)
-            .addNN(new MiniDFSNNTopology.NNConf("host0").setIpcPort(57200))
-            .addNN(new MiniDFSNNTopology.NNConf("host1").setIpcPort(57000)));
-    dfsCluster = new MiniDFSCluster.Builder(new Configuration())
-        .nnTopology(topology).numDataNodes(1).build();
-    dfsCluster.waitActive();
-
-    dfsCluster.transitionToActive(0);
   }
 
-  @After
-  public void cleanup() {
+  @AfterClass
+  public static void cleanup() {
     dfsCluster.shutdown();
     httpServer.stop(0);
   }
@@ -123,10 +130,8 @@ public class TestNameServiceConfigurationService {
     Configuration conf = new Configuration(false);
     conf.set("dfs.nameservices", NAMESERVICE);
     conf.set("dfs.ha.namenodes." + NAMESERVICE, "host0,host1");
-    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host0",
-            "localhost:57200");
-    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host1",
-            "localhost:57000");
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host0", address1);
+    conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host1", address2);
     conf.set("dfs.client.failover.proxy.provider." + NAMESERVICE,
             "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
     conf.set("fs.hdfs.impl","org.apache.hadoop.hdfs.DistributedFileSystem");
@@ -153,17 +158,20 @@ public class TestNameServiceConfigurationService {
         "org.apache.hadoop.fs.NameServiceConfigurationService");
     defaultConf.setInt(
         NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
-        8080);
+        httpServer.getAddress().getPort());
     FileSystem tstFs =
         FileSystem.get(new URI("hdfs://" + NAMESERVICE + "/"), defaultConf);
     // test writing files to hdfs
-    assertFalse(tstFs.exists(new Path("hdfs://" + NAMESERVICE + "/abc")));
-    BufferedOutputStream bos = new BufferedOutputStream(
-        tstFs.create(new Path("hdfs://" + NAMESERVICE + "/abc"), true));
+    assertFalse(tstFs.exists(
+        new Path("hdfs://" + NAMESERVICE + "/testVisitingUnconfiguredHDFS")));
+    BufferedOutputStream bos = new BufferedOutputStream(tstFs.create(
+        new Path("hdfs://" + NAMESERVICE + "/testVisitingUnconfiguredHDFS"),
+        true));
     byte[] bytes = "hello world".getBytes();
     bos.write(bytes);
     bos.close();
-    assertTrue(tstFs.exists(new Path("hdfs://" + NAMESERVICE + "/abc")));
+    assertTrue(tstFs.exists(
+        new Path("hdfs://" + NAMESERVICE + "/testVisitingUnconfiguredHDFS")));
   }
 
   @Test
@@ -180,17 +188,21 @@ public class TestNameServiceConfigurationService {
         "org.apache.hadoop.fs.NameServiceConfigurationService");
     conf.setInt(
         NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
-        8080);
+        httpServer.getAddress().getPort());
+    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
     FileSystem tstFs =
         FileSystem.get(new URI("hdfs://" + NAMESERVICE + "/"), conf);
     // test writing files to hdfs
-    assertFalse(tstFs.exists(new Path("hdfs://" + NAMESERVICE + "/abc")));
-    BufferedOutputStream bos = new BufferedOutputStream(
-        tstFs.create(new Path("hdfs://" + NAMESERVICE + "/abc"), true));
+    assertFalse(tstFs.exists(
+        new Path("hdfs://" + NAMESERVICE + "/testAutoUpdateNNAddress")));
+    BufferedOutputStream bos = new BufferedOutputStream(tstFs
+        .create(new Path("hdfs://" + NAMESERVICE + "/testAutoUpdateNNAddress"),
+            true));
     byte[] bytes = "hello world".getBytes();
     bos.write(bytes);
     bos.close();
-    assertTrue(tstFs.exists(new Path("hdfs://" + NAMESERVICE + "/abc")));
+    assertTrue(tstFs.exists(
+        new Path("hdfs://" + NAMESERVICE + "/testAutoUpdateNNAddress")));
   }
 
   @Test
@@ -234,20 +246,24 @@ public class TestNameServiceConfigurationService {
             "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
     // exclude nameservice from dfs.nameservices
     conf.set("dfs.nameservices", "");
+    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+
     boolean gotException = false;
     try {
       FileSystem.get(new URI("hdfs://" + NAMESERVICE),conf);
-    } catch (IllegalArgumentException e) {
-      gotException = true;
+      fail("Successfully got proxy provider for misconfigured FS");
+    } catch (IOException e) {
+      assertExceptionContains(
+          "Could not find any configured addresses for URI " + new URI(
+              "hdfs://" + NAMESERVICE), e.getCause().getCause());
     }
-    assertTrue(gotException);
     // test get FileSystem with NameService
     conf.set("configuration.service.unit.test","unit.test");
     conf.set(ConfigurationService.CONFIGURATION_SERVICE,
             "org.apache.hadoop.fs.NameServiceConfigurationService");
     conf.setInt(
             NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
-            8080);
+        httpServer.getAddress().getPort());
     FileSystem fs = FileSystem.get(new URI("hdfs://" + NAMESERVICE),conf);
     assertTrue(testWriteWithFileSystem(fs));
   }
