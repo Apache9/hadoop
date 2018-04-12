@@ -161,8 +161,9 @@ class BlockSender implements java.io.Closeable {
    * See {{@link BlockSender#isLongRead()}
    */
   private static final long LONG_READ_THRESHOLD_BYTES = 256 * 1024;
-  private static int SLOW_LOG_THRESHOLD_MS = 500; 
+  private static int SLOW_LOG_THRESHOLD_MS = 500;
 
+  private static final String EIO_ERROR = "Input/output error";
   /**
    * Constructor
    * 
@@ -545,7 +546,17 @@ class BlockSender implements java.io.Closeable {
     int dataOff = checksumOff + checksumDataLen;
     if (!transferTo) { // normal transfer
       long begin = System.nanoTime();
-      IOUtils.readFully(blockIn, buf, dataOff, dataLen);
+      try {
+        IOUtils.readFully(blockIn, buf, dataOff, dataLen);
+      } catch (IOException ioe) {
+        if (ioe.getMessage().startsWith(EIO_ERROR)) {
+          DiskFileCorruptException de = new DiskFileCorruptException("Original Exception : " + ioe);
+          de.initCause(ioe);
+          de.setStackTrace(ioe.getStackTrace());
+          throw de;
+        }
+        throw ioe;
+      }
       long end = System.nanoTime();
       if (end - begin > SLOW_LOG_THRESHOLD_MS * 1000 * 1000L) {
         LOG.info("BlockSender normal transfer1 cost:" + (end - begin) + "ns");
@@ -611,6 +622,16 @@ class BlockSender implements java.io.Closeable {
          * It was done here because the NIO throws an IOException for EPIPE.
          */
         String ioem = e.getMessage();
+        /*
+         * If we got an EIO when reading files or transferTo the client socket,
+         * it's very likely caused by bad disk track or other file corruptions.
+         */
+        if (ioem.startsWith(EIO_ERROR)) {
+          DiskFileCorruptException de = new DiskFileCorruptException("Original Exception : " + e);
+          de.initCause(e);
+          de.setStackTrace(e.getStackTrace());
+          throw de;
+        }
         if (!ioem.startsWith("Broken pipe") && !ioem.startsWith("Connection reset")) {
           LOG.error("BlockSender.sendChunks() exception: ", e);
         }
