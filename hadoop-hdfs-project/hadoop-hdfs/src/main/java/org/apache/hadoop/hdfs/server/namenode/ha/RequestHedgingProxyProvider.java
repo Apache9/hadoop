@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode.ha;
 
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.URI;
@@ -26,14 +27,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.locks.ReentrantLock;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
@@ -81,8 +80,19 @@ public class RequestHedgingProxyProvider<T> extends
     public Object
     invoke(Object proxy, final Method method, final Object[] args)
             throws Throwable {
-      if (successfulProxy != null) {
-        return method.invoke(successfulProxy.proxy,args);
+      if (currentUsedProxy != null) {
+        try {
+          Object retVal = method.invoke(currentUsedProxy.proxy, args);
+          LOG.debug("Invocation successful on [{}]",
+              currentUsedProxy.proxyInfo);
+          return retVal;
+        } catch (InvocationTargetException ex) {
+          Exception unwrappedException = unwrapInvocationTargetException(ex);
+          logProxyException(unwrappedException, currentUsedProxy.proxyInfo);
+          LOG.trace("Unsuccessful invocation on [{}]",
+              currentUsedProxy.proxyInfo);
+          throw unwrappedException;
+        }
       }
       if (targetProxies.isEmpty()) {
         if (tolerateNoNn) {
@@ -121,14 +131,15 @@ public class RequestHedgingProxyProvider<T> extends
           Object retVal = null;
           try {
             retVal = callResultFuture.get();
-            successfulProxy = proxyMap.get(callResultFuture);
+            currentUsedProxy = proxyMap.get(callResultFuture);
             LOG.debug("Invocation successful on [{}]",
-                successfulProxy.proxyInfo);
+                currentUsedProxy.proxyInfo);
             return retVal;
-          } catch (Exception ex) {
+          } catch (ExecutionException ex) {
+            Exception unwrappedException = unwrapExecutionException(ex);
             ProxyInfo<T> tProxyInfo = proxyMap.get(callResultFuture);
-            logProxyException(ex, tProxyInfo.proxyInfo);
-            badResults.put(tProxyInfo.proxyInfo, unwrapException(ex));
+            logProxyException(unwrappedException, tProxyInfo.proxyInfo);
+            badResults.put(tProxyInfo.proxyInfo, unwrappedException);
             LOG.trace("Unsuccessful invocation on [{}]", tProxyInfo.proxyInfo);
             numAttempts--;
           }
@@ -151,7 +162,7 @@ public class RequestHedgingProxyProvider<T> extends
   }
 
 
-  private volatile ProxyInfo<T> successfulProxy = null;
+  private volatile ProxyInfo<T> currentUsedProxy = null;
 
   public RequestHedgingProxyProvider(
           Configuration conf, URI uri, Class<T> xface) {
@@ -167,8 +178,8 @@ public class RequestHedgingProxyProvider<T> extends
   @SuppressWarnings("unchecked")
   @Override
   public synchronized ProxyInfo<T> getProxy() {
-    if (successfulProxy != null) {
-      return successfulProxy;
+    if (currentUsedProxy != null) {
+      return currentUsedProxy;
     }
     Map<String, ProxyInfo<T>> targetProxyInfos = new HashMap<>();
     StringBuilder combinedInfo = new StringBuilder("[");
@@ -188,7 +199,7 @@ public class RequestHedgingProxyProvider<T> extends
 
   @Override
   public synchronized void performFailover(T currentProxy) {
-    successfulProxy = null;
+    currentUsedProxy = null;
   }
 
   /**
@@ -199,9 +210,9 @@ public class RequestHedgingProxyProvider<T> extends
    */
   private void logProxyException(Exception ex, String proxyInfo) {
     if (isStandbyException(ex)) {
-      LOG.debug("Invocation returned standby exception on [{}]", proxyInfo);
+      LOG.debug("Invocation returned standby exception on [{}]", proxyInfo, ex);
     } else {
-      LOG.warn("Invocation returned exception on [{}]", proxyInfo);
+      LOG.warn("Invocation returned exception on [{}]", proxyInfo, ex);
     }
   }
 
@@ -210,8 +221,7 @@ public class RequestHedgingProxyProvider<T> extends
    * @param ex Exception to check.
    * @return If the exception is caused by an standby namenode.
    */
-  private boolean isStandbyException(Exception ex) {
-    Exception exception = unwrapException(ex);
+  private boolean isStandbyException(Exception exception) {
     if (exception instanceof RemoteException) {
       return ((RemoteException) exception).unwrapRemoteException()
           instanceof StandbyException;
@@ -220,24 +230,43 @@ public class RequestHedgingProxyProvider<T> extends
   }
 
   /**
-   * Unwraps the exception. <p>
+   * Unwraps the ExecutionException. <p>
    * Example:
    * <blockquote><pre>
    * if ex is
-   * ExecutionException(InvocationTargetExeption(SomeException))
+   * ExecutionException(InvocationTargetException(SomeException))
    * returns SomeException
    * </pre></blockquote>
    *
    * @return unwrapped exception
    */
-  private Exception unwrapException(Exception ex) {
+  private Exception unwrapExecutionException(ExecutionException ex) {
+    if (ex != null) {
+      Throwable cause = ex.getCause();
+      if (cause instanceof InvocationTargetException) {
+        return
+            unwrapInvocationTargetException((InvocationTargetException)cause);
+      }
+    }
+    return ex;
+
+  }
+
+  /**
+   * Unwraps the InvocationTargetException. <p>
+   * Example:
+   * <blockquote><pre>
+   * if ex is InvocationTargetException(SomeException)
+   * returns SomeException
+   * </pre></blockquote>
+   *
+   * @return unwrapped exception
+   */
+  private Exception unwrapInvocationTargetException(
+      InvocationTargetException ex) {
     if (ex != null) {
       Throwable cause = ex.getCause();
       if (cause instanceof Exception) {
-        Throwable innerCause = cause.getCause();
-        if (innerCause instanceof Exception) {
-          return (Exception) innerCause;
-        }
         return (Exception) cause;
       }
     }

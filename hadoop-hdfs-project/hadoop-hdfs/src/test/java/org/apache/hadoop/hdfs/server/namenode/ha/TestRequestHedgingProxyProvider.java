@@ -51,6 +51,7 @@ import org.mockito.stubbing.Answer;
 
 import com.google.common.collect.Lists;
 
+import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
 
 public class TestRequestHedgingProxyProvider {
@@ -111,6 +112,45 @@ public class TestRequestHedgingProxyProvider {
     assertTrue(count.get()==2);
     proxy.getStats();
     assertTrue(count.get()==3);
+  }
+
+  @Test
+  public void testExceptionInfo() throws Exception {
+    final NamenodeProtocols goodMock = Mockito.mock(NamenodeProtocols.class);
+    Mockito.when(goodMock.getStats()).thenAnswer(new Answer<long[]>() {
+      boolean first = true;
+      @Override
+      public long[] answer(InvocationOnMock invocation)
+          throws Throwable {
+        if (first) {
+          Thread.sleep(1000);// sleep so bad mock could be called.
+          first = false;
+          return new long[] { 1 };
+        } else {
+          throw new IOException("Expected Exception Info");
+        }
+      }
+    });
+    final NamenodeProtocols badMock = Mockito.mock(NamenodeProtocols.class);
+    Mockito.when(badMock.getStats()).thenAnswer(new Answer<long[]>() {
+      @Override
+      public long[] answer(InvocationOnMock invocation)
+          throws Throwable {
+        throw new IOException("Bad Mock! This is Standby!");
+      }
+    });
+
+    RequestHedgingProxyProvider<NamenodeProtocols> provider =
+        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+            createFactory(badMock, goodMock));
+    NamenodeProtocols proxy = provider.getProxy().proxy;
+    proxy.getStats();
+    try {
+      proxy.getStats();
+    } catch (Exception e) {
+      assertTrue(e instanceof IOException);
+      assertEquals("Expected Exception Info", e.getMessage());
+    }
   }
 
   @Test
