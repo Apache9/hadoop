@@ -2063,6 +2063,11 @@ public class DataNode extends ReconfigurableBase
         LOG.warn(bpReg + ":Failed to transfer " + b + " to " +
             targets[0] + " got ", ie);
         // check if there are any disk problem
+        if (ie instanceof DiskFileCorruptException) {
+          BPOfferService bpos = getBPOSForBlock(b);
+          reportBadBlock(bpos, b, "Can't replicate block " + b
+              + " because the possible disk error: " + ie.getMessage());
+        }
         checkDiskErrorAsync();
       } finally {
         xmitsInProgress.getAndDecrement();

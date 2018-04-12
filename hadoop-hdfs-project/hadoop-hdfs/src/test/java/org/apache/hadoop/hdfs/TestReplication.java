@@ -22,6 +22,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
@@ -46,7 +47,11 @@ import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.DataStorage;
 import org.apache.hadoop.hdfs.server.datanode.SimulatedFSDataset;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.util.Time;
 import org.junit.Test;
 
@@ -151,6 +156,67 @@ public class TestReplication {
     assertTrue(!fileSys.exists(name));
   }
 
+  private static class CorruptFileSimulatedFSDataset
+      extends SimulatedFSDataset {
+    /**
+     * Simulated input and output streams
+     *
+     */
+    static private class CorruptFileSimulatedInputStream
+        extends java.io.InputStream {
+      private InputStream inputStream;
+
+      CorruptFileSimulatedInputStream(InputStream is) {
+        inputStream = is;
+      }
+
+      @Override
+      public int read() throws IOException {
+        int ret = inputStream.read();
+        if (ret > 0) {
+          throw new IOException("Input/output error");
+        }
+        return ret;
+      }
+
+      @Override
+      public int read(byte[] b) throws IOException {
+        int ret = inputStream.read(b);
+        if (ret > 0) {
+          throw new IOException("Input/output error");
+        }
+        return ret;
+      }
+    }
+
+    CorruptFileSimulatedFSDataset(DataNode datanode, DataStorage storage,
+        Configuration conf) {
+      super(storage, conf);
+    }
+
+    @Override
+    public synchronized InputStream getBlockInputStream(ExtendedBlock b,
+        long seekOffset) throws IOException {
+      InputStream result = super.getBlockInputStream(b);
+      IOUtils.skipFully(result, seekOffset);
+      return new CorruptFileSimulatedInputStream(result);
+    }
+
+    static class Factory
+        extends FsDatasetSpi.Factory<CorruptFileSimulatedFSDataset> {
+      @Override
+      public CorruptFileSimulatedFSDataset newInstance(DataNode datanode,
+          DataStorage storage, Configuration conf) throws IOException {
+        return new CorruptFileSimulatedFSDataset(datanode, storage, conf);
+      }
+
+      @Override
+      public boolean isSimulated() {
+        return true;
+      }
+    }
+  }
+
   private void testBadBlockReportOnTransfer(
       boolean corruptBlockByDeletingBlockFile) throws Exception {
     Configuration conf = new HdfsConfiguration();
@@ -196,6 +262,50 @@ public class TestReplication {
       }
       blocks = dfsClient.getNamenode().
                 getBlockLocations(file1.toString(), 0, Long.MAX_VALUE);
+    }
+    replicaCount = blocks.get(0).getLocations().length;
+    assertTrue(replicaCount == 1);
+    cluster.shutdown();
+  }
+
+  @Test
+  public void testBadBlockReportOnTransferCorruptFile() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    conf.set(DFSConfigKeys.DFS_DATANODE_FSDATASET_FACTORY_KEY,
+        CorruptFileSimulatedFSDataset.Factory.class.getName());
+    FileSystem fs = null;
+    DFSClient dfsClient = null;
+    LocatedBlocks blocks = null;
+    int replicaCount = 0;
+    short replFactor = 1;
+    MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+    cluster.waitActive();
+    fs = cluster.getFileSystem();
+    dfsClient = new DFSClient(
+        new InetSocketAddress("localhost", cluster.getNameNodePort()), conf);
+
+    // Create file with replication factor of 1
+    Path file1 = new Path("/tmp/testBadBlockReportOnTransfer/file1");
+    DFSTestUtil.createFile(fs, file1, 1024, replFactor, 0);
+    DFSTestUtil.waitReplication(fs, file1, replFactor);
+
+    // Increase replication factor, this should invoke transfer request
+    // Receiving datanode fails on checksum and reports it to namenode
+    replFactor = 2;
+    fs.setReplication(file1, replFactor);
+
+    // Now get block details and check if the block is corrupt
+    blocks = dfsClient.getNamenode().getBlockLocations(file1.toString(), 0,
+        Long.MAX_VALUE);
+    while (blocks.get(0).isCorrupt() != true) {
+      try {
+        LOG.info("Waiting until block is marked as corrupt...");
+        Thread.sleep(1000);
+      } catch (InterruptedException ie) {
+      }
+      blocks = dfsClient.getNamenode().getBlockLocations(file1.toString(), 0,
+          Long.MAX_VALUE);
     }
     replicaCount = blocks.get(0).getLocations().length;
     assertTrue(replicaCount == 1);
