@@ -67,6 +67,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.ShutdownHookManager;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.util.StringUtils;
 
 /****************************************************************
  * An abstract base class for a fairly generic filesystem.  It
@@ -2685,7 +2686,11 @@ public abstract class FileSystem extends Configured implements Closeable {
 
           @Override
           public boolean retryWithConfigurationService(Exception e) {
-            return e instanceof java.lang.IllegalArgumentException;
+            return (e instanceof java.lang.IllegalArgumentException && e
+                .getCause() instanceof java.net.UnknownHostException) || (
+                e instanceof java.io.IOException && StringUtils
+                    .stringifyException(e).contains(
+                        "Could not find any configured addresses for URI "));
           }
         }, uri, conf);
   }
