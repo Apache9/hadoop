@@ -33,6 +33,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.fs.XAttrSetFlag;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
@@ -380,5 +382,46 @@ public class TestFSDirectory {
     newXAttrs = fsdir.setINodeXAttrs(existingXAttrs, toAdd,
         EnumSet.of(XAttrSetFlag.CREATE, XAttrSetFlag.REPLACE));
     verifyXAttrsPresent(newXAttrs, 4);
+  }
+
+  @Test public void testVerifyFederationRename() throws Exception {
+    INodesInPath srcIIP = null;
+    INode srcInode = null;
+    try {
+      if (fsn.getFileInfo("/A/A1/A2/A3/A4/A5", false) == null) {
+        fsn.mkdirs("/A/A1/A2/A3/A4/A5", PermissionStatus
+                .createImmutable("hadoop", "hadoop", FsPermission.getDefault()),
+            true);
+      }
+      srcIIP = fsdir.getINodesInPath4Write("/A/A1/A2/A3/A4/A5");
+      srcInode = srcIIP.getINode(2);//A2
+      srcInode.addFederationRenameFeature(
+          new FederationRenameFeature(true, 0, "", "", "", "", 0));
+      fsn.getFederationRenameMap()
+          .addRenameRecord(0, "/A/A1/A2", "", "", "", true, 0);
+      // test parent, expecting IOException
+      boolean exceptionFlag = false;
+      try {
+        srcIIP = fsdir.getINodesInPath4Write("/A/A1/A2/A3/A4/A5");
+        srcIIP.verifyFederationRename(fsn.getFederationRenameMap());
+      } catch (IOException e) {
+        exceptionFlag = true;
+      }
+      assertTrue(exceptionFlag);
+      // test child, expecting IOException
+      exceptionFlag = false;
+      try {
+        srcIIP = fsdir.getINodesInPath4Write("/A");
+        srcIIP.verifyFederationRename(fsn.getFederationRenameMap());
+      } catch (IOException e) {
+        exceptionFlag = true;
+      }
+      assertTrue(exceptionFlag);
+    } finally {
+      if (srcIIP != null) {
+        srcInode.removeFederationRenameFeature();
+      }
+      fsn.delete("/A/A1/A2/A3/A4/A5", true);
+    }
   }
 }

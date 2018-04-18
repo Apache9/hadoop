@@ -2176,7 +2176,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
     // check the target
     final INodesInPath trgIip = dir.getINodesInPath4Write(target);
-    trgIip.verifyFederationRename();
+    trgIip.verifyFederationRename(getFederationRenameMap());
     if (dir.getEZForPath(trgIip) != null) {
       throw new HadoopIllegalArgumentException(
           "concat can not be called for files in an encryption zone.");
@@ -2218,7 +2218,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         endSrc=true;
 
       final INodeFile srcInode = INodeFile.valueOf(dir.getINode4Write(src), src);
-      INodesInPath.fromINode(srcInode).verifyFederationRename();
+      INodesInPath.fromINode(srcInode).verifyFederationRename(getFederationRenameMap());
       if(src.isEmpty() 
           || srcInode.isUnderConstruction()
           || srcInode.numBlocks() == 0) {
@@ -2307,7 +2307,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         checkPathAccess(pc, src, FsAction.WRITE);
       }
       final INodesInPath iip = dir.getINodesInPath4Write(src);
-      iip.verifyFederationRename();
+      iip.verifyFederationRename(getFederationRenameMap());
       final INode inode = iip.getLastINode();
       if (inode != null) {
         boolean changed = dir.setTimes(inode, mtime, atime, true,
@@ -2731,7 +2731,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     try {
       src = resolvePath(src, pathComponents);
       INodesInPath iip = dir.getINodesInPath4Write(src);
-      iip.verifyFederationRename();
+      iip.verifyFederationRename(getFederationRenameMap());
       // Nothing to do if the path is not within an EZ
       if (dir.isInAnEZ(iip)) {
         EncryptionZone zone = dir.getEZForPath(iip);
@@ -2973,7 +2973,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     assert hasWriteLock();
     // Verify that the destination does not exist as a directory already.
     final INodesInPath iip = dir.getINodesInPath4Write(src);
-    iip.verifyFederationRename();
+    iip.verifyFederationRename(getFederationRenameMap());
     final INode inode = iip.getLastINode();
     if (inode != null && inode.isDirectory()) {
       throw new FileAlreadyExistsException("Cannot append to directory " + src
@@ -3134,7 +3134,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       if (!inode.isUnderConstruction()) {
         return true;
       }
-      INodesInPath.fromINode(inode).verifyFederationRename();
+      INodesInPath.fromINode(inode).verifyFederationRename(getFederationRenameMap());
       if (isPermissionEnabled) {
         checkPathAccess(pc, src, FsAction.WRITE);
       }
@@ -3356,7 +3356,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       FileState fileState = analyzeFileState(
           src, fileId, clientName, previous, onRetryBlock);
       final INodeFile pendingFile = fileState.inode;
-      INodesInPath.fromINode(pendingFile).verifyFederationRename();
+      INodesInPath.fromINode(pendingFile).verifyFederationRename(getFederationRenameMap());
       src = fileState.path;
 
       if (onRetryBlock[0] != null && onRetryBlock[0].getLocations().length > 0) {
@@ -4501,7 +4501,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     dir.writeLock();
     try {
       INodesInPath iip = dir.getExistingPathINodes(components);
-      iip.verifyFederationRename();
+      iip.verifyFederationRename(getFederationRenameMap());
       if (iip.isSnapshot()) {
         throw new SnapshotAccessControlException(
                 "Modification on RO snapshot is disallowed");
@@ -4686,7 +4686,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         if (inode != null) src = inode.getFullPathName();
       }
       final INodeFile pendingFile = checkLease(src, clientName, inode, fileId);
-      INodesInPath.fromINode(pendingFile).verifyFederationRename();
+      INodesInPath.fromINode(pendingFile).verifyFederationRename(getFederationRenameMap());
       if (lastBlockLength > 0) {
         pendingFile.getFileUnderConstructionFeature().updateLengthOfLastBlock(
             pendingFile, lastBlockLength);

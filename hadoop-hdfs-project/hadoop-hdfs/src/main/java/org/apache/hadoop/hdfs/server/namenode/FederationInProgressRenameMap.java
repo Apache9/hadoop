@@ -157,4 +157,20 @@ public class FederationInProgressRenameMap {
     }
     return res;
   }
+
+  synchronized List<String> getSrcPaths() {
+    List<String> res = new LinkedList<String>();
+    for (int idx = 0; idx < sourceInProgress.size(); idx++) {
+      RenameRecord rr = sourceInProgress.get(idx);
+      res.add(rr.getSrc());
+    }
+    return res;
+  }
+
+  synchronized List<String> getAllRenamePaths() {
+    List<String> res = new LinkedList<String>();
+    res.addAll(getSrcPaths());
+    res.addAll(getDestPathes());
+    return res;
+  }
 }
