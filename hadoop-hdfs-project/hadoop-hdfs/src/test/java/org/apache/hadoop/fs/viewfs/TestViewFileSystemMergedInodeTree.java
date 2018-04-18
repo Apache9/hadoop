@@ -29,9 +29,11 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
+import org.apache.hadoop.hdfs.server.namenode.INodesInPath;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.PathUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -48,6 +50,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 import static junit.framework.TestCase.fail;
+import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -421,6 +424,35 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
         new Path("/log_collector/foo/bar/newfile"));
     assertFalse(FS_HDFS[1].exists(new Path("/log_collector/foo/chen/newfile")));
     assertTrue(FS_HDFS[2].exists(new Path("/log_collector/foo/bar/newfile")));
+  }
+
+  @Test
+  public void testFedRenameFeature() throws Exception {
+    DistributedFileSystem dfs = (DistributedFileSystem)FS_HDFS[2];
+    assertTrue(dfs.mkdirs(new Path("/log_collector/foo/A/A1/A2/A3/A4/A5")));
+    assertTrue(dfs.mkdirs(new Path("/log_collector/foo/A/A")));
+    long renameId = dfs.renameSrcPhase1("/log_collector/foo/A/A1/A2/A3", "srcid",
+        "/log_collector/foo", "dstId").getRenameId();
+    // test parent
+    try {
+      dfs.delete(new Path("/log_collector/foo/A"));
+      assert false;
+    } catch (IOException e) {
+      assertExceptionContains("federation rename", e);
+    }
+    // test child
+    try {
+      dfs.delete(new Path("/log_collector/foo/A/A1/A2/A3/A4"));
+      assert false;
+    } catch (IOException e) {
+      assertExceptionContains("federation rename", e);
+    }
+    // test unrelated path
+    assertTrue(dfs.delete(new Path("/log_collector/foo/A/A")));
+    // remove FederationRenameFeature and delete
+    dfs.renameSrcPhase2(renameId, true);
+    assertTrue(dfs.delete(new Path("/log_collector/foo/A/A1/A2/A3/A4")));
+    assertTrue(dfs.delete(new Path("/log_collector/foo/A")));
   }
 
   @Test

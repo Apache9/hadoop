@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -463,10 +464,37 @@ public class INodesInPath {
     return false;
   }
 
-  public void verifyFederationRename() throws IOException {
+  public void verifyFederationRename(FederationInProgressRenameMap federationInProgressRenameMap) throws IOException {
     if (containsFederationRenameItem()) {
       throw new IOException(
           "The specifid path is in a federation rename directory or file");
     }
+    Path inodePath = new Path(DFSUtil.byteArray2PathString(path));
+    List<String> paths = federationInProgressRenameMap.getAllRenamePaths();
+    for (String p : paths) {
+      Path path = new Path(p);
+      if (isSubPath(inodePath, path)) {
+        throw new IOException("The specified path is parent of [" + p
+            + "] which is a federation rename directory or file.");
+      }
+    }
+  }
+
+  private boolean isSubPath(Path path, Path child) throws IOException {
+    if (!path.isAbsolute() || !child.isAbsolute()) {
+      throw new IOException(
+          "Couldn't compare not absolute path! [" + path + "][" + child + "]");
+    }
+    if (path.toString().length() > child.toString().length()) {
+      return false;
+    }
+    Path parent = child;
+    while (parent != null) {
+      if (parent.equals(path)) {
+        return true;
+      }
+      parent = parent.getParent();
+    }
+    return false;
   }
 }
