@@ -53,6 +53,7 @@ import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSOutputStream;
 import org.apache.hadoop.hdfs.DFSTestUtil;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
@@ -1401,4 +1402,18 @@ public class TestRetryCacheWithHA {
     }
     assertTrue("All pools must be found", tmpNames.isEmpty());
   }
+
+  @Test
+  public void testRequestHedgingProxyProvider() throws Exception {
+    conf.set(DFSUtil.addKeySuffixes(
+        DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX,
+        HATestUtil.getLogicalHostname(cluster)),
+        RequestHedgingProxyProvider.class.getName());
+    DFSClient dfs = genClientWithDummyHandler();
+    AtMostOnceOp op = new DeleteOp(dfs, "/testfile");
+    testClientRetryWithFailover(op);
+
+    HATestUtil.setFailoverConfigurations(cluster, conf);
+  }
+
 }

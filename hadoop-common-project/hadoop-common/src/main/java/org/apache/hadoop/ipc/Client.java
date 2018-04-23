@@ -122,6 +122,18 @@ public class Client {
     retryCount.set(rc);
   }
 
+  public static Integer getCallId() {
+    return callId.get();
+  }
+
+  public static Integer getRetryCount() {
+    return retryCount.get();
+  }
+
+  public static void clearCallId() {
+    callId.set(null);
+  }
+
   private Hashtable<ConnectionId, Connection> connections =
     new Hashtable<ConnectionId, Connection>();
 

@@ -24,20 +24,25 @@ import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.directory.api.ldap.codec.actions.CheckLengthNotNull;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider.ProxyFactory;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.io.retry.FailoverProxyProvider;
 import org.apache.hadoop.io.retry.MultiException;
+import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.RpcConstants;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
 import org.junit.Assert;
@@ -53,6 +58,7 @@ import com.google.common.collect.Lists;
 
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
+import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 
 public class TestRequestHedgingProxyProvider {
 
@@ -317,6 +323,61 @@ public class TestRequestHedgingProxyProvider {
     }
     Mockito.verify(active).getStats();
     Mockito.verify(standby).getStats();
+  }
+
+  @Test
+  public void testHedgingCallId() throws Exception {
+    final int cid = Client.nextCallId(), rc = 0;
+    Client.clearCallId();
+    // good Mock
+    final NamenodeProtocols goodMock = Mockito.mock(NamenodeProtocols.class);
+    Mockito.when(goodMock.getStats()).thenAnswer(new Answer<long[]>() {
+      @Override
+      public long[] answer(InvocationOnMock invocation) throws Throwable {
+        assertEquals(cid, Client.getCallId().intValue());
+        assertEquals(rc, Client.getRetryCount().intValue());
+        Thread.sleep(1000);// sleep so bad mock could be called.
+        return new long[] { 1 };
+      }
+    });
+    // bad Mock
+    final NamenodeProtocols badMock = Mockito.mock(NamenodeProtocols.class);
+    Mockito.when(badMock.getStats()).thenAnswer(new Answer<long[]>() {
+      @Override
+      public long[] answer(InvocationOnMock invocation) throws Throwable {
+        assertEquals(cid, Client.getCallId().intValue());
+        assertEquals(rc, Client.getRetryCount().intValue());
+        throw new IOException("Bad Mock! This is Standby!");
+      }
+    });
+
+    Client.setCallIdAndRetryCount(cid, rc);
+    RequestHedgingProxyProvider<NamenodeProtocols> provider =
+        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+            createFactory(goodMock, badMock));
+    NamenodeProtocols proxy = provider.getProxy().proxy;
+    proxy.getStats();
+    assertEquals(null, Client.getCallId());
+
+    Client.setCallIdAndRetryCount(cid, rc);
+    Configuration config = new Configuration(conf);
+    config.setBoolean(
+        DFSConfigKeys.DFS_CLIENT_FAILOVER_PROVIDER_TOLERATE_EMPTY_NNADDR, true);
+    config.set(DFSConfigKeys.DFS_NAMESERVICES, ns);
+    config.set(DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX + "." + ns, "nn1,nn2");
+    provider =
+        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+            createFactory(goodMock, badMock));
+    proxy = provider.getProxy().proxy;
+    try {
+      proxy.getStats();
+    } catch (UnknownHostException e) {
+      assertTrue(StringUtils.stringifyException(e)
+          .contains("no namenode address configured"));
+    }
+    assertEquals(null, Client.getCallId());
+
+    Client.clearCallId();
   }
 
   private ProxyFactory<NamenodeProtocols> createFactory(
