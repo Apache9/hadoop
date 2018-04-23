@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.ha;
 
-import java.lang.reflect.InvocationHandler;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -34,7 +34,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.ipc.Client;
+import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.RpcConstants;
+import org.apache.hadoop.ipc.RpcInvocationHandler;
 import org.apache.hadoop.ipc.StandbyException;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -56,7 +60,7 @@ public class RequestHedgingProxyProvider<T> extends
   public static final Logger LOG =
       LoggerFactory.getLogger(RequestHedgingProxyProvider.class);
 
-  class RequestHedgingInvocationHandler implements InvocationHandler {
+  class RequestHedgingInvocationHandler implements RpcInvocationHandler {
 
     final Map<String, ProxyInfo<T>> targetProxies;
 
@@ -95,6 +99,7 @@ public class RequestHedgingProxyProvider<T> extends
         }
       }
       if (targetProxies.isEmpty()) {
+        Client.clearCallId();
         if (tolerateNoNn) {
           // will trigger failover
           throw new UnknownHostException("no namenode address configured");
@@ -109,6 +114,8 @@ public class RequestHedgingProxyProvider<T> extends
       ExecutorService executor = null;
       CompletionService<Object> completionService;
       try {
+        final Integer cid = Client.getCallId();
+        final Integer rc = Client.getRetryCount();
         executor = Executors.newFixedThreadPool(targetProxies.size());
         completionService = new ExecutorCompletionService<>(executor);
         for (final Map.Entry<String, ProxyInfo<T>> pEntry :
@@ -116,6 +123,9 @@ public class RequestHedgingProxyProvider<T> extends
           Callable<Object> c = new Callable<Object>() {
             @Override
             public Object call() throws Exception {
+              if (cid != null && rc != null) {
+                Client.setCallIdAndRetryCount(cid, rc);
+              }
               LOG.trace("Invoking method {} on proxy {}", method,
                   pEntry.getValue().proxyInfo);
               return method.invoke(pEntry.getValue().proxy, args);
@@ -157,6 +167,24 @@ public class RequestHedgingProxyProvider<T> extends
           LOG.trace("Shutting down threadpool executor");
           executor.shutdownNow();
         }
+        Client.clearCallId();
+      }
+    }
+
+    @Override
+    public Client.ConnectionId getConnectionId() {
+      if (currentUsedProxy == null) {
+        return null;
+      } else {
+        return RPC.getConnectionIdForProxy(currentUsedProxy.proxy);
+      }
+    }
+
+    @Override
+    public void close() throws IOException {
+      for (Map.Entry<String, ProxyInfo<T>> pEntry : targetProxies.entrySet()) {
+        T proxy = pEntry.getValue().proxy;
+        RPC.stopProxy(proxy);
       }
     }
   }
@@ -191,7 +219,7 @@ public class RequestHedgingProxyProvider<T> extends
     }
     combinedInfo.append(']');
     T wrappedProxy = (T) Proxy.newProxyInstance(
-            RequestHedgingInvocationHandler.class.getClassLoader(),
+        RequestHedgingInvocationHandler.class.getClassLoader(),
             new Class<?>[]{xface},
             new RequestHedgingInvocationHandler(targetProxyInfos));
     return new ProxyInfo<T>(wrappedProxy, combinedInfo.toString());
@@ -218,7 +246,7 @@ public class RequestHedgingProxyProvider<T> extends
 
   /**
    * Check if the returned exception is caused by an standby namenode.
-   * @param ex Exception to check.
+   * @param exception Exception to check.
    * @return If the exception is caused by an standby namenode.
    */
   private boolean isStandbyException(Exception exception) {
