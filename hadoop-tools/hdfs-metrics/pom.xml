@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.xiaomi.infra.hdfs</groupId>
+    <artifactId>hdfs-metrics</artifactId>
+    <version>2.4.0-mdh2.3.34</version>
+
+    <dependencies>
+        <dependency>
+            <groupId>commons-configuration</groupId>
+            <artifactId>commons-configuration</artifactId>
+            <version>1.6</version>
+        </dependency>
+        <dependency>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+            <version>1.2.17</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>1.7.15</version>
+        </dependency>
+        <dependency>
+            <groupId>com.xiaomi.infra.galaxy</groupId>
+            <artifactId>galaxy-lcs-log-core</artifactId>
+            <version>2.0.11</version>
+        </dependency>
+        <dependency>
+            <groupId>com.xiaomi.infra.galaxy</groupId>
+            <artifactId>galaxy-lcs-log4j</artifactId>
+            <version>2.0.11</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+    </dependencies>
+
+    <distributionManagement>
+        <repository>
+            <id>archiva.internal</id>
+            <name>Internal Release Repository</name>
+            <url>https://nexus.d.xiaomi.net/nexus/content/repositories/releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>archiva.snapshots</id>
+            <name>Internal Snapshot Repository</name>
+            <url>https://nexus.d.xiaomi.net/nexus/content/repositories/snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
+
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <relocations>
+                        <relocation>
+                            <pattern>org.apache.thrift</pattern>
+                            <shadedPattern>com.xiaomi.infra.hdfs.org.apache.thrift</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>com.codahale.metrics</pattern>
+                            <shadedPattern>shaded.com.codahale.metrics</shadedPattern>
+                        </relocation>
+                    </relocations>
+                </configuration>
+            </plugin>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>2.5.1</version>
+                <configuration>
+                    <showWarnings>true</showWarnings>
+                    <showDeprecation>false</showDeprecation>
+                    <compilerArgument>-Xlint:-options</compilerArgument>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>appassembler-maven-plugin</artifactId>
+                <version>1.1.1</version>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>assemble</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <repositoryLayout>flat</repositoryLayout>
+                    <repositoryName>libtmp</repositoryName>
+                    <assembleDirectory>${project.build.directory}/${project.name}-${project.version}</assembleDirectory>
+                    <extraJvmArguments>-Djava.security.krb5.conf="$BASEDIR"/krb5.conf</extraJvmArguments>
+                    <binFileExtensions>
+                        <unix>.sh</unix>
+                    </binFileExtensions>
+                    <platforms>
+                        <platform>unix</platform>
+                    </platforms>
+                    <programs>
+                        <program>
+                            <mainClass>com.xiaomi.infra.hdfs.metrics.sink.LCSSink</mainClass>
+                            <name>hdfs-metrics</name>
+                        </program>
+                    </programs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>package</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <tasks>
+                                <echo message="copying jar"/>
+                                <move todir="${project.build.directory}/hdfs-metrics-${project.version}/lib/" >
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="hdfs-metrics-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="galaxy-lcs-common-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="galaxy-lcs-log-core-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="galaxy-thrift-api-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="galaxy-lcs-log4j-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="galaxy-lcs-thrift-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="galaxy-lcs-monitor-client-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="galaxy-talos-common-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="galaxy-talos-sdk-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="util-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="metrics-core-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="jersey-json-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="gson-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="json-*.jar"/>
+                                    <fileset dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp/"
+                                             includes="dnsjava-*.jar"/>
+
+                                </move>
+                                <!--<delete dir="${project.build.directory}/hdfs-metrics-${project.version}/libtmp" />-->
+                            </tasks>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
