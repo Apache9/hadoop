@@ -952,14 +952,8 @@ public class ViewFileSystem extends FileSystem {
       checkPathIsSlash(f);
       FileStatus[] result = new FileStatus[theInternalDir.getChildren().size()];
       int i = 0;
-      String[] grps = ugi.getGroupNames();
       String user = ugi.getShortUserName();
-      String grp;
-      if (grps.length != 0) {
-        grp = grps[0];
-      } else {
-        grp = user;
-      }
+      String grp = user;
       for (Entry<String, INode<FileSystem>> iEntry : theInternalDir
           .getChildren().entrySet()) {
         INode<FileSystem> inode = iEntry.getValue();
