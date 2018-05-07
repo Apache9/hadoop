@@ -17,14 +17,14 @@
  */
 package org.apache.hadoop.hdfs;
 
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus.OK;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.SUCCESS;
 
 import com.google.protobuf.ByteString;
 
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2Headers;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBuf;
+import com.xiaomi.infra.thirdparty.io.netty.channel.Channel;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2Headers;
 
 import java.io.Closeable;
 import java.io.IOException;

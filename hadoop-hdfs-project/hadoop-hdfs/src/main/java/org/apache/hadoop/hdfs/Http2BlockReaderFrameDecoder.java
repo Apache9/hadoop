@@ -22,12 +22,12 @@ import java.util.List;
 
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
 
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufInputStream;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.Unpooled;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.ByteToMessageDecoder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.CorruptedFrameException;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBuf;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBufInputStream;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.Unpooled;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.ByteToMessageDecoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.CorruptedFrameException;
 
 class Http2BlockReaderFrameDecoder extends ByteToMessageDecoder {
 

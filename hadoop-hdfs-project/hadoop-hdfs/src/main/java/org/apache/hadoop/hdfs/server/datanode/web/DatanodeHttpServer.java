@@ -22,20 +22,20 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_DE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTPS_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HTTP_ADDRESS_KEY;
 
-import org.apache.hadoop.hbase.shaded.io.netty.bootstrap.ServerBootstrap;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFactory;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFuture;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelOption;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelPipeline;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.EventLoopGroup;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.nio.NioEventLoopGroup;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.SocketChannel;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.nio.NioServerSocketChannel;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpRequestDecoder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseEncoder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.ssl.SslHandler;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.stream.ChunkedWriteHandler;
+import com.xiaomi.infra.thirdparty.io.netty.bootstrap.ServerBootstrap;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelFactory;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelFuture;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelInitializer;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelOption;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelPipeline;
+import com.xiaomi.infra.thirdparty.io.netty.channel.EventLoopGroup;
+import com.xiaomi.infra.thirdparty.io.netty.channel.nio.NioEventLoopGroup;
+import com.xiaomi.infra.thirdparty.io.netty.channel.socket.SocketChannel;
+import com.xiaomi.infra.thirdparty.io.netty.channel.socket.nio.NioServerSocketChannel;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpRequestDecoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseEncoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.ssl.SslHandler;
+import com.xiaomi.infra.thirdparty.io.netty.handler.stream.ChunkedWriteHandler;
 
 import java.io.Closeable;
 import java.io.IOException;

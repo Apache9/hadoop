@@ -555,9 +555,9 @@
       </dependency>
 
       <dependency>
-        <groupId>org.apache.hbase.thirdparty</groupId>
-        <artifactId>hbase-shaded-netty</artifactId>
-        <version>1.0.1-mdh1.2</version>
+        <groupId>com.xiaomi.infra.thirdparty</groupId>
+        <artifactId>infra-shaded-netty</artifactId>
+        <version>1.0.1</version>
       </dependency>
 
       <dependency>

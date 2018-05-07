@@ -17,12 +17,12 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web.webhdfs;
 
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFutureListener;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.DefaultHttpResponse;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpContent;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.LastHttpContent;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelFutureListener;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.channel.SimpleChannelInboundHandler;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.DefaultHttpResponse;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpContent;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.LastHttpContent;
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.server.datanode.web.ExceptionHandler;
@@ -31,8 +31,8 @@ import org.apache.hadoop.io.IOUtils;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderValues.CLOSE;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpHeaderValues.CLOSE;
 
 class HdfsWriter extends SimpleChannelInboundHandler<HttpContent> {
   private final DFSClient client;
