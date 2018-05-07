@@ -26,13 +26,13 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockRequestProto;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpMethod;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2HeadersFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.protobuf.ProtobufDecoder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.stream.ChunkedWriteHandler;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.channel.SimpleChannelInboundHandler;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpMethod;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2HeadersFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.protobuf.ProtobufDecoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.stream.ChunkedWriteHandler;
 
 @InterfaceAudience.Private
 public class DtpUrlDispatcher

@@ -17,28 +17,28 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.web;
 
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
-import org.apache.hadoop.hbase.shaded.io.netty.bootstrap.Bootstrap;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.Unpooled;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFuture;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelFutureListener;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInboundHandlerAdapter;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelPipeline;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.SocketChannel;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.nio.NioSocketChannel;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.DefaultFullHttpRequest;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.DefaultHttpResponse;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderValues;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpRequest;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpRequestEncoder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseEncoder;
+import com.xiaomi.infra.thirdparty.io.netty.bootstrap.Bootstrap;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.Unpooled;
+import com.xiaomi.infra.thirdparty.io.netty.channel.Channel;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelFuture;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelFutureListener;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelInboundHandlerAdapter;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelInitializer;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelPipeline;
+import com.xiaomi.infra.thirdparty.io.netty.channel.SimpleChannelInboundHandler;
+import com.xiaomi.infra.thirdparty.io.netty.channel.socket.SocketChannel;
+import com.xiaomi.infra.thirdparty.io.netty.channel.socket.nio.NioSocketChannel;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.DefaultFullHttpRequest;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.DefaultHttpResponse;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpHeaderValues;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpRequest;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpRequestEncoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseEncoder;
 
 import java.net.InetSocketAddress;
 

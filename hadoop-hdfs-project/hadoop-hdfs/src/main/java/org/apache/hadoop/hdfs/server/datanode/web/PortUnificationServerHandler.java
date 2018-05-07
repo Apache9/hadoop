@@ -28,19 +28,19 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.web.dtp.DtpUrlDispatcher;
 
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufUtil;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.ByteToMessageDecoder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpServerCodec;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2CodecUtil;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2Exception;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2FrameLogger;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.logging.LogLevel;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.stream.ChunkedWriteHandler;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBuf;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBufUtil;
+import com.xiaomi.infra.thirdparty.io.netty.channel.Channel;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelInitializer;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.ByteToMessageDecoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpServerCodec;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2CodecUtil;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2Exception;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2FrameLogger;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.logging.LogLevel;
+import com.xiaomi.infra.thirdparty.io.netty.handler.stream.ChunkedWriteHandler;
 
 /**
  * A port unification handler to support HTTP/1.1 and HTTP/2 on the same port.

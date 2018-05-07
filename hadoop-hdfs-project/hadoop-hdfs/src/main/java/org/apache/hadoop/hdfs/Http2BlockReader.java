@@ -19,18 +19,18 @@ package org.apache.hadoop.hdfs;
 
 import com.google.protobuf.CodedOutputStream;
 
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufOutputStream;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpMethod;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2Headers;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2DataFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2HeadersFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
-import org.apache.hadoop.hbase.shaded.io.netty.util.concurrent.Promise;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBuf;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBufOutputStream;
+import com.xiaomi.infra.thirdparty.io.netty.channel.Channel;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelInitializer;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpMethod;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.DefaultHttp2Headers;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2DataFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2HeadersFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
+import com.xiaomi.infra.thirdparty.io.netty.util.concurrent.Promise;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;

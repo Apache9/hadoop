@@ -17,10 +17,10 @@
  */
 package org.apache.hadoop.hdfs;
 
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandler.Sharable;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2DataFrame;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandler.Sharable;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.channel.SimpleChannelInboundHandler;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2DataFrame;
 
 @Sharable
 public final class Http2DataFrameUnwrapHandler

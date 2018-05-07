@@ -17,9 +17,9 @@
  */
 package org.apache.hadoop.hdfs;
 
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInboundHandlerAdapter;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBuf;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelInboundHandlerAdapter;
 
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferV2Protos.OpReadBlockFrameHeaderProto;
 

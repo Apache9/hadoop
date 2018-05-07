@@ -28,7 +28,7 @@ import org.apache.hadoop.security.token.Token;
 import org.junit.Assert;
 import org.junit.Test;
 
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.QueryStringDecoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.QueryStringDecoder;
 
 import javax.servlet.ServletContext;
 

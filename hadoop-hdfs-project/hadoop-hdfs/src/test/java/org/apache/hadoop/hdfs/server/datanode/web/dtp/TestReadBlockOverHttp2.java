@@ -51,22 +51,22 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import org.apache.hadoop.hbase.shaded.io.netty.bootstrap.Bootstrap;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufOutputStream;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.Channel;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelInitializer;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.nio.NioEventLoopGroup;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.socket.nio.NioSocketChannel;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpMethod;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2Headers;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2FrameLogger;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2StreamChannel;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.logging.LogLevel;
+import com.xiaomi.infra.thirdparty.io.netty.bootstrap.Bootstrap;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBuf;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBufOutputStream;
+import com.xiaomi.infra.thirdparty.io.netty.channel.Channel;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelInitializer;
+import com.xiaomi.infra.thirdparty.io.netty.channel.nio.NioEventLoopGroup;
+import com.xiaomi.infra.thirdparty.io.netty.channel.socket.nio.NioSocketChannel;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpMethod;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.DefaultHttp2Headers;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2FrameLogger;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2StreamChannel;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2StreamChannelBootstrap;
+import com.xiaomi.infra.thirdparty.io.netty.handler.logging.LogLevel;
 
 public class TestReadBlockOverHttp2 {
 

@@ -19,9 +19,9 @@ package org.apache.hadoop.hdfs.server.datanode.web;
 
 import com.sun.jersey.api.ParamException;
 import com.sun.jersey.api.container.ContainerException;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.Unpooled;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.DefaultFullHttpResponse;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.Unpooled;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.DefaultFullHttpResponse;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
@@ -35,13 +35,13 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpResponseStatus.NOT_FOUND;
-import static org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseStatus.FORBIDDEN;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseStatus.NOT_FOUND;
+import static com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.APPLICATION_JSON;
 
 @InterfaceAudience.Private

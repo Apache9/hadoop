@@ -20,13 +20,13 @@ package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedOutputStream;
 
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBuf;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufAllocator;
-import org.apache.hadoop.hbase.shaded.io.netty.buffer.ByteBufOutputStream;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2DataFrame;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.stream.ChunkedInput;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBuf;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBufAllocator;
+import com.xiaomi.infra.thirdparty.io.netty.buffer.ByteBufOutputStream;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2DataFrame;
+import com.xiaomi.infra.thirdparty.io.netty.handler.stream.ChunkedInput;
 
 import java.io.EOFException;
 import java.io.FileInputStream;

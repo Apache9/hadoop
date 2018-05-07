@@ -19,10 +19,10 @@ package org.apache.hadoop.hdfs.server.datanode.web;
 
 import static org.apache.hadoop.hdfs.server.datanode.web.webhdfs.WebHdfsHandler.WEBHDFS_PREFIX;
 
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelHandlerContext;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.ChannelPipeline;
-import org.apache.hadoop.hbase.shaded.io.netty.channel.SimpleChannelInboundHandler;
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http.HttpRequest;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelHandlerContext;
+import com.xiaomi.infra.thirdparty.io.netty.channel.ChannelPipeline;
+import com.xiaomi.infra.thirdparty.io.netty.channel.SimpleChannelInboundHandler;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpRequest;
 
 import java.net.InetSocketAddress;
 

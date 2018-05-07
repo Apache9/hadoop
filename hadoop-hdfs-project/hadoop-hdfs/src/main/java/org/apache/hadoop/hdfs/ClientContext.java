@@ -34,7 +34,7 @@ import org.apache.hadoop.util.Daemon;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.apache.hadoop.hbase.shaded.io.netty.handler.codec.http2.Http2FrameLogger;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2FrameLogger;
 
 /**
  * ClientContext contains context information for a client.
