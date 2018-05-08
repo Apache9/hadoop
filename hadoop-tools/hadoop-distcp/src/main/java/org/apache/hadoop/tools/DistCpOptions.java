@@ -75,7 +75,12 @@ public class DistCpOptions {
   private String includedStr = null;
   private String excludedStr = null;
 
-  // targetPathExist is a derived field, it's initialized in the 
+  /**
+   * The path to a file containing a list of paths to filter out of the copy.
+   */
+  private String filtersFile;
+
+  // targetPathExist is a derived field, it's initialized in the
   // beginning of distcp.
   private boolean targetPathExists = true;
   
@@ -144,8 +149,7 @@ public class DistCpOptions {
       this.sourcePaths = that.getSourcePaths();
       this.targetPath = that.getTargetPath();
       this.targetPathExists = that.getTargetPathExists();
-      this.includedStr = that.includedStr;
-      this.excludedStr = that.excludedStr;
+      this.filtersFile = that.getFiltersFile();
     }
   }
 
@@ -538,44 +542,6 @@ public class DistCpOptions {
   }
 
   /**
-   * Get the included string.
-   * 
-   * @return a string, only files whose path contain a matched sub string will
-   *         be copied
-   */
-  public String getIncludedStr() {
-    return includedStr;
-  }
-
-  /**
-   * Set the included string to use.
-   * 
-   * @param str - included string
-   */
-  public void setIncludedStr(String str) {
-    this.includedStr = str;
-  }
-
-  /**
-   * Get the excluded string.
-   * 
-   * @return a string, only files whose path contain a matched sub string will
-   *         be copied
-   */
-  public String getExcludedStr() {
-    return excludedStr;
-  }
-
-  /**
-   * Set the excluded string to use.
-   * 
-   * @param str - included string
-   */
-  public void setExcludedStr(String str) {
-    this.excludedStr = str;
-  }
-
-  /**
    * File path (hdfs:// or file://) that contains the list of actual files to
    * copy
    *
@@ -624,6 +590,23 @@ public class DistCpOptions {
    */
   public boolean setTargetPathExists(boolean targetPathExists) {
     return this.targetPathExists = targetPathExists;
+  }
+
+  /**
+   * File path that contains the list of patterns
+   * for paths to be filtered from the file copy.
+   * @return - Filter  file path.
+   */
+  public final String getFiltersFile() {
+    return filtersFile;
+  }
+
+  /**
+   * Set filtersFile.
+   * @param filtersFilename The path to a list of patterns to exclude from copy.
+   */
+  public final void setFiltersFile(String filtersFilename) {
+    this.filtersFile = filtersFilename;
   }
 
   public void validate(DistCpOptionSwitch option, boolean value) {
@@ -697,15 +680,9 @@ public class DistCpOptions {
         String.valueOf(mapBandwidth));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.PRESERVE_STATUS,
         DistCpUtils.packAttributes(preserveStatus));
-    Log.debug("included str " + (includedStr == null ? "null" : includedStr)
-        + " excluded str " + (excludedStr == null ? "null" : excludedStr));
-    if (includedStr != null) {
-      DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.INCLUDED_WILDMATCH,
-          includedStr);
-    }
-    if (excludedStr != null) {
-      DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.EXCLUDED_WILDMATCH,
-          excludedStr);
+    if (filtersFile != null) {
+      DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.FILTERS,
+          filtersFile);
     }
   }
 
@@ -729,6 +706,7 @@ public class DistCpOptions {
         ", targetPath=" + targetPath +
         ", targetPathExists=" + targetPathExists +
         ", preserveRawXattrs=" + preserveRawXattrs +
+        ", filtersFile='" + filtersFile + '\'' +
         '}';
   }
 

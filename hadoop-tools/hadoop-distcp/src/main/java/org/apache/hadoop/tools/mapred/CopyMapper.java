@@ -93,11 +93,6 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   private FileSystem targetFS = null;
   private Path    targetWorkPath = null;
 
-  private String includedStr = null;
-  private String excludedStr = null;
-  private Pattern pIncluded = null;
-  private Pattern pExcluded = null;
-
   private boolean renameForCopy = false;
 
   /**
@@ -128,17 +123,6 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
     Path targetFinalPath = new Path(conf.get(
             DistCpConstants.CONF_LABEL_TARGET_FINAL_PATH));
     targetFS = targetFinalPath.getFileSystem(conf);
-
-    includedStr =
-        conf.get(DistCpOptionSwitch.INCLUDED_WILDMATCH.getConfigLabel(), null);
-    if (includedStr != null) {
-      pIncluded = Pattern.compile(includedStr);
-    }
-    excludedStr =
-        conf.get(DistCpOptionSwitch.EXCLUDED_WILDMATCH.getConfigLabel(), null);
-    if (excludedStr != null) {
-      pExcluded = Pattern.compile(excludedStr);
-    }
 
     if (targetFS.exists(targetFinalPath) && targetFS.isFile(targetFinalPath)) {
       overWrite = true; // When target is an existing file, overwrite it.
@@ -274,30 +258,6 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
 
       if (sourceCurrStatus.isDirectory()) {
         createTargetDirsWithRetry(description, target, context);
-        return;
-      }
-
-      LOG.debug("include str " + (pIncluded == null ? "null" : pIncluded));
-      LOG.debug("exclude str " + (pExcluded == null ? "null" : pExcluded));
-      boolean violateIncExc = false;
-      if (pIncluded != null) {
-        violateIncExc = true;
-        Matcher m = pIncluded.matcher(sourcePath.toString());
-        if (m.find()) {
-          violateIncExc = false;
-        }
-      }
-      if (!violateIncExc && pExcluded != null) {
-        Matcher m = pExcluded.matcher(sourcePath.toString());
-        if (m.find()) {
-          violateIncExc = true;
-        }
-      }
-      if (violateIncExc) {
-        LOG.info("Skipping copy of " + sourceCurrStatus.getPath() + " to "
-            + target + " since it violate the include/exclude specification");
-        updateSkipCounters(context, sourceCurrStatus);
-        context.write(null, new Text("SKIP: " + sourceCurrStatus.getPath()));
         return;
       }
 
