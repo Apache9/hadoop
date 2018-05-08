@@ -98,18 +98,6 @@ public enum DistCpOptionSwitch {
       "Ignore files has been deleted from the source site")),
 
   /**
-   * Only copy files which match the included string
-   */
-  INCLUDED_WILDMATCH(DistCpConstants.CONF_LABEL_INCLUDED_WILDMATCH, new Option(
-      "include", true, "Onlcy copy files whose path match the string")),
-
-  /**
-   * Skip copying files which match the excluded string
-   */
-  EXCLUDED_WILDMATCH(DistCpConstants.CONF_LABEL_EXCLUDED_WILDMATCH, new Option(
-      "exclude", true, "Skip coppying files whose path match the string")),
-
-  /**
    * Deletes missing files in target that are missing from source This allows
    * the target to be in sync with the source contents Typically used in
    * conjunction with SYNC_FOLDERS Incompatible with ATOMIC_COMMIT
@@ -208,7 +196,16 @@ public enum DistCpOptionSwitch {
    * Specify bandwidth per map in MB
    */
   BANDWIDTH(DistCpConstants.CONF_LABEL_BANDWIDTH_MB,
-      new Option("bandwidth", true, "Specify bandwidth per map in MB"));
+      new Option("bandwidth", true, "Specify bandwidth per map in MB")),
+
+  /**
+   * Path containing a list of strings, which when found in the path of
+   * a file to be copied excludes that file from the copy job.
+   */
+  FILTERS(DistCpConstants.CONF_LABEL_FILTERS_FILE,
+      new Option("filters", true, "The path to a file containing a list of"
+          + " strings for paths to be excluded from the copy."));
+
 
   public static final String PRESERVE_STATUS_DEFAULT = "-prbugpct";
   private final String confLabel;

@@ -50,10 +50,6 @@ public class DistCpConstants {
   public static final String CONF_LABEL_SKIP_OPEN = "distcp.skip.open";
   public static final String CONF_LABEL_IGNORE_DELETED =
       "distcp.ignore.deleted";
-  public static final String CONF_LABEL_INCLUDED_WILDMATCH =
-      "distcp.included.wildmatch";
-  public static final String CONF_LABEL_EXCLUDED_WILDMATCH =
-      "distcp.excluded.wildmatch";
   public static final String CONF_LABEL_DELETE_MISSING = "distcp.delete.missing.source";
   public static final String CONF_LABEL_SSL_CONF = "distcp.keystore.resource";
   public static final String CONF_LABEL_MAX_MAPS = "distcp.max.maps";
@@ -63,7 +59,8 @@ public class DistCpConstants {
   public static final String CONF_LABEL_OVERWRITE = "distcp.copy.overwrite";
   public static final String CONF_LABEL_APPEND = "distcp.copy.append";
   public static final String CONF_LABEL_BANDWIDTH_MB = "distcp.map.bandwidth.mb";
-  
+  public static final String CONF_LABEL_FILTERS_FILE =
+      "distcp.filters.file";
   public static final String CONF_LABEL_MAX_CHUNKS_TOLERABLE =
       "distcp.dynamic.max.chunks.tolerable";
   public static final String CONF_LABEL_MAX_CHUNKS_IDEAL =
