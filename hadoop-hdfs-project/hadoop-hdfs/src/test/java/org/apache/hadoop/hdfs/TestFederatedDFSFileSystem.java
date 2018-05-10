@@ -579,10 +579,15 @@ public class TestFederatedDFSFileSystem {
     FileStatus[] statuses = fs.listStatus(trashPath);
     Assert.assertTrue(statuses.length > 0);
     String defaultAuthority = fs.getUri().getAuthority();
+    String authority = null;
     for (FileStatus status : statuses) {
-      String authority = status.getPath().toUri().getAuthority();
+      authority = status.getPath().toUri().getAuthority();
       Assert.assertTrue(authority == null || authority == defaultAuthority);
     }
+
+    FileStatus status = fs.getFileStatus(trashPath);
+    authority = status.getPath().toUri().getAuthority();
+    Assert.assertTrue(authority == null || authority == defaultAuthority);
   }
 
   @Test
