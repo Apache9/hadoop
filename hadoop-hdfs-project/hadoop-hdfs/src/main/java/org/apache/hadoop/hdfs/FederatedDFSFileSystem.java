@@ -729,6 +729,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
         try {
           // If any childfs contains the item, return it
           FileStatus st = childFs.getFileStatus(noSchemaPath);
+          st.setPath(new Path(st.getPath().toUri().getPath()));
           return st;
         } catch (IOException ioe) {
           // Ignore
