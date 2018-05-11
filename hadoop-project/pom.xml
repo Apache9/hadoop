@@ -80,7 +80,7 @@
     <ext-log4j.deps.scope>compile</ext-log4j.deps.scope>
 
     <scala.binary.version>2.10</scala.binary.version>
-    <spark.version>1.6.1-mdh1.6.1.8</spark.version>
+    <spark.version>1.6.1-mdh1.6.1.11-SNAPSHOT</spark.version>
     <spark.deps.scope>provided</spark.deps.scope>
 
   </properties>

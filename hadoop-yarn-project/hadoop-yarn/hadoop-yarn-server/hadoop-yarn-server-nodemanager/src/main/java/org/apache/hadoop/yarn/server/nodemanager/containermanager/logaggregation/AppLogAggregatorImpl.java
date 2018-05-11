@@ -426,11 +426,13 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
         LOG.warn("Log dir " + rootLogDir + "is an unsupported file system", ue);
         continue;
       } catch (IOException fe) {
+        LOG.warn("Failed to list dir: " + logPath + " ", fe);
         continue;
       }
     }
 
     if (localAppLogDirs.size() > 0) {
+      LOG.info("Cleanup app log dirs: " + localAppLogDirs);
       this.delService.delete(this.userUgi.getShortUserName(), null,
         localAppLogDirs.toArray(new Path[localAppLogDirs.size()]));
     }
@@ -534,7 +536,7 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
         writer.append(logKey, logValue);
       } catch (Exception e) {
         LOG.error("Couldn't upload logs for " + containerId
-            + ". Skipping this container.");
+            + ". Skipping this container.", e);
         return new HashSet<Path>();
       }
       this.uploadedFileMeta.addAll(logValue
