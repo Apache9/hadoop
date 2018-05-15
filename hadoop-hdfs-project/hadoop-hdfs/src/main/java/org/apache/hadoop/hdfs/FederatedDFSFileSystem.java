@@ -82,7 +82,6 @@ import java.util.NoSuchElementException;
 
 public class FederatedDFSFileSystem extends DistributedFileSystem {
   private ViewFileSystem viewFs = null;
-  private MountPointRenewer mpr = null;
   private URI uri;
   private static final String TRASH_STRING = ".Trash";
   private static final String TRASH_ROOT = "user";
@@ -107,12 +106,13 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
-    mpr = new MountPointRenewer(uri.getAuthority(), conf, new RenewMpt() {
-      public void renewMpt(String viewName, Configuration conf)
-          throws IOException {
-        viewFs.renewFsState(conf, viewName);
-      }
-    });
+    MountPointRenewer mpr =
+        new MountPointRenewer(uri.getAuthority(), conf, new RenewMpt() {
+          public void renewMpt(String viewName, Configuration conf)
+              throws IOException {
+            viewFs.renewFsState(conf, viewName);
+          }
+        });
     mpr.initMptFromZkAndKickoffRenewer();
     viewFs = ReflectionUtils.newInstance(ViewFileSystem.class, conf);
     viewFs.initialize(uri, conf);
@@ -520,12 +520,7 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public void close() throws IOException {
     try {
-      if (viewFs != null) {
-        viewFs.close();
-      }
-      if (mpr != null) {
-        mpr.close();
-      }
+      viewFs.close();
     } finally {
       super.close();
     }
