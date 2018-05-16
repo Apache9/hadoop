@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
+import org.apache.hadoop.ha.ClientBaseWithFixes;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
@@ -36,6 +37,9 @@ import org.apache.hadoop.hdfs.tools.DFSAdmin;
 import org.apache.hadoop.hdfs.util.ByteBufferOutputStream;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.ZooDefs;
+import org.apache.zookeeper.ZooKeeper;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -63,10 +67,10 @@ import java.util.UUID;
 import static org.apache.hadoop.fs.FileContext.FILE_DEFAULT_PERM;
 import static org.junit.Assert.assertTrue;
 
-public class TestFederatedDFSFileSystem {
+public class TestFederatedDFSFileSystem extends ClientBaseWithFixes {
   private static final Log LOG =
       LogFactory.getLog(TestFederatedDFSFileSystem.class);
-  private static Configuration conf;
+  private static Configuration gConf;
   private static MiniDFSCluster cluster;
   private static FileSystem fs1;
   private static FileSystem fs2;
@@ -75,17 +79,19 @@ public class TestFederatedDFSFileSystem {
   private static String nn2Address;
   private static String nn3Address;
 
+  private Configuration conf;
+
   @BeforeClass
-  public static void setup() throws IOException {
+  public static void setup() throws Exception {
     LOG.info("before test");
-    conf = new Configuration();
-    conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024);
+    gConf = new Configuration();
+    gConf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024);
     // Bump up replication interval so that we only run replication
     // checks explicitly.
-    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_INTERVAL_KEY, 600);
+    gConf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_INTERVAL_KEY, 600);
     // Increase max streams so that we re-replicate quickly.
-    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY, 1000);
-    conf.setLong(CommonConfigurationKeys.FS_TRASH_INTERVAL_KEY, 10000);
+    gConf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY, 1000);
+    gConf.setLong(CommonConfigurationKeys.FS_TRASH_INTERVAL_KEY, 10000);
 
     try {
       cluster = setupNewDFSCluster();
@@ -93,6 +99,16 @@ public class TestFederatedDFSFileSystem {
     } catch (Exception e) {
       LOG.info("Setup test env failed " + e.getMessage());
     }
+  }
+
+  @Before
+  public void setupBeforePerTest() {
+    conf = new Configuration(gConf);
+  }
+
+  @After
+  public void teardownAfterPerTest() {
+    conf = null;
   }
 
   @AfterClass
@@ -109,8 +125,8 @@ public class TestFederatedDFSFileSystem {
     tmpConf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, baseDir.getAbsolutePath());
     */
 
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(new Configuration(conf))
-        .nnTopology(MiniDFSNNTopology.simpleHAFederatedTopology(3))
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(new Configuration(gConf))
+        .nnTopology(MiniDFSNNTopology.simpleHAFederatedTopology(4))
         .numDataNodes(5).format(true).build();
     cluster.waitClusterUp();
     return cluster;
@@ -132,10 +148,12 @@ public class TestFederatedDFSFileSystem {
 
     // disable hdfs impl cache
     // conf.setBoolean("fs.hdfs.impl.disable.cache", true);
-    conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
+    gConf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
         "hdfs://test-cluster/");
-    conf.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
-    conf.set("fs.AbstractFileSystem.hdfs.impl", FederatedHdfs.class.getName());
+    gConf.set("fs.hdfs.impl", FederatedDFSFileSystem.class.getName());
+    gConf.set("fs.AbstractFileSystem.hdfs.impl", FederatedHdfs.class.getName());
+
+    addNSAccessConfig(gConf, "test-cluster-1", 1);
 
     nn1Address =
         "hdfs://" + cluster.getNameNode(0).getHostAndPort();
@@ -143,11 +161,30 @@ public class TestFederatedDFSFileSystem {
         "hdfs://" + cluster.getNameNode(2).getHostAndPort();
     nn3Address =
         "hdfs://" + cluster.getNameNode(4).getHostAndPort();
-    ConfigUtil.addLink(conf, "test-cluster", "/home",
+    ConfigUtil.addLink(gConf, "test-cluster", "/home",
         new URI(nn1Address+ "/home"));
-    ConfigUtil.addLink(conf, "test-cluster", "/user",
-        new URI(nn2Address+ "/user"));
-    ConfigUtil.addLink(conf, "test-cluster", "/", new URI(nn3Address + "/"));
+    ConfigUtil.addLink(gConf, "test-cluster", "/user",
+        new URI("hdfs://" + "test-cluster-1" + "/user"));
+    ConfigUtil.addLink(gConf, "test-cluster", "/", new URI(nn3Address + "/"));
+  }
+  
+  private static void addNSAccessConfig(Configuration config, String ns, int namenodeGroupId) {
+    config.set(DFSConfigKeys.DFS_NAMESERVICES, ns);
+    config.set(
+        DFSUtil.addKeySuffixes(
+            DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX, ns),
+        ConfiguredFailoverProxyProvider.class.getName());
+    config.set(
+        DFSUtil.addKeySuffixes(DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX, ns),
+        "host0,host1");
+    config.set(
+        DFSUtil.addKeySuffixes(DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY, ns,
+            "host0"),
+        cluster.getNameNode(namenodeGroupId * 2).getHostAndPort());
+    config.set(
+        DFSUtil.addKeySuffixes(DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY, ns,
+            "host1"),
+        cluster.getNameNode(namenodeGroupId * 2 + 1).getHostAndPort());
   }
 
   @Test
@@ -707,5 +744,49 @@ public class TestFederatedDFSFileSystem {
         "hdfs://cluster-3/");
     assertTrue(HAUtil.isFederationUri(conf,new URI("hdfs://fed-1")));
     assertTrue(HAUtil.isFederationUri(conf,new URI("hdfs://fed-2")));
+  }
+
+  @Test
+  public void testAddNewNameSpaceByRenewer() throws Exception {
+    conf.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER, hostPort);
+    // Add a new namespace
+    Configuration tmpConf = new Configuration(conf);
+    String clusterName = "test-cluster";
+    String newNs = clusterName + "-3";
+    addNSAccessConfig(tmpConf, newNs, 3);
+    ConfigUtil.addLink(tmpConf, clusterName, "/new-mpt",
+            new URI("hdfs://" + newNs + "/new-mpt"));
+    cluster.transitionToActive(6);
+    FileSystem fs4 = cluster.getFileSystem(6);
+    fs4.mkdirs(new Path("/new-mpt"));
+
+    // upload the config to zk
+    MountPointRenewer renewer = new MountPointRenewer(clusterName, tmpConf,
+        new MountPointRenewer.RenewMpt() {
+          @Override
+          public void renewMpt(String viewName, Configuration conf)
+              throws IOException {
+          }
+        });
+    String znode = renewer.getMptZnodePath();
+    ZooKeeper zkClient = renewer.getZkClient();
+    String mptConf = renewer.getMountPointConfig(tmpConf, clusterName, true);
+    Assert.assertTrue(mptConf.contains(newNs));
+    String path = "";
+    String[] znodes = znode.split("/");
+    for (int i = 1; i < znodes.length; i++) {
+      path = path + "/" + znodes[i];
+      zkClient.create(path, new byte[]{}, ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+    }
+    zkClient.setData(znode, mptConf.getBytes(), 0);
+    String znodeData = new String(zkClient.getData(znode, false, null), "UTF-8");
+    Assert.assertEquals(znodeData, mptConf);
+
+    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+    FederatedDFSFileSystem fs = (FederatedDFSFileSystem)FileSystem.get(conf);
+    Assert.assertEquals(fs.getChildFileSystems().length, 4);
+    Path testPath = new Path("/new-mpt/test-dir");
+    fs.mkdirs(testPath);
+    Assert.assertTrue(fs4.exists(testPath));
   }
 }

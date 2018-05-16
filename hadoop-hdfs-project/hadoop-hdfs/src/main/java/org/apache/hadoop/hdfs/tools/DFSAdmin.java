@@ -2082,7 +2082,7 @@ public class DFSAdmin extends FsShell {
       noNode = true;
     }
     String newConf =
-        mpr.getMountPointConfig(fs.getConf(), fs.getUri().getAuthority());
+        mpr.getMountPointConfig(fs.getConf(), fs.getUri().getAuthority(), true);
 
     System.out.println("UpdateMptOnZk: Old mount points are " + oldConf
         + ". New mount points are "
