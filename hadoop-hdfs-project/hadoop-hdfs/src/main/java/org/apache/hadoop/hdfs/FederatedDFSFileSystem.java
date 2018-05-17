@@ -235,8 +235,8 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   @Override
   public boolean delete(Path f, boolean recursive, boolean skipTrash)
       throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
+    // no mater skipTrash true or not, delete directly
+    return viewFs.delete(convertToViewFsScheme(f), recursive);
   }
 
   @Override
