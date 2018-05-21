@@ -69,8 +69,8 @@ class BlockPoolSliceScanner {
   
   private static final String DATA_FORMAT = "yyyy-MM-dd HH:mm:ss,SSS";
 
-  private static final int MAX_SCAN_RATE = 8 * 1024 * 1024; // 8MB per sec
-  private static final int MIN_SCAN_RATE = 1 * 1024 * 1024; // 1MB per sec
+  private static int MAX_SCAN_RATE = 8 * 1024 * 1024; // 8MB per sec
+  private static int MIN_SCAN_RATE = 1 * 1024 * 1024; // 1MB per sec
   private static final long DEFAULT_SCAN_PERIOD_HOURS = 21*24L; // three weeks
 
   private static final String VERIFICATION_PREFIX = "dncp_block_verification.log";
@@ -103,9 +103,8 @@ class BlockPoolSliceScanner {
   private boolean isNewPeriod = true;
   
   private final LogFileHandler verificationLog;
-  
-  private final DataTransferThrottler throttler = new DataTransferThrottler(
-       200, MAX_SCAN_RATE);
+
+  private DataTransferThrottler throttler = null;
   
   private static enum ScanType {
     VERIFICATION_SCAN,     // scanned as part of periodic verfication
@@ -206,6 +205,14 @@ class BlockPoolSliceScanner {
                "Verification times are not stored.");
     }
     verificationLog = rollingLogs == null? null: new LogFileHandler(rollingLogs);
+
+    MAX_SCAN_RATE =  conf.getInt(DFSConfigKeys.DFS_DATANODE_SCAN_THROTTLE_MAX_MB_KEY,
+        DFSConfigKeys.DFS_DATANODE_SCAN_THROTTLE_MAX_MB_DEFAULT) * 1024 * 1024;
+
+    MIN_SCAN_RATE =  conf.getInt(DFSConfigKeys.DFS_DATANODE_SCAN_THROTTLE_MIN_MB_KEY,
+        DFSConfigKeys.DFS_DATANODE_SCAN_THROTTLE_MIN_MB_DEFAULT) * 1024 * 1024;
+
+    throttler = new DataTransferThrottler(200, MAX_SCAN_RATE);
   }
   
   String getBlockPoolId() {
