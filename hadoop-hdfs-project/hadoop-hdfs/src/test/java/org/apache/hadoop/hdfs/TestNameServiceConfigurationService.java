@@ -10,9 +10,11 @@ import org.apache.hadoop.fs.ConfigurationService;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.NameServiceConfigurationService;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.NameServiceUtil;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.server.quorum.QuorumPeerConfig;
+import org.codehaus.jettison.json.JSONException;
+import org.codehaus.jettison.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -28,9 +30,11 @@ import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Map;
 import java.util.concurrent.Executors;
 
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -43,29 +47,36 @@ public class TestNameServiceConfigurationService {
   private static HttpServer httpServer;
 
   static class GetHandler implements HttpHandler {
-    String content;
-    public GetHandler(String content) {
+    String conf;
+    String catalog;
+    public GetHandler(String catalog, String conf) {
       super();
-      this.content = content;
-
+      this.catalog = catalog;
+      this.conf = conf;
     }
 
     @Override
     public void handle(HttpExchange httpExchange) throws IOException {
       String method = httpExchange.getRequestMethod();
       if (method.equals("GET")) {
+        URI uri = httpExchange.getRequestURI();
+        String path = uri.getQuery();
+        String data = null;
+        if (path.contains(
+            NameServiceUtil.CONFIGURATION_SERVICE_NAME_CATALOG_URL_PATH_DEFAULT)) {
+          data = catalog;
+        } else if (path.contains(NAMESERVICE)) {
+          data = conf;
+        }
         // construct response
         Headers responseHeaders = httpExchange.getResponseHeaders();
-        responseHeaders.set("Context-Type","text/plain");
-        httpExchange.sendResponseHeaders(200,0);
 
-        OutputStream responseBodyOut = httpExchange.getResponseBody();
         String jsonString =
-                "{\n" +
-                        "\"code\": 200,\n" +
-                        "\"data\": "+content+",\n" +
-                        "\"description\": \"save success\"\n" +
-                        "}";
+            "{\n" + "\"code\": 200,\n" + "\"data\": " + data + ",\n"
+                + "\"description\": \"save success\"\n" + "}";
+        responseHeaders.set("Context-Type", "application/json");
+        httpExchange.sendResponseHeaders(200, 0);
+        OutputStream responseBodyOut = httpExchange.getResponseBody();
         responseBodyOut.write(jsonString.getBytes());
         responseBodyOut.close();
       }
@@ -105,16 +116,36 @@ public class TestNameServiceConfigurationService {
     conf.set("dfs.namenode.rpc-address." + NAMESERVICE + ".host1", address2);
     conf.set("dfs.client.failover.proxy.provider." + NAMESERVICE,
         "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
-
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     conf.write(new DataOutputStream(out));
     out.flush();
     byte[] bytes = out.toByteArray();
     out.close();
+    String confString = new String(Base64.encodeBase64(bytes));
 
-    String content = new String(Base64.encodeBase64(bytes));
+    Configuration catalogConf = new Configuration(false);
+    catalogConf.set(NameServiceUtil.CONFIGURATION_SERVICE_IDC, "c4");
+    catalogConf
+        .set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_DOMAIN_PREFIX + ".c4",
+            "127.0.0.1");
+    catalogConf.set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_VERSION, "v1");
+    catalogConf
+        .set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_CLUSTER_PREFIX + ".c4",
+            "xns_c4xnssrv");
+    JSONObject obj = new JSONObject();
+    try {
+      for (Map.Entry<String, String> entry : catalogConf) {
+        String key = entry.getKey();
+        String value = entry.getValue();
+        obj.put(key, value);
+      }
+    } catch (JSONException e) {
+      throw new IOException("Convert Configuration to Json error.", e);
+    }
+    String catalogString = obj.toString();
+
     httpServer = HttpServer.create(new InetSocketAddress(0), 0);
-    httpServer.createContext("/", new GetHandler(content));
+    httpServer.createContext("/", new GetHandler(catalogString, confString));
     httpServer.setExecutor(Executors.newCachedThreadPool());
     httpServer.start();
   }
@@ -153,12 +184,7 @@ public class TestNameServiceConfigurationService {
   public void testVisitingUnconfiguredHDFS() throws Exception {
     // create an empty configuration, and use it to create FileSystem
     Configuration defaultConf = new Configuration(false);
-    defaultConf.set("configuration.service.unit.test","unit.test");
-    defaultConf.set(ConfigurationService.CONFIGURATION_SERVICE,
-        "org.apache.hadoop.fs.NameServiceConfigurationService");
-    defaultConf.setInt(
-        NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
-        httpServer.getAddress().getPort());
+    setNameServiceConf(defaultConf);
     FileSystem tstFs =
         FileSystem.get(new URI("hdfs://" + NAMESERVICE + "/"), defaultConf);
     // test writing files to hdfs
@@ -183,12 +209,7 @@ public class TestNameServiceConfigurationService {
     conf.set("dfs.ha.namenodes." + NAMESERVICE, "host0,host1");
     conf.set("dfs.client.failover.proxy.provider." + NAMESERVICE,
         "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
-    conf.set("configuration.service.unit.test","unit.test");
-    conf.set(ConfigurationService.CONFIGURATION_SERVICE,
-        "org.apache.hadoop.fs.NameServiceConfigurationService");
-    conf.setInt(
-        NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
-        httpServer.getAddress().getPort());
+    setNameServiceConf(conf);
     conf.setBoolean("fs.hdfs.impl.disable.cache", true);
     FileSystem tstFs =
         FileSystem.get(new URI("hdfs://" + NAMESERVICE + "/"), conf);
@@ -208,34 +229,17 @@ public class TestNameServiceConfigurationService {
   @Test
   public void testFetchConfiguration() throws IOException {
     Configuration conf = new Configuration(false);
-    conf.set(NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_TEAM_ID,
+    conf.set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_TEAM_ID,
         "CL7198");
     // conf.set(ConfigurationService.CONFIGURATION_SERVICE_NAME_DOMAIN_PREFIX+".mi","cnbj3");//模拟c4机房机器
-    conf.set(
-        NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_DOMAIN_PREFIX
+    conf.set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_DOMAIN_PREFIX
             + ".c4",
         "cnbj3");
-    conf.set(NameServiceConfigurationService.CONFIGURATION_SERVICE_IDC,
+    conf.set(NameServiceUtil.CONFIGURATION_SERVICE_IDC,
         "alsg,azbj,azde,azor,azsg,c3,c4,dp,hy,lg,tjwq");
     NameServiceConfigurationService nscs = new NameServiceConfigurationService(conf);
     Configuration remoteConf = nscs.fetchConfiguration("c4tst-xiaomi");
     assertTrue(remoteConf != null);
-  }
-
-  @Test
-  public void testUpdateConfFromNameService() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, NoSuchFieldException {
-    Configuration conf = new Configuration(false);
-    conf.set(NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_TEAM_ID,
-        "CL7198");
-    NameServiceConfigurationService name = new NameServiceConfigurationService(conf);
-    Field field = ConfigurationService.class.getDeclaredField("conf");
-    field.setAccessible(true);
-    Configuration reConf = (Configuration)field.get(name);
-    assertTrue(reConf.get("configuration.service.name.domain.c4").equals("cnbj3"));
-
-    Method method = NameServiceConfigurationService.class.getDeclaredMethod("getClusterIDCName",String.class);
-    method.setAccessible(true);
-    method.invoke(name,"zjy");
   }
 
   @Test
@@ -258,12 +262,7 @@ public class TestNameServiceConfigurationService {
               "hdfs://" + NAMESERVICE), e.getCause().getCause());
     }
     // test get FileSystem with NameService
-    conf.set("configuration.service.unit.test","unit.test");
-    conf.set(ConfigurationService.CONFIGURATION_SERVICE,
-            "org.apache.hadoop.fs.NameServiceConfigurationService");
-    conf.setInt(
-            NameServiceConfigurationService.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
-        httpServer.getAddress().getPort());
+    setNameServiceConf(conf);
     FileSystem fs = FileSystem.get(new URI("hdfs://" + NAMESERVICE),conf);
     assertTrue(testWriteWithFileSystem(fs));
   }
@@ -288,5 +287,23 @@ public class TestNameServiceConfigurationService {
     OutputStream out = fs.create(path);
     out.close();
     return fs.exists(path);
+  }
+
+  private void setNameServiceConf(Configuration conf) {
+    conf.set("configuration.service.unit.test", "unit.test");
+    conf.set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_CATALOG_URL_GET,
+        "http://127.0.0.1:" + httpServer.getAddress().getPort()
+            + "/v1/api/ns/get");
+    conf.set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_CATALOG_URL_PUT,
+        "http://127.0.0.1:" + httpServer.getAddress().getPort()
+            + "/v1/api/ns/put");
+    conf.setInt(NameServiceUtil.CONFIGURATION_SERVICE_NAME_HTTP_SERVER_PORT,
+        httpServer.getAddress().getPort());
+    conf.set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_URL_GET,
+        "http://%s:%d/%s/api/ns/get?teamId=%s&path=%s&cluster=%s");
+    conf.set(NameServiceUtil.CONFIGURATION_SERVICE_NAME_URL_PUT,
+        "http://%s:%d/%s/api/ns/put");
+    conf.set(ConfigurationService.CONFIGURATION_SERVICE,
+        "org.apache.hadoop.fs.NameServiceConfigurationService");
   }
 }
