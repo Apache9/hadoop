@@ -10039,7 +10039,8 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   }
 
   public boolean renameRecordExist(long renameId, String srcId, String dstId,
-      boolean isSource) {
+      boolean isSource) throws StandbyException {
+    checkOperation(OperationCategory.READ);
     return (federationRenameMap.getRenameRecord(renameId, srcId, dstId,
         isSource) != null);
   }
