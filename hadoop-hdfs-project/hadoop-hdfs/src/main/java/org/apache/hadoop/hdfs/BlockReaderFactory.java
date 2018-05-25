@@ -24,6 +24,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
+import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.commons.lang.mutable.MutableBoolean;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.logging.Log;
@@ -304,7 +305,9 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
           return reader;
         }
       } else {
+        long getBlockReaderLocalStartTs = Time.monotonicNow();
         reader = getBlockReaderLocal();
+        HdfsPerfCounter.count("getBlockReaderLocal", 1 , Time.monotonicNow() - getBlockReaderLocalStartTs);
         if (reader != null) {
           if (LOG.isTraceEnabled()) {
             LOG.trace(this + ": returning new block reader local.");
@@ -329,7 +332,10 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
     Preconditions.checkState(!DFSInputStream.tcpReadsDisabledForTesting,
         "TCP reads were disabled for testing, but we failed to " +
         "do a non-TCP read.");
-    return getRemoteBlockReaderFromTcp();
+    long getBlockReaderRemoteStartTs = Time.monotonicNow();
+    BlockReader remoteReader = getRemoteBlockReaderFromTcp();
+    HdfsPerfCounter.count("getBlockReaderRemote", 1 , Time.monotonicNow() - getBlockReaderRemoteStartTs);
+    return remoteReader;
   }
 
   /**
@@ -509,6 +515,7 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
    */
   private ShortCircuitReplicaInfo requestFileDescriptors(DomainPeer peer,
           Slot slot) throws IOException {
+    long startTs = Time.monotonicNow();
     ShortCircuitCache cache = clientContext.getShortCircuitCache();
     final DataOutputStream out =
         new DataOutputStream(new BufferedOutputStream(peer.getOutputStream()));
@@ -540,7 +547,9 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
           IOUtils.cleanup(DFSClient.LOG, fis[0], fis[1]);
         }
       }
-      return new ShortCircuitReplicaInfo(replica);
+      ShortCircuitReplicaInfo newInfo = new ShortCircuitReplicaInfo(replica);
+      HdfsPerfCounter.count("BlockReaderFactory.requestFileDescriptors", 1, Time.monotonicNow() - startTs);
+      return newInfo;
     case ERROR_UNSUPPORTED:
       if (!resp.hasShortCircuitAccessVersion()) {
         LOG.warn("short-circuit read access is disabled for " +

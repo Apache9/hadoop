@@ -707,4 +707,8 @@ class BlockReaderLocal implements BlockReader {
   void forceUnanchorable() {
     replica.getSlot().makeUnanchorable();
   }
+
+  public long getBlockId() {
+    return this.block.getBlockId();
+  }
 }

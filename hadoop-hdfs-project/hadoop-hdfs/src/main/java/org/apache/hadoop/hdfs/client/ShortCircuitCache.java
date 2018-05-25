@@ -22,6 +22,7 @@ import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 
+import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.hadoop.classification.InterfaceAudience;
 
 import java.io.IOException;
@@ -188,6 +189,7 @@ public class ShortCircuitCache implements Closeable {
 
     @Override
     public void run() {
+      long startTs = Time.monotonicNow();
       if (LOG.isTraceEnabled()) {
         LOG.trace(ShortCircuitCache.this + ": about to release " + slot);
       }
@@ -226,6 +228,7 @@ public class ShortCircuitCache implements Closeable {
           shm.getEndpointShmManager().shutdown(shm);
         }
         IOUtils.cleanup(LOG, sock, out);
+        HdfsPerfCounter.count("SlotReleaser.release", 1, Time.monotonicNow() - startTs);
       }
     }
   }
@@ -772,6 +775,7 @@ public class ShortCircuitCache implements Closeable {
       ShortCircuitReplicaCreator creator,
       Waitable<ShortCircuitReplicaInfo> newWaitable) {
     // Handle loading a new replica.
+    long startTs = Time.monotonicNow();
     ShortCircuitReplicaInfo info = null;
     try {
       if (LOG.isTraceEnabled()) {
@@ -809,6 +813,7 @@ public class ShortCircuitCache implements Closeable {
     } finally {
       lock.unlock();
     }
+    HdfsPerfCounter.count("ShortCircuitCache.create", 1, Time.monotonicNow() - startTs);
     return info;
   }
 

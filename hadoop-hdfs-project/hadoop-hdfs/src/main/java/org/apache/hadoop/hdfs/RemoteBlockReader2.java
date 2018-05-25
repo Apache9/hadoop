@@ -127,6 +127,9 @@ public class RemoteBlockReader2  implements BlockReader {
   ByteBuffer checksumBytes = null;
   /** Amount of unread data in the current received packet */
   int dataLeft = 0;
+
+  // for loging
+  private long blockId = 0;
   
   @VisibleForTesting
   public Peer getPeer() {
@@ -304,6 +307,7 @@ public class RemoteBlockReader2  implements BlockReader {
     this.startOffset = Math.max( startOffset, 0 );
     this.filename = file;
     this.peerCache = peerCache;
+    this.blockId = blockId;
 
     // The total number of bytes that we need to transfer from the DN is
     // the amount that the user wants (bytesToRead), plus the padding at
@@ -486,5 +490,9 @@ public class RemoteBlockReader2  implements BlockReader {
   @Override
   public ClientMmap getClientMmap(EnumSet<ReadOption> opts) {
     return null;
+  }
+
+  public long getBlockId () {
+    return blockId;
   }
 }
