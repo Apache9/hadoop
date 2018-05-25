@@ -1,24 +1,22 @@
 package org.apache.hadoop.hdfs;
 
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.OutputStream;
-
 import junit.framework.Assert;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.MiniDFSNNTopology.NSConf;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology.NNConf;
+import org.apache.hadoop.hdfs.MiniDFSNNTopology.NSConf;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
+import org.apache.hadoop.ipc.StandbyException;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.io.OutputStream;
 
 public class TestFederationRenameWithFailover {
   private static MiniDFSCluster cluster;
@@ -79,6 +77,14 @@ public class TestFederationRenameWithFailover {
 
   private void testNamenodeFailoverInternal(ASSwitcher switcher)
       throws IOException {
+    if (!cluster.getNameNode(0).isActiveState()) {
+      cluster.transitionToStandby(1);
+      cluster.transitionToActive(0);
+    }
+    if (!cluster.getNameNode(2).isActiveState()) {
+      cluster.transitionToStandby(3);
+      cluster.transitionToActive(2);
+    }
     String str = "testNamenodeFailover";
     String pathPrefix = "/nnfailover" + switcher.getClass().getName();
     fHdfs1 = getClientHdfs(0);
@@ -130,11 +136,6 @@ public class TestFederationRenameWithFailover {
           .getRpcServer()
           .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
               dfs2.getUri().toString(), true));
-      Assert.assertTrue(cluster
-          .getNameNode(1)
-          .getRpcServer()
-          .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
-              dfs2.getUri().toString(), true));
     }
     // verify rename id
     Assert.assertEquals(cluster.getNameNode(0).getNamesystem()
@@ -144,11 +145,6 @@ public class TestFederationRenameWithFailover {
     switcher.switchActiveNN(0);
     // verify rename record and renameid after failover
     for (int i = 0; i < TEST_RENAME_COUNT; i++) {
-      Assert.assertTrue(cluster
-          .getNameNode(0)
-          .getRpcServer()
-          .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
-              dfs2.getUri().toString(), true));
       Assert.assertTrue(cluster
           .getNameNode(1)
           .getRpcServer()
@@ -184,11 +180,6 @@ public class TestFederationRenameWithFailover {
     for (int i = 0; i < TEST_RENAME_COUNT; i++) {
       Assert.assertTrue(cluster
           .getNameNode(2)
-          .getRpcServer()
-          .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
-              dfs2.getUri().toString(), false));
-      Assert.assertTrue(cluster
-          .getNameNode(3)
           .getRpcServer()
           .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
               dfs2.getUri().toString(), false));
@@ -235,11 +226,6 @@ public class TestFederationRenameWithFailover {
         .getDstBlockGenStamp());
     switcher.switchActiveNN(1);
     for (int i = 0; i < TEST_RENAME_COUNT; i++) {
-      Assert.assertTrue(cluster
-          .getNameNode(2)
-          .getRpcServer()
-          .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
-              dfs2.getUri().toString(), false));
       Assert.assertTrue(cluster
           .getNameNode(3)
           .getRpcServer()
@@ -289,21 +275,11 @@ public class TestFederationRenameWithFailover {
           .getRpcServer()
           .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
               dfs2.getUri().toString(), true));
-      Assert.assertFalse(cluster
-          .getNameNode(0)
-          .getRpcServer()
-          .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
-              dfs2.getUri().toString(), true));
     }
     switcher.switchActiveNN(0);
     for (int i = 0; i < TEST_RENAME_COUNT; i++) {
       Assert.assertFalse(cluster
           .getNameNode(0)
-          .getRpcServer()
-          .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
-              dfs2.getUri().toString(), true));
-      Assert.assertFalse(cluster
-          .getNameNode(1)
           .getRpcServer()
           .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
               dfs2.getUri().toString(), true));
@@ -328,11 +304,6 @@ public class TestFederationRenameWithFailover {
     }
     for (int i = 0; i < TEST_RENAME_COUNT; i++) {
       Assert.assertFalse(cluster
-          .getNameNode(2)
-          .getRpcServer()
-          .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
-              dfs2.getUri().toString(), false));
-      Assert.assertFalse(cluster
           .getNameNode(3)
           .getRpcServer()
           .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
@@ -342,11 +313,6 @@ public class TestFederationRenameWithFailover {
     for (int i = 0; i < TEST_RENAME_COUNT; i++) {
       Assert.assertFalse(cluster
           .getNameNode(2)
-          .getRpcServer()
-          .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
-              dfs2.getUri().toString(), false));
-      Assert.assertFalse(cluster
-          .getNameNode(3)
           .getRpcServer()
           .renameRecordExist(ds[i].getRenameId(), dfs1.getUri().toString(),
               dfs2.getUri().toString(), false));
@@ -461,4 +427,94 @@ public class TestFederationRenameWithFailover {
     }
     Assert.assertTrue(dstFs.exists(new Path(dst + "/foo")));
   }
+
+  @Test
+  public void testRenameRecordExistWithFailover() throws IOException {
+    if (!cluster.getNameNode(0).isActiveState()) {
+      cluster.transitionToStandby(1);
+      cluster.transitionToActive(0);
+    }
+    if (!cluster.getNameNode(2).isActiveState()) {
+      cluster.transitionToStandby(3);
+      cluster.transitionToActive(2);
+    }
+    String str = "testRenameRecordExistWithFailover";
+    String pathPrefix = "/testRenameRecordExistWithFailover";
+    fHdfs1 = getClientHdfs(0);
+    fHdfs2 = getClientHdfs(1);
+    DistributedFileSystem dfs1 =
+        (DistributedFileSystem) fHdfs1.getDistributedFileSystem();
+    DistributedFileSystem dfs2 =
+        (DistributedFileSystem) fHdfs2.getDistributedFileSystem();
+    final int TEST_RENAME_COUNT = 100;
+
+    String name = pathPrefix;
+    fHdfs1.mkdirs(new Path(name), null);
+    String fname = name + "/afile";
+    OutputStream out = fHdfs1.create(new Path(fname));
+    out.close();
+    fname = name + "/testfile";
+    out = fHdfs1.create(new Path(fname));
+    out.write(str.getBytes());
+    out.close();
+    fname = name + "/testfile1";
+    out = fHdfs1.create(new Path(fname));
+    out.close();
+
+    out = fHdfs1.create(new Path("/spmodify/testfile"));
+    out.write(str.getBytes());
+    out.close();
+
+    // do rename src phase1
+    DirectorySubTree ds;
+    name = pathPrefix;
+    ds = dfs1.renameSrcPhase1(name, dfs1.getUri().toString(), name,
+        dfs2.getUri().toString());
+    // Wait for log replay to finish
+    try {
+      Thread.sleep(4000);
+    } catch (InterruptedException ie) {
+      // Ignore
+    }
+    Assert.assertTrue(cluster.getNameNode(0).getRpcServer()
+        .renameRecordExist(ds.getRenameId(), dfs1.getUri().toString(),
+            dfs2.getUri().toString(), true));
+    try {
+      cluster.getNameNode(1).getRpcServer()
+          .renameRecordExist(ds.getRenameId(), dfs1.getUri().toString(),
+              dfs2.getUri().toString(), true);
+      Assert.assertTrue("We should catch StandbyException here.", false);
+    } catch (Exception e) {
+      Assert.assertTrue(e instanceof StandbyException);
+    }
+    // verify rename id
+    Assert.assertEquals(
+        cluster.getNameNode(0).getNamesystem().getCurrentRenameId(),
+        ds.getRenameId() + 1);
+    Assert.assertEquals(
+        cluster.getNameNode(1).getNamesystem().getCurrentRenameId(),
+        ds.getRenameId() + 1);
+    cluster.transitionToStandby(0);
+    cluster.transitionToActive(1);
+    // verify rename record and renameid after failover
+    Assert.assertTrue(cluster.getNameNode(1).getRpcServer()
+        .renameRecordExist(ds.getRenameId(), dfs1.getUri().toString(),
+            dfs2.getUri().toString(), true));
+    try {
+      cluster.getNameNode(0).getRpcServer()
+          .renameRecordExist(ds.getRenameId(), dfs1.getUri().toString(),
+              dfs2.getUri().toString(), true);
+      Assert.assertTrue("We should catch StandbyException here.", false);
+    } catch (Exception e) {
+      Assert.assertTrue(e instanceof StandbyException);
+    }
+    // verify rename id
+    Assert.assertEquals(
+        cluster.getNameNode(0).getNamesystem().getCurrentRenameId(),
+        ds.getRenameId() + 1);
+    Assert.assertEquals(
+        cluster.getNameNode(1).getNamesystem().getCurrentRenameId(),
+        ds.getRenameId() + 1);
+  }
+
 }
