@@ -4385,7 +4385,7 @@ public abstract class FSEditLogOp {
         aclEntries = Lists.newArrayList();
       }
       AclStatus astatus = abuilder.addEntries(aclEntries).build();
-      return subTree.new HdfsExtendedFileStatus(fstatus, astatus);
+      return new HdfsExtendedFileStatus(fstatus, astatus);
     }
 
     @Override
@@ -4434,7 +4434,7 @@ public abstract class FSEditLogOp {
       this.startTime = Long.parseLong(st.getValue("STARTTIME"));
       long renameId = Long.parseLong(st.getValue("RENAMEID"));
       int files = Integer.parseInt(st.getValue("FILES"));
-      this.subTree = new DirectorySubTree(files);
+      this.subTree = new DirectorySubTree(files, Integer.MAX_VALUE);
       for (int i = 0; i < files; i++) {
         subTree.addItem(fileStatusFromXml(st, subTree));
       }

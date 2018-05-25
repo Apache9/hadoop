@@ -35,6 +35,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -113,6 +114,7 @@ import org.mortbay.log.Log;
  **/
 @InterfaceAudience.Private
 public class FSDirectory implements Closeable {
+  public static final org.apache.commons.logging.Log LOG = LogFactory.getLog(FSDirectory.class);
   private static INodeDirectory createRoot(FSNamesystem namesystem) {
     final INodeDirectory r = new INodeDirectory(
         INodeId.ROOT_INODE_ID,
@@ -3380,101 +3382,85 @@ public class FSDirectory implements Closeable {
     return inodesInPath;
   }
 
-  void buildDirectorySubTree(DirectorySubTree subTree, INode node,
-      int blockLimit, int snapshot, boolean isRawPath, INodesInPath iip)
+  // All children (including grandchildren) of INode should be either INodeFile
+  // or INodeDirectory
+  // INode shouldn't belong to snapshot path or reserved path.
+  void buildDirectorySubTree(DirectorySubTree subTree, INode node)
       throws IOException {
     if (subTree.remainingSize() < 1) {
       throw new FederationRenameTooBigException(
           "The directory to be renamed between namenode contains too many files");
+    } else if (node.isReference()) {
+      // seems the code will never reach here, keep it for safe.
+      throw new FederationRenameInvalidArgument(
+          "The directory to be renamed between namenodes contains reference");
+    } else if (node.isSymlink()) {
+      throw new FederationRenameInvalidArgument(
+          "The directory to be renamed between namenodes contains symlink");
     }
-    if (!node.isDirectory()) {
-      if (node.isSymlink()) {
-        throw new FederationRenameInvalidArgument(
-            "The directory to be renamed between namenodes contains symlink");
-      }
+    if (node.isFile()) {
       if (node.asFile().isUnderConstruction()) {
         throw new FederationRenameInvalidArgument(
             "The directory to be renamed between namenodes contains un-closed file");
       }
-      HdfsFileStatus fstatus =
-          createFileStatus(node.getLocalNameBytes(), node, true,
-              BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath, iip);
-      if (((HdfsLocatedFileStatus) fstatus).getBlockLocations()
-          .locatedBlockCount() > blockLimit) {
+      HdfsExtendedFileStatus item = buildHdfsExtendedFileStatus(node.asFile());
+      if (!subTree.incrBlocks(
+          ((HdfsLocatedFileStatus) item.getFileStatus()).getBlockLocations()
+              .locatedBlockCount())) {
         throw new FederationRenameTooBigException(
-            "The directory to be renamed between namenode contains too blocks");
+            "The directory to be renamed between namenode contains too many blocks");
       }
-      List<AclEntry> acl = AclStorage.readINodeAcl(node, snapshot);
-      AclStatus astatus =
-          new AclStatus.Builder().owner(node.getUserName())
-              .group(node.getGroupName())
-              .stickyBit(node.getFsPermission(snapshot).getStickyBit())
-              .addEntries(acl).build();
-      subTree.addItem(subTree.new HdfsExtendedFileStatus(fstatus, astatus));
-      return;
-    } else {
-      int newBlockLimit = blockLimit;
+      subTree.addItem(item);
+    } else if (node.isDirectory()) {
+      subTree.addItem(buildHdfsExtendedFileStatus(node.asDirectory()));
       final INodeDirectory dirInode = node.asDirectory();
-      final ReadOnlyList<INode> contents = dirInode.getChildrenList(snapshot);
-      if (contents.size() + 1 > subTree.remainingSize()) {
-        throw new FederationRenameTooBigException(
-            "The directory to be renamed between namenode contains too many files");
-      }
-      HdfsFileStatus fstatus =
-          createFileStatus(node.getLocalNameBytes(), node, true,
-              BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath, iip);
-      List<AclEntry> acl = AclStorage.readINodeAcl(node, snapshot);
-      AclStatus astatus =
-          new AclStatus.Builder().owner(node.getUserName())
-              .group(node.getGroupName())
-              .stickyBit(node.getFsPermission(snapshot).getStickyBit())
-              .addEntries(acl).build();
-      subTree.addItem(subTree.new HdfsExtendedFileStatus(fstatus, astatus));
+      final ReadOnlyList<INode> contents =
+          dirInode.getChildrenList(Snapshot.CURRENT_STATE_ID);
       for (int i = 0; i < contents.size(); i++) {
         INode cur = contents.get(i);
-        if (!cur.isDirectory()) {
-          HdfsFileStatus curFstatus =
-              createFileStatus(cur.getLocalNameBytes(), cur, true,
-                  BlockStoragePolicySuite.ID_UNSPECIFIED, snapshot, isRawPath,
-                  iip);
-          int blocks =
-              ((HdfsLocatedFileStatus) curFstatus).getBlockLocations()
-                  .locatedBlockCount();
-          if (blocks > newBlockLimit) {
-            throw new FederationRenameTooBigException(
-                "The directory to be renamed between namenode contains too many blocks");
-          }
-          acl = AclStorage.readINodeAcl(cur, snapshot);
-          AclStatus curAstatus =
-              new AclStatus.Builder().owner(node.getUserName())
-                  .group(node.getGroupName())
-                  .stickyBit(node.getFsPermission(snapshot).getStickyBit())
-                  .addEntries(acl).build();
-          subTree.addItem(subTree.new HdfsExtendedFileStatus(curFstatus,
-              curAstatus));
-          newBlockLimit -= blocks;
-        } else {
-          INodesInPath newIip = INodesInPath.fromINode(cur);
-          buildDirectorySubTree(subTree, cur, newBlockLimit, snapshot,
-              isRawPath, newIip);
-        }
+        buildDirectorySubTree(subTree, cur);
       }
+    } else {
+      throw new FederationRenameInvalidArgument(
+          "The node is neither file nor directory");
     }
+  }
+
+  private HdfsExtendedFileStatus buildHdfsExtendedFileStatus(
+      INodeWithAdditionalFields node) throws IOException {
+    INodesInPath iip = getINodesInPath(node.getFullPathName(), false);
+    if (iip.isSnapshot()) {
+      throw new FederationRenameException(
+          "FederationRename doesn't support snapshot.");
+    }
+    HdfsFileStatus fstatus =
+        createFileStatus(node.getLocalNameBytes(), node, true,
+            BlockStoragePolicySuite.ID_UNSPECIFIED, Snapshot.CURRENT_STATE_ID,
+            false, iip);
+    List<AclEntry> acl = AclStorage.readINodeAcl(node, Snapshot.CURRENT_STATE_ID);
+    AclStatus astatus =
+        new AclStatus.Builder().owner(node.getUserName())
+            .group(node.getGroupName())
+            .stickyBit(node.getFsPermission().getStickyBit())
+            .addEntries(acl).build();
+    return new HdfsExtendedFileStatus(fstatus, astatus);
   }
 
   DirectorySubTree federationRenameSrcPhase1(long renameId, String src,
       String srcId, String dst, String dstId, long stTime) throws IOException {
-    DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit);
+    DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit,
+        federationRenameBlocksLimit);
     writeLock();
     try {
       INodesInPath srcIIP = getINodesInPath4Write(src, false);
       srcIIP.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
       final INode srcInode = srcIIP.getLastINode();
       validateRenameSource(src, srcIIP);
-      final int snapshot = srcIIP.getPathSnapshotId();
-      final boolean isRawPath = isReservedRawName(src);
-      buildDirectorySubTree(res, srcInode, federationRenameBlocksLimit,
-          snapshot, isRawPath, srcIIP);
+      if (isReservedRawName(src)) {
+        throw new FederationRenameException(
+            "src path is a reserved raw path:" + src);
+      }
+      buildDirectorySubTree(res, srcInode);
       srcInode.addFederationRenameFeature(new FederationRenameFeature(true,
           renameId, src, srcId, dst, dstId, stTime));
     } finally {
@@ -3484,18 +3470,20 @@ public class FSDirectory implements Closeable {
   }
 
   DirectorySubTree federationRenameBuildSubTree(String src) {
-    DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit);
+    DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit,
+        federationRenameBlocksLimit);
     readLock();
     try {
       INodesInPath srcIIP = getINodesInPath4Write(src, false);
       final INode srcInode = srcIIP.getLastINode();
-      final int snapshot = srcIIP.getPathSnapshotId();
-      final boolean isRawPath = isReservedRawName(src);
-      buildDirectorySubTree(res, srcInode, federationRenameBlocksLimit,
-          snapshot, isRawPath, srcIIP);
+      if (isReservedRawName(src)) {
+        throw new FederationRenameException(
+            "src path is a reserved path:" + src);
+      }
+      buildDirectorySubTree(res, srcInode);
     } catch (Exception e) {
       res = null;
-      Log.warn("Fail to buildDirectorySubTree ", e);
+      LOG.warn("Fail to buildDirectorySubTree ", e);
     } finally {
       readUnlock();
     }

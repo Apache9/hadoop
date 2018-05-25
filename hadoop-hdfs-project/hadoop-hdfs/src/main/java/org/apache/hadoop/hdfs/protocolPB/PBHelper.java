@@ -2935,7 +2935,7 @@ public class PBHelper {
         new AclStatus.Builder().owner(a.getOwner()).group(a.getGroup())
             .stickyBit(a.getSticky())
             .addEntries(convertAclEntry(a.getEntriesList())).build();
-    return subTree.new HdfsExtendedFileStatus(fstatus, astatus);
+    return new HdfsExtendedFileStatus(fstatus, astatus);
   }
 
   public static HdfsExtendedFileStatusProto convert(HdfsExtendedFileStatus efs) {
@@ -2954,7 +2954,8 @@ public class PBHelper {
     long renameId = subTreeProto.getRenameId();
     List<HdfsExtendedFileStatusProto> fileStatusList =
         subTreeProto.getDentryList();
-    DirectorySubTree subTree = new DirectorySubTree(fileStatusList.size());
+    DirectorySubTree subTree =
+        new DirectorySubTree(fileStatusList.size(), Integer.MAX_VALUE);
     subTree.setRenameId(renameId);
     for (int i = 0; i < fileStatusList.size(); i++) {
       subTree.addItem(convert(fileStatusList.get(i), subTree));

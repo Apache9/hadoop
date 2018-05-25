@@ -21,6 +21,7 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.StringReader;
 import java.util.EnumSet;
 import java.util.List;
@@ -30,16 +31,19 @@ import com.google.common.collect.ImmutableList;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.fs.XAttrSetFlag;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
+import org.apache.hadoop.hdfs.protocol.DirectorySubTree;
 import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.protocol.SnapshotAccessControlException;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -48,6 +52,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
+import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -382,6 +387,145 @@ public class TestFSDirectory {
     newXAttrs = fsdir.setINodeXAttrs(existingXAttrs, toAdd,
         EnumSet.of(XAttrSetFlag.CREATE, XAttrSetFlag.REPLACE));
     verifyXAttrsPresent(newXAttrs, 4);
+  }
+
+  @Test
+  public void testFedRenameCheck() throws Exception {
+    // test block limit
+    FileSystem fs = cluster.getFileSystem(0);
+    String file1 = "/B/B1/file1";
+    String file2 = "/B/B1/B2/file2";
+    byte[] bytes = new byte[512*10];
+    OutputStream out = fs.create(new Path(file1), true, 4096, (short) 3, 512);
+    out.write(bytes);
+    out.close();
+    out = fs.create(new Path(file2), true, 4096, (short) 3, 512);
+    out.write(bytes);
+    out.close();
+
+    INodesInPath iip1 = fsdir.getINodesInPath4Write(file1);
+    INode node = iip1.getLastINode();
+    assertEquals(10, node.asFile().getBlocks().length);
+    INodesInPath iip2 = fsdir.getINodesInPath4Write(file2);
+    node = iip2.getLastINode();
+    assertEquals(10, node.asFile().getBlocks().length);
+
+    // test block exceeded
+    try {
+      int federationRenameFilesLimit = 5;
+      int federationRenameBlocksLimit = 19;
+      DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit,
+          federationRenameBlocksLimit);
+      fsdir.readLock();
+      fsn.readLock();
+      fsdir.buildDirectorySubTree(res, iip1.getINode(1));
+      assert false;
+    } catch (FederationRenameTooBigException e) {
+      assertExceptionContains(
+          "The directory to be renamed between namenode contains too many blocks",
+          e);
+    } finally {
+      fsn.readUnlock();
+      fsdir.readUnlock();
+    }
+
+    // test name-consumed exceeded
+    try {
+      int federationRenameFilesLimit = 4;
+      int federationRenameBlocksLimit = 20;
+      DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit,
+          federationRenameBlocksLimit);
+      fsdir.readLock();
+      fsn.readLock();
+      fsdir.buildDirectorySubTree(res, iip1.getINode(1));
+      assert false;
+    } catch (FederationRenameTooBigException e) {
+      assertExceptionContains(
+          "The directory to be renamed between namenode contains too many files",
+          e);
+    } finally {
+      fsn.readUnlock();
+      fsdir.readUnlock();
+    }
+
+    // test successful build
+    try {
+      int federationRenameFilesLimit = 5;
+      int federationRenameBlocksLimit = 20;
+      DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit,
+          federationRenameBlocksLimit);
+      fsdir.readLock();
+      fsn.readLock();
+      fsdir.buildDirectorySubTree(res, iip1.getINode(1));
+    } catch (Exception e) {
+      assert false;
+    } finally {
+      fsn.readUnlock();
+      fsdir.readUnlock();
+    }
+
+    // test rename snapshot path
+    String snapshotPath = null;
+    try {
+      INodesInPath iip = fsdir.getINodesInPath4Write("/B/B1/B2");
+      node = iip.getLastINode();
+      node.asDirectory().addSnapshottableFeature();
+      snapshotPath = fsn.createSnapshot("/B/B1/B2", "snapshot1");
+      fsdir.federationRenameSrcPhase1(0L, snapshotPath, "", "", "",
+          System.currentTimeMillis());
+      assert false;
+    } catch (SnapshotAccessControlException e) {
+      assertExceptionContains(
+          "Modification on a read-only snapshot is disallowed", e);
+    } finally {
+      if (snapshotPath != null && fs.exists(new Path(snapshotPath))) {
+        fsn.deleteSnapshot("/B/B1/B2", "snapshot1");
+      }
+    }
+
+    // test rename dir contains symlink
+    try {
+      fs.createSymlink(new Path(file1), new Path("/B/B1/symlink-file1"), true);
+      int federationRenameFilesLimit = 1024;
+      int federationRenameBlocksLimit = 1024;
+      DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit,
+          federationRenameBlocksLimit);
+      fsdir.readLock();
+      fsn.readLock();
+      fsdir.buildDirectorySubTree(res, iip1.getINode(1));
+      assert false;
+    } catch (FederationRenameInvalidArgument e) {
+      assertExceptionContains(
+          "The directory to be renamed between namenodes contains symlink", e);
+    } finally {
+      fsn.readUnlock();
+      fsdir.readUnlock();
+      fs.delete(new Path("/B/B1/symlink-file1"));
+    }
+
+    // test under construction
+    out = null;
+    try {
+      out = fs.append(new Path(file2));
+      int federationRenameFilesLimit = 1024;
+      int federationRenameBlocksLimit = 1024;
+      DirectorySubTree res = new DirectorySubTree(federationRenameFilesLimit,
+          federationRenameBlocksLimit);
+      fsdir.readLock();
+      fsn.readLock();
+      fsdir.buildDirectorySubTree(res, iip1.getINode(1));
+      assert false;
+    } catch (FederationRenameInvalidArgument e) {
+      assertExceptionContains(
+          "The directory to be renamed between namenodes contains un-closed file",
+          e);
+    } finally {
+      fsn.readUnlock();
+      fsdir.readUnlock();
+      if (out != null) {
+        out.close();
+      }
+    }
   }
 
   @Test public void testVerifyFederationRename() throws Exception {
