@@ -351,7 +351,7 @@ public class TestFederationRename {
     Assert.assertTrue(sp.get(0).getFileStatus().isDir());
     Assert.assertTrue(sp.get(0).getFileStatus().getLocalName().equals("ges"));
     Assert.assertTrue(sp.get(0).getFileStatus().getChildrenNum() == 2);
-    DirectorySubTree newSp = new DirectorySubTree(2);
+    DirectorySubTree newSp = new DirectorySubTree(2, Integer.MAX_VALUE);
     newSp.addItem(sp.get(0));
     newSp.addItem(sp.get(1));
     boolean gep = false;

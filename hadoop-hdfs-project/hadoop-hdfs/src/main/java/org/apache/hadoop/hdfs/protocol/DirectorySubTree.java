@@ -23,18 +23,20 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.commons.logging.Log;
 
 import org.apache.hadoop.fs.permission.AclStatus;
-import org.apache.hadoop.hdfs.protocol.Block;
+
+import java.util.ArrayList;
 
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
 public class DirectorySubTree {
-  private int length;
+  private int MAX_INODES;
+  private int MAX_BLOCKS;
   private long renameId;
-  private int currentIdx = 0;
   private int consumedIdx = 0;
-  private HdfsExtendedFileStatus[] subTree;
+  private int blocksTotal = 0;
+  private ArrayList<HdfsExtendedFileStatus> subTree;
 
-  public class HdfsExtendedFileStatus {
+  public static class HdfsExtendedFileStatus {
     private HdfsFileStatus fstatus;
     private AclStatus astatus;
 
@@ -57,27 +59,48 @@ public class DirectorySubTree {
     }
   }
 
-  public DirectorySubTree(int len) {
-    subTree = new HdfsExtendedFileStatus[len];
-    length = len;
+  public DirectorySubTree(int MAX_INODES, int MAX_BLOCKS) {
+    this.subTree = new ArrayList<>();
+    this.MAX_INODES = MAX_INODES;
+    this.MAX_BLOCKS = MAX_BLOCKS;
   }
 
   public int remainingSize() {
-    return length - currentIdx;
+    return MAX_INODES - subTree.size();
+  }
+
+  public int remainingBlocks() {
+    return MAX_BLOCKS - blocksTotal;
   }
 
   public boolean addItem(HdfsExtendedFileStatus status) {
-    if (currentIdx < length) {
-      subTree[currentIdx] = status;
-      currentIdx++;
+    if (subTree.size() < MAX_INODES) {
+      subTree.add(status);
       return true;
     }
     return false;
   }
 
+  public boolean incrBlocks(int value) {
+    // avoid cross-border
+    if ((long)blocksTotal + value <= MAX_BLOCKS) {
+      blocksTotal += value;
+      return true;
+    }
+    return false;
+  }
+
+  public int getBlocksTotal() {
+    return this.blocksTotal;
+  }
+
+  public void setBlocksTotal(int blocksTotal) {
+    this.blocksTotal = blocksTotal;
+  }
+
   public HdfsExtendedFileStatus consumeItem() {
-    if (consumedIdx < currentIdx) {
-      HdfsExtendedFileStatus res = subTree[consumedIdx];
+    if (consumedIdx < subTree.size()) {
+      HdfsExtendedFileStatus res = subTree.get(consumedIdx);
       consumedIdx++;
       return res;
     }
@@ -85,8 +108,8 @@ public class DirectorySubTree {
   }
 
   public HdfsExtendedFileStatus nextItemToConsume() {
-    if (consumedIdx < currentIdx) {
-      HdfsExtendedFileStatus res = subTree[consumedIdx];
+    if (consumedIdx < subTree.size()) {
+      HdfsExtendedFileStatus res = subTree.get(consumedIdx);
       return res;
     }
     return null;
@@ -97,7 +120,7 @@ public class DirectorySubTree {
   }
 
   public int getSize() {
-    return currentIdx;
+    return subTree.size();
   }
 
   public long getRenameId() {
@@ -105,23 +128,31 @@ public class DirectorySubTree {
   }
 
   public HdfsExtendedFileStatus get(int idx) {
-    return subTree[idx];
+    return subTree.get(idx);
   }
 
   public void dumpSubTree(Log log) {
-    log.info("subtree length " + subTree.length);
-    for (int i = 0; i < subTree.length; i++) {
-      log.info(i + "th item is " + subTree[i]);
+    log.info("subtree MAX_INODES " + subTree.size());
+    for (int i = 0; i < subTree.size(); i++) {
+      log.info(i + "th item is " + subTree.get(i));
     }
   }
 
   public long getLargestInodeId() {
     long res = 0;
-    for (int i = 0; i < currentIdx; i++) {
-      if (subTree[i].fstatus.getFileId() > res) {
-        res = subTree[i].fstatus.getFileId();
+    for (int i = 0; i < subTree.size(); i++) {
+      if (subTree.get(i).fstatus.getFileId() > res) {
+        res = subTree.get(i).fstatus.getFileId();
       }
     }
     return res;
+  }
+
+  public int getMAX_INODES() {
+    return MAX_INODES;
+  }
+
+  public int getMAX_BLOCKS() {
+    return MAX_BLOCKS;
   }
 }

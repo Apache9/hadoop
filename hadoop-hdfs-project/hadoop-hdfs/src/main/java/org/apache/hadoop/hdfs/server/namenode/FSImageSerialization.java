@@ -748,7 +748,7 @@ public class FSImageSerialization {
       throws IOException {
     long renameId = readLong(in);
     int size = readInt(in);
-    DirectorySubTree subTree = new DirectorySubTree(size);
+    DirectorySubTree subTree = new DirectorySubTree(size, Integer.MAX_VALUE);
     for (int i = 0; i < size; i++) {
       byte[] path = readBytes(in);
       byte[] symLink = readBytes(in);
@@ -802,7 +802,8 @@ public class FSImageSerialization {
       abuilder.owner(aowner).group(agroup).stickyBit(isStickBit)
           .addEntries(aclEntries);
       AclStatus astatus = abuilder.build();
-      subTree.addItem(subTree.new HdfsExtendedFileStatus(fstatus, astatus));
+      subTree.addItem(
+          new DirectorySubTree.HdfsExtendedFileStatus(fstatus, astatus));
     }
     subTree.setRenameId(renameId);
     return subTree;
