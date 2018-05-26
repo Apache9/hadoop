@@ -38,6 +38,7 @@ import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.DefaultHttpRespon
 import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpHeaderValues;
 import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpRequest;
 import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpRequestEncoder;
+import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseDecoder;
 import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http.HttpResponseEncoder;
 
 import java.net.InetSocketAddress;
@@ -108,7 +109,7 @@ class SimpleHttpProxyHandler extends SimpleChannelInboundHandler<HttpRequest> {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
           ChannelPipeline p = ch.pipeline();
-          p.addLast(new HttpRequestEncoder(), new Forwarder(uri, client));
+          p.addLast(new HttpRequestEncoder(), new HttpResponseDecoder(), new Forwarder(uri, client));
         }
       });
     ChannelFuture f = proxiedServer.connect(host);
