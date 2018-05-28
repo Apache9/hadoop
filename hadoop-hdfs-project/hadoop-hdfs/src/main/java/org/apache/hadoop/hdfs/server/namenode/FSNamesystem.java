@@ -109,6 +109,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FORCE_TO_TRASH_D
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_DEPTH;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.MAX_PATH_LENGTH;
 import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.SECURITY_XATTR_UNREADABLE_BY_SUPERUSER;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BACKUP_FSIMAGE_ENABLE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BACKUP_FSIMAGE_ENABLE_DEFAULT;
 import static org.apache.hadoop.util.Time.now;
 
 import java.io.BufferedWriter;
@@ -620,6 +622,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private int safeReplicaForInRenameBlks = 0;
   private boolean enableGetfileinfoAuditlog = true;
 
+  private boolean enableFsImageBackup;
+  private FSImageBackup fsImageBackup;
+
   /**
    * Notify that loading of this FSDirectory is complete, and
    * it is imageLoaded for use
@@ -997,6 +1002,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         forceToTrash = true;
       }
       trashPathConfigMgr = new TrashPathConfigMgr(conf);
+      this.enableFsImageBackup = isFsImageBackupEnabled(conf);
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();
@@ -1007,7 +1013,17 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       throw re;
     }
   }
-  
+
+  private boolean isFsImageBackupEnabled (Configuration conf) {
+    boolean enable =  conf.getBoolean(DFS_NAMENODE_BACKUP_FSIMAGE_ENABLE_KEY, DFS_NAMENODE_BACKUP_FSIMAGE_ENABLE_DEFAULT);
+    String cluster = conf.get(DFSConfigKeys.DFS_NAMENODE_BACKUP_FSIMAGE_CLUSTER_KEY);
+    if (cluster == null || cluster.isEmpty() || !enable) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+
   @VisibleForTesting
   public RetryCache getRetryCache() {
     return retryCache;
@@ -1413,6 +1429,12 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       standbyCheckpointer = new StandbyCheckpointer(conf, this);
       standbyCheckpointer.start();
     }
+
+    if (enableFsImageBackup) {
+      LOG.info("start fsimage backup service");
+      fsImageBackup = new FSImageBackup(this, conf);
+      fsImageBackup.start();
+    }
   }
 
   /**
@@ -1443,6 +1465,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     LOG.info("Stopping services started for standby state");
     if (standbyCheckpointer != null) {
       standbyCheckpointer.stop();
+    }
+    if (fsImageBackup != null) {
+      fsImageBackup.shouldStop();
     }
     if (editLogTailer != null) {
       editLogTailer.stop();
@@ -10221,5 +10246,10 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     }
     throw (IOException)
             new IOException("Failed to move to trash: "+path).initCause(cause);
+  }
+
+  @VisibleForTesting
+  public FSImageBackup getFSImageBackup() {
+    return fsImageBackup;
   }
 }
