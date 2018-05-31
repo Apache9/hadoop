@@ -38,6 +38,7 @@ import java.util.TreeSet;
 
 import com.google.common.base.Optional;
 
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -170,7 +171,8 @@ public class DFSAdmin extends FsShell {
 
     @Override
     public void run(Path path) throws IOException {
-      dfs.setQuota(path, HdfsConstants.QUOTA_RESET, HdfsConstants.QUOTA_DONT_SET);
+      DistributedFileSystem distributedFileSystem = getDistributedFileSystemEx(dfs, path);
+      distributedFileSystem.setQuota(path, HdfsConstants.QUOTA_RESET, HdfsConstants.QUOTA_DONT_SET);
     }
   }
   
@@ -217,7 +219,8 @@ public class DFSAdmin extends FsShell {
 
     @Override
     public void run(Path path) throws IOException {
-      dfs.setQuota(path, quota, HdfsConstants.QUOTA_DONT_SET);
+      DistributedFileSystem distributedFileSystem = getDistributedFileSystemEx(dfs, path);
+      distributedFileSystem.setQuota(path, quota, HdfsConstants.QUOTA_DONT_SET);
     }
   }
   
@@ -256,7 +259,8 @@ public class DFSAdmin extends FsShell {
 
     @Override
     public void run(Path path) throws IOException {
-      dfs.setQuota(path, HdfsConstants.QUOTA_DONT_SET, HdfsConstants.QUOTA_RESET);
+      DistributedFileSystem distributedFileSystem = getDistributedFileSystemEx(dfs, path);
+      distributedFileSystem.setQuota(path, HdfsConstants.QUOTA_DONT_SET, HdfsConstants.QUOTA_RESET);
     }
   }
   
@@ -311,7 +315,8 @@ public class DFSAdmin extends FsShell {
 
     @Override
     public void run(Path path) throws IOException {
-      dfs.setQuota(path, HdfsConstants.QUOTA_DONT_SET, quota);
+      DistributedFileSystem distributedFileSystem = getDistributedFileSystemEx(dfs, path);
+      distributedFileSystem.setQuota(path, HdfsConstants.QUOTA_DONT_SET, quota);
     }
   }
   
@@ -347,7 +352,8 @@ public class DFSAdmin extends FsShell {
 
     @Override
     public void run(Path path) throws IOException {
-      dfs.recoverLease(path);
+      DistributedFileSystem distributedFileSystem = getDistributedFileSystemEx(dfs, path);
+      distributedFileSystem.recoverLease(path);
     }
   }
 
@@ -2146,6 +2152,21 @@ public class DFSAdmin extends FsShell {
     } else {
       zkClient.setData(znode, val.getBytes(), version);
     }
+  }
+
+  protected static DistributedFileSystem getDistributedFileSystemEx(DistributedFileSystem dfs, Path path) {
+    if (dfs.supportFederation()) {
+      FileSystem[] childFileSystems = dfs.getChildFileSystems();
+      String pathAuthority = path.toUri().getAuthority();
+      for (FileSystem childFileSystem : childFileSystems) {
+        DistributedFileSystem distributedFileSystem = (DistributedFileSystem) childFileSystem.getDistributedFileSystem();
+        if (ObjectUtils.equals(distributedFileSystem.getUri().getAuthority(), pathAuthority)) {
+          dfs = distributedFileSystem;
+          break;
+        }
+      }
+    }
+    return dfs;
   }
 
   /**
