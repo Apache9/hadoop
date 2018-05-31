@@ -17,11 +17,12 @@
  */
 package org.apache.hadoop.hdfs.tools;
 
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY;
-
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.ReconfigurationUtil;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.FederatedDFSFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.server.common.Storage;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
@@ -29,22 +30,26 @@ import org.apache.hadoop.hdfs.server.datanode.StorageLocation;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY;
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.anyOf;
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
-import static org.hamcrest.CoreMatchers.containsString;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -147,5 +152,59 @@ public class TestDFSAdmin {
         containsString("From: \"old456\""));
     assertThat(outputs.get(failedOffset + 2),
         containsString("To: \"new123\""));
+  }
+
+  @Test
+  public void testGetDistributedFileSystemEx() throws Exception {
+    URI uri1 = new URI("hdfs://c4tst-fed-1");
+    URI uri2 = new URI("hdfs://c4tst-fed-2");
+    URI uri3 = new URI("hdfs://c4tst-fed-3");
+    Path path = Mockito.mock(Path.class);
+    Mockito.when(path.toUri()).thenReturn(uri2);
+
+    FederatedDFSFileSystem dfs1 = Mockito.mock(FederatedDFSFileSystem.class);
+    FederatedDFSFileSystem dfs2 = Mockito.mock(FederatedDFSFileSystem.class);
+    Mockito.when(dfs1.supportFederation()).thenReturn(true);
+    Mockito.when(dfs1.getUri()).thenReturn(uri1);
+    Mockito.when(dfs1.getDistributedFileSystem()).thenReturn(dfs1);
+
+    Mockito.when(dfs2.supportFederation()).thenReturn(true);
+    Mockito.when(dfs2.getUri()).thenReturn(uri2);
+    Mockito.when(dfs2.getDistributedFileSystem()).thenReturn(dfs2);
+    FileSystem[] fileSystems = new FileSystem[]{dfs1, dfs2};
+
+    Mockito.when(dfs2.getChildFileSystems()).thenReturn(fileSystems);
+    assertEquals(dfs2, admin.getDistributedFileSystemEx(dfs2, path));
+
+
+    Mockito.when(path.toUri()).thenReturn(uri3);
+    FederatedDFSFileSystem dfs3 = Mockito.mock(FederatedDFSFileSystem.class);
+    FederatedDFSFileSystem dfs4 = Mockito.mock(FederatedDFSFileSystem.class);
+    Mockito.when(dfs3.supportFederation()).thenReturn(true);
+    Mockito.when(dfs3.getUri()).thenReturn(uri1);
+    Mockito.when(dfs3.getDistributedFileSystem()).thenReturn(dfs3);
+
+    Mockito.when(dfs4.supportFederation()).thenReturn(true);
+    Mockito.when(dfs4.getUri()).thenReturn(uri2);
+    Mockito.when(dfs4.getDistributedFileSystem()).thenReturn(dfs4);
+    fileSystems = new FileSystem[]{dfs3, dfs4};
+
+    Mockito.when(dfs4.getChildFileSystems()).thenReturn(fileSystems);
+    assertEquals(dfs4, admin.getDistributedFileSystemEx(dfs4, path));
+
+    Mockito.when(path.toUri()).thenReturn(uri1);
+    FederatedDFSFileSystem dfs5 = Mockito.mock(FederatedDFSFileSystem.class);
+    FederatedDFSFileSystem dfs6 = Mockito.mock(FederatedDFSFileSystem.class);
+    Mockito.when(dfs5.supportFederation()).thenReturn(false);
+    Mockito.when(dfs5.getUri()).thenReturn(uri1);
+    Mockito.when(dfs5.getDistributedFileSystem()).thenReturn(dfs5);
+
+    Mockito.when(dfs6.supportFederation()).thenReturn(false);
+    Mockito.when(dfs6.getUri()).thenReturn(uri2);
+    Mockito.when(dfs6.getDistributedFileSystem()).thenReturn(dfs6);
+    fileSystems = new FileSystem[]{dfs5, dfs6};
+
+    Mockito.when(dfs6.getChildFileSystems()).thenReturn(fileSystems);
+    assertEquals(dfs6, admin.getDistributedFileSystemEx(dfs6, path));
   }
 }
