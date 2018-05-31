@@ -43,6 +43,7 @@ import org.mortbay.log.Log;
 public class XmDFSInputStream extends DFSInputStream {
   private String srcFile;
   private DFSClient dfsClient;
+  private long maxCacheTime;
   private long sleepBeforeRetry;
   private boolean needRefreshLocatedBlocks = false;
   private Map<DatanodeInfo, ClientDatanodeProtocol> cachedCDP;
@@ -65,6 +66,12 @@ public class XmDFSInputStream extends DFSInputStream {
             .getLong(
                 DFSConfigKeys.DFS_CLIENT_XIAOMI_INPUT_SLEEP_BEFORE_RETRY_MS,
                 DFSConfigKeys.DFS_CLIENT_XIAOMI_INPUT_SLEEP_BEFORE_RETRY_MS_DEFAULT);
+    this.maxCacheTime =
+      dfsClient
+        .getConfiguration()
+        .getLong(
+          DFSConfigKeys.DFS_CLIENT_XIAOMI_INPUT_MAX_CACHE_TIME_MS,
+          DFSConfigKeys.DFS_CLIENT_XIAOMI_INPUT_MAX_CACHE_TIME_MS_DEFAULT);
     this.blockSize = dfsClient.getFileInfo(src).getBlockSize();
   }
 
@@ -121,6 +128,7 @@ public class XmDFSInputStream extends DFSInputStream {
           readLen = super.read(position, buf, off, len);
         }
       }
+      long startTime = System.currentTimeMillis();
       while (readLen == -1) {
         boolean fileClosed = dfsClient.isFileClosed(srcFile);
         long origLen = getFileLength();
@@ -141,6 +149,16 @@ public class XmDFSInputStream extends DFSInputStream {
               // Yield so that there is a higher possibility that some more data
               // is written to the file when calling following updateFileLength().
               Thread.yield();
+            }
+            // If the pipeline is recreated the block info may be invalid
+            // So, need to clean cache if can't read data in a long time.
+            long endTime = System.currentTimeMillis();
+            if (endTime - startTime > maxCacheTime) {
+              DFSClient.LOG.info("clean cache for retrying time is bigger than "
+                + maxCacheTime);
+              clearClientDatanodeProtocol();
+              setRefreshLocatedBlocks(true);
+              startTime = endTime;
             }
             continue;
           }
@@ -247,7 +265,7 @@ public class XmDFSInputStream extends DFSInputStream {
       return cachedCDP.get(datanodeInfo);
     }
     ++doNewCDP;
-    if (requestNewCDP%100 == 0) {
+    if (requestNewCDP%1000 == 0) {
       DFSClient.LOG.info("getClientDatanodeProtocol: cache status: " + getCacheStatus());
     }
     return null;
@@ -286,7 +304,7 @@ public class XmDFSInputStream extends DFSInputStream {
     if (needRefreshLocatedBlocks) {
       ++doRefreshLocatedBlocks;
     }
-    if (requestRefreshLocatedBlocks%100 == 0) {
+    if (requestRefreshLocatedBlocks%1000 == 0) {
       DFSClient.LOG.info("needRefreshLocatedBlocks: cache status: " + getCacheStatus());
     }
     return needRefreshLocatedBlocks;
