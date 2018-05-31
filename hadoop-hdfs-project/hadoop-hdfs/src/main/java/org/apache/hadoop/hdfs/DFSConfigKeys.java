@@ -888,6 +888,10 @@ public static final int     DFS_CLIENT_FAILED_DATANODE_MAX_RETRY_DEFAULT = 100;
       "dfs.client.xiaomi.input.sleep-before-retry.ms";
   public static final long DFS_CLIENT_XIAOMI_INPUT_SLEEP_BEFORE_RETRY_MS_DEFAULT =
       10L;
+  public static final String DFS_CLIENT_XIAOMI_INPUT_MAX_CACHE_TIME_MS =
+    "dfs.client.xiaomi.input.max.cache.time.ms";
+  public static final long DFS_CLIENT_XIAOMI_INPUT_MAX_CACHE_TIME_MS_DEFAULT =
+    120000L;
 
   public static final String DFS_DATANODE_ENABLE_RAID_SERVICE =
       "dfs.datanode.enable.raid.service";
