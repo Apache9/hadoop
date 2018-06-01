@@ -1099,6 +1099,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         dir.fsImage.editLog.openForWrite();
       }
 
+      // Initialize the quota HDFS-6763
+      FSImage.updateCountForQuota(dir.rootDir);
+
       // Enable quota checks.
       dir.enableQuotaChecks();
       if (haEnabled) {
