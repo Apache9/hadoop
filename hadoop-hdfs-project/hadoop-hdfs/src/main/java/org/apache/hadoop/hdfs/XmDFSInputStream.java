@@ -27,6 +27,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.token.SecretManager;
@@ -115,6 +116,20 @@ public class XmDFSInputStream extends DFSInputStream {
     return super.read();
   }
 
+  private String getBlockInfo() {
+    if (locatedBlocks == null) {
+      return "";
+    }
+    final LocatedBlock last = locatedBlocks.getLastLocatedBlock();
+    StringBuilder builder = new StringBuilder();
+    builder.append("blockid ").append(last.getBlock()).append(" ");
+    builder.append("Datanode: ");
+    for (DatanodeInfo datanode : last.getLocations()) {
+      builder.append(datanode.getIpAddr()).append(" ");
+    }
+    return builder.toString();
+  }
+
   private int readInternal(final ByteBuffer bBuf, long position,
       final byte buf[], int off, int len) throws IOException {
     int readLen = 0;
@@ -154,8 +169,14 @@ public class XmDFSInputStream extends DFSInputStream {
             // So, need to clean cache if can't read data in a long time.
             long endTime = System.currentTimeMillis();
             if (endTime - startTime > maxCacheTime) {
-              DFSClient.LOG.info("clean cache for retrying time is bigger than "
-                + maxCacheTime);
+              StringBuilder builder = new StringBuilder();
+              builder.append("clean cache for retrying took more than ").append(maxCacheTime)
+                .append(" ms. read info: postion=").append(position)
+                .append(" off=").append(off).append(" len=").append(len)
+                .append(" origLen=").append(origLen).append(" newLen=").append(newLen)
+                .append(" block info: ").append(getBlockInfo())
+                .append(" file:").append(srcFile);
+              DFSClient.LOG.info(builder.toString());
               clearClientDatanodeProtocol();
               setRefreshLocatedBlocks(true);
               startTime = endTime;

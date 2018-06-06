@@ -93,7 +93,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   private final String src;
   private BlockReader blockReader = null;
   private final boolean verifyChecksum;
-  private LocatedBlocks locatedBlocks = null;
+  protected LocatedBlocks locatedBlocks = null;
   private long lastBlockBeingWrittenLength = 0;
   private DatanodeInfo currentNode = null;
   private LocatedBlock currentLocatedBlock = null;
