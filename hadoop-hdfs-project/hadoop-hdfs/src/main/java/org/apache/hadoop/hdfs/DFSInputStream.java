@@ -239,7 +239,6 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   
   DFSInputStream(DFSClient dfsClient, String src, int buffersize, boolean verifyChecksum
                  ) throws IOException, UnresolvedLinkException {
-    long startTs = Time.monotonicNow();
     this.rwLock = new ReentrantReadWriteLock(true); // fair ordering policy
     this.dfsClient = dfsClient;
     this.verifyChecksum = verifyChecksum;
@@ -248,7 +247,6 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     this.cachingStrategy =
         dfsClient.getDefaultReadCachingStrategy();
     openInfo();
-    HdfsPerfCounter.count("DFSInputStream.new", 1, Time.monotonicNow() - startTs);
   }
 
   /**
@@ -761,7 +759,6 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
    */
   @Override
   public void close() throws IOException {
-    long startTs = Time.monotonicNow();
     rwLock.writeLock().lock();
     try {
       if (closed) {
@@ -795,7 +792,6 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       // since user should not use this inputstream anymore
       removeNodeFromDetect(locatedBlocks);
       rwLock.writeLock().unlock();
-      HdfsPerfCounter.count("DFSInputStream.close", 1, Time.monotonicNow() - startTs);
     }
   }
 
@@ -1023,14 +1019,12 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
    */
   @Override
   public int read(final byte buf[], int off, int len) throws IOException {
-    long startTs = Time.monotonicNow();
     rwLock.writeLock().lock();
     try {
       ReaderStrategy byteArrayReader = new ByteArrayStrategy(buf);
       return readWithStrategy(byteArrayReader, off, len);
     } finally {
       rwLock.writeLock().unlock();
-      HdfsPerfCounter.count("SeqRead", 1, Time.monotonicNow() - startTs);
     }
   }
 
@@ -1513,7 +1507,6 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       throw new IOException("Stream closed");
     }
     failures = 0;
-    long startTs = Time.monotonicNow();
     long filelen = getFileLength();
     if ((position < 0) || (position >= filelen)) {
       return -1;
@@ -1555,7 +1548,6 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     if (dfsClient.stats != null) {
       dfsClient.stats.incrementBytesRead(realLen);
     }
-    HdfsPerfCounter.count("SeekRead", 1, Time.monotonicNow() - startTs);
     return realLen;
   }
   

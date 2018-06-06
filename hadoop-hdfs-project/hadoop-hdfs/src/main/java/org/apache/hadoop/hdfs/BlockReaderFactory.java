@@ -515,7 +515,6 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
    */
   private ShortCircuitReplicaInfo requestFileDescriptors(DomainPeer peer,
           Slot slot) throws IOException {
-    long startTs = Time.monotonicNow();
     ShortCircuitCache cache = clientContext.getShortCircuitCache();
     final DataOutputStream out =
         new DataOutputStream(new BufferedOutputStream(peer.getOutputStream()));
@@ -548,7 +547,6 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
         }
       }
       ShortCircuitReplicaInfo newInfo = new ShortCircuitReplicaInfo(replica);
-      HdfsPerfCounter.count("BlockReaderFactory.requestFileDescriptors", 1, Time.monotonicNow() - startTs);
       return newInfo;
     case ERROR_UNSUPPORTED:
       if (!resp.hasShortCircuitAccessVersion()) {
