@@ -189,7 +189,6 @@ public class ShortCircuitCache implements Closeable {
 
     @Override
     public void run() {
-      long startTs = Time.monotonicNow();
       if (LOG.isTraceEnabled()) {
         LOG.trace(ShortCircuitCache.this + ": about to release " + slot);
       }
@@ -228,7 +227,6 @@ public class ShortCircuitCache implements Closeable {
           shm.getEndpointShmManager().shutdown(shm);
         }
         IOUtils.cleanup(LOG, sock, out);
-        HdfsPerfCounter.count("SlotReleaser.release", 1, Time.monotonicNow() - startTs);
       }
     }
   }
