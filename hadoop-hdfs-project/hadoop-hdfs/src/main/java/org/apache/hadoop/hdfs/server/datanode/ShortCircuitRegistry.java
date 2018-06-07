@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Set;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -344,4 +345,7 @@ public class ShortCircuitRegistry {
     }
     IOUtils.closeQuietly(watcher);
   }
+
+  @VisibleForTesting
+  public int getShmNum () { return segments.size(); }
 }
