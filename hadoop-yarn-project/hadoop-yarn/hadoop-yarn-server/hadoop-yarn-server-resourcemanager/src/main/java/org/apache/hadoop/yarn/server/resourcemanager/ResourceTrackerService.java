@@ -39,6 +39,7 @@ import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.api.records.ResourceOption;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
@@ -62,6 +63,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeReconnectEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeResourceUpdateEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeStartedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeStatusEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
@@ -274,13 +276,19 @@ public class ResourceTrackerService extends AbstractService implements
 
     // Check if this node is a 'valid' node
     if (!this.nodesListManager.isValidNode(host)) {
-      String message =
-          "Disallowed NodeManager from  " + host
-              + ", Sending SHUTDOWN signal to the NodeManager.";
-      LOG.info(message);
-      response.setDiagnosticsMessage(message);
-      response.setNodeAction(NodeAction.SHUTDOWN);
-      return response;
+      if (getConfig().getBoolean(YarnConfiguration.GRACEFULLY_DECOMMISSION_OF_NM_ENABLE,
+              YarnConfiguration.DEFAULT_GRACEFULLY_DECOMMISSION_OF_NM_ENABLE)) {
+        // When decommission node restart and register to rm again, don't send shutdown signal to the nm.
+        // Just do nothing.
+      } else {
+        String message =
+                "Disallowed NodeManager from  " + host
+                        + ", Sending SHUTDOWN signal to the NodeManager.";
+        LOG.info(message);
+        response.setDiagnosticsMessage(message);
+        response.setNodeAction(NodeAction.SHUTDOWN);
+        return response;
+      }
     }
 
     // Check if this node has minimum allocations
@@ -380,14 +388,22 @@ public class ResourceTrackerService extends AbstractService implements
 
     // 2. Check if it's a valid (i.e. not excluded) node
     if (!this.nodesListManager.isValidNode(rmNode.getHostName())) {
-      String message =
-          "Disallowed NodeManager nodeId: " + nodeId + " hostname: "
-              + rmNode.getNodeAddress();
-      LOG.info(message);
-      shutDown.setDiagnosticsMessage(message);
-      this.rmContext.getDispatcher().getEventHandler().handle(
-          new RMNodeEvent(nodeId, RMNodeEventType.DECOMMISSION));
-      return shutDown;
+      if (getConfig().getBoolean(YarnConfiguration.GRACEFULLY_DECOMMISSION_OF_NM_ENABLE,
+              YarnConfiguration.DEFAULT_GRACEFULLY_DECOMMISSION_OF_NM_ENABLE)) {
+        this.rmContext.getDispatcher().getEventHandler().handle(
+                new RMNodeResourceUpdateEvent(nodeId,
+                        ResourceOption.newInstance(Resource.newInstance(0, 0), -1)));
+
+      } else {
+        String message =
+                "Disallowed NodeManager nodeId: " + nodeId + " hostname: "
+                        + rmNode.getNodeAddress();
+        LOG.info(message);
+        shutDown.setDiagnosticsMessage(message);
+        this.rmContext.getDispatcher().getEventHandler().handle(
+                new RMNodeEvent(nodeId, RMNodeEventType.DECOMMISSION));
+        return shutDown;
+      }
     }
     
     // 3. Check if it's a 'fresh' heartbeat i.e. not duplicate heartbeat

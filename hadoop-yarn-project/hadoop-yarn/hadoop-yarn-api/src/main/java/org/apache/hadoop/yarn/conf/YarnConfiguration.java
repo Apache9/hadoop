@@ -436,6 +436,11 @@ public class YarnConfiguration extends Configuration {
   public static final String DEFAULT_RM_CONFIGURATION_PROVIDER_CLASS =
       "org.apache.hadoop.yarn.LocalConfigurationProvider";
 
+  public static final String GRACEFULLY_DECOMMISSION_OF_NM_ENABLE = RM_PREFIX
+      + "gracefully-decommission-of-nm.enable";
+
+  public static final boolean DEFAULT_GRACEFULLY_DECOMMISSION_OF_NM_ENABLE = false;
+
   private static final List<String> RM_SERVICES_ADDRESS_CONF_KEYS_HTTP =
       Collections.unmodifiableList(Arrays.asList(
           RM_ADDRESS,
