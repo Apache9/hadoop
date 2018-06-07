@@ -33,6 +33,7 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -180,18 +181,18 @@ public class ShortCircuitCache implements Closeable {
    * state.
    */
   private class SlotReleaser implements Runnable {
-    private LinkedList<Slot> slotQueue = new LinkedList<Slot>();
+    private ConcurrentLinkedQueue<Slot> slotQueue = new ConcurrentLinkedQueue<Slot>();
     private DomainSocket domainSocket = null;
 
-    public synchronized void queueSlot(Slot slot) {
+    public void queueSlot(Slot slot) {
       slotQueue.add(slot);
     }
 
-    private synchronized Slot dequeueSlot() {
+    private Slot dequeueSlot() {
       return slotQueue.poll();
     }
 
-    private synchronized boolean hasSlot() {
+    private boolean hasSlot() {
       return !slotQueue.isEmpty();
     }
 
@@ -209,7 +210,7 @@ public class ShortCircuitCache implements Closeable {
       DataOutputStream out = null;
       final String path = shmSock.getPath();
       boolean success = false;
-      int retries = 1;
+      int retries = 2;
       try {
         while (retries > 0) {
           try {
@@ -233,6 +234,7 @@ public class ShortCircuitCache implements Closeable {
             success = true;
             break;
           } catch (SocketException se) {
+            LOG.warn(se);
             // the domain socket on datanode may be timed out, we retry once
             retries --;
             domainSocket.close();
@@ -413,6 +415,7 @@ public class ShortCircuitCache implements Closeable {
       }
     }
     this.shmManager = shmManager;
+    this.slotReleaser = new SlotReleaser();
   }
 
   public long getMmapRetryTimeoutMs() {
@@ -1066,10 +1069,12 @@ public class ShortCircuitCache implements Closeable {
    * @param slot           The slot to release.
    */
   public void scheduleSlotReleaser(Slot slot) {
-    Preconditions.checkState(shmManager != null);
-    if (slotReleaser == null) {
-      slotReleaser = new SlotReleaser();
+    if (slot == null) {
+      return;
     }
+    Preconditions.checkState(shmManager != null);
+    Preconditions.checkState(slotReleaser != null);
+
     slotReleaser.queueSlot(slot);
     releaserExecutor.execute(slotReleaser);
   }
