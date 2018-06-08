@@ -394,4 +394,7 @@ public class ShortCircuitRegistry {
  	public synchronized void visit(Visitor visitor) {
     visitor.accept(segments, slots);
   }
+
+  @VisibleForTesting
+  public int getShmNum () { return segments.size(); }
 }
