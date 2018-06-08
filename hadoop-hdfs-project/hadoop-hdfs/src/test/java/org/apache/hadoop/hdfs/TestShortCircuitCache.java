@@ -516,14 +516,7 @@ public class TestShortCircuitCache {
     sockDir.close();
   }
 
-  @Test
-  public void testDomainSocketClosedByDN () throws Exception{
-    BlockReaderTestUtil.enableShortCircuitShmTracing();
-    TemporarySocketDirectory sockDir = new TemporarySocketDirectory();
-    Configuration conf = createShortCircuitConf("testDomainSocketClosedByDN", sockDir);
-    MiniDFSCluster cluster =
-        new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
-    cluster.waitActive();
+  private void testDomainSocketClosedByDN (MiniDFSCluster cluster, Configuration conf) throws Exception{
     DistributedFileSystem fs = cluster.getFileSystem();
     final ShortCircuitCache cache =
         fs.dfs.getClientContext().getShortCircuitCache();
@@ -551,17 +544,9 @@ public class TestShortCircuitCache {
     Thread.sleep(2000);
     Assert.assertTrue(cluster.getDataNodes().get(0).getShortCircuitRegistry().getShmNum() == 0);
     Assert.assertTrue(cache.getDfsClientShmManager().getShmNum() == 0);
-    cluster.shutdown();
   }
 
-  @Test
-  public void testDNRestart () throws Exception{
-    BlockReaderTestUtil.enableShortCircuitShmTracing();
-    TemporarySocketDirectory sockDir = new TemporarySocketDirectory();
-    Configuration conf = createShortCircuitConf("testDNRestart", sockDir);
-    MiniDFSCluster cluster =
-        new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
-    cluster.waitActive();
+  private void testDNRestart (MiniDFSCluster cluster, Configuration conf) throws Exception{
     DistributedFileSystem fs = cluster.getFileSystem();
     final ShortCircuitCache cache =
         fs.dfs.getClientContext().getShortCircuitCache();
@@ -593,6 +578,19 @@ public class TestShortCircuitCache {
     Thread.sleep(2000);
     Assert.assertTrue(cluster.getDataNodes().get(0).getShortCircuitRegistry().getShmNum() == 0);
     Assert.assertTrue(cache.getDfsClientShmManager().getShmNum() == 0);
+  }
+
+  @Test
+  public void testReleaseSlotReuseDomainSocket() throws Exception {
+    BlockReaderTestUtil.enableShortCircuitShmTracing();
+    TemporarySocketDirectory sockDir = new TemporarySocketDirectory();
+    Configuration conf = createShortCircuitConf("testReleaseSlotReuseDomainSocket", sockDir);
+    MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    testDomainSocketClosedByDN(cluster, conf);
+    testDNRestart(cluster, conf);
     cluster.shutdown();
   }
+
 }
