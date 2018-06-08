@@ -26,11 +26,14 @@ import com.xiaomi.infra.hadoop.HdfsPerfCounter;
 import org.apache.hadoop.classification.InterfaceAudience;
 
 import java.io.IOException;
+import java.net.SocketException;
 import java.nio.MappedByteBuffer;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -189,32 +192,48 @@ public class ShortCircuitCache implements Closeable {
 
     @Override
     public void run() {
+      if (slot == null) {
+        return;
+      }
       if (LOG.isTraceEnabled()) {
         LOG.trace(ShortCircuitCache.this + ": about to release " + slot);
       }
       final DfsClientShm shm = (DfsClientShm)slot.getShm();
       final DomainSocket shmSock = shm.getPeer().getDomainSocket();
-      DomainSocket sock = null;
       DataOutputStream out = null;
       final String path = shmSock.getPath();
       boolean success = false;
+      int retries = 2;
       try {
-        sock = DomainSocket.connect(path);
-        out = new DataOutputStream(
-            new BufferedOutputStream(sock.getOutputStream()));
-        new Sender(out).releaseShortCircuitFds(slot.getSlotId());
-        DataInputStream in = new DataInputStream(sock.getInputStream());
-        ReleaseShortCircuitAccessResponseProto resp =
-            ReleaseShortCircuitAccessResponseProto.parseFrom(
-                PBHelper.vintPrefixed(in));
-        if (resp.getStatus() != Status.SUCCESS) {
-          String error = resp.hasError() ? resp.getError() : "(unknown)";
-          throw new IOException(resp.getStatus().toString() + ": " + error);
+        while (retries > 0) {
+          try {
+            if (domainSocket == null || !domainSocket.isOpen()) {
+              //we are running in single thread mode, no protection needed for domainSocket
+              domainSocket = DomainSocket.connect(path);
+            }
+            out = new DataOutputStream(
+                new BufferedOutputStream(domainSocket.getOutputStream()));
+            new Sender(out).releaseShortCircuitFds(slot.getSlotId());
+            DataInputStream in = new DataInputStream(domainSocket.getInputStream());
+            ReleaseShortCircuitAccessResponseProto resp =
+                ReleaseShortCircuitAccessResponseProto.parseFrom(
+                    PBHelper.vintPrefixed(in));
+            if (resp.getStatus() != Status.SUCCESS) {
+              String error = resp.hasError() ? resp.getError() : "(unknown)";
+              throw new IOException(resp.getStatus().toString() + ": " + error);
+            }
+            if (LOG.isTraceEnabled()) {
+              LOG.trace(ShortCircuitCache.this + ": released " + slot);
+            }
+            success = true;
+            break;
+          } catch (SocketException se) {
+            // the domain socket on datanode may be timed out, we retry once
+            retries --;
+            domainSocket.close();
+            domainSocket = null;
+          }
         }
-        if (LOG.isTraceEnabled()) {
-          LOG.trace(ShortCircuitCache.this + ": released " + slot);
-        }
-        success = true;
       } catch (IOException e) {
         LOG.error(ShortCircuitCache.this + ": failed to release " +
             "short-circuit shared memory slot " + slot + " by sending " +
@@ -225,8 +244,9 @@ public class ShortCircuitCache implements Closeable {
           shmManager.freeSlot(slot);
         } else {
           shm.getEndpointShmManager().shutdown(shm);
+          IOUtils.cleanup(LOG, domainSocket, out);
+          domainSocket = null;
         }
-        IOUtils.cleanup(LOG, sock, out);
       }
     }
   }
@@ -341,6 +361,8 @@ public class ShortCircuitCache implements Closeable {
    * Manages short-circuit shared memory segments for the client.
    */
   private final DfsClientShmManager shmManager;
+
+  private DomainSocket domainSocket = null;
 
   /**
    * Create a {@link ShortCircuitCache} object from a {@link Configuration}
@@ -1039,6 +1061,9 @@ public class ShortCircuitCache implements Closeable {
    * @param slot           The slot to release.
    */
   public void scheduleSlotReleaser(Slot slot) {
+    if (slot == null) {
+      return;
+    }
     Preconditions.checkState(shmManager != null);
     releaserExecutor.execute(new SlotReleaser(slot));
   }

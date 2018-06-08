@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs;
 
+import com.sun.source.tree.AssertTree;
 import org.apache.commons.lang.mutable.MutableBoolean;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -54,6 +55,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.channels.ClosedChannelException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -512,5 +514,85 @@ public class TestShortCircuitCache {
     });
     cluster.shutdown();
     sockDir.close();
+  }
+
+  @Test
+  public void testDomainSocketClosedByDN () throws Exception{
+    BlockReaderTestUtil.enableShortCircuitShmTracing();
+    TemporarySocketDirectory sockDir = new TemporarySocketDirectory();
+    Configuration conf = createShortCircuitConf("testDomainSocketClosedByDN", sockDir);
+    MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+    final ShortCircuitCache cache =
+        fs.dfs.getClientContext().getShortCircuitCache();
+    DomainPeer peer = getDomainPeerToDn(conf);
+    MutableBoolean usedPeer = new MutableBoolean(false);
+    ExtendedBlockId blockId = new ExtendedBlockId(123, "xyz");
+    final DatanodeInfo datanode =
+        new DatanodeInfo(cluster.getDataNodes().get(0).getDatanodeId());
+    // Allocating the first shm slot requires using up a peer.
+    Slot slot1 = cache.allocShmSlot(datanode, peer, usedPeer,
+        blockId, "testReleaseSlotReuseDomainSocket_client");
+
+    cluster.getDataNodes().get(0).getShortCircuitRegistry().registerSlot(blockId, slot1.getSlotId(), false);
+
+    Slot slot2 = cache.allocShmSlot(datanode, peer, usedPeer,
+        blockId, "testReleaseSlotReuseDomainSocket_client");
+
+    cluster.getDataNodes().get(0).getShortCircuitRegistry().registerSlot(blockId, slot2.getSlotId(), false);
+
+    cache.scheduleSlotReleaser(slot1);
+
+    //make the DataXceiver timedout
+    Thread.sleep(5000);
+    cache.scheduleSlotReleaser(slot2);
+    Thread.sleep(10000);
+    Assert.assertTrue(cluster.getDataNodes().get(0).getShortCircuitRegistry().getShmNum() == 0);
+    Assert.assertTrue(cache.getDfsClientShmManager().getShmNum() == 0);
+    cluster.shutdown();
+  }
+
+  @Test
+  public void testDNRestart () throws Exception{
+    BlockReaderTestUtil.enableShortCircuitShmTracing();
+    TemporarySocketDirectory sockDir = new TemporarySocketDirectory();
+    Configuration conf = createShortCircuitConf("testDNRestart", sockDir);
+    MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+    final ShortCircuitCache cache =
+        fs.dfs.getClientContext().getShortCircuitCache();
+    DomainPeer peer = getDomainPeerToDn(conf);
+    MutableBoolean usedPeer = new MutableBoolean(false);
+    ExtendedBlockId blockId = new ExtendedBlockId(123, "xyz");
+    final DatanodeInfo datanode =
+        new DatanodeInfo(cluster.getDataNodes().get(0).getDatanodeId());
+    // Allocating the first shm slot requires using up a peer.
+    Slot slot1 = cache.allocShmSlot(datanode, peer, usedPeer,
+        blockId, "testReleaseSlotReuseDomainSocket_client");
+
+    cluster.getDataNodes().get(0).getShortCircuitRegistry().registerSlot(blockId, slot1.getSlotId(), false);
+
+    // restart the datanode to  invalidate the cache
+    cluster.restartDataNode(0);
+    Thread.sleep(1000);
+    // after the restart, new allocation and release should not be affect
+    cache.scheduleSlotReleaser(slot1);
+
+    Slot slot2 = null;
+    try {
+      slot2 = cache.allocShmSlot(datanode, peer, usedPeer,
+          blockId, "testReleaseSlotReuseDomainSocket_client");
+    } catch (ClosedChannelException ce) {
+
+    }
+    cache.scheduleSlotReleaser(slot2);
+    Thread.sleep(2000);
+    Assert.assertTrue(cluster.getDataNodes().get(0).getShortCircuitRegistry().getShmNum() == 0);
+    Assert.assertTrue(cache.getDfsClientShmManager().getShmNum() == 0);
+    cluster.shutdown();
   }
 }

@@ -537,8 +537,7 @@ public class ShortCircuitShm {
     slot.makeValid();
     slots[idx] = slot;
     if (LOG.isTraceEnabled()) {
-      LOG.trace(this + ": allocAndRegisterSlot " + idx + ": allocatedSlots=" + allocatedSlots +
-                  StringUtils.getStackTrace(Thread.currentThread()));
+      LOG.trace(this + ": allocAndRegisterSlot " + idx + ": allocatedSlots=" + allocatedSlots);
     }
     return slot;
   }
@@ -587,8 +586,7 @@ public class ShortCircuitShm {
     slots[slotIdx] = slot;
     allocatedSlots.set(slotIdx, true);
     if (LOG.isTraceEnabled()) {
-      LOG.trace(this + ": registerSlot " + slotIdx + ": allocatedSlots=" + allocatedSlots +
-                  StringUtils.getStackTrace(Thread.currentThread()));
+      LOG.trace(this + ": registerSlot " + slotIdx + ": allocatedSlots=" + allocatedSlots);
     }
     return slot;
   }
