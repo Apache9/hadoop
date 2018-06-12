@@ -21,12 +21,17 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.logaggregatio
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -38,17 +43,26 @@ import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
+import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.LogAggregationContext;
 import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
+import org.apache.hadoop.yarn.client.ClientRMProxy;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.Dispatcher;
+import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
+import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.logaggregation.ContainerLogsRetentionPolicy;
 import org.apache.hadoop.yarn.logaggregation.LogAggregationUtils;
@@ -65,6 +79,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.eve
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.hadoop.yarn.util.ConverterUtils;
 
 public class LogAggregationService extends AbstractService implements
     LogHandler {
@@ -102,9 +117,11 @@ public class LogAggregationService extends AbstractService implements
 
   private final ConcurrentMap<ApplicationId, AppLogAggregator> appLogAggregators;
 
+  private final ScheduledExecutorService logCleanScheduler = Executors.newScheduledThreadPool(1);
+
   @VisibleForTesting
   ExecutorService threadPool;
-  
+
   public LogAggregationService(Dispatcher dispatcher, Context context,
       DeletionService deletionService, LocalDirsHandlerService dirsHandler) {
     super(LogAggregationService.class.getName());
@@ -128,7 +145,97 @@ public class LogAggregationService extends AbstractService implements
             0L, TimeUnit.MILLISECONDS,
             new LinkedBlockingQueue<Runnable>(),
             new ThreadFactoryBuilder().setNameFormat("LogAggregationService #%d").build());
+
+    int orphanAppLogCleanInterval =
+        getConfig().getInt("yarn.nodemanager.orphanapp.logclean.interval.hour", 6);
+
+    logCleanScheduler.scheduleAtFixedRate(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          cleanupOrphanAppLogs();
+        } catch (Exception e) {
+          LOG.error("Failed to cleanup orphan application local logs", e);
+        }
+      }
+    }, 0, orphanAppLogCleanInterval, TimeUnit.HOURS);
     super.serviceInit(conf);
+  }
+
+  private void cleanupOrphanAppLogs() throws IOException {
+    FileContext fc = getLocalFileContext(getConfig());
+    for (String app : getOrphanApplications(fc)) {
+      LOG.info("Checking orphan application: " + app + " local logs");
+      List<Path> localAppLogDirs = dirsHandler.getApplicationLogDirs(fc, app);
+      if (localAppLogDirs.size() > 0) {
+        LOG.info("Cleanup app log dirs: " + localAppLogDirs);
+        this.deletionService.delete(UserGroupInformation.getCurrentUser().getShortUserName(), null,
+                localAppLogDirs.toArray(new Path[localAppLogDirs.size()]));
+      }
+    }
+  }
+
+  private List<String> getOrphanApplications(FileContext fc) throws IOException {
+    int orphanAppRetainDays = getConfig().getInt("yarn.nodemanager.orphan.applog.retain.days", 3);
+    long orphanAppThreshold = System.currentTimeMillis()- orphanAppRetainDays * 24 * 60 * 60 * 1000;
+
+    Set<String> candidates = new HashSet<String>();
+    for (String localDir : dirsHandler.getLogDirsForCleanup()) {
+      RemoteIterator<FileStatus> itr = fc.listStatus(new Path(localDir));
+      while (itr.hasNext()) {
+        FileStatus fs = itr.next();
+        if (!fs.isDirectory()) {
+          continue;
+        }
+        if (!fs.getPath().getName().startsWith(ApplicationId.appIdStrPrefix)) {
+          continue;
+        }
+        if (fs.getModificationTime() > orphanAppThreshold) {
+          continue;
+        }
+        candidates.add(fs.getPath().getName());
+      }
+    }
+    ApplicationClientProtocol rmClient = ClientRMProxy.createRMProxy(getConfig(),
+            ApplicationClientProtocol.class);
+    List<String> orphanApps = new ArrayList<String>();
+    for (String candidate : candidates) {
+      ApplicationId appId = ConverterUtils.toApplicationId(candidate);
+      if (appLogAggregators.containsKey(appId)) {
+        continue;
+      }
+      if (isOrphanApplication(appId, rmClient, orphanAppThreshold)) {
+        orphanApps.add(candidate);
+      }
+    }
+    RPC.stopProxy(rmClient);
+    return orphanApps;
+  }
+
+  private static boolean isOrphanApplication(ApplicationId appId,
+                                             ApplicationClientProtocol rmClient,
+                                             long orphanAppThreshold) throws IOException {
+    try {
+      ApplicationReport report = rmClient.getApplicationReport(GetApplicationReportRequest.newInstance(appId))
+              .getApplicationReport();
+      LOG.info("Application : " + appId + " report: " + report);
+      YarnApplicationState currentState = report.getYarnApplicationState();
+
+      if (currentState == YarnApplicationState.FAILED
+              || currentState == YarnApplicationState.KILLED
+              || currentState == YarnApplicationState.FINISHED) {
+        if (report.getFinishTime() > 0 && report.getFinishTime() < orphanAppThreshold) {
+          LOG.info("Application: " + appId + " has finished for a long time.");
+          return true;
+        }
+      }
+    } catch (ApplicationNotFoundException e) {
+      return true;
+    } catch (YarnException e) {
+      LOG.error("Failed to get application: " + appId + " report", e);
+      return false;
+    }
+    return false;
   }
 
   @Override
@@ -138,14 +245,14 @@ public class LogAggregationService extends AbstractService implements
     this.nodeId = this.context.getNodeId();
     super.serviceStart();
   }
-  
+
   @Override
   protected void serviceStop() throws Exception {
     LOG.info(this.getName() + " waiting for pending aggregation during exit");
     stopAggregators();
     super.serviceStop();
   }
-   
+
   private void stopAggregators() {
     threadPool.shutdown();
     // if recovery on restart is supported then leave outstanding aggregations
@@ -331,7 +438,7 @@ public class LogAggregationService extends AbstractService implements
     }
     this.dispatcher.getEventHandler().handle(eventResponse);
   }
-  
+
   FileContext getLocalFileContext(Configuration conf) {
     try {
       return FileContext.getLocalFSFileContext(conf);
@@ -435,6 +542,9 @@ public class LogAggregationService extends AbstractService implements
     if (aggregator == null) {
       LOG.warn("Log aggregation is not initialized for " + appId
           + ", did it fail to start?");
+      this.dispatcher.getEventHandler().handle(
+              new ApplicationEvent(appId,
+                      ApplicationEventType.APPLICATION_LOG_HANDLING_FINISHED));
       return;
     }
     aggregator.finishLogAggregation();

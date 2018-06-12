@@ -33,7 +33,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
@@ -461,5 +463,25 @@ public class LocalDirsHandlerService extends AbstractService {
     String[] arrValidPaths = new String[validPaths.size()];
     validPaths.toArray(arrValidPaths);
     return arrValidPaths;
+  }
+
+  public List<Path> getApplicationLogDirs(FileContext fc, String applicationId) {
+    // Remove the local app-log-dirs
+    List<Path> localAppLogDirs = new ArrayList<Path>();
+    for (String rootLogDir : getLogDirsForCleanup()) {
+      Path logPath = new Path(rootLogDir, applicationId);
+      try {
+        // check if log dir exists
+        fc.getFileStatus(logPath);
+        localAppLogDirs.add(logPath);
+      } catch (UnsupportedFileSystemException ue) {
+        LOG.warn("Log dir " + rootLogDir + "is an unsupported file system", ue);
+        continue;
+      } catch (IOException fe) {
+        LOG.warn("Failed to list dir: " + logPath + " ", fe);
+        continue;
+      }
+    }
+    return localAppLogDirs;
   }
 }

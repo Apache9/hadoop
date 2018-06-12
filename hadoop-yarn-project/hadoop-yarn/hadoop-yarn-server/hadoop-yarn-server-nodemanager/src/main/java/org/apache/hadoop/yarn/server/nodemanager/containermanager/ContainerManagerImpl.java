@@ -257,6 +257,7 @@ public class ContainerManagerImpl extends CompositeService implements
 
       String diagnostic = "Application marked finished during recovery";
       for (ApplicationId appId : appsState.getFinishedApplications()) {
+        LOG.info("Application: " + appId + " marked finished during recovery");
         dispatcher.getEventHandler().handle(
             new ApplicationFinishEvent(appId, diagnostic));
       }
@@ -1094,6 +1095,7 @@ public class ContainerManagerImpl extends CompositeService implements
       CMgrCompletedAppsEvent appsFinishedEvent =
           (CMgrCompletedAppsEvent) event;
       for (ApplicationId appID : appsFinishedEvent.getAppsToCleanup()) {
+        LOG.info("Cleanup application: " + appID);
         String diagnostic = "";
         if (appsFinishedEvent.getReason() == CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN) {
           diagnostic = "Application killed on shutdown";

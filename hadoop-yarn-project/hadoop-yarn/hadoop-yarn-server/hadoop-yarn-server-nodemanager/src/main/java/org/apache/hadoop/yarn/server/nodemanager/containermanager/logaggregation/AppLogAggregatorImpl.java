@@ -415,22 +415,7 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
     uploadLogsForContainers();
 
     // Remove the local app-log-dirs
-    List<Path> localAppLogDirs = new ArrayList<Path>();
-    for (String rootLogDir : dirsHandler.getLogDirsForCleanup()) {
-      Path logPath = new Path(rootLogDir, applicationId);
-      try {
-        // check if log dir exists
-        lfs.getFileStatus(logPath);
-        localAppLogDirs.add(logPath);
-      } catch (UnsupportedFileSystemException ue) {
-        LOG.warn("Log dir " + rootLogDir + "is an unsupported file system", ue);
-        continue;
-      } catch (IOException fe) {
-        LOG.warn("Failed to list dir: " + logPath + " ", fe);
-        continue;
-      }
-    }
-
+    List<Path> localAppLogDirs = dirsHandler.getApplicationLogDirs(lfs, applicationId);
     if (localAppLogDirs.size() > 0) {
       LOG.info("Cleanup app log dirs: " + localAppLogDirs);
       this.delService.delete(this.userUgi.getShortUserName(), null,
