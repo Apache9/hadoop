@@ -73,9 +73,16 @@ public abstract class HAServiceTarget {
    */
   public HAServiceProtocol getProxy(Configuration conf, int timeoutMs)
       throws IOException {
+    return getProxy(conf, timeoutMs, 1);
+  }
+
+  public HAServiceProtocol getProxy(Configuration conf, int timeoutMs,
+      int retries) throws IOException {
     Configuration confCopy = new Configuration(conf);
     // Lower the timeout so we quickly fail to connect
-    confCopy.setInt(CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_KEY, 1);
+    confCopy.setInt(
+        CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_KEY,
+        retries);
     SocketFactory factory = NetUtils.getDefaultSocketFactory(confCopy);
     return new HAServiceProtocolClientSideTranslatorPB(
         getAddress(),

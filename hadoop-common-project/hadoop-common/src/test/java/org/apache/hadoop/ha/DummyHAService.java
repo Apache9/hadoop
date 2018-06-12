@@ -95,7 +95,13 @@ class DummyHAService extends HAServiceTarget {
       throws IOException {
     return proxy;
   }
-  
+
+  @Override
+  public HAServiceProtocol getProxy(Configuration conf, int timeout,
+      int retries) throws IOException {
+    return proxy;
+  }
+
   @Override
   public ZKFCProtocol getZKFCProxy(Configuration conf, int timeout)
       throws IOException {

@@ -178,7 +178,11 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String HA_HM_SLEEP_AFTER_DISCONNECT_KEY =
     "ha.health-monitor.sleep-after-disconnect.ms";
   public static final long HA_HM_SLEEP_AFTER_DISCONNECT_DEFAULT = 1000;
- 
+
+  public static final String HA_HM_RPC_CONNECT_MAX_RETRIES_KEY =
+      "ha.health-monitor.rpc.connect.max.retries";
+  public static final int HA_HM_RPC_CONNECT_MAX_RETRIES_DEFAULT = 3;
+
   /* Timeout for the actual monitorHealth() calls. */
   public static final String HA_HM_RPC_TIMEOUT_KEY =
     "ha.health-monitor.rpc-timeout.ms";

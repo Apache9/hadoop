@@ -190,7 +190,9 @@ public class HealthMonitor {
    * Connect to the service to be monitored. Stubbed out for easier testing.
    */
   protected HAServiceProtocol createProxy() throws IOException {
-    return targetToMonitor.getProxy(conf, rpcTimeout);
+    int retries = conf.getInt(HA_HM_RPC_CONNECT_MAX_RETRIES_KEY,
+        HA_HM_RPC_CONNECT_MAX_RETRIES_DEFAULT);
+    return targetToMonitor.getProxy(conf, rpcTimeout, retries);
   }
 
   private void doHealthChecks() throws InterruptedException {

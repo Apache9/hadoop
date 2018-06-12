@@ -847,7 +847,7 @@ public class Client {
             + action + ", retry policy=" + connectionRetryPolicy).initCause(e);
       }
       LOG.info("Retrying connect to server: " + server + ". Already tried "
-          + curRetries + " time(s); retry policy is " + connectionRetryPolicy);
+          + curRetries + " time(s); retry policy is " + connectionRetryPolicy, ioe);
     }
 
     /**
