@@ -24,6 +24,7 @@ import java.net.ConnectException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -40,6 +41,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.lang3.time.DateUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -902,13 +904,12 @@ public class HistoryFileManager extends AbstractService {
    * @throws IOException
    */
   private HistoryFileInfo scanOldDirsForJob(JobId jobId) throws IOException {
-    String boxedSerialNumber = JobHistoryUtils.serialNumberDirectoryComponent(
-        jobId, serialNumberFormat);
-    Set<String> dateStringSet = serialNumberIndex.get(boxedSerialNumber);
-    if (dateStringSet == null) {
-      return null;
-    }
-    for (String timestampPart : dateStringSet) {
+    LOG.info("Scan old dir for job: " + jobId);
+    Date today = new Date();
+    long historyRetainDays = conf.getInt("yarn.historyserver.history.retain-days", 7);
+    for (int i = 0; i <= historyRetainDays; i++) {
+      Date day = DateUtils.addDays(today, -1 * i);
+      String timestampPart = JobHistoryUtils.timestampDirectoryComponent(day.getTime());
       Path logDir = canonicalHistoryLogPath(jobId, timestampPart);
       try {
         List<FileStatus> fileStatusList = scanDirectoryForHistoryFiles(logDir,

@@ -130,6 +130,7 @@ public class CachedHistoryStorage extends AbstractService implements
     }
     try {
       HistoryFileInfo fileInfo = hsManager.getFileInfo(jobId);
+      LOG.info("Get history file info for job: " + jobId + ", info: " + fileInfo);
       Job result = null;
       if (fileInfo != null) {
         result = loadedJobCache.get(jobId);
