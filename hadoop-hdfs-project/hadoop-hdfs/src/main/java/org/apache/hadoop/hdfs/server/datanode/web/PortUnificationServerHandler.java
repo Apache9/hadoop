@@ -77,7 +77,7 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
   }
 
   private static final ConcurrentMap<LogLevel, Http2FrameLogger> FRAME_LOGGERS =
-      new ConcurrentHashMap<>();
+      new ConcurrentHashMap<LogLevel, Http2FrameLogger>();
 
   private Http2FrameLogger getFrameLogger() {
     String level = conf.get(DFSConfigKeys.DFS_HTTP2_FRAME_LOG_LEVEL_KEY,

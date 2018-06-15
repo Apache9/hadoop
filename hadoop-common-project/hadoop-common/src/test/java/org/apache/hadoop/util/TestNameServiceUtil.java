@@ -121,8 +121,7 @@ public class TestNameServiceUtil {
     @Override
     public void handle(HttpExchange httpExchange) throws IOException {
       String method = httpExchange.getRequestMethod();
-      switch (method) {
-      case "GET": {
+      if (method.equalsIgnoreCase("GET")) {
         URI uri = httpExchange.getRequestURI();
         LOG.info("GET: Request uri: " + uri);
         String path = uri.getQuery();
@@ -145,9 +144,7 @@ public class TestNameServiceUtil {
         OutputStream responseBodyOut = httpExchange.getResponseBody();
         responseBodyOut.write(jsonString.getBytes());
         responseBodyOut.close();
-        break;
-      }
-      case "POST": {
+      } else if (method.equalsIgnoreCase("POST")) {
         InputStream in = httpExchange.getRequestBody();
         byte[] bytes = IOUtils.toByteArray(in);
         String body = new String(bytes, "UTF-8");
@@ -173,10 +170,7 @@ public class TestNameServiceUtil {
                 + "}";
         responseBodyOut.write(jsonString.getBytes());
         responseBodyOut.close();
-
-        break;
-      }
-      default:
+      } else {
         throw new IOException("Non support request." + method);
       }
     }

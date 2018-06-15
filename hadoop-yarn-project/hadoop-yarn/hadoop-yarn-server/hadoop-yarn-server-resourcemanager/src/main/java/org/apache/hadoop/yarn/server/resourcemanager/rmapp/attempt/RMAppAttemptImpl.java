@@ -137,12 +137,12 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
   private SecretKey clientTokenMasterKey = null;
 
   private ConcurrentMap<NodeId, List<ContainerStatus>>
-      justFinishedContainers = new ConcurrentHashMap<>();
+      justFinishedContainers = new ConcurrentHashMap<NodeId, List<ContainerStatus>>();
   // Tracks the previous finished containers that are waiting to be
   // verified as received by the AM. If the AM sends the next allocate
   // request it implicitly acks this list.
   private ConcurrentMap<NodeId, List<ContainerStatus>>
-      finishedContainersSentToAM = new ConcurrentHashMap<>();
+      finishedContainersSentToAM = new ConcurrentHashMap<NodeId, List<ContainerStatus>>();
   private Container masterContainer;
 
   private float progress = 0;
@@ -650,7 +650,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
   public List<ContainerStatus> getJustFinishedContainers() {
     this.readLock.lock();
     try {
-      List<ContainerStatus> returnList = new ArrayList<>();
+      List<ContainerStatus> returnList = new ArrayList<ContainerStatus>();
       for (Collection<ContainerStatus> containerStatusList :
           justFinishedContainers.values()) {
         returnList.addAll(containerStatusList);
@@ -689,7 +689,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     this.writeLock.lock();
 
     try {
-      List<ContainerStatus> returnList = new ArrayList<>();
+      List<ContainerStatus> returnList = new ArrayList<ContainerStatus>();
 
       // A new allocate means the AM received the previously sent
       // finishedContainers. We can ack this to NM now
@@ -1688,7 +1688,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
       List<ContainerStatus> currentSentContainers =
           finishedContainersSentToAM.put(nodeId, new ArrayList<ContainerStatus>());
       List<ContainerId> containerIdList =
-          new ArrayList<>(currentSentContainers.size());
+          new ArrayList<ContainerId>(currentSentContainers.size());
       for (ContainerStatus containerStatus : currentSentContainers) {
         containerIdList.add(containerStatus.getContainerId());
       }

@@ -60,7 +60,7 @@ public class DirectorySubTree {
   }
 
   public DirectorySubTree(int MAX_INODES, int MAX_BLOCKS) {
-    this.subTree = new ArrayList<>();
+    this.subTree = new ArrayList<HdfsExtendedFileStatus>();
     this.MAX_INODES = MAX_INODES;
     this.MAX_BLOCKS = MAX_BLOCKS;
   }

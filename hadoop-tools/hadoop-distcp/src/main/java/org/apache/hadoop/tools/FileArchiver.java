@@ -266,11 +266,11 @@ public class FileArchiver implements Tool {
       }
      
       LOG.info("Check all in-flight tasks");
-      for (String p : new TreeSet<>(inFlightSet)) {
+      for (String p : new TreeSet<String>(inFlightSet)) {
         checkAndUpdateDirState(p);
       }
       LOG.info("Check all inconsistent tasks");
-      for (String p: new TreeSet<>(inconsistentMap.keySet())) {
+      for (String p: new TreeSet<String>(inconsistentMap.keySet())) {
         LOG.info(p + " is inconsistent, need manually check and fix");
         checkAndUpdateDirState(p);
       }
@@ -696,7 +696,7 @@ public class FileArchiver implements Tool {
     long dataSizePerMap =
         bandWidthLimit * scheduleInterval * 1024 * 1024;
 
-    TreeSet<String> tmpSet = new TreeSet<>(unscheduledSet);
+    TreeSet<String> tmpSet = new TreeSet<String>(unscheduledSet);
     Iterator<String> iter = tmpSet.iterator();
     while (availableMaps > 0 && iter.hasNext()) {
       String p = iter.next();

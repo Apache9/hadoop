@@ -172,10 +172,10 @@ class Http2ConnectionCache implements Closeable {
     public int waitingOnConstruction;
 
     public final List<Pair<Channel, DelayedCloseHandler>> values =
-        new ArrayList<>();
+        new ArrayList<Pair<Channel, DelayedCloseHandler>>();
   }
 
-  private final ConcurrentMap<String, Pool> cache = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Pool> cache = new ConcurrentHashMap<String, Pool>();
 
   private final EventLoopGroup workerGroup;
 

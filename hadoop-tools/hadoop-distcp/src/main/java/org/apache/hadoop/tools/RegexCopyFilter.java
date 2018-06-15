@@ -47,7 +47,7 @@ public class RegexCopyFilter extends CopyFilter {
    */
   protected RegexCopyFilter(String filtersFilename) {
     filtersFile = new File(filtersFilename);
-    filters = new ArrayList<>();
+    filters = new ArrayList<Pattern>();
   }
 
   /**

@@ -108,7 +108,7 @@ public class RequestHedgingProxyProvider<T> extends
               + "for HedgingProxyProvider");
         }
       }
-      Map<Future<Object>, ProxyInfo<T>> proxyMap = new HashMap<>();
+      Map<Future<Object>, ProxyInfo<T>> proxyMap = new HashMap<Future<Object>, ProxyInfo<T>>();
       int numAttempts = 0;
 
       ExecutorService executor = null;
@@ -117,7 +117,7 @@ public class RequestHedgingProxyProvider<T> extends
         final Integer cid = Client.getCallId();
         final Integer rc = Client.getRetryCount();
         executor = Executors.newFixedThreadPool(targetProxies.size());
-        completionService = new ExecutorCompletionService<>(executor);
+        completionService = new ExecutorCompletionService<Object>(executor);
         for (final Map.Entry<String, ProxyInfo<T>> pEntry :
                 targetProxies.entrySet()) {
           Callable<Object> c = new Callable<Object>() {
@@ -135,7 +135,7 @@ public class RequestHedgingProxyProvider<T> extends
           numAttempts++;
         }
 
-        Map<String, Exception> badResults = new HashMap<>();
+        Map<String, Exception> badResults = new HashMap<String, Exception>();
         while (numAttempts > 0) {
           Future<Object> callResultFuture = completionService.take();
           Object retVal = null;
@@ -209,7 +209,7 @@ public class RequestHedgingProxyProvider<T> extends
     if (currentUsedProxy != null) {
       return currentUsedProxy;
     }
-    Map<String, ProxyInfo<T>> targetProxyInfos = new HashMap<>();
+    Map<String, ProxyInfo<T>> targetProxyInfos = new HashMap<String, ProxyInfo<T>>();
     StringBuilder combinedInfo = new StringBuilder("[");
     for (int i = 0; i < proxies.size(); i++) {
       ProxyInfo<T> pInfo = super.getProxy();

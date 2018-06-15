@@ -541,15 +541,15 @@ public class TestWebHDFS {
     final String PATH = "/foo";
     byte[] CONTENTS = new byte[1024];
     RANDOM.nextBytes(CONTENTS);
+    OutputStream os = null;
     try {
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
       final WebHdfsFileSystem fs =
           WebHdfsTestUtil.getWebHdfsFileSystem(conf, WebHdfsFileSystem.SCHEME);
-      try (OutputStream os = fs.create(new Path(PATH))) {
-        os.write(CONTENTS);
-      }
+      os = fs.create(new Path(PATH));
+      os.write(CONTENTS);
       InetSocketAddress addr = cluster.getNameNode().getHttpAddress();
-      URL url = new URL("http", addr.getHostString(), addr
+      URL url = new URL("http", addr.getHostName(), addr
           .getPort(), WebHdfsFileSystem.PATH_PREFIX + PATH + "?op=OPEN" +
           Param.toSortedString("&", new OffsetParam((long) OFFSET),
                                new LengthParam((long) LENGTH))
@@ -565,6 +565,9 @@ public class TestWebHDFS {
     } finally {
       if (cluster != null) {
         cluster.shutdown();
+      }
+      if (os != null) {
+        os.close();
       }
     }
   }

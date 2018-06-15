@@ -99,7 +99,7 @@ public class HadoopArchiveLogs implements Tool {
 
   public HadoopArchiveLogs(Configuration conf) {
     setConf(conf);
-    eligibleApplications = new HashSet<>();
+    eligibleApplications = new HashSet<AppInfo>();
   }
 
   public static void main(String[] args) {
@@ -413,7 +413,7 @@ public class HadoopArchiveLogs implements Tool {
       Collections.sort(sortedApplications, new Comparator<AppInfo>() {
         @Override
         public int compare(AppInfo o1, AppInfo o2) {
-          int lCompare = Long.compare(o1.getFinishTime(), o2.getFinishTime());
+          int lCompare = compareLong(o1.getFinishTime(), o2.getFinishTime());
           if (lCompare == 0) {
             return o1.getAppId().compareTo(o2.getAppId());
           }
@@ -427,6 +427,10 @@ public class HadoopArchiveLogs implements Tool {
         eligibleApplications.remove(sortedApplications.get(i));
       }
     }
+  }
+
+  public static int compareLong(long x, long y) {
+    return (x < y) ? -1 : ((x == y) ? 0 : 1);
   }
 
   /*
