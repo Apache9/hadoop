@@ -185,13 +185,6 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
   }
 
   @Override
-  public void rename(Path src, Path dst, Options.Rename... options)
-      throws IOException {
-    throw new IOException(
-        "this operation is not supported on" + " FederatedDFSFileSystem: " + getMethodName());
-  }
-
-  @Override
   public FSDataOutputStream create(final Path f, final FsPermission permission,
       final boolean overwrite, final int bufferSize, final short replication,
       final long blockSize, final Progressable progress) throws IOException {
