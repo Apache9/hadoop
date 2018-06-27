@@ -464,11 +464,18 @@ public class INodesInPath {
     return false;
   }
 
-  public void verifyFederationRename(FederationInProgressRenameMap federationInProgressRenameMap) throws IOException {
+  // Throw IOE when cur INode or ancestor have fedrename feature
+  public void verifyFederationCurAndAncestor() throws IOException {
     if (containsFederationRenameItem()) {
       throw new IOException(
           "The specifid path is in a federation rename directory or file");
     }
+  }
+
+  // Throw IOE when child or descendants have fedrename feature
+  public void vefiryFederationDescendants(
+      FederationInProgressRenameMap federationInProgressRenameMap)
+      throws IOException {
     Path inodePath = new Path(DFSUtil.byteArray2PathString(path));
     List<String> paths = federationInProgressRenameMap.getAllRenamePaths();
     for (String p : paths) {
@@ -477,6 +484,15 @@ public class INodesInPath {
         throw new IOException("The specified path is parent of [" + p
             + "] which is a federation rename directory or file.");
       }
+    }
+  }
+
+  public void verifyFederationRename(
+      FederationInProgressRenameMap federationInProgressRenameMap)
+      throws IOException {
+    verifyFederationCurAndAncestor();
+    if (federationInProgressRenameMap != null) {
+      vefiryFederationDescendants(federationInProgressRenameMap);
     }
   }
 
