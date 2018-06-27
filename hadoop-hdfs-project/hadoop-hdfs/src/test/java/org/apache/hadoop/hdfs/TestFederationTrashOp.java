@@ -2,6 +2,8 @@ package org.apache.hadoop.hdfs;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -10,6 +12,7 @@ import java.io.PrintStream;
 
 import junit.framework.Assert;
 
+import org.apache.commons.math3.stat.inference.TestUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
@@ -124,6 +127,29 @@ public class TestFederationTrashOp {
     return results;
   }
 
+  private static String runDeleteTrash(final FsShell shell, String path)
+    throws Exception {
+    System.out.println("Path = " + path);
+    final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    final PrintStream out = new PrintStream(bytes);
+    final PrintStream oldOut = System.out;
+    final PrintStream oldErr = System.err;
+    System.setOut(out);
+    System.setErr(out);
+    final String results;
+    try {
+      shell.run(new String[] { "-rmTrash", path });
+      results = bytes.toString();
+    } finally {
+      IOUtils.closeStream(out);
+      System.setOut(oldOut);
+      System.setErr(oldErr);
+    }
+    System.out.println("DeleteTrash results:\n" + "<results>\n " + results
+      + "</results>");
+    return results;
+  }
+
   @Test
   public void testBasicTrashOp() throws Exception {
     // Step 1: create dir and files in different fs via FederatedDFSFileSystem's
@@ -198,5 +224,48 @@ public class TestFederationTrashOp {
     Assert.assertTrue(fHdfs2.exists(new Path("/dir2/testfile")));
     runDu(shell, "/fs1/dir1");
     runDu(shell, "/fs2/dir2");
+
+    // Step 5: move one file to trash and delete it from trash
+    String oneFile1 = testFile1 + "/testfile";
+    String oineTrashFile1 = trashFile1 + "/testfile";
+    argv = new String[] { "-rm", "-r", oneFile1};
+    res = ToolRunner.run(shell, argv);
+    assertFalse(fHdfs1.exists(new Path(oneFile1)));
+    assertTrue(fHdfs1.exists(new Path(oineTrashFile1)));
+
+    runDeleteTrash(shell, oineTrashFile1);
+    assertFalse(fHdfs1.exists(new Path(oineTrashFile1)));
+
+    // Step 6: delete trasn with *
+    argv = new String[] { "-rm", "-r", testFile1};
+    res = ToolRunner.run(shell, argv);
+    argv = new String[] { "-rm", "-r", testFile2};
+    res = ToolRunner.run(shell, argv);
+
+    assertTrue(fHdfs1.exists(new Path(trashFile1)));
+    assertTrue(fHdfs2.exists(new Path(trashFile2)));
+    String trashAllFiles = "/user/" + System.getProperty("user.name") + "/.Trash/Current/*";
+    runDeleteTrash(shell, trashAllFiles);
+    assertFalse(fHdfs1.exists(new Path(trashFile1)));
+    assertFalse(fHdfs2.exists(new Path(trashFile2)));
+  }
+
+  @Test
+  public void testDeleteTrashNegative () throws Exception {
+    FsShell shell = new FsShell(CONF);
+    Path fileNO = new Path("/fs1/nothisfile");
+    String msg = runDeleteTrash(shell, fileNO.toString());
+    assertTrue(msg.contains("No such file or directory"));
+
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
+    Path file1 = new Path("/fs1/f1");
+    DFSTestUtil.createFile(dfs, file1, 512, (short)1, 0);
+    msg = runDeleteTrash(shell, file1.toString());
+    assertTrue(msg.contains("Input path is not in any trash"));
+
+    Path file2 = new Path("/fs1/.Trash/f2");
+    DFSTestUtil.createFile(dfs, file2, 512, (short)1, 0);
+    msg = runDeleteTrash(shell, file2.toString());
+    assertTrue(msg.contains("Input path is not in any trash"));
   }
 }
