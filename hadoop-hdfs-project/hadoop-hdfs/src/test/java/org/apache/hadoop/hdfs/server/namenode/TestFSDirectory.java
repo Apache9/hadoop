@@ -528,7 +528,8 @@ public class TestFSDirectory {
     }
   }
 
-  @Test public void testVerifyFederationRename() throws Exception {
+  @Test
+  public void testVerifyFederationRename() throws Exception {
     INodesInPath srcIIP = null;
     INode srcInode = null;
     try {
@@ -543,24 +544,34 @@ public class TestFSDirectory {
           new FederationRenameFeature(true, 0, "", "", "", "", 0));
       fsn.getFederationRenameMap()
           .addRenameRecord(0, "/A/A1/A2", "", "", "", true, 0);
-      // test parent, expecting IOException
-      boolean exceptionFlag = false;
+      srcIIP = fsdir.getINodesInPath4Write("/A/A1/A2/A3/A4/A5");
       try {
-        srcIIP = fsdir.getINodesInPath4Write("/A/A1/A2/A3/A4/A5");
         srcIIP.verifyFederationRename(fsn.getFederationRenameMap());
+        assert false;
       } catch (IOException e) {
-        exceptionFlag = true;
+        assertExceptionContains(
+            "The specifid path is in a federation rename directory or file", e);
       }
-      assertTrue(exceptionFlag);
-      // test child, expecting IOException
-      exceptionFlag = false;
       try {
-        srcIIP = fsdir.getINodesInPath4Write("/A");
-        srcIIP.verifyFederationRename(fsn.getFederationRenameMap());
+        srcIIP.verifyFederationRename(null);
+        assert false;
       } catch (IOException e) {
-        exceptionFlag = true;
+        assertExceptionContains(
+            "The specifid path is in a federation rename directory or file", e);
       }
-      assertTrue(exceptionFlag);
+      srcIIP = fsdir.getINodesInPath4Write("/A");
+      try {
+        srcIIP.verifyFederationRename(fsn.getFederationRenameMap());
+        assert false;
+      } catch (IOException e) {
+        assertExceptionContains(
+            "which is a federation rename directory or file", e);
+      }
+      try {
+        srcIIP.verifyFederationRename(null);
+      } catch (IOException e) {
+        assert false;
+      }
     } finally {
       if (srcIIP != null) {
         srcInode.removeFederationRenameFeature();

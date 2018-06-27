@@ -1018,7 +1018,7 @@ public class FSDirectory implements Closeable {
     assert hasWriteLock();
 
     final INodesInPath iip = getINodesInPath4Write(src, true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     final INode inode = iip.getLastINode();
     if (inode == null || !inode.isFile()) {
       return null;
@@ -1065,7 +1065,7 @@ public class FSDirectory implements Closeable {
       throws IOException {
     assert hasWriteLock();
     final INodesInPath iip = getINodesInPath4Write(src, true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     final INode inode = iip.getLastINode();
     if (inode == null) {
       throw new FileNotFoundException("File/Directory does not exist: " + src);
@@ -1134,7 +1134,7 @@ public class FSDirectory implements Closeable {
       QuotaExceededException, SnapshotAccessControlException, IOException {
     assert hasWriteLock();
     final INodesInPath inodesInPath = getINodesInPath4Write(src, true);
-    inodesInPath.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    inodesInPath.verifyFederationRename(null);
     final INode inode = inodesInPath.getLastINode();
     if (inode == null) {
       throw new FileNotFoundException("File does not exist: " + src);
@@ -1159,7 +1159,7 @@ public class FSDirectory implements Closeable {
       QuotaExceededException, SnapshotAccessControlException, IOException {
     assert hasWriteLock();
     final INodesInPath inodesInPath = getINodesInPath4Write(src, true);
-    inodesInPath.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    inodesInPath.verifyFederationRename(null);
     INode inode = inodesInPath.getLastINode();
     if (inode == null) {
       throw new FileNotFoundException("File does not exist: " + src);
@@ -2337,7 +2337,7 @@ public class FSDirectory implements Closeable {
     
     String srcs = normalizePath(src);
     final INodesInPath iip = getINodesInPath4Write(srcs, true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     INodeDirectory dirNode = INodeDirectory.valueOf(iip.getLastINode(), srcs);
     if (dirNode.isRoot() && nsQuota == HdfsConstants.QUOTA_RESET) {
       throw new IllegalArgumentException("Cannot clear namespace quota on root.");
@@ -2617,7 +2617,7 @@ public class FSDirectory implements Closeable {
       throws UnresolvedLinkException, QuotaExceededException, IOException {
     assert hasWriteLock();
     getExistingPathINodes(INode.getPathComponents(path))
-        .verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+        .verifyFederationRename(null);
     final INodeSymlink symlink = new INodeSymlink(id, null, perm, mtime, atime,
         target);
     return addINode(path, symlink) ? symlink : null;
@@ -2636,7 +2636,7 @@ public class FSDirectory implements Closeable {
       List<AclEntry> aclSpec) throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(inode);
@@ -2659,7 +2659,7 @@ public class FSDirectory implements Closeable {
       List<AclEntry> aclSpec) throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(inode);
@@ -2682,7 +2682,7 @@ public class FSDirectory implements Closeable {
       throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<AclEntry> existingAcl = AclStorage.readINodeLogicalAcl(inode);
@@ -2704,7 +2704,7 @@ public class FSDirectory implements Closeable {
   private void unprotectedRemoveAcl(String src) throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     AclStorage.removeINodeAcl(inode, snapshotId);
@@ -2729,7 +2729,7 @@ public class FSDirectory implements Closeable {
 
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<AclEntry> newAcl = aclSpec;
@@ -2787,7 +2787,7 @@ public class FSDirectory implements Closeable {
       final List<XAttr> toRemove) throws IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<XAttr> existingXAttrs = XAttrStorage.readINodeXAttrs(inode);
@@ -3000,7 +3000,7 @@ public class FSDirectory implements Closeable {
       throws QuotaExceededException, IOException {
     assert hasWriteLock();
     INodesInPath iip = getINodesInPath4Write(normalizePath(src), true);
-    iip.verifyFederationRename(getFSNamesystem().getFederationRenameMap());
+    iip.verifyFederationRename(null);
     INode inode = resolveLastINode(src, iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<XAttr> existingXAttrs = XAttrStorage.readINodeXAttrs(inode);
