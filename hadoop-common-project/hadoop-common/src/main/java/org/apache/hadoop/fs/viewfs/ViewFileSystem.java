@@ -26,6 +26,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.TreeMap;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -85,7 +87,76 @@ public class ViewFileSystem extends FileSystem {
       final Path p) {
     return readOnlyMountTable(operation, p.toString());
   }
-  
+
+  static public class Key {
+    final String scheme;
+    final String authority;
+
+    public Key(URI uri) {
+      scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+      authority =
+          uri.getAuthority() == null ? "" : uri.getAuthority().toLowerCase();
+    }
+
+    @Override
+    public int hashCode() {
+      return (scheme + authority).hashCode();
+    }
+
+    static boolean isEqual(Object a, Object b) {
+      return a == b || (a != null && a.equals(b));
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (obj == this) {
+        return true;
+      }
+      if (obj != null && obj instanceof Key) {
+        Key that = (Key) obj;
+        return isEqual(this.scheme, that.scheme) && isEqual(this.authority,
+            that.authority);
+      }
+      return false;
+    }
+  }
+
+  static public class UnsafeCache {
+    HashMap<Key, FileSystem> map = new HashMap<Key, FileSystem>();
+
+    public FileSystem get(URI uri, Configuration config) throws IOException {
+      Key key = new Key(uri);
+      if (map.get(key) == null) {
+        FileSystem fs =
+            FileSystem.createFileSystemWithConfigurationService(uri, config);
+        map.put(key, fs);
+        return fs;
+      } else {
+        return map.get(key);
+      }
+    }
+
+    public FileSystem[] getAll() {
+      return map.values().toArray(new FileSystem[0]);
+    }
+
+    public FileSystem[] removeAll() {
+      FileSystem[] res = map.values().toArray(new FileSystem[0]);
+      map.clear();
+      return res;
+    }
+
+    public void closeAll() {
+      for (FileSystem fs : getAll()) {
+        try {
+          fs.close();
+        } catch (IOException e) {
+          LOG.debug("close fs failed.", e);
+        }
+      }
+    }
+  }
+
   static public class MountPoint {
     private Path src;       // the src of the mount
     private URI[] targets; //  target of the mount; Multiple targets imply mergeMount
@@ -100,7 +171,7 @@ public class ViewFileSystem extends FileSystem {
       return targets;
     }
   }
-  
+
   final long creationTime; // of the the mount table
   final UserGroupInformation ugi; // the user/group of user who created mtable
   URI myUri;
@@ -109,7 +180,9 @@ public class ViewFileSystem extends FileSystem {
   InodeTree<FileSystem> fsState;  // the fs state; ie the mount table
   Path homeDir = null;
   private ReentrantReadWriteLock fsStateLock = new ReentrantReadWriteLock();
-  
+  private boolean useVSCache = true;
+  private UnsafeCache cache = new UnsafeCache();
+
   /**
    * Make the path Absolute and get the path-part of a pathname.
    * Checks that URI matches this file system 
@@ -140,6 +213,19 @@ public class ViewFileSystem extends FileSystem {
     creationTime = Time.now();
   }
 
+  @VisibleForTesting
+  public FileSystem[] getCachedFileSystems() {
+    try {
+      fsStateLock.readLock().lock();
+      if (cache == null) {
+        return new FileSystem[0];
+      }
+      return cache.getAll();
+    } finally {
+      fsStateLock.readLock().unlock();
+    }
+  }
+
   /**
    * Return the protocol scheme for the FileSystem.
    * <p/>
@@ -163,6 +249,7 @@ public class ViewFileSystem extends FileSystem {
     super.initialize(theUri, conf);
     setConf(conf);
     config = conf;
+    useVSCache = config.getBoolean("fs.viewfs.use.vs.cache", true);
     // Now build  client side view (i.e. client side mount table) from config.
     final String authority = theUri.getAuthority();
     try {
@@ -172,13 +259,13 @@ public class ViewFileSystem extends FileSystem {
     } catch (URISyntaxException e) {
       throw new IOException("URISyntax exception: " + theUri);
     }
-
   }
 
   public void renewFsState(final Configuration conf, final String authority)
       throws IOException {
     try {
       fsStateLock.writeLock().lock();
+      if (cache == null) return;
       // It's not convenient to create anonymous subclass instance using java
       // reflection, so here we don't use configuration to control the implementation
       // class of InodeTree
@@ -189,7 +276,13 @@ public class ViewFileSystem extends FileSystem {
         protected
         FileSystem getTargetFileSystem(final URI uri)
             throws URISyntaxException, IOException {
-            return new ChRootedFileSystem(uri, config);
+            FileSystem fs = null;
+            if (useVSCache) {
+              fs = cache.get(uri, config);
+            } else {
+              fs = FileSystem.get(uri, config);
+            }
+            return new ChRootedFileSystem(fs, uri);
         }
 
         @Override
@@ -1154,6 +1247,7 @@ public class ViewFileSystem extends FileSystem {
     }
   }
 
+
   private InodeTree.ResolveResult<FileSystem> fsStateResolve(final String p,
       final boolean resolveLastComponent) throws FileNotFoundException {
     fsStateLock.readLock().lock();
@@ -1184,9 +1278,21 @@ public class ViewFileSystem extends FileSystem {
 
   @Override
   public void close() throws IOException {
-    FileSystem[] childFileSystems = getChildFileSystems();
-    for (FileSystem childFs:childFileSystems) {
-      childFs.close();
+    UnsafeCache tmp = cache;
+    fsStateLock.writeLock().lock();
+    cache = null;
+    fsStateLock.writeLock().unlock();
+    // we shouldn't close all cached filesystems when holding fsStateLock.writeLock,
+    // because this may cause deadlock.
+    // e.g. If we call cache.closeAll() within writeLock：
+    // Thread1:
+    // JVM down -> FileSystem.ClientFinalizer.run() -> synchronized(FileSystem.CACHE)
+    // -> ViewFileSystem.close() -> fsStateLock.writeLock()
+    // Thread2:
+    // ViewFileSystem.close() -> fsStateLock.writeLock() -> close child filesystem
+    // -> FileSystem.close() -> synchronized (FileSystem.CACHE)
+    if (tmp != null) {
+      tmp.closeAll();
     }
     super.close();
   }

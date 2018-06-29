@@ -48,6 +48,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Map;
 
 import static junit.framework.TestCase.fail;
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
@@ -486,15 +489,61 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
   }
 
   @Test
-  public void testCloseViewFs() throws Exception {
+  public void testViewFileSystemCache() throws Exception {
     Configuration configuration = new Configuration(conf);
-    configuration.set("fs.hdfs.impl.disable.cache","true");
-    FileSystem fileSystem = FileSystem.get(FsConstants.VIEWFS_URI, configuration);
-    FileSystem[] childs = fileSystem.getChildFileSystems();
-    fileSystem.close();
-    for (FileSystem child:childs) {
-      FileSystem tFs = FileSystem.get(child.getUri(),CONF);
-      assertTrue(tFs!=child);
+    configuration.set("fs.hdfs.impl.disable.cache", "false");
+    ViewFileSystem viewFs =
+        (ViewFileSystem) FileSystem.get(FsConstants.VIEWFS_URI, configuration);
+    FileSystem[] cachedFs = viewFs.getCachedFileSystems();
+    // test ViewFileSystem.childs not in FileSystem.cache
+    for (FileSystem child : cachedFs) {
+      FileSystem tFs = FileSystem.get(child.getUri(), CONF);
+      assertTrue(tFs != child);
+    }
+    // test independent cache for each ViewFileSystem object
+    ViewFileSystem viewFs2 =
+        (ViewFileSystem) FileSystem.get(FsConstants.VIEWFS_URI, configuration);
+    FileSystem[] cachedFs2 = viewFs2.getCachedFileSystems();
+    assertEquals(cachedFs.length, cachedFs2.length);
+    for (int i = 0; i < cachedFs.length; i++) {
+      for (int j = 0; j < cachedFs2.length; j++) {
+        assertTrue("Unexpected " + i + "==" + j,
+            cachedFs[i] != cachedFs2[j]);
+      }
+    }
+    // test renewFsState
+    cachedFs = viewFs.getCachedFileSystems();
+    viewFs.renewFsState(conf, FsConstants.VIEWFS_URI.getAuthority());
+    cachedFs2 = viewFs.getCachedFileSystems();
+    assertEquals(cachedFs.length, cachedFs2.length);
+    for (int i = 0; i < cachedFs.length; i++) {
+      try {
+        cachedFs[i].exists(new Path("/"));
+      } catch (IOException e) {
+        assertTrue("Filesystem shouldn't be closed", false);
+      }
+      int j = 0;
+      for (; j < cachedFs2.length; j++) {
+        if (cachedFs[i] == cachedFs2[j]) break;
+      }
+      assert(j <cachedFs2.length);
+    }
+    // test close
+    viewFs.close();
+    viewFs.renewFsState(conf, FsConstants.VIEWFS_URI.getAuthority());
+    try {
+      viewFs.exists(new Path("/log_collector/foo/bar"));
+    } catch (IOException e) {
+      assertExceptionContains("Filesystem closed", e);
+    }
+    FileSystem[] childs = viewFs.getChildFileSystems();
+    for (int i = 0; i < childs.length; i++) {
+      try {
+        childs[i].exists(new Path("/"));
+        assert false;
+      } catch (IOException e) {
+        assertExceptionContains("Filesystem closed", e);
+      }
     }
   }
 }
