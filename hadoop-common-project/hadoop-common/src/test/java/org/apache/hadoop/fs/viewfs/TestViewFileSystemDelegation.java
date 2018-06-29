@@ -46,6 +46,7 @@ public class TestViewFileSystemDelegation { //extends ViewFileSystemTestSetup {
   @BeforeClass
   public static void setup() throws Exception {
     conf = ViewFileSystemTestSetup.createConfig();
+    conf.setBoolean("fs.viewfs.use.vs.cache", false);
     fs1 = setupFileSystem(new URI("fs1:/"), FakeFileSystem.class);
     fs2 = setupFileSystem(new URI("fs2:/"), FakeFileSystem.class);
     viewFs = FileSystem.get(FsConstants.VIEWFS_URI, conf);
@@ -91,6 +92,7 @@ public class TestViewFileSystemDelegation { //extends ViewFileSystemTestSetup {
   @Test
   public void testAclMethods() throws Exception {
     Configuration conf = ViewFileSystemTestSetup.createConfig();
+    conf.setBoolean("fs.viewfs.use.vs.cache", false);
     FileSystem mockFs1 = setupMockFileSystem(conf, new URI("mockfs1:/"));
     FileSystem mockFs2 = setupMockFileSystem(conf, new URI("mockfs2:/"));
     FileSystem viewFs = FileSystem.get(FsConstants.VIEWFS_URI, conf);

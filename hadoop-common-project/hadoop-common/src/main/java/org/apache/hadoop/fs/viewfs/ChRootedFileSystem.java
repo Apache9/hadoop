@@ -89,16 +89,9 @@ public class ChRootedFileSystem extends FilterFileSystem {
             + path.toUri().getPath()) :
         new Path(chRootPathPartString + workingDir.toUri().getPath(), path);
   }
-  
-  /**
-   * Constructor
-   * @param uri base file system
-   * @param conf configuration
-   * @throws IOException 
-   */
-  public ChRootedFileSystem(final URI uri, Configuration conf)
-      throws IOException {
-    super(FileSystem.get(uri, conf));
+
+  public ChRootedFileSystem(final FileSystem fs, final URI uri) {
+    super(fs);
     String pathString = uri.getPath();
     if (pathString.isEmpty()) {
       pathString = "/";
@@ -108,6 +101,17 @@ public class ChRootedFileSystem extends FilterFileSystem {
     myUri = uri;
     workingDir = getHomeDirectory();
     // We don't use the wd of the myFs
+  }
+
+  /**
+   * Constructor
+   * @param uri base file system
+   * @param conf configuration
+   * @throws IOException 
+   */
+  public ChRootedFileSystem(final URI uri, Configuration conf)
+      throws IOException {
+    this(FileSystem.get(uri, conf), uri);
   }
   
   /** 

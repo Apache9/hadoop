@@ -54,6 +54,7 @@ public class TestViewFileSystemDelegationTokenSupport {
   @BeforeClass
   public static void setup() throws Exception {
     conf = ViewFileSystemTestSetup.createConfig();
+    conf.setBoolean("fs.viewfs.use.vs.cache",false);
     fs1 = setupFileSystem(new URI("fs1:///"), FakeFileSystem.class);
     fs2 = setupFileSystem(new URI("fs2:///"), FakeFileSystem.class);
     viewFs = FileSystem.get(FsConstants.VIEWFS_URI, conf);

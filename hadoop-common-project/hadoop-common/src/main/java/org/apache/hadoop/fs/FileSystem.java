@@ -2674,7 +2674,7 @@ public abstract class FileSystem extends Configured implements Closeable {
     return clazz;
   }
 
-  private static FileSystem createFileSystemWithConfigurationService(URI uri,
+  public static FileSystem createFileSystemWithConfigurationService(URI uri,
       Configuration conf) throws IOException {
     return ConfigurationService.createTargetObjWithConfigurationService(
         new ConfigurationService.Creator<FileSystem, IOException>() {
