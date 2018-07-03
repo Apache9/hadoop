@@ -26,6 +26,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,8 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -45,8 +48,6 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FilterFileSystem;
 import org.apache.hadoop.fs.FsConstants;
 import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.FsStatus;
@@ -65,6 +66,7 @@ import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.InodeTree.INode;
 import org.apache.hadoop.fs.viewfs.InodeTree.INodeLink;
+import org.apache.hadoop.fs.viewfs.ViewFileSystem.Key;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
@@ -157,6 +159,7 @@ import org.apache.hadoop.util.Time;
 @InterfaceAudience.Public
 @InterfaceStability.Evolving /*Evolving for a release,to be changed to Stable */
 public class ViewFs extends AbstractFileSystem {
+  public static final Log LOG = LogFactory.getLog(ViewFs.class);
   final long creationTime; // of the the mount table
   final UserGroupInformation ugi; // the user/group of user who created mtable
   final Configuration config;
@@ -177,8 +180,9 @@ public class ViewFs extends AbstractFileSystem {
       final Path p) {
     return readOnlyMountTable(operation, p.toString());
   }
-  
-  
+
+  public Map<Key, AbstractFileSystem> cache = null;
+
   static public class MountPoint {
     private Path src;       // the src of the mount
     private URI[] targets; //  target of the mount; Multiple targets imply mergeMount
@@ -211,6 +215,7 @@ public class ViewFs extends AbstractFileSystem {
   ViewFs(final URI theUri, final Configuration conf) throws IOException,
       URISyntaxException {
     super(theUri, FsConstants.VIEWFS_SCHEME, false, -1);
+    cache = new HashMap<>();
     creationTime = Time.now();
     ugi = UserGroupInformation.getCurrentUser();
     config = conf;
@@ -232,9 +237,13 @@ public class ViewFs extends AbstractFileSystem {
           if (pathString.isEmpty()) {
             pathString = "/";
           }
-          return new ChRootedFs(
-              AbstractFileSystem.createFileSystem(uri, config), new Path(
-                  pathString));
+          Key key = new Key(uri);
+          AbstractFileSystem fs = cache.get(key);
+          if (fs == null) {
+            fs = AbstractFileSystem.createFileSystem(uri, config);
+            cache.put(key, fs);
+          }
+          return new ChRootedFs(fs, new Path(pathString));
         }
 
       @Override
@@ -253,7 +262,6 @@ public class ViewFs extends AbstractFileSystem {
         }
       };
     } finally {
-      lastMptUpdateTime = Time.monotonicNow();
       fsStateLock.writeLock().unlock();
     }
   }
@@ -1150,17 +1158,17 @@ public class ViewFs extends AbstractFileSystem {
   private InodeTree.ResolveResult<AbstractFileSystem> fsStateResolve(
       final String p, final boolean resolveLastComponent)
       throws FileNotFoundException {
-    fsStateLock.readLock().lock();
-    if (fsRenewCkCb != null && fsRenewCkCb.shouldRenew(lastMptUpdateTime)) {
-      fsStateLock.readLock().unlock();
+    if (fsRenewCkCb != null && fsRenewCkCb.shouldRenew()) {
+      fsRenewCkCb.updateMountponitConfig(config);
       try {
         renewFsState(config, viewName);
       } catch (Exception e) {
         // For whatever issue, use what we have in the config
+        LOG.warn("renew fs state failed", e);
       }
-      fsStateLock.readLock().lock();
     }
     try {
+      fsStateLock.readLock().lock();
       return fsState.resolve(p, resolveLastComponent);
     } finally {
       fsStateLock.readLock().unlock();
@@ -1176,16 +1184,9 @@ public class ViewFs extends AbstractFileSystem {
     }
   }
 
-  public long getLastMptUpdateTime() {
-    return lastMptUpdateTime;
-  }
-
-  public void setLastMptUpdateTime(long time) {
-    lastMptUpdateTime = time;
-  }
-
   public interface FsStateRenewChecker {
-    boolean shouldRenew(long lastUpdateTime);
+    boolean shouldRenew();
+    void updateMountponitConfig(Configuration conf);
   }
 
   public void setRenewCheckerCb(FsStateRenewChecker cb) {

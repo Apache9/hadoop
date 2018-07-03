@@ -198,7 +198,7 @@ public class MountPointRenewer {
     }
   }
 
-  private static boolean updateMountPointConfig(Configuration conf,
+  public static boolean updateMountPointConfig(Configuration conf,
       String kvConfig,
       String viewName) throws IllegalArgumentException, IOException {
     if (kvConfig == null) {
@@ -235,7 +235,7 @@ public class MountPointRenewer {
     return zkQuorum;
   }
 
-  private static String getMptConfFromZookeeper(String viewName,
+  public static String getMptConfFromZookeeper(String viewName,
       Configuration conf)
       throws IOException,
       IllegalArgumentException, KeeperException, InterruptedException {

@@ -25,12 +25,14 @@ import static org.apache.hadoop.fs.FileContextTestHelper.isFile;
 import static org.apache.hadoop.fs.viewfs.Constants.PERMISSION_555;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.hadoop.conf.Configuration;
@@ -47,6 +49,7 @@ import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.AclUtil;
+import org.apache.hadoop.fs.viewfs.ViewFileSystem.Key;
 import org.apache.hadoop.fs.viewfs.ViewFs.MountPoint;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -88,6 +91,10 @@ public class ViewFsBaseTest {
 
   protected FileContextTestHelper createFileContextHelper() {
     return new FileContextTestHelper();
+  }
+
+  int getClusterNum() {
+    return 1;
   }
 
   @Before
@@ -156,7 +163,7 @@ public class ViewFsBaseTest {
   int getExpectedDelegationTokenCount() {
     return 0;
   }
-  
+
   /**
    * This default implementation is when viewfs has mount points
    * into file systems, such as LocalFs that do no have delegation tokens.
@@ -169,7 +176,21 @@ public class ViewFsBaseTest {
     Assert.assertEquals(getExpectedDelegationTokenCount(), delTokens.size());
   }
 
-  
+  @Test
+  public void testCache() throws Exception {
+    ViewFs viewFs =
+        (ViewFs) (FileContext.getFileContext(FsConstants.VIEWFS_URI, conf))
+            .getDefaultFileSystem();
+    // test cache
+    assertEquals(getClusterNum(), viewFs.cache.size());
+    for (AbstractFileSystem afs : viewFs.getChildFileSystems()) {
+      if (afs instanceof ChRootedFs) {
+        afs = ((ChRootedFs) afs).getMyFs();
+      }
+      assertTrue(viewFs.cache.get(new Key(afs.getUri())) == afs);
+    }
+  }
+
   @Test
   public void testBasicPaths() {
     Assert.assertEquals(FsConstants.VIEWFS_URI,

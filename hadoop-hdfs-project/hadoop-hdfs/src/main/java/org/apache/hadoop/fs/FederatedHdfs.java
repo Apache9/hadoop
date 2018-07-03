@@ -36,6 +36,7 @@ import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
+import org.apache.zookeeper.KeeperException;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -71,24 +72,44 @@ public class FederatedHdfs extends AbstractFileSystem {
       throw new URISyntaxException(theUri.toString(), "not an federation uri");
     }
     URI viewFsUri = convertToViewFsScheme(theUri);
-    viewFs = AbstractFileSystem.newInstance(ViewFs.class, viewFsUri, conf);
     MountPointRenewer.updateMptFromZkOnce(theUri.getAuthority(), conf);
-    viewFs.renewFsState(conf, theUri.getAuthority());
-    viewFs.setLastMptUpdateTime(Time.monotonicNow());
+    viewFs = AbstractFileSystem.newInstance(ViewFs.class, viewFsUri, conf);
     viewFs.setRenewCheckerCb(new ViewFs.FsStateRenewChecker() {
-      public boolean shouldRenew(long lastUpdateTime) {
+      private String lastMountPointTable = null;
+      private long lastCheckTime = Time.monotonicNow();
+      @Override
+      synchronized public boolean shouldRenew() {
         // Since the creation of this class is random, do not need another
         // random
         long checkInterval =
             conf.getLong(FederationConfigKeys.FEDFS_MOUNT_TABLE_RENEW_INTERVAL,
                 FederationConfigKeys.FEDFS_MOUNT_TABLE_RENEW_INTERVAL_DEFAULT);
-        System.out.println("checkInterval is " + checkInterval
-            + " lastUpdateTime " + lastUpdateTime + " now "
-            + Time.monotonicNow());
-        if (Time.monotonicNow() - lastUpdateTime > checkInterval) {
-          return true;
+        long now = Time.monotonicNow();
+        if (now - lastCheckTime > checkInterval) {
+          lastCheckTime = now;
+          try {
+            String mptFromZk = MountPointRenewer
+                .getMptConfFromZookeeper(theUri.getAuthority(), conf);
+            if (lastMountPointTable == null || !mptFromZk
+                .equals(lastMountPointTable)) {
+              lastMountPointTable = mptFromZk;
+              return true;
+            }
+          } catch (Exception e) {
+            LOG.warn("failed get mountpoint from zk", e);
+          }
         }
         return false;
+      }
+
+      @Override
+      public void updateMountponitConfig(Configuration conf) {
+        try {
+          MountPointRenewer.updateMountPointConfig(conf, lastMountPointTable,
+              theUri.getAuthority());
+        } catch (IOException e) {
+          LOG.warn("update configuration failed.", e);
+        }
       }
     });
   }
