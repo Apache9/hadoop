@@ -53,7 +53,7 @@ public class Count extends FsCommand {
       "that match the specified file pattern.  The output columns are:\n" +
       "DIR_COUNT FILE_COUNT CONTENT_SIZE FILE_NAME or\n" +
       "QUOTA REMAINING_QUOTA SPACE_QUOTA REMAINING_SPACE_QUOTA \n" +
-      "      DIR_COUNT FILE_COUNT CONTENT_SIZE FILE_NAME\n" +
+      "      DIR_COUNT FILE_COUNT CONTENT_SIZE SPACE_CONSUMED FILE_NAME\n" +
       "The -h option shows file sizes in human readable format.";
   
   private boolean showQuotas;
