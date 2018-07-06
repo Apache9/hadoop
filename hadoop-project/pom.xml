@@ -20,11 +20,11 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-main</artifactId>
-    <version>2.6.0-mdh3.12.5-jre8</version>
+    <version>2.6.0-mdh3.12.6-jre8</version>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-project</artifactId>
-  <version>2.6.0-mdh3.12.5-jre8</version>
+  <version>2.6.0-mdh3.12.6-jre8</version>
   <description>Apache Hadoop Project POM</description>
   <name>Apache Hadoop Project POM</name>
   <packaging>pom</packaging>
