@@ -489,6 +489,49 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
   }
 
   @Test
+  public void testViewFileSystemNewInstance() throws Exception {
+    // test newInstance
+    ViewFileSystem viewFs1 =
+        (ViewFileSystem) FileSystem.get(FsConstants.VIEWFS_URI, conf);
+    ViewFileSystem viewFs2 =
+        (ViewFileSystem) FileSystem.newInstance(FsConstants.VIEWFS_URI, conf);
+    ViewFileSystem viewFs3 =
+        (ViewFileSystem) FileSystem.newInstance(FsConstants.VIEWFS_URI, conf);
+    viewFs3.close();
+    for (FileSystem subFs : viewFs3.getChildFileSystems()) {
+      try {
+        subFs.exists(new Path("/"));
+        assert false;
+      } catch (IOException e) {
+        assertExceptionContains("Filesystem closed", e);
+      }
+    }
+    for (FileSystem subFs : viewFs1.getChildFileSystems()) {
+      try {
+        subFs.exists(new Path("/"));
+      } catch (IOException e) {
+        assert false;
+      }
+    }
+    viewFs1.close();
+    for (FileSystem subFs : viewFs1.getChildFileSystems()) {
+      try {
+        subFs.exists(new Path("/"));
+        assert false;
+      } catch (IOException e) {
+        assertExceptionContains("Filesystem closed", e);
+      }
+    }
+    for (FileSystem subFs : viewFs2.getChildFileSystems()) {
+      try {
+        subFs.exists(new Path("/"));
+      } catch (IOException e) {
+        assert false;
+      }
+    }
+  }
+
+  @Test
   public void testViewFileSystemCache() throws Exception {
     Configuration configuration = new Configuration(conf);
     configuration.set("fs.hdfs.impl.disable.cache", "false");
