@@ -1,7 +1,7 @@
 package org.apache.hadoop.hdfs;
 
+import com.google.common.collect.Lists;
 import junit.framework.Assert;
-import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -24,17 +24,17 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.QuotaSummary;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.Trash;
-import org.apache.hadoop.fs.TrashPolicy;
+import org.apache.hadoop.fs.permission.AclEntry;
+import org.apache.hadoop.fs.permission.AclUtil;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.fs.viewfs.Constants;
-import org.apache.hadoop.fs.viewfs.ViewFileSystem;
 import org.apache.hadoop.ha.ClientBaseWithFixes;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
 import org.apache.hadoop.hdfs.tools.DFSAdmin;
-import org.apache.hadoop.hdfs.util.ByteBufferOutputStream;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.zookeeper.CreateMode;
@@ -61,10 +61,18 @@ import java.io.PrintWriter;
 import java.net.URI;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import static org.apache.hadoop.fs.FileContext.FILE_DEFAULT_PERM;
+import static org.apache.hadoop.fs.permission.AclEntryScope.ACCESS;
+import static org.apache.hadoop.fs.permission.AclEntryType.GROUP;
+import static org.apache.hadoop.fs.permission.AclEntryType.MASK;
+import static org.apache.hadoop.fs.permission.AclEntryType.OTHER;
+import static org.apache.hadoop.fs.permission.AclEntryType.USER;
+import static org.apache.hadoop.fs.permission.FsAction.ALL;
+import static org.apache.hadoop.hdfs.server.namenode.AclTestHelpers.aclEntry;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class TestFederatedDFSFileSystem extends ClientBaseWithFixes {
@@ -92,6 +100,8 @@ public class TestFederatedDFSFileSystem extends ClientBaseWithFixes {
     // Increase max streams so that we re-replicate quickly.
     gConf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY, 1000);
     gConf.setLong(CommonConfigurationKeys.FS_TRASH_INTERVAL_KEY, 10000);
+
+    gConf.setBoolean("dfs.namenode.acls.enabled", true);
 
     try {
       cluster = setupNewDFSCluster();
@@ -169,7 +179,9 @@ public class TestFederatedDFSFileSystem extends ClientBaseWithFixes {
   }
   
   private static void addNSAccessConfig(Configuration config, String ns, int namenodeGroupId) {
-    config.set(DFSConfigKeys.DFS_NAMESERVICES, ns);
+    String prens = config.get(DFSConfigKeys.DFS_NAMESERVICES);
+    config.set(DFSConfigKeys.DFS_NAMESERVICES,
+        prens == null ? ns : prens + ", " + ns);
     config.set(
         DFSUtil.addKeySuffixes(
             DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX, ns),
@@ -788,5 +800,93 @@ public class TestFederatedDFSFileSystem extends ClientBaseWithFixes {
     Path testPath = new Path("/new-mpt/test-dir");
     fs.mkdirs(testPath);
     Assert.assertTrue(fs4.exists(testPath));
+  }
+
+  @Test
+  public void testFederationCommand() throws Exception {
+    Configuration conf = new Configuration(gConf);
+    addNSAccessConfig(conf, "test-cluster-0", 0);
+    addNSAccessConfig(conf, "test-cluster-1", 1);
+
+    Path apiPatha = new Path("/testFederationMethod/api/a");
+    Path apiPathb = new Path(apiPatha, "b");
+    Path shellPatha = new Path("/testFederationMethod/shell/a");
+    Path shellPathb = new Path(shellPatha, "b");
+
+    fs1.mkdirs(apiPatha);
+    fs2.mkdirs(apiPathb);
+
+    ConfigUtil.addLink(conf, "test-cluster", apiPatha.toString(),
+        new URI("hdfs://" + "test-cluster-0" + apiPatha));
+    ConfigUtil.addLink(conf, "test-cluster", apiPathb.toString(),
+        new URI("hdfs://" + "test-cluster-1" + apiPathb));
+
+    fs1.mkdirs(shellPatha);
+    fs2.mkdirs(shellPathb);
+
+    ConfigUtil.addLink(conf, "test-cluster", shellPatha.toString(),
+        new URI("hdfs://" + "test-cluster-0" + shellPatha));
+    ConfigUtil.addLink(conf, "test-cluster", shellPathb.toString(),
+        new URI("hdfs://" + "test-cluster-1" + shellPathb));
+
+    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+
+    FileSystem fs = FileSystem.get(conf);
+    assertTrue("No FederatedDFSFileSystem.",
+        fs instanceof FederatedDFSFileSystem);
+    FederatedDFSFileSystem dfs = (FederatedDFSFileSystem) fs;
+
+    FileStatus status;
+    // test fedchown
+
+    FsShell shell = new DFSAdmin(conf);
+    shell.run(
+        new String[] { "-fedchown", "testFederationMethod:testFederationMethod",
+            shellPatha.toString() });
+
+    status = fs1.getFileStatus(shellPatha);
+    assertEquals("testFederationMethod", status.getOwner());
+    status = fs2.getFileStatus(shellPatha);
+    assertEquals("testFederationMethod", status.getOwner());
+
+    // test fedchmod
+    shell.run(new String[] { "-fedchmod", "002", shellPatha.toString() });
+    status = fs1.getFileStatus(shellPatha);
+    assertEquals(2, status.getPermission().toShort());
+    status = fs2.getFileStatus(shellPatha);
+    assertEquals(2, status.getPermission().toShort());
+
+    // test fedsetfacl
+    List<AclEntry> entries;
+    List<AclEntry> aclEntries;
+    FsPermission perm;
+
+    entries = Lists.newArrayList(aclEntry(ACCESS, USER, ALL),
+        aclEntry(ACCESS, USER, "foo", ALL), aclEntry(ACCESS, GROUP, ALL),
+        aclEntry(ACCESS, GROUP, "bar", ALL), aclEntry(ACCESS, MASK, ALL),
+        aclEntry(ACCESS, OTHER, ALL));
+
+    shell.run(new String[] { "-fedsetfacl", "--set",
+        "user::rwx,user:foo:rwx,group::rwx,group:bar:rwx,mask::rwx,other::rwx",
+        shellPatha.toString() });
+    perm = fs1.getFileStatus(shellPatha).getPermission();
+    aclEntries = fs1.getAclStatus(shellPatha).getEntries();
+    aclEntries = AclUtil.getAclFromPermAndEntries(perm, aclEntries);
+    assertEquals(entries, aclEntries);
+    perm = fs2.getFileStatus(shellPatha).getPermission();
+    aclEntries = fs2.getAclStatus(shellPatha).getEntries();
+    aclEntries = AclUtil.getAclFromPermAndEntries(perm, aclEntries);
+    assertEquals(entries, aclEntries);
+
+    // test fedsetquota
+    shell.run(new String[] { "-fedsetquota", "5", shellPatha.toString() });
+    assertEquals(5, fs1.getQuotaSummary(shellPatha).getQuota());
+    assertEquals(5, fs2.getQuotaSummary(shellPatha).getQuota());
+
+    // test fedmkdirs
+    Path shellDir = new Path("/testFederationCommand/shellDir/mkdirs");
+    shell.run(new String[] { "-fedmkdirs", "-p", shellDir.toString() });
+    assertTrue(fs1.exists(shellDir));
+    assertTrue(fs2.exists(shellDir));
   }
 }

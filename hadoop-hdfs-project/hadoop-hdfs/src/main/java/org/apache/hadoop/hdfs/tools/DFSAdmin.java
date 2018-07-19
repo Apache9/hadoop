@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
@@ -96,9 +95,6 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.hadoop.util.ZKUtil;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
-import org.apache.zookeeper.WatchedEvent;
-import org.apache.zookeeper.Watcher;
-import org.apache.zookeeper.KeeperException.Code;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.apache.zookeeper.ZooDefs.Ids;
@@ -129,7 +125,7 @@ public class DFSAdmin extends FsShell {
     public DFSAdminCommand(FileSystem fs) {
       super(fs.getConf());
       if (!(fs.isDistributedFileSystem())) {
-        throw new IllegalArgumentException("FileSystem " + fs.getUri() + 
+        throw new IllegalArgumentException("FileSystem " + fs.getUri() +
             " is not an HDFS file system");
       }
       this.dfs = (DistributedFileSystem) fs.getDistributedFileSystem();
@@ -455,11 +451,11 @@ public class DFSAdmin extends FsShell {
     "\t[-allowSnapshot <snapshotDir>]\n" +
     "\t[-disallowSnapshot <snapshotDir>]\n" +
     "\t[-shutdownDatanode <datanode_host:ipc_port> [upgrade]]\n" +
-    "\t[-getDatanodeInfo <datanode_host:ipc_port>]\n" +
-    "\t[-metasave filename]\n" +
-    "\t[-setStoragePolicy path policyName]\n" +
-    "\t[-getStoragePolicy path]\n" +
-    "\t[-updateMptOnZk\n" +
+    "\t[-getDatanodeInfo <datanode_host:ipc_port>]\n" + "\t[-metasave filename]\n"
+        + "\t[-setStoragePolicy path policyName]\n"
+        + "\t[-getStoragePolicy path]\n" + "\t[-updateMptOnZk\n"
+        + "\t[-fedchown\n" + "\t[-fedchmod\n" + "\t[-fedsetquota\n"
+        + "\t[-fedsetfacl\n" + "\t[-fedmkdir\n" +
     "\t[-help [cmd]]\n";
 
   /**
@@ -1126,6 +1122,16 @@ public class DFSAdmin extends FsShell {
       System.out.println(getStoragePolicy);
     } else if ("updateMptOnZk".equalsIgnoreCase(cmd)) {
       System.out.println(updateMptOnZk);
+    } else if (FedDFSAdminCommand.FedchownCommand.matches(cmd)) {
+      System.out.println(FedDFSAdminCommand.FedchownCommand.DESCRIPTION);
+    } else if (FedDFSAdminCommand.FedchmodCommand.matches(cmd)) {
+      System.out.println(FedDFSAdminCommand.FedchmodCommand.DESCRIPTION);
+    } else if (FedDFSAdminCommand.FedSetQuotaCommand.matches(cmd)) {
+      System.out.println(FedDFSAdminCommand.FedSetQuotaCommand.DESCRIPTION);
+    } else if (FedDFSAdminCommand.FedSetfaclCommand.matches(cmd)) {
+      System.out.println(FedDFSAdminCommand.FedSetfaclCommand.DESCRIPTION);
+    } else if (FedDFSAdminCommand.FedMkdirs.matches(cmd)) {
+      System.out.println(FedDFSAdminCommand.FedMkdirs.DESCRIPTION);
     } else if ("help".equals(cmd)) {
       System.out.println(help);
     } else {
@@ -1697,6 +1703,22 @@ public class DFSAdmin extends FsShell {
           + " [-getDatanodeInfo <datanode_host:ipc_port>]");
     } else if ("-updateMptOnZk".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin" + "[-updateMptOnZk]");
+    } else if (FedDFSAdminCommand.FedchownCommand.matches(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin" + " ["
+          + FedDFSAdminCommand.FedchownCommand.USAGE + "]");
+    } else if (FedDFSAdminCommand.FedchmodCommand.matches(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin" + " ["
+          + FedDFSAdminCommand.FedchmodCommand.USAGE + "]");
+    } else if (FedDFSAdminCommand.FedSetfaclCommand.matches(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin" + " ["
+          + FedDFSAdminCommand.FedSetfaclCommand.USAGE + "]");
+    } else if (FedDFSAdminCommand.FedSetQuotaCommand.matches(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin" + " ["
+          + FedDFSAdminCommand.FedSetQuotaCommand.USAGE + "]");
+    } else if (FedDFSAdminCommand.FedMkdirs.matches(cmd)) {
+      System.err.println(
+          "Usage: hdfs dfsadmin" + " [" + FedDFSAdminCommand.FedMkdirs.USAGE
+              + "]");
     } else {
       System.err.println("Usage: hdfs dfsadmin");
       System.err.println("Note: Administrative commands can only be run as the HDFS superuser.");
@@ -1754,7 +1776,7 @@ public class DFSAdmin extends FsShell {
       if (argv.length != 1) {
         printUsage(cmd);
         return exitCode;
-      }      
+      }
     } else if ("-restoreFailedStorage".equals(cmd)) {
       if (argv.length != 2) {
         printUsage(cmd);
@@ -1851,7 +1873,7 @@ public class DFSAdmin extends FsShell {
         return exitCode;
       }
     }
-    
+
     // initialize DFSAdmin
     try {
       init();
@@ -1939,6 +1961,21 @@ public class DFSAdmin extends FsShell {
         } else {
           printHelp("");
         }
+      } else if (FedDFSAdminCommand.FedchownCommand.matches(cmd)) {
+        exitCode = new FedDFSAdminCommand.FedchownCommand(getConf())
+            .run(Arrays.copyOfRange(argv, 1, argv.length));
+      } else if (FedDFSAdminCommand.FedchmodCommand.matches(cmd)) {
+        exitCode = new FedDFSAdminCommand.FedchmodCommand(getConf())
+            .run(Arrays.copyOfRange(argv, 1, argv.length));
+      } else if (FedDFSAdminCommand.FedSetfaclCommand.matches(cmd)) {
+        exitCode = new FedDFSAdminCommand.FedSetfaclCommand(getConf())
+            .run(Arrays.copyOfRange(argv, 1, argv.length));
+      } else if (FedDFSAdminCommand.FedSetQuotaCommand.matches(cmd)) {
+        exitCode = new FedDFSAdminCommand.FedSetQuotaCommand(getConf())
+            .run(Arrays.copyOfRange(argv, 1, argv.length));
+      } else if (FedDFSAdminCommand.FedMkdirs.matches(cmd)) {
+        exitCode = new FedDFSAdminCommand.FedMkdirs(getConf())
+            .run(Arrays.copyOfRange(argv, 1, argv.length));
       } else {
         exitCode = -1;
         System.err.println(cmd.substring(1) + ": Unknown command");

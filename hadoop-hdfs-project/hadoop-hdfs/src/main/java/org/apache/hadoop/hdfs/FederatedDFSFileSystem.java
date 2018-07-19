@@ -75,10 +75,12 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 public class FederatedDFSFileSystem extends DistributedFileSystem {
   private ViewFileSystem viewFs = null;
