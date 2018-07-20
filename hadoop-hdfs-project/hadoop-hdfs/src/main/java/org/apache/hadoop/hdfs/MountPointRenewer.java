@@ -178,7 +178,7 @@ public class MountPointRenewer {
   }
 
   public static void verifyNewMountPoints(Configuration conf, String kvConf,
-      String viewName) throws IllegalArgumentException, IOException {
+      String viewName) throws IOException {
     String origKvConfig = getMountPointConfig(conf, viewName, false);
     String[] origKvs = origKvConfig.split(";");
     String[] kvs = kvConf.split(";");
@@ -191,7 +191,7 @@ public class MountPointRenewer {
         }
       }
       if (!contiansOrigKv) {
-        throw new IllegalArgumentException(
+        throw new IOException(
             "New mount point table is invalid since " + origKv
                 + " is not contained.");
       }
@@ -200,7 +200,7 @@ public class MountPointRenewer {
 
   public static boolean updateMountPointConfig(Configuration conf,
       String kvConfig,
-      String viewName) throws IllegalArgumentException, IOException {
+      String viewName) throws IOException {
     if (kvConfig == null) {
       return false;
     }
@@ -334,7 +334,7 @@ public class MountPointRenewer {
         try {
           updateMountPointConfig(conf, mptFromZk, viewName);
         } catch (IOException ioe) {
-          LOG.debug("Update mount point table inforamtion from zk failed", ioe);
+          LOG.warn("Update mount point table inforamtion from zk failed", ioe);
           return false;
         }
       }
