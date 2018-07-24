@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -145,10 +146,18 @@ public class LogAggregationService extends AbstractService implements
             0L, TimeUnit.MILLISECONDS,
             new LinkedBlockingQueue<Runnable>(),
             new ThreadFactoryBuilder().setNameFormat("LogAggregationService #%d").build());
+    super.serviceInit(conf);
+  }
 
+
+  @Override
+  protected void serviceStart() throws Exception {
+    // NodeId is only available during start, the following cannot be moved
+    // anywhere else.
+    this.nodeId = this.context.getNodeId();
     int orphanAppLogCleanInterval =
-        getConfig().getInt("yarn.nodemanager.orphanapp.logclean.interval.hour", 6);
-
+            getConfig().getInt("yarn.nodemanager.orphanapp.logclean.interval.hour", 6);
+    int initDelay = (int) (60 * 60 * new Random().nextFloat());
     logCleanScheduler.scheduleAtFixedRate(new Runnable() {
       @Override
       public void run() {
@@ -158,8 +167,8 @@ public class LogAggregationService extends AbstractService implements
           LOG.error("Failed to cleanup orphan application local logs", e);
         }
       }
-    }, 0, orphanAppLogCleanInterval, TimeUnit.HOURS);
-    super.serviceInit(conf);
+    }, initDelay,orphanAppLogCleanInterval * 60 * 60, TimeUnit.SECONDS);
+    super.serviceStart();
   }
 
   private void cleanupOrphanAppLogs() throws IOException {
@@ -238,13 +247,6 @@ public class LogAggregationService extends AbstractService implements
     return false;
   }
 
-  @Override
-  protected void serviceStart() throws Exception {
-    // NodeId is only available during start, the following cannot be moved
-    // anywhere else.
-    this.nodeId = this.context.getNodeId();
-    super.serviceStart();
-  }
 
   @Override
   protected void serviceStop() throws Exception {
