@@ -113,6 +113,7 @@ public class CachedHistoryStorage extends AbstractService implements
       loadedJobCache.put(job.getID(), job);
       return job;
     } catch (IOException e) {
+      LOG.error("Failed to find/load job: :" + fileInfo.getJobId(), e);
       throw new YarnRuntimeException(
           "Could not find/load job: " + fileInfo.getJobId(), e);
     }
@@ -122,31 +123,35 @@ public class CachedHistoryStorage extends AbstractService implements
   Map<JobId, Job> getLoadedJobCache() {
     return loadedJobCache;
   }
-  
+
   @Override
   public Job getFullJob(JobId jobId) {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Looking for Job " + jobId);
     }
-    try {
-      HistoryFileInfo fileInfo = hsManager.getFileInfo(jobId);
-      LOG.info("Get history file info for job: " + jobId + ", info: " + fileInfo);
-      Job result = null;
-      if (fileInfo != null) {
-        result = loadedJobCache.get(jobId);
-        if (result == null) {
-          result = loadJob(fileInfo);
-        } else if(fileInfo.isDeleted()) {
+    Exception exception = null;
+    for (int retry = 0; retry < 3; retry++) {
+      try {
+        HistoryFileInfo fileInfo = hsManager.getFileInfo(jobId);
+        LOG.info("Get history file info for job: " + jobId + ", info: " + fileInfo);
+        Job result = null;
+        if (fileInfo != null) {
+          result = loadedJobCache.get(jobId);
+          if (result == null) {
+            result = loadJob(fileInfo);
+          } else if (fileInfo.isDeleted()) {
+            loadedJobCache.remove(jobId);
+            result = null;
+          }
+        } else {
           loadedJobCache.remove(jobId);
-          result = null;
         }
-      } else {
-        loadedJobCache.remove(jobId);
+        return result;
+      } catch (IOException e) {
+        exception = e;
       }
-      return result;
-    } catch (IOException e) {
-      throw new YarnRuntimeException(e);
     }
+    throw new YarnRuntimeException(exception);
   }
 
   @Override

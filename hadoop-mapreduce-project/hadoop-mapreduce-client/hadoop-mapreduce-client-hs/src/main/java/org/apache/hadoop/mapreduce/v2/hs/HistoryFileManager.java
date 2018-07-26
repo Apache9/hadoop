@@ -930,22 +930,30 @@ public class HistoryFileManager extends AbstractService {
     return jobListCache.values();
   }
 
+  private boolean isHistoryExist(HistoryFileInfo fileInfo) throws IOException {
+    if (fileInfo == null || fileInfo.historyFile == null) {
+        return false;
+    }
+    Path file = fileInfo.historyFile;
+    return file.getFileSystem(conf).exists(file);
+  }
+
   public HistoryFileInfo getFileInfo(JobId jobId) throws IOException {
     // FileInfo available in cache.
     HistoryFileInfo fileInfo = jobListCache.get(jobId);
-    if (fileInfo != null) {
+    if (fileInfo != null && isHistoryExist(fileInfo)) {
       return fileInfo;
     }
     // OK so scan the intermediate to be sure we did not lose it that way
     scanIntermediateDirectory();
     fileInfo = jobListCache.get(jobId);
-    if (fileInfo != null) {
+    if (fileInfo != null && isHistoryExist(fileInfo)) {
       return fileInfo;
     }
 
     // Intermediate directory does not contain job. Search through older ones.
     fileInfo = scanOldDirsForJob(jobId);
-    if (fileInfo != null) {
+    if (fileInfo != null && isHistoryExist(fileInfo)) {
       return fileInfo;
     }
     return null;
