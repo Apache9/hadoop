@@ -442,6 +442,7 @@ public abstract class FSQueue implements Queue, Schedulable {
         toPreempt, Resources.none()) && preemptedContainers < maxContainerToPreempt) {
       RMContainer container = preemptContainer();
       if (container == null) {
+        LOG.warn("Resource: " + toPreempt + " can't be preempted between children on queue: " + getQueueName());
         break;
       } else {
         preemptedContainers++;

@@ -892,6 +892,8 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     if (toBePreempted != null) {
       LOG.info("App " + getName() + " is going to preempt a running " +
           "container: " + toBePreempted.getContainerId());
+    } else {
+      LOG.warn("Can't preempt a container from application: " + getName());
     }
     long cost = System.currentTimeMillis() - start;
     if (cost > 100) {

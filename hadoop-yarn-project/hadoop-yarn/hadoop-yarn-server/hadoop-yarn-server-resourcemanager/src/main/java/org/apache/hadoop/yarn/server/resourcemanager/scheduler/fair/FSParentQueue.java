@@ -348,6 +348,9 @@ public class FSParentQueue extends FSQueue {
     if (candidateQueue != null) {
       toBePreempted = candidateQueue.preemptContainer();
     }
+    if (toBePreempted == null) {
+      LOG.warn("Can't preempt a container from queue: " + getQueueName());
+    }
     return toBePreempted;
   }
 

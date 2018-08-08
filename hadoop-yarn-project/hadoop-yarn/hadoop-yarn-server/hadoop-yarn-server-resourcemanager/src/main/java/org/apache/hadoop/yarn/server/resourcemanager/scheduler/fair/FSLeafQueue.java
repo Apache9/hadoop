@@ -361,6 +361,8 @@ public class FSLeafQueue extends FSQueue {
 
     // If this queue is not over its fair share, reject
     if (!preemptContainerPreCheck()) {
+      LOG.info("The queue " + getQueueName() + " is not over its fair share. Resource usage: "
+              + getResourceUsage() + " fair share: " + getFairShare());
       return toBePreempted;
     }
 
@@ -387,6 +389,9 @@ public class FSLeafQueue extends FSQueue {
     // Preempt from the selected app
     if (candidateSched != null) {
       toBePreempted = candidateSched.preemptContainer();
+    }
+    if (toBePreempted == null) {
+      LOG.warn("Can't preempt a container from queue: " + getQueueName());
     }
     return toBePreempted;
   }
