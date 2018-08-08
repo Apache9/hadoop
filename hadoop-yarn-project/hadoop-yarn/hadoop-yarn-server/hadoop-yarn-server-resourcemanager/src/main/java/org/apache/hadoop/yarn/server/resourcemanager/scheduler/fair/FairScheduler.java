@@ -194,7 +194,7 @@ public class FairScheduler extends
   protected int maxAssign; // Max containers to assign per heartbeat
 
   @VisibleForTesting
-  final MaxRunningAppsEnforcer maxRunningEnforcer;
+  MaxRunningAppsEnforcer maxRunningEnforcer;
 
   private AllocationFileLoaderService allocsLoader;
   @VisibleForTesting
@@ -205,7 +205,6 @@ public class FairScheduler extends
     clock = new SystemClock();
     allocsLoader = new AllocationFileLoaderService();
     queueMgr = new QueueManager(this);
-    maxRunningEnforcer = new MaxRunningAppsEnforcer(this);
     aclProxyUsers = new HashSet<String>();
     exclusiveAppNameUsers = new HashSet<String>();
     exclusiveUserApps = new HashSet<Pair<String, String>>();
@@ -1376,6 +1375,7 @@ public class FairScheduler extends
     synchronized (this) {
       this.conf = new FairSchedulerConfiguration(conf);
       validateConf(this.conf);
+      maxRunningEnforcer = new MaxRunningAppsEnforcer(this);
       resourceCalculator = this.conf.getResourceCalculator();
       LOG.info("Using resource calculator: " + resourceCalculator.getClass().getName());
       minimumAllocation = this.conf.getMinimumAllocation();

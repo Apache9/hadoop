@@ -18,11 +18,14 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -45,10 +48,18 @@ public class MaxRunningAppsEnforcer {
   @VisibleForTesting
   final ListMultimap<String, FSAppAttempt> usersNonRunnableApps;
 
+  final boolean isQueueNotRestricted;
+
+  final Set<String> unRestrictedQueues;
+
   public MaxRunningAppsEnforcer(FairScheduler scheduler) {
     this.scheduler = scheduler;
     this.usersNumRunnableApps = new HashMap<String, Integer>();
     this.usersNonRunnableApps = ArrayListMultimap.create();
+    this.isQueueNotRestricted = scheduler.getConf().getBoolean(FairSchedulerConfiguration.IGNODRE_QUEUE_RESTRICTION_ENABLE,
+            FairSchedulerConfiguration.DEFAULT_IGNODRE_QUEUE_RESTRICTION_ENABLE);
+    this.unRestrictedQueues = new HashSet<>(Arrays.asList(scheduler.getConf().getTrimmedStrings(
+            FairSchedulerConfiguration.IGNODRE_RESTRICTION_QUEUES)));
   }
 
   /**
@@ -56,6 +67,9 @@ public class MaxRunningAppsEnforcer {
    * maxRunningApps limits.
    */
   public boolean canAppBeRunnable(FSQueue queue, String user) {
+    if (isQueueNotRestricted && unRestrictedQueues.contains(queue.getQueueName())) {
+          return true;
+    }
     AllocationConfiguration allocConf = scheduler.getAllocationConfiguration();
     Integer userNumRunnable = usersNumRunnableApps.get(user);
     if (userNumRunnable == null) {

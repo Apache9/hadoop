@@ -152,6 +152,14 @@ public class FairSchedulerConfiguration extends Configuration {
           CONF_PREFIX + "preemption.containers.max";
   public static final int DEFAULT_CONTAINERS_PER_PREEMPTION = Integer.MAX_VALUE;
 
+  public static final String IGNODRE_QUEUE_RESTRICTION_ENABLE= CONF_PREFIX
+          + "ignore-queue-restriction.enable";
+
+  public static final boolean DEFAULT_IGNODRE_QUEUE_RESTRICTION_ENABLE = false;
+
+  public static final String IGNODRE_RESTRICTION_QUEUES= CONF_PREFIX
+          + "ignore-restriction.queues";
+
   public FairSchedulerConfiguration() {
     super();
   }
