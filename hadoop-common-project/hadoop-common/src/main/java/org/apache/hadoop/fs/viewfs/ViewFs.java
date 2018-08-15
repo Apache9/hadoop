@@ -215,7 +215,7 @@ public class ViewFs extends AbstractFileSystem {
   ViewFs(final URI theUri, final Configuration conf) throws IOException,
       URISyntaxException {
     super(theUri, FsConstants.VIEWFS_SCHEME, false, -1);
-    cache = new HashMap<>();
+    cache = new HashMap<Key, AbstractFileSystem>();
     creationTime = Time.now();
     ugi = UserGroupInformation.getCurrentUser();
     config = conf;

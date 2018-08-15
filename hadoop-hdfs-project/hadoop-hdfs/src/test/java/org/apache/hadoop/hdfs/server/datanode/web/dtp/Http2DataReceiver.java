@@ -28,7 +28,6 @@ import com.xiaomi.infra.thirdparty.io.netty.handler.codec.http2.Http2HeadersFram
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 
 public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
 
@@ -75,12 +74,13 @@ public class Http2DataReceiver extends ChannelInboundHandlerAdapter {
     buffer.readBytes(data);
     buffer.release();
     if (!HttpResponseStatus.OK.equals(status)) {
+      String content = new String(data);
       if (HttpResponseStatus.NOT_FOUND.equals(status)) {
-        error = new FileNotFoundException("Status: " + status + ", content: " +
-            new String(data, StandardCharsets.UTF_8));
+        error = new FileNotFoundException("Status: " + status + ", content: " + 
+            content);
       } else {
         error = new IOException("Status: " + status + ", content: " +
-            new String(data, StandardCharsets.UTF_8));
+            content);
       }
 
     }

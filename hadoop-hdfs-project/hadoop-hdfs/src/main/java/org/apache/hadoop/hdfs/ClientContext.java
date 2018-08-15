@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs;
 
+import java.lang.Math;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
@@ -124,7 +125,7 @@ public class ClientContext {
     if (initialWindowSize <= 0) {
       initialWindowSize = conf.http2BlockReaderMaxReadLenth;
     }
-    return (int) Long.min(initialWindowSize, Integer.MAX_VALUE / 2);
+    return (int) Math.min(initialWindowSize, Integer.MAX_VALUE / 2);
   }
 
   private ClientContext(String name, Conf conf) {

@@ -111,7 +111,7 @@ public class TestRequestHedgingProxyProvider {
     });
 
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri, NamenodeProtocols.class,
             createFactory(badMock,goodMock,goodMock,badMock));
     NamenodeProtocols proxy = provider.getProxy().proxy;
     long[] stats = proxy.getStats();
@@ -147,7 +147,7 @@ public class TestRequestHedgingProxyProvider {
     });
 
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri, NamenodeProtocols.class,
             createFactory(badMock, goodMock));
     NamenodeProtocols proxy = provider.getProxy().proxy;
     proxy.getStats();
@@ -173,7 +173,7 @@ public class TestRequestHedgingProxyProvider {
     Mockito.when(badMock.getStats()).thenThrow(new IOException("Bad mock !!"));
 
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri, NamenodeProtocols.class,
             createFactory(badMock, goodMock));
     long[] stats = provider.getProxy().proxy.getStats();
     Assert.assertTrue(stats.length == 1);
@@ -195,7 +195,7 @@ public class TestRequestHedgingProxyProvider {
     });
 
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri, NamenodeProtocols.class,
             createFactory(goodMock, badMock));
     long[] stats = provider.getProxy().proxy.getStats();
     Assert.assertTrue(stats.length == 1);
@@ -213,7 +213,7 @@ public class TestRequestHedgingProxyProvider {
             new IOException("Worse mock !!"));
 
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri, NamenodeProtocols.class,
             createFactory(badMock, worseMock));
     try {
       provider.getProxy().proxy.getStats();
@@ -243,7 +243,7 @@ public class TestRequestHedgingProxyProvider {
             "Standby NameNode"));
 
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri,
             NamenodeProtocols.class, createFactory(active, standby));
     try {
       provider.getProxy().proxy.getBlockLocations("/tmp/test.file", 0L, 20L);
@@ -276,7 +276,7 @@ public class TestRequestHedgingProxyProvider {
             "Standby NameNode"));
 
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri,
             NamenodeProtocols.class, createFactory(active, standby));
     try {
       provider.getProxy().proxy.getStats();
@@ -307,7 +307,7 @@ public class TestRequestHedgingProxyProvider {
     Mockito.when(standby.getStats()).thenThrow(new ConnectException());
 
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri,
             NamenodeProtocols.class, createFactory(active, standby));
     try {
       provider.getProxy().proxy.getStats();
@@ -353,7 +353,7 @@ public class TestRequestHedgingProxyProvider {
 
     Client.setCallIdAndRetryCount(cid, rc);
     RequestHedgingProxyProvider<NamenodeProtocols> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri, NamenodeProtocols.class,
             createFactory(goodMock, badMock));
     NamenodeProtocols proxy = provider.getProxy().proxy;
     proxy.getStats();
@@ -366,7 +366,7 @@ public class TestRequestHedgingProxyProvider {
     config.set(DFSConfigKeys.DFS_NAMESERVICES, ns);
     config.set(DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX + "." + ns, "nn1,nn2");
     provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+        new RequestHedgingProxyProvider<NamenodeProtocols>(conf, nnUri, NamenodeProtocols.class,
             createFactory(goodMock, badMock));
     proxy = provider.getProxy().proxy;
     try {

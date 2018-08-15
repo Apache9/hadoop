@@ -270,7 +270,7 @@ public class TestHadoopArchiveLogs {
     hal.generateScript(localScript, workingDir, remoteRootLogDir, suffix);
     Assert.assertTrue(localScript.exists());
     String script = IOUtils.toString(localScript.toURI());
-    String[] lines = script.split(System.lineSeparator());
+    String[] lines = script.split(System.getProperty("line.separator"));
     Assert.assertEquals(16, lines.length);
     Assert.assertEquals("#!/bin/bash", lines[0]);
     Assert.assertEquals("set -e", lines[1]);

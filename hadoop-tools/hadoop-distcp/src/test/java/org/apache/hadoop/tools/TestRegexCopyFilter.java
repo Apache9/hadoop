@@ -31,7 +31,7 @@ public class TestRegexCopyFilter {
 
   @Test
   public void testShouldCopyTrue() {
-    List<Pattern> filters = new ArrayList<>();
+    List<Pattern> filters = new ArrayList<Pattern>();
     filters.add(Pattern.compile("user"));
 
     RegexCopyFilter regexCopyFilter = new RegexCopyFilter("fakeFile");
@@ -43,7 +43,7 @@ public class TestRegexCopyFilter {
 
   @Test
   public void testShouldCopyFalse() {
-    List<Pattern> filters = new ArrayList<>();
+    List<Pattern> filters = new ArrayList<Pattern>();
     filters.add(Pattern.compile(".*test.*"));
 
     RegexCopyFilter regexCopyFilter = new RegexCopyFilter("fakeFile");
@@ -55,7 +55,7 @@ public class TestRegexCopyFilter {
 
   @Test
   public void testShouldCopyWithMultipleFilters() {
-    List<Pattern> filters = new ArrayList<>();
+    List<Pattern> filters = new ArrayList<Pattern>();
     filters.add(Pattern.compile(".*test.*"));
     filters.add(Pattern.compile("/user/b.*"));
     filters.add(Pattern.compile(".*_SUCCESS"));
@@ -78,7 +78,7 @@ public class TestRegexCopyFilter {
 
   @Test
   public void testShouldExcludeAll() {
-    List<Pattern> filters = new ArrayList<>();
+    List<Pattern> filters = new ArrayList<Pattern>();
     filters.add(Pattern.compile(".*test.*"));
     filters.add(Pattern.compile("/user/b.*"));
     filters.add(Pattern.compile(".*"));           // exclude everything
@@ -100,7 +100,7 @@ public class TestRegexCopyFilter {
   }
 
   private List<Path> getTestPaths() {
-    List<Path> toCopy = new ArrayList<>();
+    List<Path> toCopy = new ArrayList<Path>();
     toCopy.add(new Path("/user/bar"));
     toCopy.add(new Path("/user/foo/_SUCCESS"));
     toCopy.add(new Path("/hive/test_data"));

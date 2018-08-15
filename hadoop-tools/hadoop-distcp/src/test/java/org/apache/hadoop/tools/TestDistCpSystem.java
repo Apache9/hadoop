@@ -238,7 +238,7 @@ public class TestDistCpSystem extends TestCase {
   private void testDirPreserve(FileSystem dstFs, String parent, String owner,
       String group, FsPermission perm, List<AclEntry> entries, boolean hopeTrue) throws IOException {
     FileStatus status = dstFs.getFileStatus(new Path(parent));
-    Set<AclEntry> set = new HashSet<>(dstFs.getAclStatus(new Path(parent)).getEntries());
+    Set<AclEntry> set = new HashSet<AclEntry>(dstFs.getAclStatus(new Path(parent)).getEntries());
     if (hopeTrue) {
       assertTrue(status.getOwner().equals(owner));
       assertTrue(status.getGroup().equals(group));

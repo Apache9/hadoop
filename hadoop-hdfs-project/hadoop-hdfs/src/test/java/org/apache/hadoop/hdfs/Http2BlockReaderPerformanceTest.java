@@ -23,9 +23,9 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLongArray;
 
@@ -39,6 +39,8 @@ import org.apache.hadoop.fs.Path;
  *
  */
 public class Http2BlockReaderPerformanceTest {
+
+  private static Random random = new Random();
 
   private final boolean pread;
 
@@ -56,14 +58,24 @@ public class Http2BlockReaderPerformanceTest {
     long length = Long.parseLong(args[2]);
     long blockSize = Long.parseLong(args[3]);
     byte[] b = new byte[bufferSize];
-    try (FileSystem fs = FileSystem.get(new Configuration());
-        FSDataOutputStream out = fs.create(file, true, bufferSize,
-            fs.getDefaultReplication(file), blockSize)) {
+    FileSystem fs = null;
+    FSDataOutputStream out = null;
+    try {
+      fs = FileSystem.get(new Configuration());
+      out = fs.create(file, true, bufferSize,
+            fs.getDefaultReplication(file), blockSize);
       for (long remaining = length; remaining > 0;) {
-        ThreadLocalRandom.current().nextBytes(b);
+        random.nextBytes(b);
         int toWrite = (int) Math.min(remaining, bufferSize);
         out.write(b, 0, toWrite);
         remaining -= toWrite;
+      }
+    } finally {
+      if (fs != null) {
+        fs.close();
+      }
+      if (out != null) {
+        out.close();
       }
     }
   }
@@ -95,8 +107,14 @@ public class Http2BlockReaderPerformanceTest {
       final int readCountPerThread, final int readLength, final boolean pread,
       final AtomicLongArray cost) throws IOException, InterruptedException {
     // warm up
-    try (FSDataInputStream input = fs.open(file)) {
-      input.read(0, new byte[1], 0, 1);
+    FSDataInputStream fsinput = null;
+    try {
+      fsinput = fs.open(file);
+      fsinput.read(0, new byte[1], 0, 1);
+    } finally {
+      if (fsinput != null) {
+        fsinput.close();
+      }
     }
     long fileLength = fs.getFileStatus(file).getLen();
     final long seekBound = Math.min(fileLength, Integer.MAX_VALUE) - readLength;
@@ -164,12 +182,18 @@ public class Http2BlockReaderPerformanceTest {
           Long.MAX_VALUE);
     }
     AtomicLongArray cost = new AtomicLongArray(concurrency);
-    try (FileSystem fs = FileSystem.get(conf)) {
+    FileSystem fs = null;
+    try {
+      fs = FileSystem.get(conf);
       if (noChecksum) {
         fs.setVerifyChecksum(false);
       }
       doTest(fs, file, concurrency, readCountPerThread, readLength, pread,
           cost);
+    } finally {
+      if (fs != null) {
+        fs.close();
+      }
     }
     long max = 0, min = Long.MAX_VALUE, sum = 0;
     for (int i = 0; i < concurrency; i++) {
@@ -198,7 +222,7 @@ public class Http2BlockReaderPerformanceTest {
   public static void main(String[] args)
       throws IOException, InterruptedException {
     int times = Integer.parseInt(args[0]);
-    List<String> argList = new ArrayList<>();
+    List<String> argList = new ArrayList<String>();
     boolean pread = false;
     boolean noChecksum = false;
     for (int i = 1; i < args.length; i++) {

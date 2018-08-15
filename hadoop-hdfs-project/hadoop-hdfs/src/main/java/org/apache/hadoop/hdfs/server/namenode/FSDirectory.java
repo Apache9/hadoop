@@ -3618,7 +3618,7 @@ public class FSDirectory implements Closeable {
       if (addedNode != null) {
         ((INodeDirectory) parent).removeChild(addedNode);
       }
-      throw e;
+      throw (IOException) e;
     }
   }
 
@@ -3692,7 +3692,7 @@ public class FSDirectory implements Closeable {
         // If fail, let source side fixer handle it. Should never happen, may
         // need human involves.
         NameNode.stateChangeLog.fatal("Graft sub tree to namespace failed", t);
-        throw t;
+        throw (IOException) t;
       }
     } finally {
       writeUnlock();

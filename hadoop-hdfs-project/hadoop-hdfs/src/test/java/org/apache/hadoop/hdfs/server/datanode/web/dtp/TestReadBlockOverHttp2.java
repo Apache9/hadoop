@@ -130,10 +130,10 @@ public class TestReadBlockOverHttp2 {
   @Test
   public void test()
       throws IOException, InterruptedException, ExecutionException {
-    try (FSDataOutputStream out =
-        CLUSTER.getFileSystem().create(new Path("/test"))) {
-      out.write(1);
-    }
+    FSDataOutputStream out =
+      CLUSTER.getFileSystem().create(new Path("/test"));
+    out.write(1);
+    out.close();
     Channel stream = new Http2StreamChannelBootstrap(CHANNEL)
         .handler(new ChannelInitializer<Channel>() {
 
@@ -186,9 +186,14 @@ public class TestReadBlockOverHttp2 {
   @Test(expected = FileNotFoundException.class)
   public void testBlockNotExists()
       throws IOException, InterruptedException, ExecutionException {
-    try (FSDataOutputStream out =
-        CLUSTER.getFileSystem().create(new Path("/test"))) {
+    FSDataOutputStream out = null;
+    try {
+       out = CLUSTER.getFileSystem().create(new Path("/test"));
       out.write(2);
+    } finally {
+      if (out != null) {
+        out.close();
+      }
     }
     Channel stream = new Http2StreamChannelBootstrap(CHANNEL)
         .handler(new ChannelInitializer<Channel>() {
