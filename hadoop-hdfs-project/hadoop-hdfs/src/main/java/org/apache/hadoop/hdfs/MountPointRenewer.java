@@ -29,7 +29,7 @@ public class MountPointRenewer {
   
   private Configuration conf;
   private String viewName;
-  final private Log LOG = LogFactory.getLog(MountPointRenewer.class);
+  static final public Log LOG = LogFactory.getLog(MountPointRenewer.class);
   
   // mptRenewInterval is the interval to get new configuration in normal
   // condition.
@@ -191,6 +191,8 @@ public class MountPointRenewer {
         }
       }
       if (!contiansOrigKv) {
+        LOG.warn("New mount point table is invalid since " + origKv
+            + " is not contained.");
         throw new IOException(
             "New mount point table is invalid since " + origKv
                 + " is not contained.");
@@ -277,9 +279,13 @@ public class MountPointRenewer {
       mptFromZk = getMptConfFromZookeeper(viewName, conf);
     } catch (Exception e) {
       // Ignore, using whatever we have in the original configration
+      LOG.warn("Fail in getting mpt from zk, will use original configuration",
+          e);
       return false;
     }
-    if (mptFromZk != null) {
+    if (mptFromZk == null || mptFromZk.length() == 0) {
+      LOG.warn("mpt from zk is empty, will use original configuration");
+    } else {
       // Renew the fsstate in viewfs if the mount table in zk changed. Otherwise
       // do nothing.
       try {
