@@ -29,22 +29,19 @@ import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.directory.api.ldap.codec.actions.CheckLengthNotNull;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider.ProxyFactory;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
-import org.apache.hadoop.io.retry.FailoverProxyProvider;
 import org.apache.hadoop.io.retry.MultiException;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.RemoteException;
-import org.apache.hadoop.ipc.RpcConstants;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -58,7 +55,7 @@ import com.google.common.collect.Lists;
 
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
-import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
+import static junit.framework.TestCase.fail;
 
 public class TestRequestHedgingProxyProvider {
 
@@ -378,6 +375,43 @@ public class TestRequestHedgingProxyProvider {
     assertEquals(null, Client.getCallId());
 
     Client.clearCallId();
+  }
+
+  @Test
+  public void testHedgingMultiThreads() throws Exception {
+    final NamenodeProtocols delayMock = Mockito.mock(NamenodeProtocols.class);
+    Mockito.when(delayMock.getStats()).thenAnswer(new Answer<long[]>() {
+      @Override
+      public long[] answer(InvocationOnMock invocation) throws Throwable {
+        Thread.sleep(2000);
+        return new long[] { 1 };
+      }
+    });
+    final RequestHedgingProxyProvider<NamenodeProtocols> provider =
+        new RequestHedgingProxyProvider<>(conf, nnUri, NamenodeProtocols.class,
+            createFactory(delayMock, delayMock));
+    final NamenodeProtocols delayProxy = provider.getProxy().proxy;
+    LogManager.getLogger(RequestHedgingProxyProvider.class).setLevel(Level.DEBUG);
+    delayProxy.getStats();
+
+    Thread t = new Thread(){
+      @Override
+      public void run(){
+        try {
+          Thread.sleep(1000);
+          provider.performFailover(delayProxy);
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    };
+    t.start();
+    try {
+      delayProxy.getStats();
+    } catch (NullPointerException e) {
+      fail("RequestHedging cause a data race!");
+    }
+    t.join();
   }
 
   private ProxyFactory<NamenodeProtocols> createFactory(

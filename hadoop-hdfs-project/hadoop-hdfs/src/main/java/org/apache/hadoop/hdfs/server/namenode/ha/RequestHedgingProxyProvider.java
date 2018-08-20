@@ -63,6 +63,7 @@ public class RequestHedgingProxyProvider<T> extends
   class RequestHedgingInvocationHandler implements RpcInvocationHandler {
 
     final Map<String, ProxyInfo<T>> targetProxies;
+    private volatile ProxyInfo<T> currentUsedProxy = null;
 
     public RequestHedgingInvocationHandler(
             Map<String, ProxyInfo<T>> targetProxies) {
@@ -84,90 +85,95 @@ public class RequestHedgingProxyProvider<T> extends
     public Object
     invoke(Object proxy, final Method method, final Object[] args)
             throws Throwable {
-      if (currentUsedProxy != null) {
-        try {
-          Object retVal = method.invoke(currentUsedProxy.proxy, args);
-          LOG.debug("Invocation successful on [{}]",
-              currentUsedProxy.proxyInfo);
-          return retVal;
-        } catch (InvocationTargetException ex) {
-          Exception unwrappedException = unwrapInvocationTargetException(ex);
-          logProxyException(unwrappedException, currentUsedProxy.proxyInfo);
-          LOG.trace("Unsuccessful invocation on [{}]",
-              currentUsedProxy.proxyInfo);
-          throw unwrappedException;
-        }
-      }
-      if (targetProxies.isEmpty()) {
-        Client.clearCallId();
-        if (tolerateNoNn) {
-          // will trigger failover
-          throw new UnknownHostException("no namenode address configured");
-        } else {
-          throw new RuntimeException("Could not find any configured addresses "
-              + "for HedgingProxyProvider");
-        }
-      }
-      Map<Future<Object>, ProxyInfo<T>> proxyMap = new HashMap<>();
-      int numAttempts = 0;
-
-      ExecutorService executor = null;
-      CompletionService<Object> completionService;
-      try {
-        final Integer cid = Client.getCallId();
-        final Integer rc = Client.getRetryCount();
-        executor = Executors.newFixedThreadPool(targetProxies.size());
-        completionService = new ExecutorCompletionService<>(executor);
-        for (final Map.Entry<String, ProxyInfo<T>> pEntry :
-                targetProxies.entrySet()) {
-          Callable<Object> c = new Callable<Object>() {
-            @Override
-            public Object call() throws Exception {
-              if (cid != null && rc != null) {
-                Client.setCallIdAndRetryCount(cid, rc);
+      if (currentUsedProxy == null) {
+        synchronized (this) {
+          if (currentUsedProxy == null) {
+            if (targetProxies.isEmpty()) {
+              Client.clearCallId();
+              if (tolerateNoNn) {
+                // will trigger failover
+                throw new UnknownHostException("no namenode address configured");
+              } else {
+                throw new RuntimeException("Could not find any configured addresses "
+                    + "for HedgingProxyProvider");
               }
-              LOG.trace("Invoking method {} on proxy {}", method,
-                  pEntry.getValue().proxyInfo);
-              return method.invoke(pEntry.getValue().proxy, args);
             }
-          };
-          proxyMap.put(completionService.submit(c), pEntry.getValue());
-          numAttempts++;
-        }
+            Map<Future<Object>, ProxyInfo<T>> proxyMap = new HashMap<>();
+            int numAttempts = 0;
 
-        Map<String, Exception> badResults = new HashMap<>();
-        while (numAttempts > 0) {
-          Future<Object> callResultFuture = completionService.take();
-          Object retVal = null;
-          try {
-            retVal = callResultFuture.get();
-            currentUsedProxy = proxyMap.get(callResultFuture);
-            LOG.debug("Invocation successful on [{}]",
-                currentUsedProxy.proxyInfo);
-            return retVal;
-          } catch (ExecutionException ex) {
-            Exception unwrappedException = unwrapExecutionException(ex);
-            ProxyInfo<T> tProxyInfo = proxyMap.get(callResultFuture);
-            logProxyException(unwrappedException, tProxyInfo.proxyInfo);
-            badResults.put(tProxyInfo.proxyInfo, unwrappedException);
-            LOG.trace("Unsuccessful invocation on [{}]", tProxyInfo.proxyInfo);
-            numAttempts--;
+            ExecutorService executor = null;
+            CompletionService<Object> completionService;
+            try {
+              final Integer cid = Client.getCallId();
+              final Integer rc = Client.getRetryCount();
+              executor = Executors.newFixedThreadPool(targetProxies.size());
+              completionService = new ExecutorCompletionService<>(executor);
+              for (final Map.Entry<String, ProxyInfo<T>> pEntry :
+                  targetProxies.entrySet()) {
+                Callable<Object> c = new Callable<Object>() {
+                  @Override
+                  public Object call() throws Exception {
+                    if (cid != null && rc != null) {
+                      Client.setCallIdAndRetryCount(cid, rc);
+                    }
+                    LOG.trace("Invoking method {} on proxy {}", method,
+                        pEntry.getValue().proxyInfo);
+                    return method.invoke(pEntry.getValue().proxy, args);
+                  }
+                };
+                proxyMap.put(completionService.submit(c), pEntry.getValue());
+                numAttempts++;
+              }
+
+              Map<String, Exception> badResults = new HashMap<>();
+              while (numAttempts > 0) {
+                Future<Object> callResultFuture = completionService.take();
+                Object retVal = null;
+                try {
+                  retVal = callResultFuture.get();
+                  currentUsedProxy = proxyMap.get(callResultFuture);
+                  LOG.debug("Invocation successful on [{}]",
+                      currentUsedProxy.proxyInfo);
+                  return retVal;
+                } catch (ExecutionException ex) {
+                  Exception unwrappedException = unwrapExecutionException(ex);
+                  ProxyInfo<T> tProxyInfo = proxyMap.get(callResultFuture);
+                  logProxyException(unwrappedException, tProxyInfo.proxyInfo);
+                  badResults.put(tProxyInfo.proxyInfo, unwrappedException);
+                  LOG.trace("Unsuccessful invocation on [{}]", tProxyInfo.proxyInfo);
+                  numAttempts--;
+                }
+              }
+
+              // At this point we should have All bad results (Exceptions)
+              // Or should have returned with successful result.
+              if (badResults.size() == 1) {
+                throw badResults.values().iterator().next();
+              } else {
+                throw new MultiException(badResults);
+              }
+            } finally {
+              if (executor != null) {
+                LOG.trace("Shutting down threadpool executor");
+                executor.shutdownNow();
+              }
+              Client.clearCallId();
+            }
           }
         }
+      }
 
-        // At this point we should have All bad results (Exceptions)
-        // Or should have returned with successful result.
-        if (badResults.size() == 1) {
-          throw badResults.values().iterator().next();
-        } else {
-          throw new MultiException(badResults);
-        }
-      } finally {
-        if (executor != null) {
-          LOG.trace("Shutting down threadpool executor");
-          executor.shutdownNow();
-        }
-        Client.clearCallId();
+      try {
+        Object retVal = method.invoke(currentUsedProxy.proxy, args);
+        LOG.debug("Invocation successful on [{}]",
+            currentUsedProxy.proxyInfo);
+        return retVal;
+      } catch (InvocationTargetException ex) {
+        Exception unwrappedException = unwrapInvocationTargetException(ex);
+        logProxyException(unwrappedException, currentUsedProxy.proxyInfo);
+        LOG.trace("Unsuccessful invocation on [{}]",
+            currentUsedProxy.proxyInfo);
+        throw unwrappedException;
       }
     }
 
@@ -190,7 +196,7 @@ public class RequestHedgingProxyProvider<T> extends
   }
 
 
-  private volatile ProxyInfo<T> currentUsedProxy = null;
+  private volatile ProxyInfo<T> currentUsedHandler = null;
 
   public RequestHedgingProxyProvider(
           Configuration conf, URI uri, Class<T> xface) {
@@ -206,8 +212,8 @@ public class RequestHedgingProxyProvider<T> extends
   @SuppressWarnings("unchecked")
   @Override
   public synchronized ProxyInfo<T> getProxy() {
-    if (currentUsedProxy != null) {
-      return currentUsedProxy;
+    if (currentUsedHandler != null) {
+      return currentUsedHandler;
     }
     Map<String, ProxyInfo<T>> targetProxyInfos = new HashMap<>();
     StringBuilder combinedInfo = new StringBuilder("[");
@@ -222,12 +228,13 @@ public class RequestHedgingProxyProvider<T> extends
         RequestHedgingInvocationHandler.class.getClassLoader(),
             new Class<?>[]{xface},
             new RequestHedgingInvocationHandler(targetProxyInfos));
-    return new ProxyInfo<T>(wrappedProxy, combinedInfo.toString());
+    currentUsedHandler = new ProxyInfo<T>(wrappedProxy, combinedInfo.toString());
+    return currentUsedHandler;
   }
 
   @Override
   public synchronized void performFailover(T currentProxy) {
-    currentUsedProxy = null;
+    currentUsedHandler = null;
   }
 
   /**
