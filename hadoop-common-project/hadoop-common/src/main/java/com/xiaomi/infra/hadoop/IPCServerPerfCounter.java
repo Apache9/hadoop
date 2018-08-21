@@ -26,7 +26,7 @@ public class IPCServerPerfCounter {
     // It is not necessary very accurate for perfcounter metrics. Otherwise we
     // need heavy atomic or lock operations. Just use volatile w/o lock to avoid
     // heavy cpu load.
-    volatile int numOps = 0;
+    volatile long numOps = 0;
     volatile long queueTime = 0;
     volatile long processingTime = 0;
     Map<String, TopMetric> topMetrics;
@@ -80,7 +80,7 @@ public class IPCServerPerfCounter {
     for (String metricName : metrics.keySet()) {
       IPCServerMetric ipcMetric = metrics.get(metricName);
       // Get metrics value
-      int numOps = ipcMetric.numOps;
+      long numOps = ipcMetric.numOps;
       long queueTime = ipcMetric.queueTime;
       long processingTime = ipcMetric.processingTime;
       totalOps += numOps;
