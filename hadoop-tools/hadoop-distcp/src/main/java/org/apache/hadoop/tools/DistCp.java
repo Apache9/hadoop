@@ -35,6 +35,7 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.JobSubmissionFiles;
 import org.apache.hadoop.mapreduce.Cluster;
 import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.tools.CopyListing.*;
 import org.apache.hadoop.tools.mapred.CopyMapper;
 import org.apache.hadoop.tools.mapred.CopyOutputFormat;
@@ -516,11 +517,19 @@ public class DistCp extends Configured implements Tool {
       DistCpOptions.TARGET_PARENT option) throws IOException {
     if (option == DistCpOptions.TARGET_PARENT.MIRROR
         || option == DistCpOptions.TARGET_PARENT.SPECIFY) {
-      try {
-        fs.access(new Path("/"), FsAction.ALL);
-      } catch (AccessControlException e) {
+// Instruction: preserve this code so when all clusters are updated to 2.6 we
+// can change back.
+//      try {
+//        fs.access(new Path("/"), FsAction.ALL);
+//      } catch (AccessControlException e) {
+//        throw new IOException(
+//            "Only super user can use -Parent <specified option> and -Parent mirror");
+//      }
+      String userName = UserGroupInformation.getCurrentUser().getUserName();
+      if (!userName.equals("hdfs_admin@XIAOMI.HADOOP")) {
         throw new IOException(
-            "Only super user can use -Parent <specified option> and -Parent mirror");
+            "Only hdfs_admin can use -Parent <specified option> and -Parent mirror, your current user is "
+                + userName);
       }
     }
   }
