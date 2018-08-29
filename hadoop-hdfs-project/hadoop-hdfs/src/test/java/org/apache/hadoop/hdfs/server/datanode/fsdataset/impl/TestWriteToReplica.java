@@ -17,12 +17,16 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.fsdataset.impl;
 
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.StorageType;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.server.datanode.BlockMetadataHeader;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.datanode.FinalizedReplica;
@@ -33,6 +37,7 @@ import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaUnderRecovery;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaWaitingToBeRecovered;
+import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
 import org.junit.Assert;
 import org.junit.Test;
@@ -46,7 +51,9 @@ public class TestWriteToReplica {
   final private static int RWR = 3;
   final private static int RUR = 4;
   final private static int NON_EXISTENT = 5;
-  
+
+  private static final DataChecksum DEFAULT_CHECKSUM =
+      DataChecksum.newDataChecksum(DataChecksum.Type.CRC32C, 512);
   // test close
   @Test
   public void testClose() throws Exception {
@@ -128,6 +135,13 @@ public class TestWriteToReplica {
       cluster.shutdown();
     }
   }
+
+  private void saveMetaFileHeader(File metaFile) throws IOException {
+    DataOutputStream metaOut = new DataOutputStream(
+        new FileOutputStream(metaFile));
+    BlockMetadataHeader.writeHeader(metaOut, DEFAULT_CHECKSUM);
+    metaOut.close();
+  }
   
   /**
    * Generate testing environment and return a collection of blocks
@@ -154,6 +168,7 @@ public class TestWriteToReplica {
     replicasMap.add(bpid, replicaInfo);
     replicaInfo.getBlockFile().createNewFile();
     replicaInfo.getMetaFile().createNewFile();
+    saveMetaFileHeader(replicaInfo.getMetaFile());
     
     replicasMap.add(bpid, new ReplicaInPipeline(
         blocks[TEMPORARY].getBlockId(),
