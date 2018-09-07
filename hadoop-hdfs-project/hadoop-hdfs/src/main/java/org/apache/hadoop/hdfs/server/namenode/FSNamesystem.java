@@ -1958,13 +1958,22 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       try {
         checkOperation(OperationCategory.WRITE);
         INode inode = res.iip.getLastINode();
-        boolean updateAccessTime = now > inode.getAccessTime() +
-            getAccessTimePrecision();
+        boolean updateAccessTime =
+            now > inode.getAccessTime() + getAccessTimePrecision();
         if (!isInSafeMode() && updateAccessTime) {
-          boolean changed = dir.setTimes(inode, -1, now, false,
-              res.iip.getLatestSnapshotId());
-          if (changed) {
-            getEditLog().logTimes(src, -1, now);
+          // Because we lost lock for a moment, the inode might be deleted or
+          // renamed. Update path src as srcUpdate to make editlog right.
+          String srcUpdate = inode.getFullPathName();
+          if (srcUpdate != null && !srcUpdate.equals("")
+              && srcUpdate.charAt(0) == Path.SEPARATOR_CHAR) {
+            // INode exists
+            boolean changed = dir.setTimes(inode, -1, now, false,
+                res.iip.getLatestSnapshotId());
+            if (changed) {
+              getEditLog().logTimes(srcUpdate, -1, now);
+            }
+          } else {
+            // INode has been deleted. Ignore access time update.
           }
         }
       } catch (Throwable e) {

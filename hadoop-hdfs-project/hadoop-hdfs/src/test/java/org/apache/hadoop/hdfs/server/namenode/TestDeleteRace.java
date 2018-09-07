@@ -18,6 +18,8 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,6 +31,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
@@ -57,6 +60,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.internal.util.reflection.Whitebox;
 
+import static org.junit.Assert.assertTrue;
 
 /**
  * Test race between delete and other operations.  For now only addBlock()
@@ -208,6 +212,155 @@ public class TestDeleteRace {
       // write data and close to make sure a block is allocated.
       out.write(new byte[32], 0, 32);
       out.close();
+
+      // Restart name node so that it replays edit. If old path was
+      // logged in edit, it will fail to come up.
+      cluster.restartNameNode(0);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testOpenRenameRace() throws Exception {
+    Configuration conf = new Configuration();
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, 1000);
+    MiniDFSCluster cluster = null;
+    final String src = "/ab/cd/efg";
+    final String dst = "/ab/cd/hij";
+    final DistributedFileSystem hdfs;
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).build();
+      cluster.waitActive();
+      final FSNamesystem fsn = cluster.getNamesystem();
+
+      hdfs = cluster.getFileSystem();
+      OutputStream out = hdfs.create(new Path(src));
+      out.write("hello".getBytes());
+      out.close();
+      FileStatus status = hdfs.getFileStatus(new Path(src));
+      long accessTime = status.getAccessTime();
+
+      // getSetThread start
+      //      | 2s
+      //      | openThread start
+      //      | 2s
+      //      | renameThread start, now openThread and renameThread all get set.
+      //      | 2s
+      //      | getSetThread end, it's fair lock so openThread got lock.
+      //      | openThread unlock, renameThread got lock immediately and rename.
+      //      | renameThread unlock, openThread got lock and update time.
+      Thread getSetThread = new Thread(new Runnable() {
+        @Override
+        public void run() {
+          fsn.writeLock();
+          try {
+            Thread.sleep(6000);
+          } catch (InterruptedException e) {
+          }
+          fsn.writeUnlock();
+        }
+      });
+      Thread openThread = new Thread(new Runnable() {
+        @Override public void run() {
+          try {
+            hdfs.open(new Path(src));
+          } catch (IOException e) {
+          }
+        }
+      });
+      Thread renameThread = new Thread(new Runnable() {
+        @Override public void run() {
+          try {
+            hdfs.rename(new Path(src), new Path(dst));
+          } catch (IOException e) {
+          }
+        }
+      });
+      getSetThread.start();
+      Thread.sleep(2000);
+      openThread.start();
+      Thread.sleep(2000);
+      renameThread.start();
+
+      openThread.join();
+      renameThread.join();
+
+      status = hdfs.getFileStatus(new Path(dst));
+      assertTrue(status.getAccessTime() - accessTime > 1000);
+      // Restart name node so that it replays edit. If old path was
+      // logged in edit, it will fail to come up.
+      cluster.restartNameNode(0);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testOpenDeleteRace() throws Exception {
+    Configuration conf = new Configuration();
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, 1000);
+    MiniDFSCluster cluster = null;
+    final String src = "/ab/cd/efg";
+    final DistributedFileSystem hdfs;
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).build();
+      cluster.waitActive();
+      final FSNamesystem fsn = cluster.getNamesystem();
+
+      hdfs = cluster.getFileSystem();
+      OutputStream out = hdfs.create(new Path(src));
+      out.write("hello".getBytes());
+      out.close();
+
+      // getSetThread start
+      //      | 2s
+      //      | openThread start
+      //      | 2s
+      //      | deleteThread start, now openThread and deleteThread all get set.
+      //      | 2s
+      //      | getSetThread end, it's fair lock so openThread got lock.
+      //      | openThread unlock, deleteThread got lock immediately and rename.
+      //      | deleteThread unlock, openThread got lock and update time.
+      Thread getSetThread = new Thread(new Runnable() {
+        @Override
+        public void run() {
+          fsn.writeLock();
+          try {
+            Thread.sleep(6000);
+          } catch (InterruptedException e) {
+          }
+          fsn.writeUnlock();
+        }
+      });
+      Thread openThread = new Thread(new Runnable() {
+        @Override public void run() {
+          try {
+            hdfs.open(new Path(src));
+          } catch (IOException e) {
+          }
+        }
+      });
+      Thread deleteThread = new Thread(new Runnable() {
+        @Override public void run() {
+          try {
+            hdfs.delete(new Path(src), true, true);
+          } catch (IOException e) {
+          }
+        }
+      });
+      getSetThread.start();
+      Thread.sleep(2000);
+      openThread.start();
+      Thread.sleep(2000);
+      deleteThread.start();
+
+      openThread.join();
+      deleteThread.join();
 
       // Restart name node so that it replays edit. If old path was
       // logged in edit, it will fail to come up.
