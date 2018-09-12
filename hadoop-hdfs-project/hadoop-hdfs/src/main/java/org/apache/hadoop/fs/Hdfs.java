@@ -571,9 +571,8 @@ public class Hdfs extends AbstractFileSystem {
       }
       FederationRenameBlockCollector frbc = null;
       if (blksToDup.size() != 0) {
-        frbc =
-            new FederationRenameBlockCollector(subTree, blksToDup, conf);
-        }
+        frbc = new FederationRenameBlockCollector(subTree, blksToDup, conf);
+      }
         // ask DN to add new link
       if (frbc != null) {
         frbc.linkBlocksToNewPool();

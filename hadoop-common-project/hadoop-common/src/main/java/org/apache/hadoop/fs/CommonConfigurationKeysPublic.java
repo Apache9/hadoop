@@ -374,5 +374,7 @@ public class CommonConfigurationKeysPublic {
       "hadoop.rpc.processingtime.log.threshold";
   public static final long HADOOP_RPC_PROCESSING_TIME_LOG_THRESHOLD_MS_DEFAULT =
       2000;
+  public static final String HADOOP_FED_RENAME_TOKEN = "hadoop.fed.rename.token";
+  public static final String HADOOP_FED_RENAME_TOKEN_DEFAULT = "Subtree";
 }
 

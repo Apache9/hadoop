@@ -2350,10 +2350,9 @@ public class DistributedFileSystem extends FileSystem {
       }
       FederationRenameBlockCollector frbc = null;
       if (blksToDup.size() != 0) {
-        frbc =
-            new FederationRenameBlockCollector(subTree, blksToDup,
-                dfs.getConfiguration());
-        }
+        frbc = new FederationRenameBlockCollector(subTree, blksToDup,
+            dfs.getConfiguration());
+      }
         // ask DN to add new link
       if (frbc != null) {
         frbc.linkBlocksToNewPool();

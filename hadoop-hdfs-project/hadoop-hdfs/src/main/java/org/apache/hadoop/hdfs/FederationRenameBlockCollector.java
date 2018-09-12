@@ -16,7 +16,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlocksToDup;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -35,9 +38,33 @@ import org.apache.hadoop.util.Time;
 
 public class FederationRenameBlockCollector {
 
+  public static final Log LOG = LogFactory.getLog(FederationRenameBlockCollector.class);
   private Map<DatanodeInfo, BlocksToDup> dnBlkMap = null;
+  private Map<DatanodeInfo, UserGroupInformation> dnTicketMap = null;
   private String srcPool = null;
   private Configuration conf = null;
+  private TOKEN_FROM tokenFrom;
+  static enum TOKEN_FROM {
+    Subtree, Login
+  }
+
+  private void buildDNTicketMapFromSubtree(DirectorySubTree subTree) {
+    for (int i = 0; i < subTree.getSize(); i++) {
+      HdfsFileStatus st = subTree.get(i).getFileStatus();
+      if (!st.isDir() && !st.isSymlink()) {
+        LocatedBlocks blks = ((HdfsLocatedFileStatus) st).getBlockLocations();
+        List<LocatedBlock> lblks = blks.getLocatedBlocks();
+        for (LocatedBlock lblk : lblks) {
+          for (DatanodeInfo datanode : lblk.getLocations()) {
+            UserGroupInformation ticket = UserGroupInformation
+                .createRemoteUser(lblk.getBlock().getLocalBlock().toString());
+            ticket.addToken(lblk.getBlockToken());
+            dnTicketMap.put(datanode, ticket);
+          }
+        }
+      }
+    }
+  }
 
   public FederationRenameBlockCollector(DirectorySubTree subTree,
       BlocksToDup blksToDup, Configuration inConf) throws IOException {
@@ -79,6 +106,15 @@ public class FederationRenameBlockCollector {
           }
         }
       }
+    }
+
+    this.dnTicketMap = new HashMap<DatanodeInfo, UserGroupInformation>();
+    String fedRenameTokenValue =
+        conf.get(CommonConfigurationKeys.HADOOP_FED_RENAME_TOKEN,
+            CommonConfigurationKeys.HADOOP_FED_RENAME_TOKEN_DEFAULT);
+    tokenFrom = TOKEN_FROM.valueOf(fedRenameTokenValue);
+    if (tokenFrom == TOKEN_FROM.Subtree) {
+      buildDNTicketMapFromSubtree(subTree);
     }
   }
 
@@ -139,7 +175,7 @@ public class FederationRenameBlockCollector {
     boolean connectViaHostName =
         conf.getBoolean(DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME,
             DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT);
-    final UserGroupInformation ugi = UserGroupInformation.getLoginUser();
+    final UserGroupInformation loginUser = UserGroupInformation.getLoginUser();
     int numDns = dnBlkMap.size();
     int maxThreads =
         conf.getInt(DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MAX_THREAD,
@@ -157,7 +193,7 @@ public class FederationRenameBlockCollector {
     int minLinks =
         conf.getInt(DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOKCS_MINIMAL,
             DFSConfigKeys.DFS_FEDERATION_CLIENT_LINK_BLOCKS_MINIMAL_DEFAULT);
-    
+
     Map<Long, BlkReplicaInfo> notFinishedBlks = new HashMap<Long, BlkReplicaInfo>();
     for (Map.Entry<DatanodeInfo, BlocksToDup> item : dnBlkMap.entrySet()) {
       for (BlocksToDup.DupBlockInfo dbi : item.getValue().getDupBlocksInfo()) {
@@ -176,8 +212,11 @@ public class FederationRenameBlockCollector {
       Exception lastExp = null;
       // TBD: Assert unlinkedBlks contain a src blk only once
       for (Map.Entry<DatanodeInfo, BlocksToDup> item : dnBlkMap.entrySet()) {
+        UserGroupInformation ticket = tokenFrom == TOKEN_FROM.Login ?
+            loginUser : dnTicketMap.get(item.getKey());
+        LOG.debug(tokenFrom+" "+ticket);
         Callable<Block[]> oneDnTsk =
-            getLinkBlocksTskForOneDataNode(item, connectViaHostName, ugi);
+            getLinkBlocksTskForOneDataNode(item, connectViaHostName, ticket);
         Future<Block[]> tskFuture = linkService.submit(oneDnTsk);
         futures.add(tskFuture);
       }

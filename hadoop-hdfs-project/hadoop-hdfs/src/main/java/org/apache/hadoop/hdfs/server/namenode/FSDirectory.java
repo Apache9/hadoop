@@ -2462,12 +2462,18 @@ public class FSDirectory implements Closeable {
    * @throws IOException if any error occurs
    */
   private HdfsFileStatus createFileStatus(byte[] path, INode node,
+      boolean needLocation, byte storagePolicy, int snapshot, boolean isRawPath,
+      INodesInPath iip) throws IOException {
+    return createFileStatus(path, node, needLocation, storagePolicy, snapshot,
+        isRawPath, iip, false);
+  }
+  private HdfsFileStatus createFileStatus(byte[] path, INode node,
       boolean needLocation, byte storagePolicy, int snapshot,
-      boolean isRawPath, INodesInPath iip)
+      boolean isRawPath, INodesInPath iip, boolean needBlockToken)
       throws IOException {
     if (needLocation) {
       return createLocatedFileStatus(path, node, storagePolicy, snapshot,
-          isRawPath, iip);
+          isRawPath, iip, needBlockToken);
     } else {
       return createFileStatus(path, node, storagePolicy, snapshot,
           isRawPath, iip);
@@ -2525,7 +2531,7 @@ public class FSDirectory implements Closeable {
    */
   private HdfsLocatedFileStatus createLocatedFileStatus(byte[] path, INode node,
       byte storagePolicy, int snapshot, boolean isRawPath,
-      INodesInPath iip) throws IOException {
+      INodesInPath iip, boolean needBlockToken) throws IOException {
     assert hasReadLock();
     long size = 0; // length is zero for directories
     short replication = 0;
@@ -2546,7 +2552,7 @@ public class FSDirectory implements Closeable {
           fileNode.computeFileSizeNotIncludingLastUcBlock() : size;
 
       loc = getFSNamesystem().getBlockManager().createLocatedBlocks(
-          fileNode.getBlocks(), fileSize, isUc, 0L, size, false,
+          fileNode.getBlocks(), fileSize, isUc, 0L, size, needBlockToken,
           inSnapshot, feInfo);
       if (loc == null) {
         loc = new LocatedBlocks();
@@ -3436,7 +3442,7 @@ public class FSDirectory implements Closeable {
     HdfsFileStatus fstatus =
         createFileStatus(node.getLocalNameBytes(), node, true,
             BlockStoragePolicySuite.ID_UNSPECIFIED, Snapshot.CURRENT_STATE_ID,
-            false, iip);
+            false, iip, true);
     List<AclEntry> acl = AclStorage.readINodeAcl(node, Snapshot.CURRENT_STATE_ID);
     AclStatus astatus =
         new AclStatus.Builder().owner(node.getUserName())
