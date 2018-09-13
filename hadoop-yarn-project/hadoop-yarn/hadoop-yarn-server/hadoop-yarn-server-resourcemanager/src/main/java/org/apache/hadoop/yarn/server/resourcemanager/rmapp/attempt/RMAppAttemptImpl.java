@@ -60,6 +60,7 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationAttemptState;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
@@ -182,6 +183,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
   private RMAppAttemptMetrics attemptMetrics = null;
   private ResourceRequest amReq = null;
   private BlacklistManager blacklistedNodesForAM = null;
+  private int maxAttemptStateSize;
 
   private static final StateMachineFactory<RMAppAttemptImpl,
                                            RMAppAttemptState,
@@ -465,6 +467,8 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     
     this.amReq = amReq;
     this.blacklistedNodesForAM = amBlacklist;
+    this.maxAttemptStateSize = conf.getInt(YarnConfiguration.RM_MAX_APP_ATTEMPT_STATE_SIZE,
+            YarnConfiguration.DEFAULT_RM_MAX_APP_ATTEMPT_STATE_SIZE);
   }
 
   @Override
@@ -1185,8 +1189,8 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
       break;
     }
 
-    if (diags != null && diags.length() > 5 * 1024 * 1024) {
-      LOG.info("Too large diags from event: " + event.getType() + " for app: " + applicationAttemptId + ". The full diags: " + diags);
+    if (diags != null && diags.length() > this.maxAttemptStateSize) {
+      LOG.warn("Too large diags from event: " + event.getType() + " for app: " + applicationAttemptId + ". The full diags: " + diags);
       diags = diags.substring(0, 10240);
     }
 

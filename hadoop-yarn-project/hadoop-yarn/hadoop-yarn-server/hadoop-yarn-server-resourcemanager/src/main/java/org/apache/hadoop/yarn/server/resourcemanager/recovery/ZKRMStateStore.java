@@ -112,6 +112,8 @@ public class ZKRMStateStore extends RMStateStore {
   private List<ACL> zkAcl;
   private List<ZKUtil.ZKAuthInfo> zkAuths;
 
+  private int maxAttemptStateSize;
+
   class ZKSyncOperationCallback implements AsyncCallback.VoidCallback {
     @Override
     public void processResult(int rc, String path, Object ctx){
@@ -289,6 +291,9 @@ public class ZKRMStateStore extends RMStateStore {
         RM_DT_SEQUENTIAL_NUMBER_ZNODE_NAME);
     amrmTokenSecretManagerRoot =
         getNodePath(zkRootNodePath, AMRMTOKEN_SECRET_MANAGER_ROOT);
+
+    maxAttemptStateSize = conf.getInt(YarnConfiguration.RM_MAX_APP_ATTEMPT_STATE_SIZE,
+            YarnConfiguration.DEFAULT_RM_MAX_APP_ATTEMPT_STATE_SIZE);
   }
 
   @Override
@@ -584,23 +589,27 @@ public class ZKRMStateStore extends RMStateStore {
   }
 
   private void loadApplicationAttemptState(ApplicationStateData appState,
-      ApplicationId appId)
-      throws Exception {
-    String appPath = getNodePath(rmAppRoot, appId.toString());
-    List<String> attempts = getChildrenWithRetries(appPath, false);
-    for (String attemptIDStr : attempts) {
-      if (attemptIDStr.startsWith(ApplicationAttemptId.appAttemptIdStrPrefix)) {
-        String attemptPath = getNodePath(appPath, attemptIDStr);
-        byte[] attemptData = getDataWithRetries(attemptPath, false);
+      ApplicationId appId) throws Exception {
+    try {
+      String appPath = getNodePath(rmAppRoot, appId.toString());
+      List<String> attempts = getChildrenWithRetries(appPath, false);
+      for (String attemptIDStr : attempts) {
+        if (attemptIDStr.startsWith(ApplicationAttemptId.appAttemptIdStrPrefix)) {
+          String attemptPath = getNodePath(appPath, attemptIDStr);
+          byte[] attemptData = getDataWithRetries(attemptPath, false);
 
-        ApplicationAttemptStateDataPBImpl attemptState =
-            new ApplicationAttemptStateDataPBImpl(
-                ApplicationAttemptStateDataProto.parseFrom(attemptData));
+          ApplicationAttemptStateDataPBImpl attemptState =
+                  new ApplicationAttemptStateDataPBImpl(
+                          ApplicationAttemptStateDataProto.parseFrom(attemptData));
 
-        appState.attempts.put(attemptState.getAttemptId(), attemptState);
+          appState.attempts.put(attemptState.getAttemptId(), attemptState);
+        }
       }
+      LOG.debug("Done loading application: " + appId + " from ZK state store");
+    } catch (Exception e) {
+      LOG.error("Failed to load application: " + appId + " from ZK state store.", e);
+      throw e;
     }
-    LOG.debug("Done loading applications from ZK state store");
   }
 
   @Override
@@ -670,7 +679,7 @@ public class ZKRMStateStore extends RMStateStore {
           + " at: " + nodeUpdatePath);
     }
     byte[] attemptStateData = attemptStateDataPB.getProto().toByteArray();
-    if (attemptStateData.length > 5 * 1024 * 1024) {
+    if (attemptStateData.length > maxAttemptStateSize) {
       LOG.warn("Too large application attempt: " + appAttemptIdStr + " state size: " + attemptStateData.length
           + " Master container size: " + attemptStateDataPB.getProto().getMasterContainer().getSerializedSize()
           + " Credentials size: " + attemptStateDataPB.getProto().getAppAttemptTokens().size()

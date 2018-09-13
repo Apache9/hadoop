@@ -526,6 +526,10 @@ public class YarnConfiguration extends Configuration {
   public static final int DEFAULT_RM_STATE_STORE_MAX_COMPLETED_APPLICATIONS =
       DEFAULT_RM_MAX_COMPLETED_APPLICATIONS;
 
+  public static final String RM_MAX_APP_ATTEMPT_STATE_SIZE =
+      RM_PREFIX + "max.app-attempt-state.size";
+  public static final int DEFAULT_RM_MAX_APP_ATTEMPT_STATE_SIZE = 512 * 1024;
+
   /** Default application name */
   public static final String DEFAULT_APPLICATION_NAME = "N/A";
 
