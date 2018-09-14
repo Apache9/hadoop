@@ -48,7 +48,7 @@ public class ResourceInfo {
   
   @Override
   public String toString() {
-    return "<memory:" + memory/1000 + " G, vCores:" + vCores + ">";
+    return "<memory:" + memory/1024 + " G, vCores:" + vCores + ">";
   }
 
   public void setMemory(int memory) {
