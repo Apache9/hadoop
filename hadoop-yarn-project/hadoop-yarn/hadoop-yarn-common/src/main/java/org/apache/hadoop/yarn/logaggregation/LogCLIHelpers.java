@@ -203,7 +203,6 @@ public class LogCLIHelpers implements Configurable {
           reader.close();
         }
       }
-      if (foundAnyLogs) break;
     }
     if (! foundAnyLogs) {
       emptyLogDir(remoteAppLogDir.toString());
