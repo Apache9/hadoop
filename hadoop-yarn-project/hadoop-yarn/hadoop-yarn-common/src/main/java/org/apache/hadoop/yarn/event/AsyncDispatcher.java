@@ -181,7 +181,12 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
     try{
       EventHandler handler = eventDispatchers.get(type);
       if(handler != null) {
+        long startTime = System.currentTimeMillis();
         handler.handle(event);
+        long finishTime = System.currentTimeMillis();
+        if (finishTime - startTime > 10 * 1000) {
+          LOG.warn("Processing event: " + event + " costs " + (finishTime - startTime)/1000 + " s.");
+        }
       } else {
         throw new Exception("No handler for registered for " + type);
       }
