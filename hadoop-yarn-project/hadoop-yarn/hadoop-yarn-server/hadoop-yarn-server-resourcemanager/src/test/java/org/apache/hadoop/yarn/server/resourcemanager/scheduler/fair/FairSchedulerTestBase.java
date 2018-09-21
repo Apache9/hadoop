@@ -22,7 +22,9 @@ import static org.mockito.Mockito.when;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -171,6 +173,11 @@ public class FairSchedulerTestBase {
 
   protected ApplicationAttemptId createSchedulingRequest(
       int memory, int vcores, String queueId, String userId, int numContainers, String appName) {
+    return createSchedulingRequest(memory, vcores, queueId, userId, numContainers, appName, new HashSet<String>());
+  }
+
+  protected ApplicationAttemptId createSchedulingRequest(
+      int memory, int vcores, String queueId, String userId, int numContainers, String appName, Set<String> tags) {
     ApplicationAttemptId id = createAppAttemptId(this.APP_ID++, this.ATTEMPT_ID++);
 
     RMApp rmApp = mock(RMApp.class);
@@ -178,6 +185,7 @@ public class FairSchedulerTestBase {
     when(rmApp.getCurrentAppAttempt()).thenReturn(rmAppAttempt);
     when(rmApp.getUser()).thenReturn(userId);
     when(rmApp.getName()).thenReturn(appName);
+    when(rmApp.getApplicationTags()).thenReturn(tags);
     when(rmAppAttempt.getRMAppAttemptMetrics()).thenReturn(
         new RMAppAttemptMetrics(id, resourceManager.getRMContext()));
     resourceManager.getRMContext().getRMApps()

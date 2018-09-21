@@ -139,6 +139,8 @@ public class FairSchedulerConfiguration extends Configuration {
 
   protected static final String EXCLUSIVE_APP_NAME_USERS = CONF_PREFIX + "exclusive.app.name.users";
 
+  protected static final String EXCLUSIVE_APP_NAME_TAGS = CONF_PREFIX + "exclusive.app.name.tags";
+
   /** The update interval for calculating resources in FairScheduler .*/
   public static final String UPDATE_INTERVAL_MS =
       CONF_PREFIX + "update-interval-ms";

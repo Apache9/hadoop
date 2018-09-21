@@ -122,7 +122,9 @@ public class FairScheduler extends
   private boolean usePortForNodeName;
   private Set<String> aclProxyUsers;
   private Set<String> exclusiveAppNameUsers;
+  private Set<String> exclusiveAppNameTags;
   private Set<Pair<String, String>> exclusiveUserApps;
+  private Set<Pair<String, String>> exclusiveTagApps;
 
   private static final Log LOG = LogFactory.getLog(FairScheduler.class);
   
@@ -207,7 +209,9 @@ public class FairScheduler extends
     queueMgr = new QueueManager(this);
     aclProxyUsers = new HashSet<String>();
     exclusiveAppNameUsers = new HashSet<String>();
+    exclusiveAppNameTags = new HashSet<String>();
     exclusiveUserApps = new HashSet<Pair<String, String>>();
+    exclusiveTagApps = new HashSet<Pair<String, String>>();
   }
 
   private void validateConf(Configuration conf) {
@@ -710,6 +714,24 @@ public class FairScheduler extends
       }
     }
 
+    Set<String> tagIntersection = new HashSet<String>(rmApp.getApplicationTags());
+    tagIntersection.retainAll(exclusiveAppNameTags);
+    if (!tagIntersection.isEmpty()) {
+      for (String tag : tagIntersection) {
+        if (exclusiveTagApps.contains(Pair.of(tag, rmApp.getName()))) {
+          String message = "Reject application " + applicationId
+              + " with existing same tag and name (" + tag + ", " + rmApp.getName() + ")";
+          LOG.info(message);
+          rmContext.getDispatcher().getEventHandler()
+              .handle(new RMAppRejectedEvent(applicationId, message));
+          return;
+        }
+      }
+      for (String tag : tagIntersection) {
+        exclusiveTagApps.add(Pair.of(tag, rmApp.getName()));
+      }
+    }
+
     // Enforce ACLs
     UserGroupInformation userUgi = UserGroupInformation.createRemoteUser(realUser);
 
@@ -850,9 +872,17 @@ public class FairScheduler extends
     application.stop(finalState);
     applications.remove(applicationId);
 
+    RMApp rmApp = rmContext.getRMApps().get(applicationId);
     if (exclusiveAppNameUsers.contains(application.getUser())) {
-      RMApp rmApp = rmContext.getRMApps().get(applicationId);
       exclusiveUserApps.remove(Pair.of(rmApp.getUser(), rmApp.getName()));
+    }
+
+    Set<String> tagIntersection = new HashSet<String>(rmApp.getApplicationTags());
+    tagIntersection.retainAll(exclusiveAppNameTags);
+    if (!tagIntersection.isEmpty()) {
+      for (String tag : tagIntersection) {
+        exclusiveTagApps.remove(Pair.of(tag, rmApp.getName()));
+      }
     }
   }
 
@@ -1407,6 +1437,12 @@ public class FairScheduler extends
           (FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_USERS));
       for (String user : conf.getTrimmedStrings(FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_USERS)) {
         exclusiveAppNameUsers.add(user);
+      }
+
+      LOG.info("Exclusive name app tags: " + conf.getTrimmedStrings
+          (FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_TAGS));
+      for (String tag : conf.getTrimmedStrings(FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_TAGS)) {
+        exclusiveAppNameTags.add(tag);
       }
 
       updateInterval = this.conf.getUpdateInterval();

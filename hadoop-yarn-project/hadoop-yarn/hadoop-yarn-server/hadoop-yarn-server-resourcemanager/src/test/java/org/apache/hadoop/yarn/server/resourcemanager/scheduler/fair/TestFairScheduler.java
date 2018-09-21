@@ -1111,7 +1111,7 @@ public class TestFairScheduler extends FairSchedulerTestBase {
   }
 
   @Test (timeout = 500000)
-    public void testExclusiveAppName() throws Exception {
+    public void testExclusiveAppNameUsers() throws Exception {
       conf.set(FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_USERS, "user1, user2");
       conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
       PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
@@ -1146,11 +1146,11 @@ public class TestFairScheduler extends FairSchedulerTestBase {
       assertNotNull(scheduler.getSchedulerApp(appAttId1));
       ApplicationAttemptId appAttId2 =
           createSchedulingRequest(1024, 1, "queue1", user, 2, "app1");
-      assertNull("App with the same name with the same user be rejected",
+      assertNull("App with the same name and user should be rejected",
           scheduler.getSchedulerApp(appAttId2));
       ApplicationAttemptId appAttId3 =
           createSchedulingRequest(1024, 1, "queue2", user, 2, "app1");
-      assertNull("App with the same name with the same user be rejected",
+      assertNull("App with the same name and user should be rejected",
           scheduler.getSchedulerApp(appAttId3));
       ApplicationAttemptId appAttId4 =
           createSchedulingRequest(1024, 1, "queue1", user, 2, "app2");
@@ -1161,11 +1161,76 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     ApplicationAttemptId appAttId1 = createSchedulingRequest(1024, 1, "queue1", "user3", 2, "app1");
     assertNotNull(scheduler.getSchedulerApp(appAttId1));
     ApplicationAttemptId appAttId2 = createSchedulingRequest(1024, 1, "queue1", "user3", 2, "app1");
-    assertNotNull("App with the same name with the same user be rejected",
+    assertNotNull("App with the same name and user should be rejected",
         scheduler.getSchedulerApp(appAttId2));
     ApplicationAttemptId appAttId3 = createSchedulingRequest(1024, 1, "queue1", "user3", 2, "app2");
     assertNotNull(scheduler.getSchedulerApp(appAttId3));
   }
+
+  @Test (timeout = 500000)
+  public void testExclusiveAppNameTags() throws Exception {
+    conf.set(FairSchedulerConfiguration.EXCLUSIVE_APP_NAME_TAGS, "tag1, tag2");
+    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"root\">");
+    out.println("<queue name=\"queue1\">");
+    out.println("<maxResources>8192mb,10vcores</maxResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queue2\">");
+    out.println("<maxResources>8192mb,10vcores</maxResources>");
+    out.println("</queue>");
+    out.println("</queue>");
+    out.println("</allocations>");
+    out.close();
+
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, resourceManager.getRMContext());
+
+    RMNode node = MockNodes.newNodeInfo(1, BuilderUtils.newResource(8192, 7), 1, "127.0.0.1");
+    NodeAddedSchedulerEvent nodeEvent = new NodeAddedSchedulerEvent(node);
+    scheduler.handle(nodeEvent);
+
+    Set<String> exclusiveTags = new HashSet<String>();
+    exclusiveTags.add("tag1");
+    exclusiveTags.add("tag2");
+    // Test for users that enabled exclusive app name
+    for (String tag: exclusiveTags) {
+      Set<String> tags = new HashSet<String>();
+      tags.add(tag);
+      ApplicationAttemptId appAttId1 =
+          createSchedulingRequest(1024, 1, "queue1", "user1", 2, "app1", tags);
+      assertNotNull(scheduler.getSchedulerApp(appAttId1));
+      ApplicationAttemptId appAttId2 =
+          createSchedulingRequest(1024, 1, "queue1", "user1", 2, "app1", tags);
+      assertNull("App with the same name and tag should be rejected",
+          scheduler.getSchedulerApp(appAttId2));
+      ApplicationAttemptId appAttId3 =
+          createSchedulingRequest(1024, 1, "queue2", "user1", 2, "app1", tags);
+      assertNull("App with the same name and tag should be rejected",
+          scheduler.getSchedulerApp(appAttId3));
+      ApplicationAttemptId appAttId4 =
+          createSchedulingRequest(1024, 1, "queue1", "user1", 2, "app2", tags);
+      assertNotNull(scheduler.getSchedulerApp(appAttId4));
+    }
+
+    // Test for tags that not enabled exclusive app name
+    Set<String> tags = new HashSet<String>();
+    tags.add("tag3");
+    ApplicationAttemptId appAttId1 =
+        createSchedulingRequest(1024, 1, "queue1", "user1", 2, "app1", tags);
+    assertNotNull(scheduler.getSchedulerApp(appAttId1));
+    ApplicationAttemptId appAttId2 =
+        createSchedulingRequest(1024, 1, "queue1", "user1", 2, "app1", tags);
+    assertNotNull("App with the same name and tag should be rejected",
+        scheduler.getSchedulerApp(appAttId2));
+    ApplicationAttemptId appAttId3 =
+        createSchedulingRequest(1024, 1, "queue1", "user1", 2, "app2", tags);
+    assertNotNull(scheduler.getSchedulerApp(appAttId3));
+  }
+
 
   @Test
   public void testAssignToNonLeafQueueReturnsNull() throws Exception {
