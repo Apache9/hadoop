@@ -33,6 +33,7 @@ import org.apache.hadoop.tools.*;
 import org.apache.hadoop.tools.DistCpOptions.FileAttribute;
 import org.apache.hadoop.tools.util.DistCpUtils;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -57,6 +58,7 @@ public class CopyCommitter extends FileOutputCommitter {
   private boolean syncFolder = false;
   private boolean overwrite = false;
   private boolean targetPathExists = true;
+  private boolean ignoreDeleted = false;
   
   /**
    * Create a output committer
@@ -77,6 +79,7 @@ public class CopyCommitter extends FileOutputCommitter {
     syncFolder = conf.getBoolean(DistCpConstants.CONF_LABEL_SYNC_FOLDERS, false);
     overwrite = conf.getBoolean(DistCpConstants.CONF_LABEL_OVERWRITE, false);
     targetPathExists = conf.getBoolean(DistCpConstants.CONF_LABEL_TARGET_PATH_EXISTS, true);
+    ignoreDeleted = conf.getBoolean(DistCpConstants.CONF_LABEL_IGNORE_DELETED, false);
     
     super.commitJob(jobContext);
 
@@ -198,8 +201,15 @@ public class CopyCommitter extends FileOutputCommitter {
         if (targetRoot.equals(targetFile) && syncOrOverwrite) continue;
 
         FileSystem targetFS = targetFile.getFileSystem(conf);
-        DistCpUtils.preserve(targetFS, targetFile, srcFileStatus, attributes,
-            preserveRawXattrs);
+        try {
+          DistCpUtils.preserve(targetFS, targetFile, srcFileStatus, attributes,
+                  preserveRawXattrs);
+        } catch (FileNotFoundException e) {
+          if (!ignoreDeleted) {
+            throw e;
+          }
+          LOG.info("Target file: " + targetFile + " doesn't exist, may be deleted.");
+        }
 
         taskAttemptContext.progress();
         taskAttemptContext.setStatus("Preserving status on directory entries. [" +
