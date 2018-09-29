@@ -913,7 +913,7 @@ public class FSImage implements Closeable {
    * Load in the filesystem image from file. It's a big list of
    * filenames and blocks.
    */
-  private void loadFSImage(File curFile, MD5Hash expectedMd5,
+  void loadFSImage(File curFile, MD5Hash expectedMd5,
       FSNamesystem target, MetaRecoveryContext recovery,
       boolean requireSameLayoutVersion) throws IOException {
     // BlockPoolId is required when the FsImageLoader loads the rolling upgrade
