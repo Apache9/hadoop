@@ -246,7 +246,7 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
 
       } catch (IOException e1) {
         LOG.error("Cannot create writer for app " + this.applicationId
-            + ". Skip log upload this time. ");
+            + ". Skip log upload this time. ", e1);
         return;
       }
 
