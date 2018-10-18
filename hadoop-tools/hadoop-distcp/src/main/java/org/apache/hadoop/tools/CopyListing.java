@@ -272,4 +272,8 @@ public abstract class CopyListing extends Configured {
       super(message);
     }
   }
+
+  public static class BlockSizeNotMatchException extends RuntimeException {
+    public BlockSizeNotMatchException(String message) { super(message); }
+  }
 }

@@ -34,11 +34,18 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.JobSubmissionFiles;
 import org.apache.hadoop.mapreduce.Cluster;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.TaskAttemptID;
+import org.apache.hadoop.mapreduce.task.JobContextImpl;
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.tools.CopyListing.*;
 import org.apache.hadoop.tools.mapred.CopyMapper;
 import org.apache.hadoop.tools.mapred.CopyOutputFormat;
+import org.apache.hadoop.tools.mapred.UniformSizeInputFormat;
 import org.apache.hadoop.tools.util.DistCpUtils;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.util.Tool;
@@ -144,6 +151,9 @@ public class DistCp extends Configured implements Tool {
     } catch (XAttrsNotSupportedException e) {
       LOG.error("XAttrs not supported on at least one file system: ", e);
       return DistCpConstants.XATTRS_NOT_SUPPORTED;
+    } catch (BlockSizeNotMatchException e) {
+      LOG.error("SourcePath/Files and TargetPath BlockSize not Match.Try use -pb or -skipcrccheck.",e);
+      return DistCpConstants.UNKNOWN_ERROR;
     } catch (Exception e) {
       LOG.error("Exception encountered ", e);
       return DistCpConstants.UNKNOWN_ERROR;
@@ -162,6 +172,7 @@ public class DistCp extends Configured implements Tool {
     assert getConf() != null;
 
     Job job = null;
+    Path listFile = null;
     try {
       synchronized(this) {
         //Don't cleanup while we are setting up.
@@ -170,7 +181,11 @@ public class DistCp extends Configured implements Tool {
 
         job = createJob();
       }
-      createInputFileListing(job);
+      listFile = createInputFileListing(job);
+      // check inputoptions with -pb (blocksize) or skipcrccheck
+      if(listFile != null) {
+        recheckOptions(job);
+      }
 
       job.submit();
       submitted = true;
@@ -642,6 +657,59 @@ public class DistCp extends Configured implements Tool {
       if (distCp.isSubmitted()) return;
 
       distCp.cleanup();
+    }
+  }
+
+  /**
+   * recheck input args for -pb , -skipcrccheck
+   * @param job the current job
+   * @throws Exception if FS blk size not match, throw BlockSizeNotMatchException.
+   */
+  private void recheckOptions(Job job) throws Exception {
+    boolean isPreserveBlock = false;
+    boolean isSkipcrccheck = false;
+    boolean matchBlockSize = true;
+    isPreserveBlock = inputOptions.shouldPreserve(DistCpOptions.FileAttribute.BLOCKSIZE);
+    isSkipcrccheck = inputOptions.shouldSkipCRC();
+    if (isPreserveBlock || isSkipcrccheck) {
+      return;
+    }
+    Path targetPath = inputOptions.getTargetPath();
+    FileSystem targetFS = targetPath.getFileSystem(getConf());
+    long targetBlockSize = 0;
+    if (inputOptions.getTargetPathExists()) {
+      FileStatus targetStatus = targetFS.getFileStatus(targetPath);
+      targetBlockSize = targetStatus.getBlockSize();
+    }
+    if (0 == targetBlockSize) {
+      targetBlockSize = targetFS.getDefaultBlockSize(targetPath);
+    }
+    JobContext jobContext = new JobContextImpl(job.getConfiguration(),job.getJobID());
+    UniformSizeInputFormat uniformSizeInputFormat = new UniformSizeInputFormat();
+    // a InputSplit of MR task is FilePath, FileStatus KV pairs. Use filestatus to get BlockSize.
+    List<InputSplit> splits = uniformSizeInputFormat.getSplits(jobContext);
+    for (int i = 0; i < splits.size(); ++i) {
+      InputSplit split = splits.get(i);
+      RecordReader<Text,CopyListingFileStatus> recordReader =
+          uniformSizeInputFormat.createRecordReader(split,null);
+      final TaskAttemptContext taskAttemptContext = new TaskAttemptContextImpl(
+          jobContext.getConfiguration(), new TaskAttemptID());
+      recordReader.initialize(split, taskAttemptContext);
+      while (recordReader.nextKeyValue()) {
+        long currentBlockSize = recordReader.getCurrentValue().getBlockSize();
+        if ((currentBlockSize != 0) && (currentBlockSize != targetBlockSize)) {
+          matchBlockSize = false;
+          break;
+        }
+      }
+      recordReader.close();
+      if (false == matchBlockSize) {
+        break;
+      }
+    }
+    if (!matchBlockSize) {
+      throw new BlockSizeNotMatchException("SourcePath/Files and TargetPath BlockSize not Match." +
+          "Try use -pb or -skipcrccheck.");
     }
   }
 }
