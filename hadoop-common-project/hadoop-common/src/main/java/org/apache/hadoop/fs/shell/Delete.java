@@ -115,14 +115,15 @@ class Delete {
       if (!skipTrash) {
         try {
           success = Trash.moveToAppropriateTrash(item.fs, item.path, getConf());
-        } catch(FileNotFoundException fnfe) {
+        } catch (FileNotFoundException fnfe) {
           throw fnfe;
         } catch (IOException ioe) {
           String msg = ioe.getMessage();
           if (ioe.getCause() != null) {
             msg += ": " + ioe.getCause().getMessage();
-	  }
-          throw new IOException(msg + ". Consider using -skipTrash option", ioe);
+          }
+          throw new IOException(msg + ". Consider using -skipTrash option",
+              ioe);
         }
       }
       return success;

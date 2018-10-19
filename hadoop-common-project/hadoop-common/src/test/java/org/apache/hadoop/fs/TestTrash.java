@@ -431,10 +431,13 @@ public class TestTrash extends TestCase {
       String output = byteStream.toString();
       System.setOut(stdout);
       System.setErr(stderr);
-      assertTrue("skipTrash wasn't suggested as remedy to failed rm command" +
-          " or we deleted / even though we could not get server defaults",
-          output.indexOf("Consider using -skipTrash option") != -1 ||
-          output.indexOf("Failed to determine server trash configuration") != -1);
+      assertTrue(
+          "skipTrash wasn't suggested as remedy to failed rm command"
+              + " or we deleted / even though we could not get server defaults",
+          output.indexOf("Permission denied") != -1
+              || output.indexOf("Consider using -skipTrash option") != -1
+              || output.indexOf(
+                  "Failed to determine server trash configuration") != -1);
     }
 
     // Verify old checkpoint format is recognized

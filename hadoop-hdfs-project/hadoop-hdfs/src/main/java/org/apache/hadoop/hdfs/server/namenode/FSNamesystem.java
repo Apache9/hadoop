@@ -619,6 +619,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   private FederationRenameFixer federationRenameFixer = null;
   private int safeReplicaForInRenameBlks = 0;
   private boolean enableGetfileinfoAuditlog = true;
+  private String checkPath;
 
   /**
    * Notify that loading of this FSDirectory is complete, and
@@ -854,6 +855,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    */
   FSNamesystem(Configuration conf, FSImage fsImage, boolean ignoreRetryCache)
       throws IOException {
+    checkPath = conf.get("dfs.shell.delete.checkpath");
     provider = DFSUtil.createKeyProviderCryptoExtension(conf);
     if (provider == null) {
       LOG.info("No KeyProvider found.");
@@ -3947,6 +3949,10 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   @Deprecated
   boolean renameTo(String src, String dst) 
       throws IOException, UnresolvedLinkException {
+    if (isInTrash(new Path(dst))
+        && !checkPathCanBeDeleted(new Path(src), checkPath)) {
+      throw new AccessControlException();
+    }
     CacheEntry cacheEntry = RetryCache.waitForCompletion(retryCache);
     if (cacheEntry != null && cacheEntry.isSuccess()) {
       return true; // Return previous response
@@ -4119,6 +4125,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       UnresolvedLinkException, IOException {
 
     Path path = new Path(src);
+    if (!checkPathCanBeDeleted(path, checkPath)) {
+      throw new AccessControlException();
+    }
 
     if (forceToTrash || trashPathConfigMgr.needMoveToTrash(src)) {
       if (!isInTrash(path)) {
@@ -10175,6 +10184,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
 
   private boolean moveToTrash(String src, boolean recursive) throws AccessControlException, SafeModeException,
           UnresolvedLinkException, IOException {
+    if (!checkPathCanBeDeleted(new Path(src), checkPath)) {
+      throw new AccessControlException();
+    }
     byte[][] pathComponents = FSDirectory.getPathComponentsForReservedPath(src);
     FSPermissionChecker pc = getPermissionChecker();
     // do the same check as deleting
@@ -10252,5 +10264,37 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     }
     throw (IOException)
             new IOException("Failed to move to trash: "+path).initCause(cause);
+  }
+
+  public static boolean checkPathCanBeDeleted(Path p, String ckPath) {
+    boolean res = true;
+    String path = p.toUri().getPath();
+    Path parentPath = p.getParent();
+    if (parentPath == null) {
+      return false;
+    }
+    String parent = parentPath.toUri().getPath();
+    String checkPath = ckPath;
+    if (checkPath == null) {
+      return res;
+    }
+    String[] pathArray = checkPath.split(":");
+    for (String s : pathArray) {
+      if (s.endsWith("/")) {
+        s = s.substring(0, s.length() - 1);
+      }
+      if (s.endsWith("*")) {
+        int index = s.lastIndexOf("/");
+        s = s.substring(0, index);
+        if (path.equals(s) || parent.equals(s)) {
+          res = false;
+          break;
+        }
+      } else if (path.equals(s)) {
+        res = false;
+        break;
+      }
+    }
+    return res;
   }
 }
