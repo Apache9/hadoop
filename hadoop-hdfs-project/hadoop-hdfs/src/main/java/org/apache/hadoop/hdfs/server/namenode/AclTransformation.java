@@ -19,6 +19,8 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.fs.permission.AclEntryScope.*;
 import static org.apache.hadoop.fs.permission.AclEntryType.*;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACLS_MAX_ENTRIES_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACLS_MAX_ENTRIES_DEFAULT;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,6 +43,7 @@ import org.apache.hadoop.fs.permission.AclEntryType;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.ScopedAclEntries;
+import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.protocol.AclException;
 
 /**
@@ -62,7 +65,11 @@ import org.apache.hadoop.hdfs.protocol.AclException;
  */
 @InterfaceAudience.Private
 final class AclTransformation {
-  private static final int MAX_ENTRIES = 32;
+  private static int max_entries;
+  static {
+    HdfsConfiguration conf = new HdfsConfiguration();
+    max_entries = conf.getInt(DFS_NAMENODE_ACLS_MAX_ENTRIES_KEY, DFS_NAMENODE_ACLS_MAX_ENTRIES_DEFAULT);
+  }
 
   /**
    * Filters (discards) any existing ACL entries that have the same scope, type
@@ -80,7 +87,7 @@ final class AclTransformation {
   public static List<AclEntry> filterAclEntriesByAclSpec(
       List<AclEntry> existingAcl, List<AclEntry> inAclSpec) throws AclException {
     ValidatedAclSpec aclSpec = new ValidatedAclSpec(inAclSpec);
-    ArrayList<AclEntry> aclBuilder = Lists.newArrayListWithCapacity(MAX_ENTRIES);
+    ArrayList<AclEntry> aclBuilder = Lists.newArrayListWithCapacity(max_entries);
     EnumMap<AclEntryScope, AclEntry> providedMask =
       Maps.newEnumMap(AclEntryScope.class);
     EnumSet<AclEntryScope> maskDirty = EnumSet.noneOf(AclEntryScope.class);
@@ -114,7 +121,7 @@ final class AclTransformation {
    */
   public static List<AclEntry> filterDefaultAclEntries(
       List<AclEntry> existingAcl) throws AclException {
-    ArrayList<AclEntry> aclBuilder = Lists.newArrayListWithCapacity(MAX_ENTRIES);
+    ArrayList<AclEntry> aclBuilder = Lists.newArrayListWithCapacity(max_entries);
     for (AclEntry existingEntry: existingAcl) {
       if (existingEntry.getScope() == DEFAULT) {
         // Default entries sort after access entries, so we can exit early.
@@ -138,9 +145,9 @@ final class AclTransformation {
   public static List<AclEntry> mergeAclEntries(List<AclEntry> existingAcl,
       List<AclEntry> inAclSpec) throws AclException {
     ValidatedAclSpec aclSpec = new ValidatedAclSpec(inAclSpec);
-    ArrayList<AclEntry> aclBuilder = Lists.newArrayListWithCapacity(MAX_ENTRIES);
+    ArrayList<AclEntry> aclBuilder = Lists.newArrayListWithCapacity(max_entries);
     List<AclEntry> foundAclSpecEntries =
-      Lists.newArrayListWithCapacity(MAX_ENTRIES);
+      Lists.newArrayListWithCapacity(max_entries);
     EnumMap<AclEntryScope, AclEntry> providedMask =
       Maps.newEnumMap(AclEntryScope.class);
     EnumSet<AclEntryScope> maskDirty = EnumSet.noneOf(AclEntryScope.class);
@@ -200,7 +207,7 @@ final class AclTransformation {
   public static List<AclEntry> replaceAclEntries(List<AclEntry> existingAcl,
       List<AclEntry> inAclSpec) throws AclException {
     ValidatedAclSpec aclSpec = new ValidatedAclSpec(inAclSpec);
-    ArrayList<AclEntry> aclBuilder = Lists.newArrayListWithCapacity(MAX_ENTRIES);
+    ArrayList<AclEntry> aclBuilder = Lists.newArrayListWithCapacity(max_entries);
     // Replacement is done separately for each scope: access and default.
     EnumMap<AclEntryScope, AclEntry> providedMask =
       Maps.newEnumMap(AclEntryScope.class);
@@ -271,9 +278,9 @@ final class AclTransformation {
    */
   private static List<AclEntry> buildAndValidateAcl(
       ArrayList<AclEntry> aclBuilder) throws AclException {
-    if (aclBuilder.size() > MAX_ENTRIES) {
+    if (aclBuilder.size() > max_entries) {
       throw new AclException("Invalid ACL: ACL has " + aclBuilder.size() +
-        " entries, which exceeds maximum of " + MAX_ENTRIES + ".");
+        " entries, which exceeds maximum of " + max_entries + ".");
     }
     aclBuilder.trimToSize();
     Collections.sort(aclBuilder, ACL_ENTRY_COMPARATOR);
@@ -444,9 +451,9 @@ final class AclTransformation {
      * @throws AclException if validation fails
      */
     public ValidatedAclSpec(List<AclEntry> aclSpec) throws AclException {
-      if (aclSpec.size() > MAX_ENTRIES) {
+      if (aclSpec.size() > max_entries) {
         throw new AclException("Invalid ACL: ACL spec has " + aclSpec.size() +
-          " entries, which exceeds maximum of " + MAX_ENTRIES + ".");
+          " entries, which exceeds maximum of " + max_entries + ".");
       }
       Collections.sort(aclSpec, ACL_ENTRY_COMPARATOR);
       this.aclSpec = aclSpec;
