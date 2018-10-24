@@ -786,7 +786,13 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
    * @return an FSNamesystem which contains the loaded namespace
    * @throws IOException if loading fails
    * */
-  public static FSNamesystem loadFromFSImageFile(Configuration conf) throws IOException {
+  public static FSNamesystem loadFromFSImageFile(Configuration conf)
+      throws IOException {
+    return loadFromFSImageFile(conf, true);
+  }
+  
+  public static FSNamesystem loadFromFSImageFile(Configuration conf,
+      boolean updateCountForQuota) throws IOException {
     String filePath = conf.get(DFSConfigKeys.DFS_NAMENODE_LOAD_FSIMAGE);
     if (filePath == null) {
       throw new RuntimeException("Couldn't find fsimage file path in conf.");
@@ -796,6 +802,9 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
         Collections.<URI>emptyList());
     FSNamesystem namesystem = new FSNamesystem(conf, fsImage, false);
     fsImage.loadFSImage(imageFile, null, namesystem, null, false);
+    if (updateCountForQuota) {
+      FSImage.updateCountForQuota(namesystem.getFSDirectory().getRoot());
+    }
     return namesystem;
   }
 
