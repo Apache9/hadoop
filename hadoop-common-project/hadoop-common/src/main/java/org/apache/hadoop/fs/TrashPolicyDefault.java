@@ -34,7 +34,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -113,19 +112,17 @@ public class TrashPolicyDefault extends TrashPolicy {
 
   @Override
   public boolean moveToTrash(Path path) throws IOException {
-    LOG.info("moveToTrash: " + path);
     if (!isEnabled())
       return false;
 
-    LOG.info("fs.getWorkingDirectory(): " + fs.getWorkingDirectory() + " path: " + path);
     if (!path.isAbsolute())                       // make path absolute
       path = new Path(fs.getWorkingDirectory(), path);
-    LOG.info("after fs.getWorkingDirectory(): " + fs.getWorkingDirectory() + " path: " + path);
+
     if (!fs.exists(path))                         // check that path exists
       throw new FileNotFoundException(path.toString());
 
     String qpath = fs.makeQualified(path).toString();
-    LOG.info("qpath: " + qpath + " trash: " + trash);
+
     if (qpath.startsWith(trash.toString())) {
       return false;                               // already in trash
     }
@@ -135,31 +132,15 @@ public class TrashPolicyDefault extends TrashPolicy {
                             "\" to the trash, as it contains the trash");
     }
 
-    LOG.info("current: " + current + " path: " + path + " path.getParent(): " + path.getParent());
     Path trashPath = makeTrashRelativePath(current, path);
     Path baseTrashPath = makeTrashRelativePath(current, path.getParent());
-    LOG.info("trashPath: " + trashPath + " baseTrashPath:" + baseTrashPath);
+
     IOException cause = null;
 
-//    String subPath = StringUtils.EMPTY;
-//    while (baseTrashPath != null) {
-//      FileStatus fileStatus = fs.getFileStatus(baseTrashPath);
-//      if (!fileStatus.isDirectory()) {
-//        baseTrashPath = new Path(baseTrashPath.toString() + fileStatus.getModificationTime() + subPath);
-//        LOG.info("baseTrashPath: " + baseTrashPath);
-//        break;
-//      }
-//      subPath = "/" + baseTrashPath.getName();
-//      LOG.info("subPath: " + subPath);
-//      baseTrashPath = baseTrashPath.getParent();
-//    }
-//LOG.info("baseTrashPath: " + baseTrashPath);
     // try twice, in case checkpoint between the mkdirs() & rename()
     for (int i = 0; i < 2; i++) {
       try {
-        boolean ret = fs.mkdirs(baseTrashPath, PERMISSION);
-        LOG.info("ret: " + ret);
-        if (!ret) {      // create current
+        if (!fs.mkdirs(baseTrashPath, PERMISSION)) {      // create current
           LOG.warn("Can't create(mkdir) trash directory: "+baseTrashPath);
           return false;
         }
