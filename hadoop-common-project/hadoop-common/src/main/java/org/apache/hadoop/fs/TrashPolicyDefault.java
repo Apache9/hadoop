@@ -117,7 +117,6 @@ public class TrashPolicyDefault extends TrashPolicy {
 
     if (!path.isAbsolute())                       // make path absolute
       path = new Path(fs.getWorkingDirectory(), path);
-
     if (!fs.exists(path))                         // check that path exists
       throw new FileNotFoundException(path.toString());
 
@@ -135,6 +134,8 @@ public class TrashPolicyDefault extends TrashPolicy {
     Path baseTrashPath = makeTrashRelativePath(current, path.getParent());
 
     IOException cause = null;
+
+    // try twice, in case checkpoint between the mkdirs() & rename()
     for (int i = 0; i < 2; i++) {
       try {
         if (!fs.mkdirs(baseTrashPath, PERMISSION)) {      // create current
