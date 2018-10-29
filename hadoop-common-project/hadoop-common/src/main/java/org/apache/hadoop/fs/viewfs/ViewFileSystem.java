@@ -25,6 +25,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1221,23 +1222,23 @@ public class ViewFileSystem extends FileSystem {
 
     @Override
     public byte[] getXAttr(Path path, String name) throws IOException {
-      throw new NotInMountpointException(path, "getXAttr");
+      return new byte[0];
     }
 
     @Override
     public Map<String, byte[]> getXAttrs(Path path) throws IOException {
-      throw new NotInMountpointException(path, "getXAttrs");
+      return Collections.emptyMap();
     }
 
     @Override
     public Map<String, byte[]> getXAttrs(Path path, List<String> names)
         throws IOException {
-      throw new NotInMountpointException(path, "getXAttrs");
+      return Collections.emptyMap();
     }
 
     @Override
     public List<String> listXAttrs(Path path) throws IOException {
-      throw new NotInMountpointException(path, "listXAttrs");
+      return Collections.emptyList();
     }
 
     @Override
