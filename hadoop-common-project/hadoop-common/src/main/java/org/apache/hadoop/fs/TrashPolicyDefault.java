@@ -22,12 +22,12 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKP
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.io.FileInputStream;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -122,7 +122,6 @@ public class TrashPolicyDefault extends TrashPolicy {
       throw new FileNotFoundException(path.toString());
 
     String qpath = fs.makeQualified(path).toString();
-
     if (qpath.startsWith(trash.toString())) {
       return false;                               // already in trash
     }
@@ -136,8 +135,6 @@ public class TrashPolicyDefault extends TrashPolicy {
     Path baseTrashPath = makeTrashRelativePath(current, path.getParent());
 
     IOException cause = null;
-
-    // try twice, in case checkpoint between the mkdirs() & rename()
     for (int i = 0; i < 2; i++) {
       try {
         if (!fs.mkdirs(baseTrashPath, PERMISSION)) {      // create current
