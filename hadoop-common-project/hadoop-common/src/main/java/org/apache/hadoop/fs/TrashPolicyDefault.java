@@ -144,6 +144,30 @@ public class TrashPolicyDefault extends TrashPolicy {
           LOG.warn("Can't create(mkdir) trash directory: "+baseTrashPath);
           return false;
         }
+      } catch (FileAlreadyExistsException e) {
+        // find the path which is not a directory, and modify baseTrashPath
+        // & trashPath, then mkdirs
+        Path existsFilePath = baseTrashPath;
+        while (!fs.exists(existsFilePath)) {
+          existsFilePath = existsFilePath.getParent();
+        }
+
+        // Case don't modify baseTrashPath when existsFilePath is deleted
+        try {
+          FileStatus fileStatus = fs.getFileStatus(existsFilePath);
+          if (!fileStatus.isDirectory()) {
+            baseTrashPath = new Path(baseTrashPath.toString().replace(
+                    existsFilePath.toString(), existsFilePath.toString() + Time.now())
+            );
+            trashPath = new Path(baseTrashPath, trashPath.getName());
+          }
+        } catch (FileNotFoundException e1) {
+          LOG.warn("The existFilePath is not found " + existsFilePath);
+        }
+
+        // retry, ignore current failure
+        --i;
+        continue;
       } catch (IOException e) {
         LOG.warn("Can't create trash directory: "+baseTrashPath);
         cause = e;

@@ -348,6 +348,26 @@ public class TestHDFSTrash {
       assertTrue(fs.mkdirs(new Path("/tmp/dir4")));
       assertTrue(trash.moveToTrash(new Path("/tmp/dir4")));
     }
+  }
 
+  @Test
+  public void testExistingFileTrash() throws IOException {
+    /**
+     *  case:
+     *  1.create /tmp/a
+     *  2.moveToTrash /tmp/a
+     *  3.create /tmp/a/b
+     *  4.moveToTrash /tmp/a/b
+     */
+    FileSystem fs = cluster.getFileSystem();
+    Configuration conf = fs.getConf();
+    Trash trash = new Trash(fs, conf);
+    Path path1 = new Path("/tmp/a");
+    fs.create(path1);
+    assertTrue(trash.moveToTrash(path1));
+
+    Path path2 = new Path("/tmp/a/b");
+    fs.create(path2);
+    assertTrue(trash.moveToTrash(path2));
   }
 }
