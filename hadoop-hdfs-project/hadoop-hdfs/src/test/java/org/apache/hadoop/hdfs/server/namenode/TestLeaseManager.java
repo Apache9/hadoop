@@ -20,7 +20,6 @@ package org.apache.hadoop.hdfs.server.namenode;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
@@ -71,7 +70,7 @@ public class TestLeaseManager {
    */
   @Test
   public void testCheckLease() throws IOException {
-    LeaseManager lm = new LeaseManager(makeMockFsNameSystem());
+    LeaseManager lm = makeMockFsNameSystem().getLeaseManager();
 
     long numLease = 100;
 
@@ -85,24 +84,45 @@ public class TestLeaseManager {
     assertEquals(numLease, lm.countLease());
 
     //Initiate a call to checkLease. This should exit within the test timeout
+    // In first call, we just remove one lease and then and then return due to
+    // the max lock hold to release lease expired.
+    lm.checkLeases();
+    assertEquals(numLease - 1, lm.countLease());
+
+    // in second call, we catch an exception and don't remove the lease.
     lm.checkLeases();
     assertEquals(numLease - 1, lm.countLease());
   }
 
 
   private static FSNamesystem makeMockFsNameSystem() throws IOException {
-    FSNamesystem fsn = mock(FSNamesystem.class);
+    final FSNamesystem fsn = mock(FSNamesystem.class);
+    final LeaseManager lm = new LeaseManager(fsn);
+    when(fsn.getLeaseManager()).thenReturn(lm);
     when(fsn.hasWriteLock()).thenReturn(true);
     when(fsn.getMaxLockHoldToReleaseLeaseMs()).thenReturn(maxLockHoldToReleaseLeaseMs);
-    /* Sleep as long as twice the time the LeaseManager checks for the leases during one round
-      and throw IOException to help th test
+    /*
+     * Sleep as long as twice the time the LeaseManager checks for the leases
+     * during one round and throw IOException to help th test
      */
-    when(fsn.internalReleaseLease(any(Lease.class), anyString(), anyString())).thenAnswer(new Answer<String>() {
-      @Override public String answer(InvocationOnMock invocation) throws Throwable {
-        Thread.sleep(2 * maxLockHoldToReleaseLeaseMs);
-        throw new IOException("IO Exception for test");
-      }
-    });
+    when(fsn.internalReleaseLease(any(Lease.class), anyString(), anyString()))
+        .thenAnswer(new Answer<Boolean>() {
+          int callNum = 0;
+
+          @Override
+          public Boolean answer(InvocationOnMock invocation) throws Throwable {
+            Thread.sleep(2 * maxLockHoldToReleaseLeaseMs);
+            if (callNum == 0) {
+              callNum++;
+              Object[] param = invocation.getArguments();
+              fsn.getLeaseManager().removeLease((Lease) param[0],
+                  (String) param[1]);
+              return true;
+            } else {
+              throw new IOException("IO Exception for test");
+            }
+          }
+        });
     return fsn;
   }
 }

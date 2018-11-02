@@ -432,7 +432,6 @@ public class LeaseManager {
       && !isMaxLockHoldToReleaseLease(start)) {
       LOG.info(leaseToCheck + " has expired hard limit");
 
-      final List<String> removing = new ArrayList<String>();
       // need to create a copy of the oldest lease paths, becuase 
       // internalReleaseLease() removes paths corresponding to empty files,
       // i.e. it needs to modify the collection being iterated over
@@ -455,19 +454,15 @@ public class LeaseManager {
             needSync = true;
           }
         } catch (IOException e) {
+          // It will retried later.
           LOG.error("Cannot release the path " + p + " in the lease "
               + leaseToCheck, e);
-          removing.add(p);
         }
         if (isMaxLockHoldToReleaseLease(start)) {
           LOG.debug("Breaking out of checkLeases after " +
               fsnamesystem.getMaxLockHoldToReleaseLeaseMs() + "ms.");
           break;
         }
-      }
-
-      for(String p : removing) {
-        removeLease(leaseToCheck, p);
       }
     }
     return needSync;
