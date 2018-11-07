@@ -347,6 +347,7 @@ public class DataNode extends ReconfigurableBase
   private String dnUserName = null;
 
   private SpanReceiverHost spanReceiverHost;
+  private boolean isDiskErrorChecked = false;
 
   /**
    * Creates a dummy DataNode for testing purpose.
@@ -1260,7 +1261,13 @@ public class DataNode extends ReconfigurableBase
 
     // Exclude failed disks before initializing the block pools to avoid startup
     // failures.
-    checkDiskError();
+    synchronized (checkDiskErrorMutex) {
+      if (!isDiskErrorChecked) {
+        checkDiskError();
+        isDiskErrorChecked = true;
+        LOG.info("checkDiskError when initBlockPool");
+      }
+    }
 
     initPeriodicScanners(conf);
     
