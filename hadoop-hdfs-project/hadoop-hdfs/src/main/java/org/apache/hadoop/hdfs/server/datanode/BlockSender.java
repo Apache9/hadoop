@@ -779,7 +779,7 @@ class BlockSender implements java.io.Closeable {
     // Trigger readahead of beginning of file if configured.
     manageOsCache();
 
-    final long startTime = ClientTraceLog.isDebugEnabled() ? System.nanoTime() : 0;
+    final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
     try {
       int maxChunksPerPacket;
       int pktBufSize = PacketHeader.PKT_MAX_HEADER_LEN;
@@ -825,9 +825,9 @@ class BlockSender implements java.io.Closeable {
         sentEntireByteRange = true;
       }
     } finally {
-      if ((clientTraceFmt != null) && ClientTraceLog.isDebugEnabled()) {
+      if (clientTraceFmt != null) {
         final long endTime = System.nanoTime();
-        ClientTraceLog.debug(String.format(clientTraceFmt, totalRead,
+        ClientTraceLog.info(String.format(clientTraceFmt, totalRead,
             initialOffset, endTime - startTime));
       }
       close();
