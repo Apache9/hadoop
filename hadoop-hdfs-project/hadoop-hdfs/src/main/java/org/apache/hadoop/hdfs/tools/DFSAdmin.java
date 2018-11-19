@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
@@ -51,6 +52,8 @@ import org.apache.hadoop.fs.FsStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.shell.Command;
 import org.apache.hadoop.fs.shell.CommandFormat;
+import org.apache.hadoop.fs.viewfs.MountpointRenewer;
+import org.apache.hadoop.hdfs.HdfsMountpointRenewer;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
@@ -59,9 +62,7 @@ import org.apache.hadoop.hdfs.FederatedDFSFileSystem;
 import org.apache.hadoop.hdfs.FederationConfigKeys;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
-import org.apache.hadoop.hdfs.MountPointRenewer;
 import org.apache.hadoop.hdfs.NameNodeProxies;
-import org.apache.hadoop.hdfs.MountPointRenewer.RenewMpt;
 import org.apache.hadoop.hdfs.NameNodeProxies.ProxyAndInfo;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
@@ -2097,7 +2098,6 @@ public class DFSAdmin extends FsShell {
       throw new IOException(
           "Operation is not supported for non-federated file system");
     }
-    FederatedDFSFileSystem fdfs = (FederatedDFSFileSystem) fs;
     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
     String superUser =
         fs.getConf().get(DFSConfigKeys.DFS_PERMISSIONS_SUPERUSER_KEY,
@@ -2106,89 +2106,38 @@ public class DFSAdmin extends FsShell {
       throw new IOException("Operation is not permitted for user "
           + ugi.getUserName());
     }
-    MountPointRenewer mpr =
-        new MountPointRenewer(fs.getUri().getAuthority(), fs.getConf(),
-            new RenewMpt() {
-              public void renewMpt(String viewName, Configuration conf)
-                  throws IOException {
-              }
-            });
-    boolean noNode = false;
-    String oldConf = null;
-    String znode = mpr.getMptZnodePath();
-    ZooKeeper zkClient = mpr.getZkClient();
-    Stat st = new Stat();
-    try {
-      byte[] data = zkClient.getData(znode, null, st);
-      oldConf = new String(data);
-    } catch (NoNodeException nne) {
-      noNode = true;
-    }
-    String newConf =
-        mpr.getMountPointConfig(fs.getConf(), fs.getUri().getAuthority(), true);
-
-    System.out.println("UpdateMptOnZk: Old mount points are " + oldConf
-        + ". New mount points are "
-        + newConf);
-
-    if (noNode) {
-      // Create node and write the the new conf
-      updateZk(true, newConf, fdfs, znode, zkClient, 0);
-    } else {
-      String[] oldKvs = oldConf.split(";");
-      String[] newKvs = newConf.split(";");
-      for (String okv : oldKvs) {
-        boolean containedInNewConf = false;
-        for (String nkv : newKvs) {
-          if (nkv.equals(okv)) {
-            containedInNewConf = true;
-            break;
+    String clusterName = fs.getUri().getAuthority();
+    Configuration config = fs.getConf();
+    HdfsMountpointRenewer hmpr = new HdfsMountpointRenewer();
+    hmpr.initialize(clusterName, config,
+        new MountpointRenewer.RenewMountpoint() {
+          @Override
+          public void doUpdateMountpoint() {
           }
-        }
-        if (!containedInNewConf) {
-          throw new IOException(
-              "The new mount point configuration is not a superset of the orignal one");
-        }
-      }
-      // write new conf to the znode
-      updateZk(false, newConf, fdfs, znode, zkClient, st.getVersion());
+        });
+    String zkMptConfString = null;
+    Configuration zkMptConf = null;
+    try {
+      zkMptConfString = new String(
+          hmpr.getMptConfFromZookeeper(config));
+      zkMptConf =
+          HdfsMountpointRenewer.deserializeString2Mountpoint(zkMptConfString);
+    } catch (NoNodeException nne) {
+      // ignore NoNodeException
     }
+    String newMptConfString =
+        HdfsMountpointRenewer.serializeMountpoint2String(config, clusterName);
+    Configuration newMptConf =
+        HdfsMountpointRenewer.deserializeString2Mountpoint(newMptConfString);
+
+    System.out.println("UpdateMptOnZk: Old mount points are " + zkMptConfString
+        + ". New mount points are " + newMptConfString);
+
+    if (zkMptConf != null) {
+      hmpr.verifyNewMountPoints(zkMptConf, newMptConf);
+    }
+    hmpr.setMptConfToZookeeper(newMptConfString.getBytes(), config);
     return 0;
-  }
-
-  private void updateZk(boolean create, String val, FederatedDFSFileSystem fs,
-      String znode, ZooKeeper zkClient, int version)
-      throws KeeperException, IOException, InterruptedException {
-
-    String zkAclConf =
-        fs.getConf().get(CommonConfigurationKeys.ZK_ACL_KEY,
-            CommonConfigurationKeys.ZK_ACL_DEFAULT);
-    zkAclConf = ZKUtil.resolveConfIndirection(zkAclConf);
-    List<ACL> zkAcls = ZKUtil.parseACLs(zkAclConf);
-    if (zkAcls.isEmpty()) {
-      zkAcls = Ids.CREATOR_ALL_ACL;
-    }
-    if (create) {
-      // Create all parents first
-      String pathParts[] = znode.split("/");
-      Preconditions.checkArgument(pathParts.length >= 2 && pathParts[0].isEmpty(), "Invalid path: %s", znode);
-      
-      StringBuilder sb = new StringBuilder();
-      for (int i = 1; i < pathParts.length - 1; i++) {
-        sb.append("/").append(pathParts[i]);
-        String prefixPath = sb.toString();
-        LOG.debug("Ensuring existence of " + prefixPath);
-        try {
-          zkClient.create(prefixPath, new byte[]{}, zkAcls, CreateMode.PERSISTENT);
-        } catch (NodeExistsException e) {
-            // This is OK - just ensuring existence.
-        }
-      }
-      // create the node
-      zkClient.create(znode, val.getBytes(), zkAcls, CreateMode.PERSISTENT);
-    } else {
-      zkClient.setData(znode, val.getBytes(), version);
-    }
   }
 
   protected static DistributedFileSystem getDistributedFileSystemEx(DistributedFileSystem dfs, Path path) {

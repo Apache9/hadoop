@@ -22,21 +22,17 @@ import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.fs.viewfs.Constants;
+import org.apache.hadoop.fs.viewfs.MountpointRenewer;
 import org.apache.hadoop.fs.viewfs.ViewFs;
 import org.apache.hadoop.fs.viewfs.ViewFsFileStatus;
-import org.apache.hadoop.hdfs.FederationConfigKeys;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
-import org.apache.hadoop.hdfs.MountPointRenewer;
-import org.apache.hadoop.hdfs.MountPointRenewer.RenewMpt;
+import org.apache.hadoop.hdfs.HdfsMountpointRenewer;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Progressable;
-import org.apache.hadoop.util.Time;
-import org.apache.zookeeper.KeeperException;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -45,7 +41,6 @@ import java.net.URISyntaxException;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 /**
  * Support federation directly on hdfs scheme It's an federation version of
@@ -72,46 +67,9 @@ public class FederatedHdfs extends AbstractFileSystem {
       throw new URISyntaxException(theUri.toString(), "not an federation uri");
     }
     URI viewFsUri = convertToViewFsScheme(theUri);
-    MountPointRenewer.updateMptFromZkOnce(theUri.getAuthority(), conf);
+    conf.setClass("fs.viewfs.mount.point.renewer.impl",
+        HdfsMountpointRenewer.class, MountpointRenewer.class);
     viewFs = AbstractFileSystem.newInstance(ViewFs.class, viewFsUri, conf);
-    viewFs.setRenewCheckerCb(new ViewFs.FsStateRenewChecker() {
-      private String lastMountPointTable = null;
-      private long lastCheckTime = Time.monotonicNow();
-      @Override
-      synchronized public boolean shouldRenew() {
-        // Since the creation of this class is random, do not need another
-        // random
-        long checkInterval =
-            conf.getLong(FederationConfigKeys.FEDFS_MOUNT_TABLE_RENEW_INTERVAL,
-                FederationConfigKeys.FEDFS_MOUNT_TABLE_RENEW_INTERVAL_DEFAULT);
-        long now = Time.monotonicNow();
-        if (now - lastCheckTime > checkInterval) {
-          lastCheckTime = now;
-          try {
-            String mptFromZk = MountPointRenewer
-                .getMptConfFromZookeeper(theUri.getAuthority(), conf);
-            if (lastMountPointTable == null || !mptFromZk
-                .equals(lastMountPointTable)) {
-              lastMountPointTable = mptFromZk;
-              return true;
-            }
-          } catch (Exception e) {
-            LOG.warn("failed get mountpoint from zk", e);
-          }
-        }
-        return false;
-      }
-
-      @Override
-      public void updateMountponitConfig(Configuration conf) {
-        try {
-          MountPointRenewer.updateMountPointConfig(conf, lastMountPointTable,
-              theUri.getAuthority());
-        } catch (IOException e) {
-          LOG.warn("update configuration failed.", e);
-        }
-      }
-    });
   }
 
   @Override
@@ -396,6 +354,10 @@ public class FederatedHdfs extends AbstractFileSystem {
   public Path resolvePath(final Path f) throws FileNotFoundException,
           AccessControlException, UnresolvedLinkException, IOException {
     return viewFs.resolvePath(convertToViewFsScheme(f));
+  }
+
+  public AbstractFileSystem[] getChildFileSystems() {
+    return viewFs.getChildFileSystems();
   }
 
   URI convertToViewFsScheme(URI p) throws URISyntaxException {

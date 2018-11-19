@@ -181,6 +181,8 @@ public class ViewFileSystem extends FileSystem {
   InodeTree<FileSystem> fsState;  // the fs state; ie the mount table
   Path homeDir = null;
   private ReentrantReadWriteLock fsStateLock = new ReentrantReadWriteLock();
+  private String clusterName;
+  private MountpointRenewer mountpointRenewer;
   private boolean useVSCache = true;
   private UnsafeCache cache = new UnsafeCache();
 
@@ -255,23 +257,29 @@ public class ViewFileSystem extends FileSystem {
     final String authority = theUri.getAuthority();
     try {
       myUri = new URI(FsConstants.VIEWFS_SCHEME, authority, "/", null, null);
-      renewFsState(conf, authority);
+      this.clusterName = myUri.getAuthority();
+      this.mountpointRenewer = MountpointRenewer
+          .createMountpointRenewer(clusterName, conf,
+              new MountpointRenewer.RenewMountpoint() {
+                @Override public void doUpdateMountpoint() {
+                  renewFsState();
+                }
+              });
+      renewFsState();
       workingDir = this.getHomeDirectory();
     } catch (URISyntaxException e) {
       throw new IOException("URISyntax exception: " + theUri);
     }
   }
 
-  public void renewFsState(final Configuration conf, final String authority)
-      throws IOException {
+  public void renewFsState() {
     try {
       fsStateLock.writeLock().lock();
       if (cache == null) return;
       // It's not convenient to create anonymous subclass instance using java
       // reflection, so here we don't use configuration to control the implementation
       // class of InodeTree
-      fsState = new MergedInodeTree<FileSystem>(conf, authority) {
-      // fsState = new InodeTree<FileSystem>(conf, authority) {
+      fsState = new MergedInodeTree<FileSystem>(config, clusterName) {
 
         @Override
         protected
@@ -301,8 +309,10 @@ public class ViewFileSystem extends FileSystem {
           // return MergeFs.createMergeFs(mergeFsURIList, config);
         }
       };
+    } catch (IOException e) {
+      LOG.warn("Failed renew fsStat" + clusterName, e);
     } catch (URISyntaxException e) {
-      throw new IOException("URISyntax exception: " + authority);
+      LOG.warn("Failed renew fsStat" + clusterName, e);
     } finally {
       fsStateLock.writeLock().unlock();
     }
@@ -516,7 +526,15 @@ public class ViewFileSystem extends FileSystem {
     InodeTree.MountPoint<FileSystem> currentNode = null;
     InodeTree.MountPoint<FileSystem> nearestAncestorNode = null;
     TreeMap<String, FileStatus> resMap = new TreeMap<String, FileStatus>() {};
-    for (InodeTree.MountPoint<FileSystem> pt : fsState.getMountPoints()) {
+    mountpointRenewer.updateMptFromZk(config);
+    List<InodeTree.MountPoint<FileSystem>> pts = null;
+    try {
+      fsStateLock.readLock().lock();
+      pts = fsState.getMountPoints();
+    } finally {
+      fsStateLock.readLock().unlock();
+    }
+    for (InodeTree.MountPoint<FileSystem> pt : pts) {
       if (!res.resolvedPath.startsWith(pt.src))
         continue;
       if (res.resolvedPath.equals(pt.src)) {
@@ -1251,6 +1269,7 @@ public class ViewFileSystem extends FileSystem {
 
   private InodeTree.ResolveResult<FileSystem> fsStateResolve(final String p,
       final boolean resolveLastComponent) throws FileNotFoundException {
+    mountpointRenewer.updateMptFromZk(config);
     fsStateLock.readLock().lock();
     try {
       return fsState.resolve(p, resolveLastComponent);
@@ -1269,6 +1288,7 @@ public class ViewFileSystem extends FileSystem {
   }
 
   private String fsStateGetHomeDirPrefixValue() {
+    mountpointRenewer.updateMptFromZk(config);
     fsStateLock.readLock().lock();
     try {
       return fsState.getHomeDirPrefixValue();

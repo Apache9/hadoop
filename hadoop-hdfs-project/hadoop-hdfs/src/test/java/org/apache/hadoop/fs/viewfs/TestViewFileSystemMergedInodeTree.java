@@ -556,7 +556,7 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
     }
     // test renewFsState
     cachedFs = viewFs.getCachedFileSystems();
-    viewFs.renewFsState(conf, FsConstants.VIEWFS_URI.getAuthority());
+    viewFs.renewFsState();
     cachedFs2 = viewFs.getCachedFileSystems();
     assertEquals(cachedFs.length, cachedFs2.length);
     for (int i = 0; i < cachedFs.length; i++) {
@@ -573,7 +573,7 @@ public class TestViewFileSystemMergedInodeTree extends ViewFileSystemBaseTest {
     }
     // test close
     viewFs.close();
-    viewFs.renewFsState(conf, FsConstants.VIEWFS_URI.getAuthority());
+    viewFs.renewFsState();
     try {
       viewFs.exists(new Path("/log_collector/foo/bar"));
     } catch (IOException e) {

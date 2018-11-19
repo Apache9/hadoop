@@ -20,13 +20,24 @@ package org.apache.hadoop.hdfs.tools;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.ReconfigurationUtil;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.viewfs.ConfigUtil;
+import org.apache.hadoop.fs.viewfs.MountpointRenewer;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.FederatedDFSFileSystem;
+import org.apache.hadoop.hdfs.HdfsMountpointRenewer;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.apache.hadoop.hdfs.server.common.Storage;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.StorageLocation;
+import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.ToolRunner;
+import org.apache.zookeeper.KeeperException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,7 +48,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.security.PrivilegedAction;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
@@ -58,11 +72,18 @@ public class TestDFSAdmin {
   private MiniDFSCluster cluster;
   private DFSAdmin admin;
   private DataNode datanode;
+  private final String clusterName = "test-cluster";
 
   @Before
   public void setUp() throws Exception {
-    Configuration conf = new Configuration();
-    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    MiniDFSNNTopology topology = new MiniDFSNNTopology().addNameservice(
+        new MiniDFSNNTopology.NSConf(clusterName)
+            .addNN(new MiniDFSNNTopology.NNConf("host0").setIpcPort(0))
+            .addNN(new MiniDFSNNTopology.NNConf("host1").setIpcPort(0)));
+    cluster =
+        new MiniDFSCluster.Builder(new Configuration()).nnTopology(topology)
+            .numDataNodes(1).build();
+    cluster.transitionToActive(0);
     cluster.waitActive();
 
     admin = new DFSAdmin();
@@ -206,5 +227,78 @@ public class TestDFSAdmin {
 
     Mockito.when(dfs6.getChildFileSystems()).thenReturn(fileSystems);
     assertEquals(dfs6, admin.getDistributedFileSystemEx(dfs6, path));
+  }
+
+  @Test
+  public void testUpdateMPT2Zk() throws Exception {
+    Configuration config = new Configuration(false);
+    config.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER,
+        "tj-hadoop-staging-zk01.kscn:21000");
+    config.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
+        "hdfs://" + clusterName + "/");
+    config.setClass("fs.hdfs.impl", FederatedDFSFileSystem.class,
+        FileSystem.class);
+
+    HdfsMountpointRenewer hmpr = new HdfsMountpointRenewer();
+    hmpr.initialize(clusterName, config,
+        new MountpointRenewer.RenewMountpoint() {
+          @Override
+          public void doUpdateMountpoint() {
+          }
+        });
+    hmpr.deleteMptConfFromZookeeper(config);
+
+    // test update mpt when znode doesn't exist
+    addNs(clusterName + "-3", config, 0, 1, "/dir-in-3");
+    testUpdateMpt2Zk(config, hmpr);
+    // test incremental update mpt when znode exists
+    addNs(clusterName + "-4", config, 0, 1, "/dir-in-4");
+    testUpdateMpt2Zk(config, hmpr);
+  }
+
+  private void addNs(String ns, Configuration config, int host0, int host1,
+      String link) throws URISyntaxException {
+    String prens = config.get(DFSConfigKeys.DFS_NAMESERVICES);
+    config.set(DFSConfigKeys.DFS_NAMESERVICES,
+        prens == null ? ns : prens + ", " + ns);
+    config.set(DFSUtil.addKeySuffixes(
+        DFSConfigKeys.DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX, ns),
+        ConfiguredFailoverProxyProvider.class.getName());
+    config.set(
+        DFSUtil.addKeySuffixes(DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX, ns),
+        "host0,host1");
+    config.set(DFSUtil
+        .addKeySuffixes(DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY, ns,
+            "host0"), cluster.getNameNode(host0).getHostAndPort());
+    config.set(DFSUtil
+        .addKeySuffixes(DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY, ns,
+            "host1"), cluster.getNameNode(host1).getHostAndPort());
+    ConfigUtil.addLink(config, clusterName, link,
+        new URI("hdfs://" + ns + link));
+  }
+
+  private void testUpdateMpt2Zk(Configuration config,
+      HdfsMountpointRenewer hmpr)
+      throws IOException, KeeperException, InterruptedException {
+    String newMptConfString =
+        HdfsMountpointRenewer.serializeMountpoint2String(config, clusterName);
+    final DFSAdmin dfsAdmin = new DFSAdmin(config);
+    final String[] argv = new String[] { "-updateMptOnZk" };
+    UserGroupInformation ugi = UserGroupInformation
+        .createUserForTesting("hdfs", new String[] { "hdfs" });
+    ugi.doAs(new PrivilegedAction<Object>() {
+      @Override public Object run() {
+        int res = 0;
+        try {
+          res = ToolRunner.run(dfsAdmin, argv);
+        } catch (Exception e) {
+          assert false;
+        }
+        assertEquals(0, res);
+        return null;
+      }
+    });
+    byte[] zkData = hmpr.getMptConfFromZookeeper(config);
+    assertTrue(Arrays.equals(zkData, newMptConfString.getBytes()));
   }
 }

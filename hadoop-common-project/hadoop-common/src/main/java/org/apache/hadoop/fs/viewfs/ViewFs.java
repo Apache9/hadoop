@@ -71,6 +71,7 @@ import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 
 
@@ -167,8 +168,8 @@ public class ViewFs extends AbstractFileSystem {
   Path homeDir = null;
   ReentrantReadWriteLock fsStateLock = new ReentrantReadWriteLock();
   private long lastMptUpdateTime = 0;
-  private FsStateRenewChecker fsRenewCkCb = null;
-  String viewName;
+  private MountpointRenewer mountpointRenewer;
+  final String viewName;
   
   static AccessControlException readOnlyMountTable(final String operation,
       final String p) {
@@ -222,6 +223,19 @@ public class ViewFs extends AbstractFileSystem {
     // Now build  client side view (i.e. client side mount table) from config.
     viewName = theUri.getAuthority();
     renewFsState(conf, viewName);
+    this.mountpointRenewer = MountpointRenewer
+        .createMountpointRenewer(viewName, conf,
+            new MountpointRenewer.RenewMountpoint() {
+              @Override public void doUpdateMountpoint() {
+                try {
+                  renewFsState(config, viewName);
+                } catch (IOException e) {
+                  LOG.warn("Failed renew fsState.", e);
+                } catch (URISyntaxException e) {
+                  LOG.warn("Failed renew fsState.", e);
+                }
+              }
+            });
   }
 
   public void renewFsState(final Configuration conf, final String authority)
@@ -715,6 +729,7 @@ public class ViewFs extends AbstractFileSystem {
   
   @Override
   public List<Token<?>> getDelegationTokens(String renewer) throws IOException {
+    mountpointRenewer.updateMptFromZk(config);
     List<InodeTree.MountPoint<AbstractFileSystem>> mountPoints = 
                 fsState.getMountPoints();
     List<Token<?>> result = new ArrayList<Token<?>>(mountPoints.size());
@@ -1147,6 +1162,7 @@ public class ViewFs extends AbstractFileSystem {
   }
 
   private String fsStateGetHomeDirPrefixValue() {
+    mountpointRenewer.updateMptFromZk(config);
     fsStateLock.readLock().lock();
     try {
       return fsState.getHomeDirPrefixValue();
@@ -1158,15 +1174,7 @@ public class ViewFs extends AbstractFileSystem {
   private InodeTree.ResolveResult<AbstractFileSystem> fsStateResolve(
       final String p, final boolean resolveLastComponent)
       throws FileNotFoundException {
-    if (fsRenewCkCb != null && fsRenewCkCb.shouldRenew()) {
-      fsRenewCkCb.updateMountponitConfig(config);
-      try {
-        renewFsState(config, viewName);
-      } catch (Exception e) {
-        // For whatever issue, use what we have in the config
-        LOG.warn("renew fs state failed", e);
-      }
-    }
+    mountpointRenewer.updateMptFromZk(config);
     try {
       fsStateLock.readLock().lock();
       return fsState.resolve(p, resolveLastComponent);
@@ -1176,21 +1184,13 @@ public class ViewFs extends AbstractFileSystem {
   }
 
   private List<InodeTree.MountPoint<AbstractFileSystem>> fsStateGetMountPoints() {
+    mountpointRenewer.updateMptFromZk(config);
     fsStateLock.readLock().lock();
     try {
       return fsState.getMountPoints();
     } finally {
       fsStateLock.readLock().unlock();
     }
-  }
-
-  public interface FsStateRenewChecker {
-    boolean shouldRenew();
-    void updateMountponitConfig(Configuration conf);
-  }
-
-  public void setRenewCheckerCb(FsStateRenewChecker cb) {
-    this.fsRenewCkCb = cb;
   }
 
   public AbstractFileSystem[] getChildFileSystems() {

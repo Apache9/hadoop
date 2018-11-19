@@ -304,6 +304,7 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final boolean HADOOP_RAID_ENABLED_DEFAULT = false;
 
   public static final String ZK_QUORUM_KEY = "ha.zookeeper.quorum";
+  public static final String ZK_OBSERVER = "dfs.client.zookeeper.observer";
   public static final String ZK_SESSION_TIMEOUT_KEY =
       "ha.zookeeper.session-timeout.ms";
   public static final int ZK_SESSION_TIMEOUT_DEFAULT = 5 * 1000;
@@ -318,4 +319,13 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
       "security.federation.client-nn.protocol.acl";
   public static final String SECURITY_FEDERATION_CLIENT_DN_PROTOCOL_ACL =
       "security.federation.client-dn.protocol.acl";
+
+  public static final String VIEW_FS_ZK_MPT_NODE_KEY = "fs.fedfs.mpt.zknode";
+  public static final String VIEW_FS_ZK_MPT_NODE_DEFAULT = "MountPointTable";
+  public static final String VIEW_FS_MOUNT_TABLE_RENEW_INTERVAL =
+      "fs.fedfs.mpt.renew.interval";
+  public static final long VIEW_FS_MOUNT_TABLE_RENEW_INTERVAL_DEFAULT = 3600000;
+  public static final String VIEW_FS_SKIP_MOUNT_TABLE_RENEW =
+      "fs.fedfs.skip.mpt.renew";
+  public static final boolean VIEW_FS_SKIP_MOUNT_TABLE_RENEW_DEFAULT = false;
 }

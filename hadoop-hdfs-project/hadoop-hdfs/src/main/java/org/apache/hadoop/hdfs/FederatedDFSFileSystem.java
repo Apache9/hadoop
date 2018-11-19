@@ -45,10 +45,10 @@ import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.viewfs.MountpointRenewer;
 import org.apache.hadoop.fs.viewfs.ViewFileSystem;
 import org.apache.hadoop.fs.viewfs.ViewFsFileStatus;
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
-import org.apache.hadoop.hdfs.MountPointRenewer.RenewMpt;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
@@ -84,7 +84,6 @@ import java.util.Set;
 
 public class FederatedDFSFileSystem extends DistributedFileSystem {
   private ViewFileSystem viewFs = null;
-  private MountPointRenewer mpr = null;
   private URI uri;
   private static final String TRASH_STRING = ".Trash";
   private static final String TRASH_ROOT = "user";
@@ -109,13 +108,8 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
-    mpr = new MountPointRenewer(uri.getAuthority(), conf, new RenewMpt() {
-      public void renewMpt(String viewName, Configuration conf)
-          throws IOException {
-        viewFs.renewFsState(conf, viewName);
-      }
-    });
-    mpr.initMptFromZkAndKickoffRenewer();
+    conf.setClass("fs.viewfs.mount.point.renewer.impl",
+        HdfsMountpointRenewer.class, MountpointRenewer.class);
     viewFs = ReflectionUtils.newInstance(ViewFileSystem.class, conf);
     viewFs.initialize(uri, conf);
     this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
@@ -517,9 +511,6 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
     try {
       if (viewFs != null) {
         viewFs.close();
-      }
-      if (mpr != null) {
-        mpr.close();
       }
     } finally {
       super.close();
