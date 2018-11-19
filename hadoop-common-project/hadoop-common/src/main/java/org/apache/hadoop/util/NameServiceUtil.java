@@ -127,8 +127,18 @@ public final class NameServiceUtil {
     String teamId = localConf.get(CONFIGURATION_SERVICE_NAME_TEAM_ID,
         CONFIGURATION_SERVICE_NAME_TEAM_ID_DEFAULT);
     String path = basePath + "/" + authority;
-    String localIDCName = getLocalIDCName();
-    String clusterIDCName = getClusterIDCName(authority, localConf);
+    String localIDCName = null;
+    try {
+      localIDCName = getLocalIDCName();
+    } catch (IOException e) {
+      LOG.debug("Failed getting local IDC", e);
+    }
+    String clusterIDCName = null;
+    try {
+      clusterIDCName = getClusterIDCName(authority, localConf);
+    } catch (IOException e) {
+      LOG.debug("Failed getting cluster IDC", e);
+    }
     String domainName = localConf
         .get(CONFIGURATION_SERVICE_NAME_DOMAIN_PREFIX + "." + localIDCName,
             localConf.get(CONFIGURATION_SERVICE_NAME_DOMAIN_PREFIX + "."

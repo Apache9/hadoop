@@ -7,9 +7,11 @@ import com.sun.net.httpserver.HttpServer;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ConfigurationService;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.NameServiceConfigurationService;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.util.NameServiceUtil;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.server.quorum.QuorumPeerConfig;
@@ -277,6 +279,37 @@ public class TestNameServiceConfigurationService {
     }
     FileSystem fs = FileSystem.get(uri,new Configuration(false));
     assertTrue(testWriteWithFileSystem(fs));
+  }
+
+  @Test
+  // BlackBox Test
+  public void testPreserveUserConf() throws Exception {
+    // create an empty configuration, and use it to create FileSystem
+    Configuration defaultConf = new Configuration(false);
+    setNameServiceConf(defaultConf);
+    FileSystem tstFs =
+        FileSystem.get(new URI("hdfs://" + NAMESERVICE + "/"), defaultConf);
+    assertEquals(null, tstFs.getConf().get("fs.permissions.umask-mode"));
+
+    defaultConf = new Configuration(false);
+    defaultConf.set("fs.hdfs.impl.disable.cache", "true");
+    defaultConf.set("fs.permissions.umask-mode", "177");
+    setNameServiceConf(defaultConf);
+    tstFs = FileSystem.get(new URI("hdfs://" + NAMESERVICE + "/"), defaultConf);
+    assertEquals("177", tstFs.getConf().get("fs.permissions.umask-mode"));
+    // test writing files to hdfs
+    assertFalse(tstFs.exists(
+        new Path("hdfs://" + NAMESERVICE + "/testVisitingUnconfiguredHDFS")));
+    BufferedOutputStream bos = new BufferedOutputStream(tstFs.create(
+        new Path("hdfs://" + NAMESERVICE + "/testVisitingUnconfiguredHDFS"),
+        true));
+    byte[] bytes = "hello world".getBytes();
+    bos.write(bytes);
+    bos.close();
+    FileStatus status = tstFs.getFileStatus(
+        new Path("hdfs://" + NAMESERVICE + "/testVisitingUnconfiguredHDFS"));
+    FsPermission permission = status.getPermission();
+    assertEquals(FsPermission.createImmutable((short)384), permission);
   }
 
   private boolean testWriteWithFileSystem(FileSystem fs) throws Exception {

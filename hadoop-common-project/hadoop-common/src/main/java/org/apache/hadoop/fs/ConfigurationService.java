@@ -10,7 +10,11 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.net.URI;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 public abstract class ConfigurationService {
 
@@ -18,6 +22,8 @@ public abstract class ConfigurationService {
   public static final String CONFIGURATION_SERVICE = "configuration.service";
   public static final String CONFIGURATION_SERVICE_RETRY =
           "configuration.service.retry";
+  public static final String CONFIGURATION_SERVICE_PRESERVE_USER_CONF =
+      "configuration.service.preserve.user.conf";
   public static final int CONFIGURATION_SERVICE_RETRY_DEFAULT = 3;
 
   public ConfigurationService(Configuration conf) {
@@ -28,7 +34,19 @@ public abstract class ConfigurationService {
           throws IOException;
 
   public static final Log LOG = LogFactory.getLog(ConfigurationService.class);
-
+  public static ArrayList<Pattern> ACCESS_CONFIG = new ArrayList<Pattern>();
+  static {
+    ACCESS_CONFIG.add(Pattern.compile("^dfs\\.nameservices"));
+    ACCESS_CONFIG.add(Pattern.compile("^dfs\\.namenode\\.rpc-address\\..*"));
+    ACCESS_CONFIG.add(
+        Pattern.compile("^dfs\\.client\\.failover\\.proxy\\.provider\\..*"));
+    ACCESS_CONFIG.add(Pattern.compile("^dfs\\.ha\\.namenodes\\..*"));
+    ACCESS_CONFIG.add(Pattern.compile("^fs\\.viewfs\\.mounttable\\..*"));
+    ACCESS_CONFIG.add(Pattern.compile("^fs\\.hdfs\\.impl"));
+    ACCESS_CONFIG.add(Pattern.compile("^ha\\.zookeeper\\.quorum\\..*"));
+    ACCESS_CONFIG
+        .add(Pattern.compile("^dfs\\.client\\.zookeeper\\.observer\\..*"));
+  }
   /**
    * Return cluster's configuration based on remote service, cluster is defined
    * by URI. If encounter any error, return the input configuration. The java
@@ -53,8 +71,18 @@ public abstract class ConfigurationService {
    * to update remoteServiceConf, so remote service could be configured more
    * flexible. The input configuration is used to initialize remote service
    * conf.
+   * Preserve user configuration.
    */
-  public static Configuration getConfigurationFromConfigurationService(URI uri, Configuration configuration) {
+  public static Configuration getConfigurationFromConfigurationService(URI uri,
+      Configuration configuration) {
+    boolean preserve = configuration
+        .getBoolean(CONFIGURATION_SERVICE_PRESERVE_USER_CONF, true);
+    return getConfigurationFromConfigurationService(uri, configuration,
+        preserve);
+  }
+
+  public static Configuration getConfigurationFromConfigurationService(URI uri,
+      Configuration configuration, boolean preserveUserConf) {
     String scheme = uri.getScheme();
     String authority = uri.getAuthority();
     Configuration remoteServiceConf = new Configuration(configuration);
@@ -107,9 +135,35 @@ public abstract class ConfigurationService {
       if (remoteConf == null) {
         return null;
       } else {
-        return remoteConf;
+        if (preserveUserConf) {
+          Configuration res = new Configuration(configuration);
+          Iterator<Map.Entry<String, String>> iterator =
+              getAccessConf(remoteConf).iterator();
+          while (iterator.hasNext()) {
+            Map.Entry<String,String> entry = iterator.next();
+            res.set(entry.getKey(), entry.getValue());
+          }
+          return res;
+        } else {
+          return remoteConf;
+        }
       }
     }
+  }
+
+  public static Configuration getAccessConf(Configuration conf) {
+    Configuration accessConf = new Configuration(false);
+    Iterator<Map.Entry<String, String>> iterator = conf.iterator();
+    while (iterator.hasNext()) {
+      Map.Entry<String,String> entry = iterator.next();
+      for (Pattern pattern : ACCESS_CONFIG) {
+        if (pattern.matcher(entry.getKey()).matches()) {
+          accessConf.set(entry.getKey(), entry.getValue());
+          break;
+        }
+      }
+    }
+    return accessConf;
   }
 
   private static void updateConfWithJavaProperties(Configuration conf) {
