@@ -1174,37 +1174,35 @@ public class Client {
       }
 
       // release the resources
-      // first thing to do;take the connection out of the connection list
-      synchronized (connections) {
-        if (connections.get(remoteId) == this) {
-          connections.remove(remoteId);
+      try {
+        // first thing to do;take the connection out of the connection list
+        synchronized (connections) {
+          if (connections.get(remoteId) == this) {
+            connections.remove(remoteId);
+          }
         }
-      }
 
-      // close the streams and therefore the socket
-      IOUtils.closeStream(out);
-      IOUtils.closeStream(in);
-      disposeSasl();
-
-      // clean up all calls
-      if (closeException == null) {
+        // close the streams and therefore the socket
+        IOUtils.closeStream(out);
+        IOUtils.closeStream(in);
+        disposeSasl();
+      } finally {
+        // Threads that call Client.call() would wait forever unless this
+        // connection thread notifies them, so we must notify all pending calls
+        // no matter resources are successfully released nor a Throwable occurs.
         if (!calls.isEmpty()) {
-          LOG.warn(
-              "A connection is closed for no cause and calls are not empty");
-
-          // clean up calls anyway
-          closeException = new IOException("Unexpected closed connection");
+          if (closeException == null) {
+            LOG.warn(
+                "A connection is closed for no cause and calls are not empty");
+            closeException = new IOException("Unexpected closed connection");
+          } else {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("closing ipc connection to " + server + ": " +
+                  closeException.getMessage(),closeException);
+            }
+          }
           cleanupCalls();
         }
-      } else {
-        // log the info
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("closing ipc connection to " + server + ": " +
-              closeException.getMessage(),closeException);
-        }
-
-        // cleanup calls
-        cleanupCalls();
       }
       closeConnection();
       if (LOG.isDebugEnabled())
