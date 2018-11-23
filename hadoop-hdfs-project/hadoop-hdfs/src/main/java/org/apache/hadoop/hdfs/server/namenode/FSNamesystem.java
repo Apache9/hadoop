@@ -1351,6 +1351,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       cacheManager.startMonitorThread();
       blockManager.getDatanodeManager().setShouldSendCachingCommands(true);
       federationRenameFixer.activate();
+      trashPathConfigMgr.start();
     } finally {
       startingActiveService = false;
       checkSafeMode();
@@ -1424,6 +1425,7 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       blockManager.clearQueues();
       initializedReplQueues = false;
       federationRenameFixer.deactivate();
+      trashPathConfigMgr.stop();
     } finally {
       writeUnlock();
     }

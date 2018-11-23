@@ -9,6 +9,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_KEY;
@@ -23,15 +24,29 @@ public class TrashPathConfigMgr implements Runnable {
   Thread refreshThr;
   private long refreshInterval;
   private long lastModifiedTime = 0;
+  private AtomicBoolean running = new AtomicBoolean(false);
 
   public TrashPathConfigMgr(Configuration conf) {
     refreshInterval = conf.getLong(DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_KEY, DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_DEFAULT);
-    start();
   }
+
   public void start () {
+    running.set(true);
     refreshThr = new Thread(this);
     refreshThr.setDaemon(true);
     refreshThr.start();
+  }
+
+  public void stop() {
+    running.set(false);
+    if (refreshThr != null) {
+      refreshThr.interrupt();
+      try {
+        refreshThr.join(2000);
+      } catch (InterruptedException e) {
+      }
+    }
+    refreshThr = null;
   }
 
   private void addPath (ArrayList<String[]> list,  String path) {
@@ -53,8 +68,12 @@ public class TrashPathConfigMgr implements Runnable {
     }
   }
 
-  private synchronized void updateConf (ArrayList <String[]> list) {
+  protected synchronized void updateConf (ArrayList <String[]> list) {
     trashPathList = list;
+  }
+
+  protected void handle() { // for unit test
+
   }
 
   private boolean hasCommonPrefix(String[] path1, String[] path2 ) {
@@ -98,53 +117,38 @@ public class TrashPathConfigMgr implements Runnable {
 
   @Override
   public void run() {
-    while (true) {
-      try {
-        File trashPathConfFile = new File(TRASH_PATH_CONFIG_FILE);
-        if (!trashPathConfFile.exists()
-            || lastModifiedTime == trashPathConfFile.lastModified()) {
-          LOG.warn("the trash path config file doesn't exist or not modified: " + trashPathConfFile);
-          try {
-            Thread.sleep(refreshInterval);
-          } catch (InterruptedException e) {
-          }
-          continue;
-        }
-
-        lastModifiedTime = trashPathConfFile.lastModified();
-
-      } catch (Exception e) {
-        LOG.error("fail to open trash path config file" + e);
-        try {
-          Thread.sleep(refreshInterval);
-        } catch (InterruptedException ie) {
-        }
-      }
-
+    while (running.get()) {
+      File trashPathConfFile = new File(TRASH_PATH_CONFIG_FILE);
       BufferedReader br = null;
       try {
-        ArrayList <String[]> tmpList = new ArrayList<String[]>();
-        br = new BufferedReader(new InputStreamReader(new FileInputStream(TRASH_PATH_CONFIG_FILE)));
-        String pathStr = null;
-        while ((pathStr = br.readLine()) != null) {
-          addPath(tmpList, pathStr);
+        if (trashPathConfFile.exists() && lastModifiedTime != trashPathConfFile
+            .lastModified()) {
+          lastModifiedTime = trashPathConfFile.lastModified();
+          ArrayList<String[]> tmpList = new ArrayList<String[]>();
+          br = new BufferedReader(new FileReader(trashPathConfFile));
+          String pathStr = null;
+          while ((pathStr = br.readLine()) != null) {
+            addPath(tmpList, pathStr);
+          }
+          updateConf(tmpList);
+          LOG.info("update trash path conf from file:" + trashPathConfFile);
+        } else {
+          handle();
         }
-        updateConf(tmpList);
-      } catch (Exception e) {
-        LOG.error("failed to load trash config " + e);
+      } catch (Throwable e) {
+        LOG.error("fail to update trash path config file:" + trashPathConfFile,
+            e);
       } finally {
         if (br != null) {
           try {
             br.close();
           } catch (IOException e) {
-            e.printStackTrace();
           }
         }
-      }
-
-      try {
-        Thread.sleep(refreshInterval);
-      } catch (InterruptedException e) {
+        try {
+          Thread.sleep(refreshInterval);
+        } catch (InterruptedException e) {
+        }
       }
     }
   }
