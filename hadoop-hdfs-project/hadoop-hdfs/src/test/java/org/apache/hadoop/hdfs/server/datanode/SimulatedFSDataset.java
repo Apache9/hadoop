@@ -26,9 +26,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
@@ -1272,6 +1274,13 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   public Block[] addBlocksToNewPool(String srcPool, BlocksToDup blks)
       throws IOException {
     return null;
+  }
+
+  @Override
+  public synchronized Set<? extends Replica> deepCopyReplica(String bpid)
+      throws IOException {
+    Set<? extends Replica> replicas = new HashSet<>(getMap(bpid).values());
+    return replicas;
   }
 }
 

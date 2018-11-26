@@ -160,7 +160,11 @@ public class FsVolumeImpl implements FsVolumeSpi {
   long getBlockPoolUsed(String bpid) throws IOException {
     return getBlockPoolSlice(bpid).getDfsUsed();
   }
-  
+
+  public FsDatasetImpl getDataset() {
+    return dataset;
+  }
+
   /**
    * Calculate the capacity of the filesystem, after removing any
    * reserved capacity.

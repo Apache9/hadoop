@@ -41,9 +41,10 @@ import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.datanode.BlockMetadataHeader;
 import org.apache.hadoop.hdfs.server.datanode.DataStorage;
 import org.apache.hadoop.hdfs.server.datanode.DatanodeUtil;
+import org.apache.hadoop.hdfs.server.datanode.FSCachingGetSpaceUsed;
 import org.apache.hadoop.hdfs.server.datanode.FinalizedReplica;
-import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaBeingWritten;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaWaitingToBeRecovered;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIO;
@@ -78,6 +79,7 @@ class BlockPoolSlice {
   
   // TODO:FEDERATION scalability issue - a thread per DU is needed
   private final GetSpaceUsed dfsUsage;
+  private File duCacheFile;
 
   /**
    * Create a blook pool slice
@@ -133,10 +135,14 @@ class BlockPoolSlice {
     }
     // Use cached value initially if available. Or the following call will
     // block until the initial du command completes.
-    this.dfsUsage = new CachingGetSpaceUsed.Builder().setPath(bpDir)
-                                                     .setConf(conf)
-                                                     .setInitialUsed(loadDfsUsed())
-                                                     .build();
+    this.duCacheFile = new File(currentDir, DU_CACHE_FILE);
+    this.dfsUsage = new FSCachingGetSpaceUsed.Builder().setBpid(bpid)
+                                                        .setVolume(volume)
+                                                        .setDuCacheFile(duCacheFile)
+                                                        .setPath(bpDir)
+                                                        .setConf(conf)
+                                                        .setInitialUsed(loadDfsUsed())
+                                                        .build();
 
     // Make the dfs usage to be saved during shutdown.
     ShutdownHookManager.get().addShutdownHook(
@@ -144,7 +150,11 @@ class BlockPoolSlice {
         @Override
         public void run() {
           if (!dfsUsedSaved) {
-            saveDfsUsed();
+            try {
+              dfsUsage.saveSpaceUsed();
+            } catch (IOException e) {
+              LOG.error(e);
+            }
           }
         }
       }, SHUTDOWN_HOOK_PRIORITY);
@@ -674,7 +684,11 @@ class BlockPoolSlice {
   }
   
   void shutdown() {
-    saveDfsUsed();
+    try {
+      dfsUsage.saveSpaceUsed();
+    } catch (IOException e) {
+     LOG.error(e);
+    }
     dfsUsedSaved = true;
     if (dfsUsage instanceof CachingGetSpaceUsed) {
       IOUtils.cleanup(LOG, ((CachingGetSpaceUsed) dfsUsage));

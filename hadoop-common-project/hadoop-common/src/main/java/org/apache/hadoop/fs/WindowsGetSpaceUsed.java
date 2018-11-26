@@ -37,7 +37,8 @@ public class WindowsGetSpaceUsed extends CachingGetSpaceUsed {
     super(builder.getPath(),
         builder.getInterval(),
         builder.getJitter(),
-        builder.getInitialUsed());
+        builder.getInitialUsed(),
+        builder.getDuCacheFile());
   }
 
   /**

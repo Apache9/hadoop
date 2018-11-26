@@ -17,26 +17,28 @@
  */
 package org.apache.hadoop.fs;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.util.Shell;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.util.Shell;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public interface GetSpaceUsed {
 
 
   long getUsed() throws IOException;
 
+  void saveSpaceUsed() throws IOException;
+
   /**
    * The builder class
    */
-  final class Builder {
+  class Builder {
     static final Logger LOG = LoggerFactory.getLogger(Builder.class);
 
     static final String CLASSNAME_KEY = "fs.getspaceused.classname";
@@ -50,6 +52,8 @@ public interface GetSpaceUsed {
     private Long interval = null;
     private Long jitter = null;
     private Long initialUsed = null;
+    private File duCacheFile = null;
+    protected Constructor<? extends GetSpaceUsed> cons;
 
     public Configuration getConf() {
       return conf;
@@ -136,11 +140,22 @@ public interface GetSpaceUsed {
       return this;
     }
 
+    public File getDuCacheFile() {
+      return duCacheFile;
+    }
+
+    public Builder setDuCacheFile(File duCacheFile) {
+      this.duCacheFile = duCacheFile;
+      return this;
+    }
+
     public GetSpaceUsed build() throws IOException {
       GetSpaceUsed getSpaceUsed = null;
       try {
-        Constructor<? extends GetSpaceUsed> cons =
-            getKlass().getConstructor(Builder.class);
+        if (cons == null) {
+          cons = getKlass().getConstructor(Builder.class);
+        }
+
         getSpaceUsed = cons.newInstance(this);
       } catch (InstantiationException e) {
         LOG.warn("Error trying to create an instance of " + getKlass(), e);

@@ -27,6 +27,7 @@ import java.io.InputStream;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -515,4 +516,6 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    
   public Block[] addBlocksToNewPool(String srcPool, BlocksToDup blksToDup)
       throws IOException;
+
+  public Set<? extends Replica> deepCopyReplica(String bpid) throws IOException;
 }

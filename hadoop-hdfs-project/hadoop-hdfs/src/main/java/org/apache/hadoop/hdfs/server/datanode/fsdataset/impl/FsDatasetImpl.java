@@ -2959,5 +2959,11 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     return lblk.toArray(new Block[0]);
   }
 
+  @Override
+  public synchronized Set<? extends Replica> deepCopyReplica(String bpid) {
+    Set<? extends Replica> replicas =
+        new HashSet<>(volumeMap.replicas(bpid));
+    return replicas;
+  }
 }
 

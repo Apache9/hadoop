@@ -34,9 +34,9 @@ public class DU extends CachingGetSpaceUsed {
   private final DUShell duShell;
 
   @VisibleForTesting
-  public DU(File path, long interval, long jitter, long initialUsed)
+  public DU(File path, long interval, long jitter, long initialUsed, File duCacheFile)
       throws IOException {
-    super(path, interval, jitter, initialUsed);
+    super(path, interval, jitter, initialUsed, duCacheFile);
     this.duShell = new DUShell();
   }
 
@@ -44,7 +44,8 @@ public class DU extends CachingGetSpaceUsed {
     this(builder.getPath(),
         builder.getInterval(),
         builder.getJitter(),
-        builder.getInitialUsed());
+        builder.getInitialUsed(),
+        builder.getDuCacheFile());
   }
 
   @Override

@@ -17,16 +17,19 @@
  */
 package org.apache.hadoop.fs;
 
-import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.classification.InterfaceStability;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.Closeable;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.util.Time;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Interface for class that can tell estimate much space
@@ -46,6 +49,7 @@ public abstract class CachingGetSpaceUsed implements Closeable, GetSpaceUsed {
   private final long jitter;
   private final String dirPath;
   private Thread refreshUsed;
+  private File duCacheFile;
 
   /**
    * This is the constructor used by the builder.
@@ -56,7 +60,8 @@ public abstract class CachingGetSpaceUsed implements Closeable, GetSpaceUsed {
     this(builder.getPath(),
         builder.getInterval(),
         builder.getJitter(),
-        builder.getInitialUsed());
+        builder.getInitialUsed(),
+        builder.getDuCacheFile());
   }
 
   /**
@@ -70,22 +75,28 @@ public abstract class CachingGetSpaceUsed implements Closeable, GetSpaceUsed {
   CachingGetSpaceUsed(File path,
                       long interval,
                       long jitter,
-                      long initialUsed) throws IOException {
+                      long initialUsed,
+                      File duCacheFile) throws IOException {
     this.dirPath = path.getCanonicalPath();
     this.refreshInterval = interval;
     this.jitter = jitter;
     this.used.set(initialUsed);
+    this.duCacheFile = duCacheFile;
   }
 
-  void init() {
+  public void init() {
     if (used.get() < 0) {
       used.set(0);
       refresh();
     }
 
+    startRefreshThread();
+  }
+
+  protected void startRefreshThread() {
     if (refreshInterval > 0) {
-      refreshUsed = new Thread(new RefreshThread(this),
-          "refreshUsed-" + dirPath);
+      refreshUsed =
+          new Thread(new RefreshThread(this), "refreshUsed-" + dirPath);
       refreshUsed.setDaemon(true);
       refreshUsed.start();
     } else {
@@ -149,6 +160,36 @@ public abstract class CachingGetSpaceUsed implements Closeable, GetSpaceUsed {
     }
   }
 
+  @Override
+  public void saveSpaceUsed() throws IOException {
+    if (duCacheFile == null) {
+      throw new IOException("duCacheFile is null");
+    }
+
+    if (duCacheFile.exists() && !duCacheFile.delete()) {
+      LOG.warn(
+          "Failed to delete old dfsUsed file in " + duCacheFile.getParent());
+    }
+
+    FileWriter out = null;
+    try {
+      if (used.get() > 0) {
+        out = new FileWriter(duCacheFile);
+        // mtime is written last, so that truncated writes won't be valid.
+        out.write(Long.toString(used.get()) + " " + Long.toString(Time.now()));
+        out.flush();
+        out.close();
+        out = null;
+      }
+    } catch (IOException ioe) {
+      // If write failed, the volume might be bad. Since the cache file is
+      // not critical, log the error and continue.
+      LOG.warn("Failed to write dfsUsed to " + duCacheFile, ioe);
+    } finally {
+      IOUtils.cleanup(null, out);
+    }
+  }
+
   private static final class RefreshThread implements Runnable {
 
     final CachingGetSpaceUsed spaceUsed;
@@ -174,9 +215,12 @@ public abstract class CachingGetSpaceUsed implements Closeable, GetSpaceUsed {
           Thread.sleep(refreshInterval);
           // update the used variable
           spaceUsed.refresh();
+          spaceUsed.saveSpaceUsed();
         } catch (InterruptedException e) {
           LOG.warn("Thread Interrupted waiting to refresh disk information", e);
           Thread.currentThread().interrupt();
+        } catch (IOException e) {
+          LOG.error("save space used error", e);
         }
       }
     }
