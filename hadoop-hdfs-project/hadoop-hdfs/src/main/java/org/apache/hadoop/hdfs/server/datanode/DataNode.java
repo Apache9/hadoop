@@ -44,6 +44,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PLUGINS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_STARTUP_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_TRANSFER_USE_BLOCKBALANCETHROTTLER_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_TRANSFER_USE_BLOCKBALANCETHROTTLER_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_MAX_NUM_BLOCKS_TO_LOG_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_MAX_NUM_BLOCKS_TO_LOG_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSER_DEFAULT;
@@ -169,6 +171,7 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.ReplicaRecoveryInfo;
+import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.http.HttpConfig;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.ReadaheadPool;
@@ -1951,6 +1954,7 @@ public class DataNode extends ReconfigurableBase
     final private DatanodeRegistration bpReg;
     final String clientname;
     final CachingStrategy cachingStrategy;
+    DataTransferThrottler throttler;
 
     /**
      * Connect to the first item in the target list.  Pass along the 
@@ -1977,6 +1981,19 @@ public class DataNode extends ReconfigurableBase
       this.clientname = clientname;
       this.cachingStrategy =
           new CachingStrategy(true, getDnConf().readaheadLength);
+      this.throttler = null;
+      // In case of transfer need-replicated or need-replace blocks,
+      // the stage is set BlockConstructionStage.PIPELINE_SETUP_CREATE.
+      // We can set bandwith use balanceThrottler, by configuration.
+      // For transferReplicaForPipelineRecovery(), ignore throttle bandwidth.
+      if ((stage == BlockConstructionStage.PIPELINE_SETUP_CREATE) &&
+          clientname.isEmpty()) {
+        if (conf.getBoolean(DFS_DATANODE_TRANSFER_USE_BLOCKBALANCETHROTTLER_KEY,
+                            DFS_DATANODE_TRANSFER_USE_BLOCKBALANCETHROTTLER_DEFAULT)) {
+          DataXceiverServer dxcs = (DataXceiverServer) dataXceiverServer.getRunnable();
+          this.throttler = dxcs.balanceThrottler;
+        }
+      }
     }
 
     /**
@@ -2042,7 +2059,7 @@ public class DataNode extends ReconfigurableBase
             false);
 
         // send data & checksum
-        blockSender.sendBlock(out, unbufOut, null);
+        blockSender.sendBlock(out, unbufOut, throttler);
 
         // no response necessary
         LOG.info(getClass().getSimpleName() + ": Transmitted " + b
