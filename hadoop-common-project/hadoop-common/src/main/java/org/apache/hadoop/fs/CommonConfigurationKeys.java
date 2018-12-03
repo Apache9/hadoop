@@ -328,4 +328,12 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String VIEW_FS_SKIP_MOUNT_TABLE_RENEW =
       "fs.fedfs.skip.mpt.renew";
   public static final boolean VIEW_FS_SKIP_MOUNT_TABLE_RENEW_DEFAULT = false;
+
+  public static final String DEEP_COPY_REPLICA_THRESHOLD_KEY =
+      "deep.copy.replica.threshold.ms";
+  public static final long DEEP_COPY_REPLICA_THRESHOLD_DEFAULT = 50;
+
+  public static final String REPLICA_CACHING_GET_SPACE_USED_THRESHOLD_KEY =
+      "replica.caching.get.space.used.threshold.ms";
+  public static final long REPLICA_CACHING_GET_SPACE_USED_DEFAULT = 10000;
 }
