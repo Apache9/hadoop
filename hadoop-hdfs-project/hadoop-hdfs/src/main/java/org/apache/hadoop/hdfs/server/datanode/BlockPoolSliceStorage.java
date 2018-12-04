@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.datanode;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.HardLink;
@@ -43,7 +44,13 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.Collections;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -136,8 +143,9 @@ public class BlockPoolSliceStorage extends Storage {
    * @param startOpt startup option
    * @throws IOException on error
    */
-  void recoverTransitionRead(DataNode datanode, NamespaceInfo nsInfo,
-      Collection<File> dataDirs, StartupOption startOpt) throws IOException {
+  void recoverTransitionRead(final DataNode datanode,
+      final NamespaceInfo nsInfo, Collection<File> dataDirs,
+      final StartupOption startOpt) throws IOException {
     LOG.info("Analyzing storage directories for bpid " + nsInfo.getBlockPoolID());
     Set<String> existingStorageDirs = new HashSet<String>();
     for (int i = 0; i < getNumStorageDirs(); i++) {
@@ -193,11 +201,33 @@ public class BlockPoolSliceStorage extends Storage {
     // Each storage directory is treated individually.
     // During startup some of them can upgrade or roll back
     // while others could be up-to-date for the regular startup.
+    ExecutorService service = Executors.newFixedThreadPool(getNumStorageDirs());
+    List<Future<Void>> futures = Lists.newArrayList();
     for (int idx = 0; idx < getNumStorageDirs(); idx++) {
-      doTransition(datanode, getStorageDir(idx), nsInfo, startOpt);
-      assert getCTime() == nsInfo.getCTime() 
-          : "Data-node and name-node CTimes must be the same.";
+      final int finalIdx = idx;
+      futures.add(service.submit(new Callable<Void>() {
+        @Override
+        public Void call() throws IOException {
+          doTransition(datanode, getStorageDir(finalIdx), nsInfo, startOpt);
+          assert getCTime() == nsInfo
+              .getCTime() : "Data-node and name-node CTimes must be the same.";
+          return null;
+        }
+      }));
     }
+    for (int idx = 0; idx < getNumStorageDirs(); idx++) {
+      Future<Void> future = futures.get(idx);
+      try {
+        future.get();
+      } catch (ExecutionException | InterruptedException
+          | CancellationException e) {
+        LOG.error(
+            "Unexpected exception while loading storage directories  for block pool "
+                + nsInfo.getBlockPoolID(),
+            e);
+      }
+    }
+    service.shutdown();
 
     // 3. Update all storages. Some of them might have just been formatted.
     this.writeAll();
