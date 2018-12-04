@@ -8,6 +8,7 @@ import org.apache.zookeeper.KeeperException;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
@@ -48,6 +49,24 @@ public class TestHdfsMountpointRenewer {
   }
 
   @Test
+  public void testDeprecatedKey() throws Exception {
+    System.setProperty("hadoop.property.dfs.block.size", "128m");
+    Configuration conf = new HdfsConfiguration(false);
+    assertEquals(1, conf.size());
+    final AtomicInteger counter = new AtomicInteger(0);
+    MountpointRenewer mptRenewer = new TestHdfsMountpoint() {};
+    mptRenewer.initialize(clusterName, conf, new MountpointRenewer.RenewMountpoint() {
+      @Override
+      public void doUpdateMountpoint() {
+        counter.incrementAndGet();
+      }
+    });
+
+    mptRenewer.updateMptFromZk(conf);
+    assertEquals(1, counter.get());
+  }
+
+  @Test
   public void testVerifyMountpointInZk() throws Exception {
     Configuration conf = new Configuration(false);
     String cn = clusterName + "-5";
@@ -67,11 +86,11 @@ public class TestHdfsMountpointRenewer {
     MountpointRenewer mptRenewer =
         new TestHdfsMountpoint() {
           @Override
-          public void verifyNewMountPoints(
-              Configuration originalConf, Configuration newConf)
+          public void verify(Map<String, String> originalConf,
+              Map<String, String> newConf)
               throws IOException {
             try {
-              super.verifyNewMountPoints(originalConf, newConf);
+              super.verify(originalConf, newConf);
             } catch (IOException ioe) {
               assertExceptionContains("New mount point table is invalid", ioe);
               throw ioe;

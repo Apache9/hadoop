@@ -31,7 +31,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
@@ -93,15 +92,8 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.hadoop.util.ZKUtil;
-import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
-import org.apache.zookeeper.KeeperException.NodeExistsException;
-import org.apache.zookeeper.ZooDefs.Ids;
-import org.apache.zookeeper.data.ACL;
-import org.apache.zookeeper.data.Stat;
-import org.apache.zookeeper.ZooKeeper;
 
 import com.google.common.base.Preconditions;
 
@@ -2116,7 +2108,7 @@ public class DFSAdmin extends FsShell {
           }
         });
     String zkMptConfString = null;
-    Configuration zkMptConf = null;
+    Map<String,String> zkMptConf = null;
     try {
       zkMptConfString = new String(
           hmpr.getMptConfFromZookeeper(config));
@@ -2127,14 +2119,14 @@ public class DFSAdmin extends FsShell {
     }
     String newMptConfString =
         HdfsMountpointRenewer.serializeMountpoint2String(config, clusterName);
-    Configuration newMptConf =
+    Map<String,String> newMptConf =
         HdfsMountpointRenewer.deserializeString2Mountpoint(newMptConfString);
 
     System.out.println("UpdateMptOnZk: Old mount points are " + zkMptConfString
         + ". New mount points are " + newMptConfString);
 
     if (zkMptConf != null) {
-      hmpr.verifyNewMountPoints(zkMptConf, newMptConf);
+      hmpr.verify(zkMptConf, newMptConf);
     }
     hmpr.setMptConfToZookeeper(newMptConfString.getBytes(), config);
     return 0;

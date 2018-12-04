@@ -11,6 +11,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
@@ -21,22 +22,23 @@ public class HdfsMountpointRenewer extends MountpointRenewer {
   @Override
   public void updateMountPointConfig(Configuration conf,
       byte[] zkData) throws IOException {
-    Configuration newConf = deserializeString2Mountpoint(new String(zkData));
-    verifyNewMountPoints(conf, newConf);
-    Iterator<Map.Entry<String, String>> iter = newConf.iterator();
+    Map<String, String> newConf =
+        deserializeString2Mountpoint(new String(zkData));
+    Map<String, String> originalConf = getMountPointEntries(conf);
+    // new mount table should contain all mount table entries in original conf.
+    verify(originalConf, newConf);
+    Iterator<Map.Entry<String, String>> iter = newConf.entrySet().iterator();
     while (iter.hasNext()) {
       Map.Entry<String, String> kv = iter.next();
       conf.set(kv.getKey(), kv.getValue());
     }
   }
 
-  // new mount table should contain all mount table entries in original conf.
-  // new & old mount tables may contain other entries, but we only care about
-  // mount table entries here.
-  public void verifyNewMountPoints(Configuration originalConf,
-      Configuration newConf) throws IOException {
-    Configuration originalMpConf = getMountPointEntries(originalConf);
-    Iterator<Map.Entry<String, String>> iter = originalMpConf.iterator();
+  // new mount table should contain all entries in original conf.
+  public void verify(Map<String,String> originalConf,
+      Map<String,String> newConf) throws IOException {
+    Iterator<Map.Entry<String, String>> iter =
+        originalConf.entrySet().iterator();
     while (iter.hasNext()) {
       Map.Entry<String, String> kv = iter.next();
       if (!kv.getValue().equals(newConf.get(kv.getKey()))) {
@@ -51,9 +53,9 @@ public class HdfsMountpointRenewer extends MountpointRenewer {
 
   // Return the mount point configuration in "key=value;key=value;key=value"
   // format.
-  protected Configuration getMountPointEntries(final Configuration config)
+  protected Map<String,String> getMountPointEntries(Configuration config)
       throws IOException {
-    Configuration res = new Configuration(false);
+    Map<String,String> res = new HashMap<String,String>();
 
     final String mtPrefix =
         Constants.CONFIG_VIEWFS_PREFIX + "." + clusterName + ".";
@@ -68,7 +70,7 @@ public class HdfsMountpointRenewer extends MountpointRenewer {
           continue;
         } else if (src.startsWith(linkPrefix) || src
             .startsWith(linkMergePrefix)) { // link or merge link
-          res.set(si.getKey(), si.getValue());
+          res.put(si.getKey(), si.getValue());
         } else {
           throw new IOException(
               "ViewFs: Invalid entry in Mount table in config: " + src);
@@ -133,13 +135,13 @@ public class HdfsMountpointRenewer extends MountpointRenewer {
     return mpBuilder.toString();
   }
 
-  public static Configuration deserializeString2Mountpoint(String content)
+  public static Map<String,String> deserializeString2Mountpoint(String content)
       throws IOException {
     if (content == null) {
       throw new IOException("content is null !");
     }
     String[] kvs = content.split(";");
-    Configuration conf = new Configuration(false);
+    Map<String,String> conf = new HashMap<String,String>();
     for (String kv : kvs) {
       if (kv.length() == 0) {
         continue;
@@ -151,12 +153,12 @@ public class HdfsMountpointRenewer extends MountpointRenewer {
       String key = kv.substring(0, splitIdx);
       String val = kv.substring(splitIdx + 1);
       if (conf.get(key) == null) {
-        conf.set(key, val);
+        conf.put(key, val);
       } else if (key.equals(DFSConfigKeys.DFS_NAMESERVICES)) {
         Set<String> nsSet = new HashSet<String>();
         nsSet.addAll(Arrays.asList(conf.get(key).split(",")));
         nsSet.addAll(Arrays.asList(val.split(",")));
-        conf.set(key, Joiner.on(",").skipNulls().join(nsSet));
+        conf.put(key, Joiner.on(",").skipNulls().join(nsSet));
       }
     }
     return conf;

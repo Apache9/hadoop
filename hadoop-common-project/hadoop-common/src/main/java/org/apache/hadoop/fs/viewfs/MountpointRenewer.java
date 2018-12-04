@@ -90,7 +90,7 @@ abstract public class MountpointRenewer {
           try {
             updateMountPointConfig(conf, mptFromZk);
           } catch (IOException ioe) {
-            LOG.warn("Update mount point table from zk failed", ioe);
+            LOG.debug("Update mount point table from zk failed", ioe);
             return;
           }
           lastMountPointTable = mptFromZk;
