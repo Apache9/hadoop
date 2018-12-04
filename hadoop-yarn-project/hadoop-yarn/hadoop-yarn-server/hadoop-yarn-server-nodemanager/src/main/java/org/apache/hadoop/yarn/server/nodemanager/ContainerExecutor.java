@@ -209,16 +209,16 @@ public abstract class ContainerExecutor implements Configurable {
 
   public void writeLaunchEnv(OutputStream out, Map<String, String> environment, Map<Path, List<String>> resources, List<String> command) throws IOException{
     ContainerLaunch.ShellScriptBuilder sb = ContainerLaunch.ShellScriptBuilder.create();
-    if (environment != null) {
-      for (Map.Entry<String,String> env : environment.entrySet()) {
-        sb.env(env.getKey().toString(), env.getValue().toString());
-      }
-    }
     if (resources != null) {
       for (Map.Entry<Path,List<String>> entry : resources.entrySet()) {
         for (String linkName : entry.getValue()) {
           sb.symlink(entry.getKey(), new Path(linkName));
         }
+      }
+    }
+    if (environment != null) {
+      for (Map.Entry<String,String> env : environment.entrySet()) {
+        sb.env(env.getKey().toString(), env.getValue().toString());
       }
     }
 
