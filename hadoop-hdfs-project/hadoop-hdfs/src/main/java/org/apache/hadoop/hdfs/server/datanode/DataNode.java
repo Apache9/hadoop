@@ -18,6 +18,8 @@
 package org.apache.hadoop.hdfs.server.datanode;
 
 
+import static org.apache.hadoop.fs.CommonConfigurationKeys.CHECK_DISK_ERROR_INTERNAL_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeys.CHECK_DISK_ERROR_INTERNAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ADDRESS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY;
@@ -340,7 +342,7 @@ public class DataNode extends ReconfigurableBase
   private final boolean getHdfsBlockLocationsEnabled;
   private ObjectName dataNodeInfoBeanName;
   private Thread checkDiskErrorThread = null;
-  protected final int checkDiskErrorInterval = 5*1000;
+  protected long checkDiskErrorInterval;
   private boolean checkDiskErrorFlag = false;
   private Object checkDiskErrorMutex = new Object();
   private long lastDiskErrorCheck;
@@ -394,6 +396,8 @@ public class DataNode extends ReconfigurableBase
     this.isPermissionEnabled = conf.getBoolean(
         DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY,
         DFSConfigKeys.DFS_PERMISSIONS_ENABLED_DEFAULT);
+    this.checkDiskErrorInterval = conf.getLong(CHECK_DISK_ERROR_INTERNAL_KEY,
+        CHECK_DISK_ERROR_INTERNAL_DEFAULT);
 
     confVersion = "core-" +
         conf.get("hadoop.common.configuration.version", "UNSPECIFIED") +

@@ -336,4 +336,9 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String REPLICA_CACHING_GET_SPACE_USED_THRESHOLD_KEY =
       "replica.caching.get.space.used.threshold.ms";
   public static final long REPLICA_CACHING_GET_SPACE_USED_DEFAULT = 10000;
+
+  public static final String CHECK_DISK_ERROR_INTERNAL_KEY =
+      "check.disk.error.internal";
+
+  public static final long CHECK_DISK_ERROR_INTERNAL_DEFAULT = 30 * 1000;
 }
