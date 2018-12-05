@@ -24,8 +24,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -46,6 +44,7 @@ import org.apache.hadoop.tools.DistCpOptions;
 import org.apache.hadoop.tools.DistCpOptions.FileAttribute;
 import org.apache.hadoop.tools.util.DistCpUtils;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.tools.DistCpConstants.RENAME_RETRY_OP;
 
 /**
  * Mapper class that executes the DistCp copy operation.
@@ -94,6 +93,7 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   private Path    targetWorkPath = null;
 
   private boolean renameForCopy = false;
+  private RENAME_RETRY_OP renameForCopyRetryOp;
 
   /**
    * Implementation of the Mapper::setup() method. This extracts the DistCp-
@@ -134,6 +134,9 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
 
     renameForCopy =
         conf.getBoolean(DistCpConstants.DISTCP_RENAME_FOR_COPY, false);
+    renameForCopyRetryOp = RENAME_RETRY_OP.valueOf(
+        conf.get(DistCpConstants.DISTCP_RENAME_FOR_COPY_RETRY_OP,
+            RENAME_RETRY_OP.DO_NOT_RETRY.name()));
   }
 
   /**
@@ -236,7 +239,10 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
           fileAttributes.contains(FileAttribute.ACL), 
           preserveXAttrs, preserveRawXattrs);
       } catch (FileNotFoundException e) {
-        if (ignoreDeleted) {
+        if (ignoreDeleted || renameForCopy) {
+          // When we do renameForCopy, if an attempt fails and yarn restarts an
+          // attempt for the task, we will get a FileNotFoundException.
+          // We should ignore it and continue.
           return;
         }
         throw new IOException(new RetriableFileCopyCommand.CopyReadException(e));
@@ -286,7 +292,45 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
               // Ignore
             }
           }
-          sourceFS.rename(sourcePath, target);
+          int retry = 0;
+          while (true) {
+            try {
+              sourceFS.rename(sourcePath, target);
+              break;
+            } catch (IOException e) {
+              if (renameForCopyRetryOp == RENAME_RETRY_OP.DO_NOT_RETRY) {
+                LOG.warn(String.format("got exception while rename %s to %s,"
+                    + " skip it.", sourcePath, target), e);
+                break;
+              } else if (renameForCopyRetryOp
+                  == RENAME_RETRY_OP.RETRY_UNTIL_SUCCESS) {
+                retry ++;
+
+                if (!targetFS.exists(target)) {
+                  LOG.info(String.format("got exception while rename %s to %s,"
+                          + " tried %d times. since %s doesn't exist, retry"
+                          + " after sleeping 30 seconds.",
+                      sourcePath, target, retry, target), e);
+                  for (int i = 0; i < 30; i++) {
+                    context.progress();// report so task won't be killed
+                    try {
+                      Thread.sleep(1000);
+                    } catch (InterruptedException ie) {
+                    }
+                  }
+                  continue;
+                } else {
+                  LOG.info(String.format("got exception while rename %s to %s,"
+                          + " tried %d times. since %s exists, skip retry and "
+                          + "let fixer handle it.",
+                      sourcePath, target, retry, target), e);
+                  break;
+                }
+              } else {
+                throw e;
+              }
+            }
+          }
         } else {
           copyFileWithRetry(description, sourceCurrStatus, target, context,
               action, fileAttributes);

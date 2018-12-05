@@ -144,4 +144,9 @@ public class DistCpConstants {
   static final String HDFS_RESERVED_RAW_DIRECTORY_NAME = "/.reserved/raw";
 
   public static final String DISTCP_RENAME_FOR_COPY = "distcp.rename.for.copy";
+  public static final String DISTCP_RENAME_FOR_COPY_RETRY_OP =
+      "distcp.rename.for.copy.retry.op";
+  public static enum RENAME_RETRY_OP {
+    DO_NOT_RETRY, RETRY_UNTIL_SUCCESS
+  }
 }
