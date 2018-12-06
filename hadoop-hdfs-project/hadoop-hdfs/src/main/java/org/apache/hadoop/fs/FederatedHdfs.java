@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.viewfs.MountpointRenewer;
 import org.apache.hadoop.fs.viewfs.ViewFs;
 import org.apache.hadoop.fs.viewfs.ViewFsFileStatus;
+import org.apache.hadoop.hdfs.FederationUtil;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.HdfsMountpointRenewer;
@@ -66,6 +67,7 @@ public class FederatedHdfs extends AbstractFileSystem {
     if (!isUriCompatible(theUri, conf)) {
       throw new URISyntaxException(theUri.toString(), "not an federation uri");
     }
+    FederationUtil.confAllNamespace(theUri.getAuthority(), conf);
     URI viewFsUri = convertToViewFsScheme(theUri);
     conf.setClass("fs.viewfs.mount.point.renewer.impl",
         HdfsMountpointRenewer.class, MountpointRenewer.class);

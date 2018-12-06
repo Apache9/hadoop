@@ -108,11 +108,16 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
 
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
+    this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
+    try {
+      FederationUtil.confAllNamespace(uri.getAuthority(), conf);
+    } catch (URISyntaxException e) {
+      throw new IOException(e);
+    }
     conf.setClass("fs.viewfs.mount.point.renewer.impl",
         HdfsMountpointRenewer.class, MountpointRenewer.class);
     viewFs = ReflectionUtils.newInstance(ViewFileSystem.class, conf);
     viewFs.initialize(uri, conf);
-    this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
   }
 
   @Override

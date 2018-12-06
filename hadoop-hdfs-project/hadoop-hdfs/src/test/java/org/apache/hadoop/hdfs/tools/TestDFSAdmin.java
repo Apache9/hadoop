@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.tools;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.ReconfigurationUtil;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -232,7 +233,7 @@ public class TestDFSAdmin {
   @Test
   public void testUpdateMPT2Zk() throws Exception {
     Configuration config = new Configuration(false);
-    config.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER,
+    config.set(CommonConfigurationKeys.ZK_OBSERVER,
         "tj-hadoop-staging-zk01.kscn:21000");
     config.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
         "hdfs://" + clusterName + "/");

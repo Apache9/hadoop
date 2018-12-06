@@ -108,7 +108,7 @@ public class TestDFSClientZKBasedFailover {
        * conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + nameservice,
        * hostPort);
        */
-      conf.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER, hostPort);
+      conf.set(CommonConfigurationKeys.ZK_OBSERVER, hostPort);
       conf.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
       conf.set(DFSConfigKeys.DFS_HA_FENCE_METHODS_KEY,
           AlwaysSucceedFencer.class.getName());
@@ -432,7 +432,7 @@ public class TestDFSClientZKBasedFailover {
         Configuration tmpConf = new Configuration(fs.getConf());
         tmpConf.set(CommonConfigurationKeys.ZK_QUORUM_KEY,
             "127.0.0.1:" + 80);
-        tmpConf.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER,
+        tmpConf.set(CommonConfigurationKeys.ZK_OBSERVER,
             "127.0.0.1:" + 80);
         tmpConf.setBoolean("fs.hdfs.impl.disable.cache", true);
         FileSystem nfs = FileSystem.get(tmpConf);

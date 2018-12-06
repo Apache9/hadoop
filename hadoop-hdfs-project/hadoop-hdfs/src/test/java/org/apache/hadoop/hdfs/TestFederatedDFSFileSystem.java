@@ -653,7 +653,7 @@ public class TestFederatedDFSFileSystem extends TestFederated {
    * */
   @Test
   public void testAddNewNameSpaceByRenewer() throws Exception {
-    conf.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER, hostPort);
+    conf.set(CommonConfigurationKeys.ZK_OBSERVER, hostPort);
     // Add a new namespace
     Configuration tmpConf = new Configuration(conf);
     String clusterName = "test-cluster";

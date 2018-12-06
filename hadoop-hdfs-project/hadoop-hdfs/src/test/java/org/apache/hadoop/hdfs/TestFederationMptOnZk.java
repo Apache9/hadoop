@@ -106,7 +106,7 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
     // 3. Verify that we can create files under the new mount point with the
     // same fs client in step 2
     String str = "testFederatedDFSFileSystem";
-    CONF.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER, hostPort);
+    CONF.set(CommonConfigurationKeys.ZK_OBSERVER, hostPort);
     Configuration tmpCONF = new Configuration(CONF);
     tmpCONF.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(CONF);
@@ -149,7 +149,7 @@ public class TestFederationMptOnZk extends ClientBaseWithFixes {
     // 3. Verify that we can create files under the new mount point with the
     // same fs client in step 2
     String str = "testFederatedHDFS";
-    CONF.set(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER, hostPort);
+    CONF.set(CommonConfigurationKeys.ZK_OBSERVER, hostPort);
     Configuration tmpCONF = new Configuration(CONF);
     tmpCONF.set(CommonConfigurationKeys.ZK_QUORUM_KEY, hostPort);
     DFSAdmin admin = new DFSAdmin(tmpCONF);

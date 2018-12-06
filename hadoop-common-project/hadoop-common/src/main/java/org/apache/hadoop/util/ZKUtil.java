@@ -23,6 +23,8 @@ import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.HadoopIllegalArgumentException;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Id;
@@ -173,6 +175,22 @@ public class ZKUtil {
     }
     String path = valInConf.substring(1).trim();
     return Files.toString(new File(path), Charsets.UTF_8).trim();
+  }
+
+  public static String getZkQuorum(Configuration inconf, String clusterName){
+    String zkQuorum =
+        inconf.get(CommonConfigurationKeys.ZK_OBSERVER + "." + clusterName);
+    if (zkQuorum == null) {
+      zkQuorum = inconf.get(CommonConfigurationKeys.ZK_OBSERVER);
+    }
+    if (zkQuorum == null) {
+      zkQuorum =
+          inconf.get(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + clusterName);
+    }
+    if (zkQuorum == null) {
+      zkQuorum = inconf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
+    }
+    return zkQuorum;
   }
 
   /**

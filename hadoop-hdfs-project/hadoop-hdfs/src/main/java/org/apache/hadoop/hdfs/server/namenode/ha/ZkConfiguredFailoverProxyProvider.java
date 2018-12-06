@@ -38,6 +38,7 @@ import org.apache.hadoop.hdfs.server.namenode.ha.proto.HAZKInfoProtos.ActiveNode
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
+import org.apache.hadoop.util.ZKUtil;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
@@ -112,28 +113,10 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
     if (nsId == null) {
       throw new RuntimeException("No nameservices is configured");
     }
-    String zkQuorum = getZkQuorum();
+    String zkQuorum = ZKUtil.getZkQuorum(conf, nsId);
     if (zkQuorum == null) {
       noZkQuorum = true;
     }
-  }
-
-  private String getZkQuorum() {
-    // If no observer is configured, fail back to ha quorum. The intention is to
-    // support smooth upgrading.
-    String zkQuorum = null;
-    zkQuorum =
-        conf.get(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER + "." + nsId);
-    if (zkQuorum == null) {
-      zkQuorum = conf.get(DFSConfigKeys.DFS_CLIENT_ZOOKEEPER_OBSERVER);
-    }
-    if (zkQuorum == null) {
-      zkQuorum = conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY + "." + nsId);
-    }
-    if (zkQuorum == null) {
-      zkQuorum = conf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
-    }
-    return zkQuorum;
   }
 
   @Override
@@ -170,7 +153,7 @@ public class ZkConfiguredFailoverProxyProvider<T> extends
     InetSocketAddress activeNN = null;
     ZooKeeper zkClient = null;
     try {
-      String zkQuorum = getZkQuorum();
+      String zkQuorum = ZKUtil.getZkQuorum(conf, nsId);
       assert (zkQuorum != null);
       zkClient =
           new ZooKeeper(zkQuorum, conf.getInt(

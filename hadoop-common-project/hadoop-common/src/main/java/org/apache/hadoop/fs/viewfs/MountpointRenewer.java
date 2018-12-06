@@ -192,16 +192,6 @@ abstract public class MountpointRenewer {
     }
   }
 
-  String getZkQuorum(Configuration inconf) {
-    // If no observer is configured, fail back to ha quorum. The intention is to
-    // support smooth upgrading.
-    String zkQuorum = inconf.get(CommonConfigurationKeys.ZK_OBSERVER);
-    if (zkQuorum == null) {
-      zkQuorum = inconf.get(CommonConfigurationKeys.ZK_QUORUM_KEY);
-    }
-    return zkQuorum;
-  }
-
   String getZnode(Configuration conf) {
     String znode =
         conf.get(CommonConfigurationKeys.ZK_PARENT_ZNODE_KEY,
@@ -215,7 +205,7 @@ abstract public class MountpointRenewer {
   }
 
   ZooKeeper getZkClient(Configuration conf) throws IOException {
-    String zkQuorum = getZkQuorum(conf);
+    String zkQuorum = ZKUtil.getZkQuorum(conf, clusterName);
     if (zkQuorum == null) {
       throw new IOException("Failed get zkQuorum. zkQuorum is null.");
     }
