@@ -20,7 +20,10 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY;
-import static org.junit.Assert.*;
+import static org.apache.hadoop.hdfs.server.namenode.NameNode.getRemoteUser;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,9 +32,12 @@ import java.util.Collection;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSTestUtil;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
@@ -212,5 +218,44 @@ public class TestFSNamesystem {
     assertTrue(root.getChildrenList(Snapshot.CURRENT_STATE_ID).isEmpty());
     fsn.imageLoadComplete();
     assertTrue(fsn.isImageLoaded());
+  }
+
+  @Test
+  public void testDeleteWithExistingFileTrash() throws IOException {
+    Configuration conf = new Configuration();
+    MiniDFSCluster cluster = null;
+
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).build();
+      cluster.waitActive();
+      FSNamesystem fsn = cluster.getNamesystem();
+      fsn.forceToTrash = true;
+
+      String src = "/user/" + getRemoteUser().getUserName() + "/b";
+      String src2 = "/user/" + getRemoteUser().getUserName() + "/b/a";
+      DistributedFileSystem hdfs = cluster.getFileSystem();
+      hdfs.create(new Path(src));
+      fsn.delete(src, false);
+      assertTrue(hdfs.getClient()
+          .exists("/user/" + getRemoteUser().getShortUserName()
+              + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+              + "/b"));
+      HdfsFileStatus hdfsFileStatus = hdfs.getClient()
+          .getFileInfo("/user/" + getRemoteUser().getShortUserName()
+              + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+              + "/b");
+      assertTrue(!hdfsFileStatus.isDir());
+
+      hdfs.create(new Path(src2));
+      fsn.delete(src2, false);
+      assertTrue(!hdfs.getClient()
+          .exists("/user/" + getRemoteUser().getShortUserName()
+              + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+              + "/b/a"));
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
   }
 }
