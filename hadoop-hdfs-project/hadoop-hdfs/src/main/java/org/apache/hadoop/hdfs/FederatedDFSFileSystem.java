@@ -245,6 +245,14 @@ public class FederatedDFSFileSystem extends DistributedFileSystem {
       IOException lastIoe = null;
       for (FileSystem childFs : childrenFs) {
         try {
+          // We should not execute childFs.getContentSummary if the path doesn't exist in childFs.
+          if (!childFs.exists(noSchemaPath)) {
+            if (lastIoe == null) {
+              lastIoe = new FileNotFoundException("File does not exist: " + noSchemaPath);
+            }
+            excepted++;
+            continue;
+          }
           ContentSummary oneCs = childFs.getContentSummary(noSchemaPath);
           length += oneCs.getLength();
           fileCount += oneCs.getFileCount();
