@@ -100,7 +100,7 @@ abstract public class FedDFSAdminCommand extends Command {
     static private String allowedChars =
         Shell.WINDOWS ? "[-_./@a-zA-Z0-9 ]" : "[-_./@a-zA-Z0-9]";
 
-    private static final String NAME = "fedchown";
+    private static final String NAME = "chownFed";
     public static final String USAGE = "[-R] [OWNER][:[GROUP]] PATH...";
     public static final String DESCRIPTION =
         "Changes owner and group of a file in all clusters of federation. ";
@@ -175,7 +175,7 @@ abstract public class FedDFSAdminCommand extends Command {
    * just do it at all cluster under the federation.
    */
   protected static class FedchmodCommand extends FedDFSAdminCommand {
-    private static final String NAME = "fedchmod";
+    private static final String NAME = "chmodFed";
     public static final String USAGE =
         "[-R] <MODE[,MODE]... | OCTALMODE> PATH...";
     public static final String DESCRIPTION =
@@ -243,7 +243,7 @@ abstract public class FedDFSAdminCommand extends Command {
    * just do it at all cluster under the federation.
    */
   protected static class FedSetfaclCommand extends FedDFSAdminCommand {
-    private static final String NAME = "fedsetfacl";
+    private static final String NAME = "setfaclFed";
     public static String USAGE = "[-R] [{-b|-k} {-m|-x <acl_spec>} <path>]"
         + "|[--set <acl_spec> <path>]";
     public static String DESCRIPTION = "Sets Access Control Lists (ACLs)"
@@ -356,9 +356,53 @@ abstract public class FedDFSAdminCommand extends Command {
     }
   }
 
+  protected static class FedClearQuotaCommand extends FedDFSAdminCommand {
+
+    private static final String NAME = "clrQuotaFed";
+    public static final String USAGE = "-"+NAME+" <dirname>...<dirname>";
+    public static final String DESCRIPTION = USAGE + ": " +
+        "Clear the quota for each directory <dirName>.\n" +
+        "\t\tFor each directory, attempt to clear the quota. An error will be reported if\n" +
+        "\t\t1. the directory does not exist or is a file, or\n" +
+        "\t\t2. user is not an administrator.\n" +
+        "\t\tIt does not fault if the directory has no quota.";
+
+    CommandFormat cf = new CommandFormat(1, Integer.MAX_VALUE);
+
+    protected FedClearQuotaCommand(Configuration conf) {
+      super(conf);
+    }
+
+    public static boolean matches(String cmd) {
+      return ("-" + NAME).equals(cmd);
+    }
+
+    @Override
+    public String getCommandName() {
+      return NAME;
+    }
+
+    @Override
+    protected void processOptions(LinkedList<String> args) throws IOException {
+      cf.parse(args);
+    }
+
+    @Override
+    protected void processPath(PathData item) throws IOException {
+      if (item.fs instanceof DistributedFileSystem) {
+        ((DistributedFileSystem) item.fs)
+            .setQuota(item.path, HdfsConstants.QUOTA_RESET, HdfsConstants.QUOTA_DONT_SET);
+      } else {
+        throw new IOException(
+            "Can't get DistributedFileSystem instance for uri: "
+                + item.fs.getUri());
+      }
+    }
+  }
+
   protected static class FedSetQuotaCommand extends FedDFSAdminCommand {
 
-    private static final String NAME = "fedsetquota";
+    private static final String NAME = "setQuotaFed";
     public static final String USAGE =
         "-" + NAME + " <quota> <dirname>...<dirname>";
     public static final String DESCRIPTION =
@@ -402,13 +446,110 @@ abstract public class FedDFSAdminCommand extends Command {
             .setQuota(item.path, quota, HdfsConstants.QUOTA_DONT_SET);
       } else {
         throw new IOException(
-            "Can't get DistributedFileSystem instance for uri: ");
+            "Can't get DistributedFileSystem instance for uri: "
+                + item.fs.getUri());
+      }
+    }
+  }
+
+  protected static class FedClearSpaceQuotaCommand extends FedDFSAdminCommand {
+
+    private static final String NAME = "clrSpaceQuotaFed";
+    public static final String USAGE = "-"+NAME+" <dirname>...<dirname>";
+    public static final String DESCRIPTION = USAGE + ": " +
+        "Clear the disk space quota for each directory <dirName>.\n" +
+        "\t\tFor each directory, attempt to clear the quota. An error will be reported if\n" +
+        "\t\t1. the directory does not exist or is a file, or\n" +
+        "\t\t2. user is not an administrator.\n" +
+        "\t\tIt does not fault if the directory has no quota.";
+
+    CommandFormat cf = new CommandFormat(1, Integer.MAX_VALUE);
+
+    protected FedClearSpaceQuotaCommand(Configuration conf) {
+      super(conf);
+    }
+
+    public static boolean matches(String cmd) {
+      return ("-" + NAME).equals(cmd);
+    }
+
+    @Override
+    public String getCommandName() {
+      return NAME;
+    }
+
+    @Override
+    protected void processOptions(LinkedList<String> args) throws IOException {
+      cf.parse(args);
+    }
+
+    @Override
+    protected void processPath(PathData item) throws IOException {
+      if (item.fs instanceof DistributedFileSystem) {
+        ((DistributedFileSystem) item.fs)
+            .setQuota(item.path, HdfsConstants.QUOTA_DONT_SET, HdfsConstants.QUOTA_RESET);
+      } else {
+        throw new IOException(
+            "Can't get DistributedFileSystem instance for uri: "
+                + item.fs.getUri());
+      }
+    }
+  }
+
+  protected static class FedSetSpaceQuotaCommand extends FedDFSAdminCommand {
+
+    private static final String NAME = "setSpaceQuotaFed";
+    public static final String USAGE =
+        "-" + NAME + " <quota> <dirname>...<dirname>";
+    public static final String DESCRIPTION =
+        "-setQuota <quota> <dirname>...<dirname>: "
+            + "Set the disk space quota <quota> for each directory <dirName>.\n"
+            + "\t\tThe space quota is a long integer that puts a hard limit\n"
+            + "\t\ton the number of names in the directory tree\n"
+            + "\t\tFor each directory, attempt to set the quota. An error will be reported if\n"
+            + "\t\t1. N is not a positive integer, or\n"
+            + "\t\t2. User is not an administrator, or\n"
+            + "\t\t3. The directory does not exist or is a file.\n"
+            + "\t\tNote: A quota of 1 would force the directory to remain empty.\n";
+
+    CommandFormat cf = new CommandFormat(2, Integer.MAX_VALUE);
+
+    private long quota = -1;
+
+    protected FedSetSpaceQuotaCommand(Configuration conf) {
+      super(conf);
+    }
+
+    public static boolean matches(String cmd) {
+      return ("-" + NAME).equals(cmd);
+    }
+
+    @Override
+    public String getCommandName() {
+      return NAME;
+    }
+
+    @Override
+    protected void processOptions(LinkedList<String> args) throws IOException {
+      cf.parse(args);
+      quota = Long.parseLong(args.remove(0));
+    }
+
+    @Override
+    protected void processPath(PathData item) throws IOException {
+      if (item.fs instanceof DistributedFileSystem) {
+        ((DistributedFileSystem) item.fs)
+            .setQuota(item.path, HdfsConstants.QUOTA_DONT_SET, quota);
+      } else {
+        throw new IOException(
+            "Can't get DistributedFileSystem instance for uri: "
+                + item.fs.getUri());
       }
     }
   }
 
   protected static class FedMkdirs extends FedDFSAdminCommand {
-    public static final String NAME = "fedmkdirs";
+    public static final String NAME = "mkdirsFed";
     public static final String USAGE = "[-p] <path> ...";
     public static final String DESCRIPTION =
         "Create a directory in specified location in all clusters of federation."

@@ -444,11 +444,16 @@ public class DFSAdmin extends FsShell {
     "\t[-allowSnapshot <snapshotDir>]\n" +
     "\t[-disallowSnapshot <snapshotDir>]\n" +
     "\t[-shutdownDatanode <datanode_host:ipc_port> [upgrade]]\n" +
-    "\t[-getDatanodeInfo <datanode_host:ipc_port>]\n" + "\t[-metasave filename]\n"
-        + "\t[-setStoragePolicy path policyName]\n"
-        + "\t[-getStoragePolicy path]\n" + "\t[-updateMptOnZk\n"
-        + "\t[-fedchown\n" + "\t[-fedchmod\n" + "\t[-fedsetquota\n"
-        + "\t[-fedsetfacl\n" + "\t[-fedmkdir\n" +
+    "\t[-getDatanodeInfo <datanode_host:ipc_port>]\n" +
+    "\t[-metasave filename]\n" +
+    "\t[-setStoragePolicy path policyName]\n" +
+    "\t[-getStoragePolicy path]\n" +
+    "\t[-updateMptOnZk\n" +
+    "\t[-fedchown\n" +
+    "\t[-fedchmod\n" +
+    "\t[-fedsetquota\n" +
+    "\t[-fedsetfacl\n" +
+    "\t[-fedmkdir\n" +
     "\t[-help [cmd]]\n";
 
   /**
@@ -1119,8 +1124,16 @@ public class DFSAdmin extends FsShell {
       System.out.println(FedDFSAdminCommand.FedchownCommand.DESCRIPTION);
     } else if (FedDFSAdminCommand.FedchmodCommand.matches(cmd)) {
       System.out.println(FedDFSAdminCommand.FedchmodCommand.DESCRIPTION);
+    } else if (FedDFSAdminCommand.FedClearQuotaCommand.matches(cmd)) {
+      System.out.println(FedDFSAdminCommand.FedClearQuotaCommand.DESCRIPTION);
     } else if (FedDFSAdminCommand.FedSetQuotaCommand.matches(cmd)) {
       System.out.println(FedDFSAdminCommand.FedSetQuotaCommand.DESCRIPTION);
+    } else if (FedDFSAdminCommand.FedClearSpaceQuotaCommand.matches(cmd)) {
+      System.out
+          .println(FedDFSAdminCommand.FedClearSpaceQuotaCommand.DESCRIPTION);
+    } else if (FedDFSAdminCommand.FedSetSpaceQuotaCommand.matches(cmd)) {
+      System.out
+          .println(FedDFSAdminCommand.FedSetSpaceQuotaCommand.DESCRIPTION);
     } else if (FedDFSAdminCommand.FedSetfaclCommand.matches(cmd)) {
       System.out.println(FedDFSAdminCommand.FedSetfaclCommand.DESCRIPTION);
     } else if (FedDFSAdminCommand.FedMkdirs.matches(cmd)) {
@@ -1963,8 +1976,17 @@ public class DFSAdmin extends FsShell {
       } else if (FedDFSAdminCommand.FedSetfaclCommand.matches(cmd)) {
         exitCode = new FedDFSAdminCommand.FedSetfaclCommand(getConf())
             .run(Arrays.copyOfRange(argv, 1, argv.length));
+      } else if (FedDFSAdminCommand.FedClearQuotaCommand.matches(cmd)) {
+        exitCode = new FedDFSAdminCommand.FedClearQuotaCommand(getConf())
+            .run(Arrays.copyOfRange(argv, 1, argv.length));
       } else if (FedDFSAdminCommand.FedSetQuotaCommand.matches(cmd)) {
         exitCode = new FedDFSAdminCommand.FedSetQuotaCommand(getConf())
+            .run(Arrays.copyOfRange(argv, 1, argv.length));
+      } else if (FedDFSAdminCommand.FedClearSpaceQuotaCommand.matches(cmd)) {
+        exitCode = new FedDFSAdminCommand.FedClearSpaceQuotaCommand(getConf())
+            .run(Arrays.copyOfRange(argv, 1, argv.length));
+      } else if (FedDFSAdminCommand.FedSetSpaceQuotaCommand.matches(cmd)) {
+        exitCode = new FedDFSAdminCommand.FedSetSpaceQuotaCommand(getConf())
             .run(Arrays.copyOfRange(argv, 1, argv.length));
       } else if (FedDFSAdminCommand.FedMkdirs.matches(cmd)) {
         exitCode = new FedDFSAdminCommand.FedMkdirs(getConf())

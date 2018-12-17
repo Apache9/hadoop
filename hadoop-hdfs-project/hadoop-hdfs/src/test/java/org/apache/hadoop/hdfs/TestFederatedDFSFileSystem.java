@@ -739,11 +739,10 @@ public class TestFederatedDFSFileSystem extends TestFederated {
     FederatedDFSFileSystem dfs = (FederatedDFSFileSystem) fs;
 
     FileStatus status;
-    // test fedchown
-
+    // test chownFed
     FsShell shell = new DFSAdmin(conf);
     shell.run(
-        new String[] { "-fedchown", "testFederationMethod:testFederationMethod",
+        new String[] { "-chownFed", "testFederationMethod:testFederationMethod",
             shellPatha.toString() });
 
     status = fs1.getFileStatus(shellPatha);
@@ -751,14 +750,14 @@ public class TestFederatedDFSFileSystem extends TestFederated {
     status = fs2.getFileStatus(shellPatha);
     assertEquals("testFederationMethod", status.getOwner());
 
-    // test fedchmod
-    shell.run(new String[] { "-fedchmod", "002", shellPatha.toString() });
+    // test chmodFed
+    shell.run(new String[] { "-chmodFed", "002", shellPatha.toString() });
     status = fs1.getFileStatus(shellPatha);
     assertEquals(2, status.getPermission().toShort());
     status = fs2.getFileStatus(shellPatha);
     assertEquals(2, status.getPermission().toShort());
 
-    // test fedsetfacl
+    // test setfaclFed
     List<AclEntry> entries;
     List<AclEntry> aclEntries;
     FsPermission perm;
@@ -768,7 +767,7 @@ public class TestFederatedDFSFileSystem extends TestFederated {
         aclEntry(ACCESS, GROUP, "bar", ALL), aclEntry(ACCESS, MASK, ALL),
         aclEntry(ACCESS, OTHER, ALL));
 
-    shell.run(new String[] { "-fedsetfacl", "--set",
+    shell.run(new String[] { "-setfaclFed", "--set",
         "user::rwx,user:foo:rwx,group::rwx,group:bar:rwx,mask::rwx,other::rwx",
         shellPatha.toString() });
     perm = fs1.getFileStatus(shellPatha).getPermission();
@@ -780,14 +779,29 @@ public class TestFederatedDFSFileSystem extends TestFederated {
     aclEntries = AclUtil.getAclFromPermAndEntries(perm, aclEntries);
     assertEquals(entries, aclEntries);
 
-    // test fedsetquota
-    shell.run(new String[] { "-fedsetquota", "5", shellPatha.toString() });
+    // test setQuotaFed
+    shell.run(new String[] { "-setQuotaFed", "5", shellPatha.toString() });
     assertEquals(5, fs1.getQuotaSummary(shellPatha).getQuota());
     assertEquals(5, fs2.getQuotaSummary(shellPatha).getQuota());
 
-    // test fedmkdirs
+    // test clrQuotaFed
+    shell.run(new String[] { "-clrQuotaFed", shellPatha.toString() });
+    assertEquals(-1, fs1.getQuotaSummary(shellPatha).getQuota());
+    assertEquals(-1, fs2.getQuotaSummary(shellPatha).getQuota());
+
+    // test setSpaceQuotaFed
+    shell.run(new String[] { "-setSpaceQuotaFed", "5", shellPatha.toString() });
+    assertEquals(5, fs1.getQuotaSummary(shellPatha).getSpaceQuota());
+    assertEquals(5, fs2.getQuotaSummary(shellPatha).getSpaceQuota());
+
+    // test clrQuotaFed
+    shell.run(new String[] { "-clrSpaceQuotaFed", shellPatha.toString() });
+    assertEquals(-1, fs1.getQuotaSummary(shellPatha).getSpaceQuota());
+    assertEquals(-1, fs2.getQuotaSummary(shellPatha).getSpaceQuota());
+
+    // test mkdirsFed
     Path shellDir = new Path("/testFederationCommand/shellDir/mkdirs");
-    shell.run(new String[] { "-fedmkdirs", "-p", shellDir.toString() });
+    shell.run(new String[] { "-mkdirsFed", "-p", shellDir.toString() });
     assertTrue(fs1.exists(shellDir));
     assertTrue(fs2.exists(shellDir));
   }
