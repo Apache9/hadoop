@@ -108,19 +108,13 @@ public class ContainersMonitorImpl extends AbstractService implements
     LOG.info(" Using ResourceCalculatorProcessTree : "
         + this.processTreeClass);
 
-    double memoryMbOveruseRatio = conf.getDouble(YarnConfiguration.NM_PMEM_MB_OVERUSE_RATIO,
-        YarnConfiguration.DEFAULT_NM_PMEM_MB_OVERUSE_RATIO);
-
-    long configuredPMemForContainers = (int) (memoryMbOveruseRatio * conf.getLong(
+    long configuredPMemForContainers = conf.getLong(
         YarnConfiguration.NM_PMEM_MB,
-        YarnConfiguration.DEFAULT_NM_PMEM_MB)) * 1024 * 1024l;
+        YarnConfiguration.DEFAULT_NM_PMEM_MB) * 1024 * 1024l;
 
-    double vCoresOveruseRatio = conf.getDouble(YarnConfiguration.NM_VCORES_OVERUSE_RATIO,
-        YarnConfiguration.DEFAULT_NM_VCORES_OVERUSE_RATIO);
-
-    long configuredVCoresForContainers = (int) (vCoresOveruseRatio * conf.getLong(
+    long configuredVCoresForContainers = conf.getLong(
         YarnConfiguration.NM_VCORES,
-        YarnConfiguration.DEFAULT_NM_VCORES));
+        YarnConfiguration.DEFAULT_NM_VCORES);
 
     long configuredNumsOfThreadForContainers = conf.getLong(
             YarnConfiguration.MAX_NUMS_OF_THREAD,

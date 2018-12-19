@@ -32,6 +32,7 @@ message RegisterNodeManagerRequestProto {
   optional string nm_version = 5;
   repeated NMContainerStatusProto container_statuses = 6;
   repeated ApplicationIdProto runningApplications = 7;
+  optional bool isOverUse = 108;
 }
 
 message RegisterNodeManagerResponseProto {

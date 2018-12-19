@@ -86,7 +86,7 @@ public class TestProtocolRecords {
     RegisterNodeManagerRequest request =
         RegisterNodeManagerRequest.newInstance(
           NodeId.newInstance("1.1.1.1", 1000), 8080,
-            Resource.newInstance(1024, 1), "NM-version-id", reports,
+            Resource.newInstance(1024, 1), false, "NM-version-id", reports,
             Arrays.asList(appId));
     RegisterNodeManagerRequest requestProto =
         new RegisterNodeManagerRequestPBImpl(

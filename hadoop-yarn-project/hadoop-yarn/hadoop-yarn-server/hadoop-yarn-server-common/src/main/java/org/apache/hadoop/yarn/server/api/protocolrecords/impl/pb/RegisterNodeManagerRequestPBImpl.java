@@ -115,8 +115,7 @@ public class RegisterNodeManagerRequestPBImpl extends RegisterNodeManagerRequest
     }
     viaProto = false;
   }
-    
-  
+
   @Override
   public Resource getResource() {
     RegisterNodeManagerRequestProtoOrBuilder p = viaProto ? proto : builder;
@@ -136,6 +135,21 @@ public class RegisterNodeManagerRequestPBImpl extends RegisterNodeManagerRequest
     if (resource == null) 
       builder.clearResource();
     this.resource = resource;
+  }
+
+  @Override
+  public boolean getIsOverUse() {
+    RegisterNodeManagerRequestProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasIsOverUse()) {
+      return true;
+    }
+    return (p.getIsOverUse());
+  }
+
+  @Override
+  public void setIsOverUse(boolean isOverUse) {
+    maybeInitBuilder();
+    builder.setIsOverUse(isOverUse);
   }
 
   @Override

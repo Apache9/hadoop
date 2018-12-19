@@ -59,7 +59,7 @@ public class TestResourceTrackerOnHA extends ProtocolHATestBase{
 
     // make sure registerNodeManager works when failover happens
     RegisterNodeManagerRequest request =
-        RegisterNodeManagerRequest.newInstance(nodeId, 0, resource,
+        RegisterNodeManagerRequest.newInstance(nodeId, 0, resource, false,
             YarnVersionInfo.getVersion(), null, null);
     resourceTracker.registerNodeManager(request);
     Assert.assertTrue(waitForNodeManagerToConnect(10000, nodeId));

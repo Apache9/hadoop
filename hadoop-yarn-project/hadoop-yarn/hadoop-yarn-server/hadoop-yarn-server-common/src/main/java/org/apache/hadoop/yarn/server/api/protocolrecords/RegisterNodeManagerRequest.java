@@ -28,13 +28,14 @@ import org.apache.hadoop.yarn.util.Records;
 public abstract class RegisterNodeManagerRequest {
 
   public static RegisterNodeManagerRequest newInstance(NodeId nodeId,
-      int httpPort, Resource resource, String nodeManagerVersionId,
-      List<NMContainerStatus> containerStatuses,
+      int httpPort, Resource resource, boolean isOverUse,
+      String nodeManagerVersionId, List<NMContainerStatus> containerStatuses,
       List<ApplicationId> runningApplications) {
     RegisterNodeManagerRequest request =
         Records.newRecord(RegisterNodeManagerRequest.class);
     request.setHttpPort(httpPort);
     request.setResource(resource);
+    request.setIsOverUse(isOverUse);
     request.setNodeId(nodeId);
     request.setNMVersion(nodeManagerVersionId);
     request.setContainerStatuses(containerStatuses);
@@ -45,6 +46,7 @@ public abstract class RegisterNodeManagerRequest {
   public abstract NodeId getNodeId();
   public abstract int getHttpPort();
   public abstract Resource getResource();
+  public abstract boolean getIsOverUse();
   public abstract String getNMVersion();
   public abstract List<NMContainerStatus> getNMContainerStatuses();
   
@@ -64,6 +66,7 @@ public abstract class RegisterNodeManagerRequest {
   public abstract void setNodeId(NodeId nodeId);
   public abstract void setHttpPort(int port);
   public abstract void setResource(Resource resource);
+  public abstract void setIsOverUse(boolean isOveruse);
   public abstract void setNMVersion(String version);
   public abstract void setContainerStatuses(
       List<NMContainerStatus> containerStatuses);

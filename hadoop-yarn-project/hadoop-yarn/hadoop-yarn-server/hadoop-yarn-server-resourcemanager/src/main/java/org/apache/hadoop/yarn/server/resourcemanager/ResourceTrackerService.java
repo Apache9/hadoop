@@ -102,6 +102,9 @@ public class ResourceTrackerService extends AbstractService implements
   private int minAllocMb;
   private int minAllocVcores;
 
+  private double nMVCoresOveruseRatio;
+  private double nMMemoryMbOveruseRatio;
+
   static {
     resync.setNodeAction(NodeAction.RESYNC);
 
@@ -150,6 +153,16 @@ public class ResourceTrackerService extends AbstractService implements
     minimumNodeManagerVersion = conf.get(
         YarnConfiguration.RM_NODEMANAGER_MINIMUM_VERSION,
         YarnConfiguration.DEFAULT_RM_NODEMANAGER_MINIMUM_VERSION);
+
+    nMVCoresOveruseRatio = conf.getDouble(
+            YarnConfiguration.NM_VCORES_OVERUSE_RATIO,
+            YarnConfiguration.DEFAULT_NM_VCORES_OVERUSE_RATIO
+    );
+
+    nMMemoryMbOveruseRatio = conf.getDouble(
+            YarnConfiguration.NM_PMEM_MB_OVERUSE_RATIO,
+            YarnConfiguration.DEFAULT_NM_PMEM_MB_OVERUSE_RATIO
+    );
 
     super.serviceInit(conf);
   }
@@ -308,6 +321,20 @@ public class ResourceTrackerService extends AbstractService implements
         .getCurrentKey());
     response.setNMTokenMasterKey(nmTokenSecretManager
         .getCurrentKey());    
+
+    // Support resource overuse in resourcemanager
+    boolean isOverUse = request.getIsOverUse();
+    if (!isOverUse) {
+      int overUseVirtualCores = (int) (capability.getVirtualCores() * nMVCoresOveruseRatio);
+      int overUseMemoryMb = (int) (capability.getMemory() * nMMemoryMbOveruseRatio);
+      capability.setVirtualCores(overUseVirtualCores);
+      capability.setMemory(overUseMemoryMb);
+      String message =
+              "NodeManager from node " + host + "(cmPort: " + cmPort + " httpPort: "
+                      + httpPort + ") " + "registered with overused capability: " + capability
+                      + ", assigned nodeId " + nodeId;
+      LOG.info(message);
+    }
 
     RMNode rmNode = new RMNodeImpl(nodeId, rmContext, host, cmPort, httpPort,
         resolve(host), capability, nodeManagerVersion);

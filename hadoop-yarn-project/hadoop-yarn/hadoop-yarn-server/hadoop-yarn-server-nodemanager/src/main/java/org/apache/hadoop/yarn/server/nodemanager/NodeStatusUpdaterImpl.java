@@ -134,25 +134,17 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
         conf.getInt(
             YarnConfiguration.NM_PMEM_MB, YarnConfiguration.DEFAULT_NM_PMEM_MB);
 
-    double memoryMbOveruseRatio = conf.getDouble(YarnConfiguration.NM_PMEM_MB_OVERUSE_RATIO,
-        YarnConfiguration.DEFAULT_NM_PMEM_MB_OVERUSE_RATIO);
-    int overUseMemoryMb = (int)(memoryMb * memoryMbOveruseRatio);
-
     float vMemToPMem =
         conf.getFloat(
             YarnConfiguration.NM_VMEM_PMEM_RATIO, 
-            YarnConfiguration.DEFAULT_NM_VMEM_PMEM_RATIO); 
-    int virtualMemoryMb = (int)Math.ceil(overUseMemoryMb * vMemToPMem);
+            YarnConfiguration.DEFAULT_NM_VMEM_PMEM_RATIO);
+    int virtualMemoryMb = (int)Math.ceil(memoryMb * vMemToPMem);
 
     int virtualCores =
         conf.getInt(
             YarnConfiguration.NM_VCORES, YarnConfiguration.DEFAULT_NM_VCORES);
 
-    double vCoresOveruseRatio = conf.getDouble(YarnConfiguration.NM_VCORES_OVERUSE_RATIO,
-        YarnConfiguration.DEFAULT_NM_VCORES_OVERUSE_RATIO);
-    int overUseVirtualCores = (int)(virtualCores * vCoresOveruseRatio);
-
-    this.totalResource = Resource.newInstance(overUseMemoryMb, overUseVirtualCores);
+    this.totalResource = Resource.newInstance(memoryMb, virtualCores);
     metrics.addResource(totalResource);
     this.tokenKeepAliveEnabled = isTokenKeepAliveEnabled(conf);
     this.tokenRemovalDelayMs =
@@ -182,10 +174,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     }
     super.serviceInit(conf);
     LOG.info("Initialized nodemanager for " + nodeId + ":" +
-        " physical-memory=" + memoryMb + " physical-memory-overuse-ratio=" + memoryMbOveruseRatio +
-        " overuse-physical-memory=" + overUseMemoryMb + " virtual-memory=" + virtualMemoryMb +
-        " virtual-cores=" + virtualCores + " virtual-cores-overuse-ratio=" + vCoresOveruseRatio +
-        " overuse-virtual-cores=" + overUseVirtualCores);
+        " physical-memory=" + memoryMb + " virtual-memory=" + virtualMemoryMb +
+        " virtual-cores=" + virtualCores);
   }
 
   @Override
@@ -260,7 +250,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
       throws YarnException, IOException {
     List<NMContainerStatus> containerReports = getNMContainerStatuses();
     RegisterNodeManagerRequest request =
-        RegisterNodeManagerRequest.newInstance(nodeId, httpPort, totalResource,
+        RegisterNodeManagerRequest.newInstance(nodeId, httpPort, totalResource, false,
           nodeManagerVersionId, containerReports, getRunningApplications());
     if (containerReports != null) {
       LOG.info("Registering with RM using containers :" + containerReports);
