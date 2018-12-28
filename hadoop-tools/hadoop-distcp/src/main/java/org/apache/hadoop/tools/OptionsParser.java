@@ -114,6 +114,10 @@ public class OptionsParser {
       option.setIgnoreDeleted(true);
     }
 
+    if (command.hasOption(DistCpOptionSwitch.MKDIRS_FIRST.getSwitch())) {
+      option.setMkdirsFirst(true);
+    }
+
     if (command.hasOption(DistCpOptionSwitch.OVERWRITE.getSwitch())) {
       option.setOverwrite(true);
     }

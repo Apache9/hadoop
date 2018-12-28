@@ -46,6 +46,7 @@ public class DistCpOptions {
   private boolean append = false;
   private boolean skipCRC = false;
   private boolean blocking = true;
+  private boolean mkdirsFirst = false;
   private TARGET_PARENT targetParent = TARGET_PARENT.DEFAULT;
   private String parentOwner = null;
   private String parentGroup = null;
@@ -223,6 +224,14 @@ public class DistCpOptions {
     this.ignoreDeleted = ignoreDeleted;
   }
 
+  public boolean shouldMkdirsFirst() { return mkdirsFirst; }
+
+  /**
+   * Set if mkdirs all target dirs before job submit.
+   * @param mkdirsFirst - boolean switch
+   */
+  public void setMkdirsFirst(boolean mkdirsFirst) { this.mkdirsFirst = mkdirsFirst; }
+
   /**
    * Should target files missing in source should be deleted?
    *
@@ -396,6 +405,8 @@ public class DistCpOptions {
   public Iterator<FileAttribute> preserveAttributes() {
     return preserveStatus.iterator();
   }
+
+  public EnumSet<FileAttribute> getPreserveStatus() { return preserveStatus; }
 
   public static enum TARGET_PARENT {
     DEFAULT, SPECIFY, MIRROR, CREATE
@@ -668,6 +679,8 @@ public class DistCpOptions {
         String.valueOf(skipOpen));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.IGNORE_DELETED,
         String.valueOf(ignoreDeleted));
+    DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.MKDIRS_FIRST,
+        String.valueOf(mkdirsFirst));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.DELETE_MISSING,
         String.valueOf(deleteMissing));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.OVERWRITE,

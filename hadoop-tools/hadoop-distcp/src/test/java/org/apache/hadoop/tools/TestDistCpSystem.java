@@ -32,6 +32,8 @@ import java.util.UUID;
 
 import junit.framework.TestCase;
 
+import org.apache.commons.logging.LogFactory;
+import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -40,7 +42,10 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.tools.util.DistCpUtils;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.log4j.Level;
 
 /**
  * A JUnit test for copying files recursively.
@@ -446,6 +451,87 @@ public class TestDistCpSystem extends TestCase {
     };
 
     testPreserveUserHelper(srcfiles, dstfiles, true, true, true);
+  }
+
+  public void testMkdirsFirst() throws Exception {
+    FileEntry srcDir = new FileEntry(SRCDAT, true);
+    FileEntry[] srcfiles = { srcDir,
+        new FileEntry(SRCDAT + "/file1", false),
+        new FileEntry(SRCDAT + "/dir1", true),
+        new FileEntry(SRCDAT + "/dir1/file2", false),
+        new FileEntry(SRCDAT + "/dir1/dir2", true) };
+    final String testSrc = "/testdir/";
+    MiniDFSCluster cluster1 = null;
+    MiniDFSCluster cluster2 = null;
+    try {
+      if (LogFactory.getLog(DistCp.class) instanceof Log4JLogger) {
+        System.out.println("stdout: Log is log4j");
+        ((Log4JLogger)LogFactory.getLog(DistCp.class)).getLogger().setLevel(Level.ALL);
+      }
+      Configuration conf = new Configuration();
+      conf.set("dfs.namenode.acls.enabled", "true");
+      cluster1 = setupNewDFSCluster(conf);
+      cluster2 = setupNewDFSCluster(conf);
+
+      FileSystem srcFs = cluster1.getFileSystem();
+      FileSystem dstFs = cluster2.getFileSystem();
+      srcFs.mkdirs(new Path(testSrc));
+      createFiles(srcFs, testSrc, srcfiles);
+      Path dir1 = new Path(testSrc+SRCDAT+"/dir1");
+      assertTrue(srcFs.exists(dir1)&&srcFs.isDirectory(dir1));
+      srcFs.setOwner(dir1,"tstown","tstgrp");
+      srcFs.setPermission(dir1,new FsPermission((short)00754));
+      //List<AclEntry> aclEntries = srcFs.getAclStatus(dir1).getEntries();// does not have u,g,o
+      List<AclEntry> aclEntries = DistCpUtils.getAcl(srcFs, srcFs.getFileStatus(dir1));
+      aclEntries.add(AclEntry.parseAclEntry("user:u_hdfs:rwx", true));
+      srcFs.setAcl(dir1,aclEntries);
+      dstFs.mkdirs(new Path(testSrc)); //can ignore dest dir
+      // test -mkdirsFirst && -p work
+      String[] args = new String[] { "-mkdirsFirst", "-pugpa", srcFs.getUri()+""+testSrc + SRCDAT,
+              dstFs.getUri()+testSrc };
+      DistCp distCp;
+      DistCpOptions inputop = OptionsParser.parse(args);
+      // the mkdirsFirst option should be set
+      assertTrue(inputop.shouldMkdirsFirst());
+      assertTrue(inputop.shouldPreserve(DistCpOptions.FileAttribute.USER));
+      assertTrue(inputop.shouldPreserve(DistCpOptions.FileAttribute.GROUP));
+      assertTrue(inputop.shouldPreserve(DistCpOptions.FileAttribute.PERMISSION));
+      assertTrue(inputop.shouldPreserve(DistCpOptions.FileAttribute.ACL));
+
+      distCp = new DistCp(conf,inputop);
+      // the method to be reflect
+      Method createJob = DistCp.class.getDeclaredMethod("createJob");
+      createJob.setAccessible(true);
+      Job job = (Job) createJob.invoke(distCp);
+      Method createInputFileListing = DistCp.class.getDeclaredMethod("createInputFileListing",Job.class);
+      createInputFileListing.setAccessible(true);
+      Path listFile = (Path) createInputFileListing.invoke(distCp, job);
+      Method createAllTargetDirs = DistCp.class.getDeclaredMethod("createAllTargetDirs",Job.class,Path.class);
+      createAllTargetDirs.setAccessible(true);
+      createAllTargetDirs.invoke(distCp, job, listFile);
+      // before run, the target dir must exist.
+      Path targetdir1 = new Path(dstFs.getUri()+testSrc+SRCDAT+"/dir1");
+      assertTrue(dstFs.exists(targetdir1));
+      // check preserved owner group permission acl
+      FileStatus status = dstFs.getFileStatus(targetdir1);
+      List<AclEntry> tgtacllist = dstFs.getAclStatus(targetdir1).getEntries();
+      Set<AclEntry> set = new HashSet<>(DistCpUtils.getAcl(dstFs,dstFs.getFileStatus(targetdir1)));
+      assertTrue(status.getOwner().equals("tstown"));
+      assertTrue(status.getGroup().equals("tstgrp"));
+      assertTrue(status.getPermission().equals(srcFs.getFileStatus(dir1).getPermission()));
+      assertTrue(set.containsAll(aclEntries));
+      // run distcp and the files are copied to target Fs.
+      ToolRunner.run(conf, distCp, args);
+      assertTrue(dstFs.exists(targetdir1));
+      assertTrue(dstFs.exists(new Path(targetdir1,"file2")));
+    } finally {
+      if (cluster1 != null) {
+        cluster1.shutdown();
+      }
+      if (cluster2 != null) {
+        cluster2.shutdown();
+      }
+    }
   }
 
 }

@@ -96,7 +96,9 @@ public class DistCpConstants {
 
   /* Boolean to indicate whether the target of distcp exists. */
   public static final String CONF_LABEL_TARGET_PATH_EXISTS = "distcp.target.path.exists";
-  
+
+  /* Boolean to indicate whether create all target dirs before job submit */
+  public static final String CONF_LABEL_MKDIRS_FIRST = "distcp.mkdirs.first";
   /**
    * DistCp job id for consumers of the Disctp 
    */

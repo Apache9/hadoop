@@ -83,6 +83,7 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   private boolean syncFolders = false;
   private boolean skipOpen = false;
   private boolean ignoreDeleted = false;
+  private boolean mkdirsFirst = false;
   private boolean ignoreFailures = false;
   private boolean skipCrc = false;
   private boolean overWrite = false;
@@ -112,6 +113,7 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
     ignoreDeleted =
         conf.getBoolean(DistCpOptionSwitch.IGNORE_DELETED.getConfigLabel(),
             false);
+    mkdirsFirst = conf.getBoolean(DistCpOptionSwitch.MKDIRS_FIRST.getConfigLabel(), false);
     ignoreFailures = conf.getBoolean(DistCpOptionSwitch.IGNORE_FAILURES.getConfigLabel(), false);
     skipCrc = conf.getBoolean(DistCpOptionSwitch.SKIP_CRC.getConfigLabel(), false);
     overWrite = conf.getBoolean(DistCpOptionSwitch.OVERWRITE.getConfigLabel(), false);
@@ -263,6 +265,11 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
       }
 
       if (sourceCurrStatus.isDirectory()) {
+        if (mkdirsFirst && targetFS.exists(target)) {
+          // the target(is a Dir) has been created before job submit.
+          incrementCounter(context, Counter.COPY, 1);
+          return;
+        }
         createTargetDirsWithRetry(description, target, context);
         return;
       }

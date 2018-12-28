@@ -29,6 +29,8 @@ import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclUtil;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -185,6 +187,10 @@ public class DistCp extends Configured implements Tool {
       // check inputoptions with -pb (blocksize) or skipcrccheck
       if(listFile != null) {
         recheckOptions(job);
+        // before job copy files, create all target dirs first.
+        if(inputOptions.shouldMkdirsFirst()) {
+          createAllTargetDirs(job, listFile);
+        }
       }
 
       job.submit();
@@ -710,6 +716,34 @@ public class DistCp extends Configured implements Tool {
     if (!matchBlockSize) {
       throw new BlockSizeNotMatchException("SourcePath/Files and TargetPath BlockSize not Match." +
           "Try use -pb or -skipcrccheck.");
+    }
+  }
+
+  protected void createAllTargetDirs(Job job, Path listFile) throws Exception {
+    Path target = inputOptions.getTargetPath();
+    FileSystem tgtFs = target.getFileSystem(getConf());
+    target = target.makeQualified(tgtFs.getUri(),tgtFs.getWorkingDirectory());
+    CopyListingFileStatus srcFileStatus = new CopyListingFileStatus();
+    Text srcRelPath = new Text();
+    SequenceFile.Reader reader = null;
+    try {
+      reader = new SequenceFile.Reader(job.getConfiguration(),
+                                       SequenceFile.Reader.file(listFile));
+      while (reader.next(srcRelPath, srcFileStatus)) {
+        if(srcFileStatus.isDirectory()) {
+          Path targetDir = new Path(target + srcRelPath.toString());
+          if (!tgtFs.exists(targetDir)) {
+            tgtFs.mkdirs(targetDir);
+            LOG.debug("mkdirs: "+targetDir);
+          }
+          DistCpUtils.preserve(tgtFs, targetDir, srcFileStatus,
+                               inputOptions.getPreserveStatus(),
+                               inputOptions.shouldPreserveRawXattrs());
+          LOG.debug("preserve: "+targetDir);
+        }
+      }
+    } finally {
+      IOUtils.closeStream(reader);
     }
   }
 }

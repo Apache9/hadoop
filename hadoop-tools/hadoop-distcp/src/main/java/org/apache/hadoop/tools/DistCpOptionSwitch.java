@@ -44,6 +44,15 @@ public enum DistCpOptionSwitch {
               "<mirror> and <specified>")),
 
   /**
+   * Use -mkdirsFirst to create all target dirs before job submit. If -p[u|g|p|a] flag is
+   * enabled, the dirs [owner|group|permission|acl] will be preserved at the same time.
+   */
+  MKDIRS_FIRST(DistCpConstants.CONF_LABEL_MKDIRS_FIRST,
+      new Option("mkdirsFirst", false, "Use -mkdirsFirst to create " +
+          "all target dirs before job submit. If -p[u|g|p|a] flag is enabled, " +
+          "the dirs [owner|group|permission|acl] will be preserved at the same time.")),
+
+  /**
    * Ignores any failures during copy, and continues with rest.
    * Logs failures in a file
    */
