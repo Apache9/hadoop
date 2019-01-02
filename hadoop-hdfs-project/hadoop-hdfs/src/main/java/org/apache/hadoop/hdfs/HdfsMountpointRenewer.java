@@ -5,6 +5,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.viewfs.Constants;
 import org.apache.hadoop.fs.viewfs.MountpointRenewer;
 import org.apache.hadoop.hdfs.server.namenode.ha.ZkConfiguredFailoverProxyProvider;
+import org.apache.hadoop.util.StringUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -24,29 +25,37 @@ public class HdfsMountpointRenewer extends MountpointRenewer {
       byte[] zkData) throws IOException {
     Map<String, String> newConf =
         deserializeString2Mountpoint(new String(zkData));
-    Map<String, String> originalConf = getMountPointEntries(conf);
-    // new mount table should contain all mount table entries in original conf.
-    verify(originalConf, newConf);
+    Map<String, String> originalMountpoint = getMountPointEntries(conf);
+    // newConf should contain all mount points in original conf.
+    verify(originalMountpoint, newConf);
+    // set entries from newConf to conf in incremental mode.
     Iterator<Map.Entry<String, String>> iter = newConf.entrySet().iterator();
     while (iter.hasNext()) {
       Map.Entry<String, String> kv = iter.next();
-      conf.set(kv.getKey(), kv.getValue());
+      String key = kv.getKey();
+      String value = kv.getValue();
+      if (conf.get(key) == null) {
+        conf.set(key, value);
+      } else if (key.equals(DFSConfigKeys.DFS_NAMESERVICES)) {
+        Set<String> nsSet = new HashSet<String>();
+        nsSet.addAll(conf.getStringCollection(key));
+        nsSet.addAll(StringUtils.getStringCollection(value));
+        conf.set(key, Joiner.on(",").skipNulls().join(nsSet));
+      }
     }
   }
 
-  // new mount table should contain all entries in original conf.
-  public void verify(Map<String,String> originalConf,
+  // newConf should be a super set of original mount point.
+  public void verify(Map<String,String> originalMountpoint,
       Map<String,String> newConf) throws IOException {
     Iterator<Map.Entry<String, String>> iter =
-        originalConf.entrySet().iterator();
+        originalMountpoint.entrySet().iterator();
     while (iter.hasNext()) {
       Map.Entry<String, String> kv = iter.next();
       if (!kv.getValue().equals(newConf.get(kv.getKey()))) {
-        LOG.warn("New mount point table is invalid since " + kv.getKey()
-            + " is not contained.");
         throw new IOException(
-            "New mount point table is invalid since " + kv.getKey()
-                + " is not contained.");
+            "New mount point table is invalid since " + kv.getKey() + "=" + kv
+                .getValue() + " is not contained.");
       }
     }
   }
@@ -152,14 +161,7 @@ public class HdfsMountpointRenewer extends MountpointRenewer {
       }
       String key = kv.substring(0, splitIdx);
       String val = kv.substring(splitIdx + 1);
-      if (conf.get(key) == null) {
-        conf.put(key, val);
-      } else if (key.equals(DFSConfigKeys.DFS_NAMESERVICES)) {
-        Set<String> nsSet = new HashSet<String>();
-        nsSet.addAll(Arrays.asList(conf.get(key).split(",")));
-        nsSet.addAll(Arrays.asList(val.split(",")));
-        conf.put(key, Joiner.on(",").skipNulls().join(nsSet));
-      }
+      conf.put(key, val);
     }
     return conf;
   }

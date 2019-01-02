@@ -8,6 +8,7 @@ import org.apache.zookeeper.KeeperException;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -118,9 +119,9 @@ public class TestHdfsMountpointRenewer {
         "org.apache.hadoop.hdfs.server.namenode.ha."
             + "ConfiguredFailoverProxyProvider");
     conf.set("dfs.ha.namenodes." + cn, "host0,host1");
-    conf.set("dfs.namenode.rpc-address." + cn + ".host0", "ip:port");
-    conf.set("dfs.namenode.rpc-address." + cn + ".host1", "ip:port");
-    conf.set("dfs.nameservices", clusterName + "-0");
+    conf.set("dfs.namenode.rpc-address." + cn + ".host0", "localhost:port");
+    conf.set("dfs.namenode.rpc-address." + cn + ".host1", "localhost:port");
+    conf.set("dfs.nameservices", clusterName + "-0" + ",c4tst-non-exist");
     conf.setLong(CommonConfigurationKeys.VIEW_FS_MOUNT_TABLE_RENEW_INTERVAL,
         1000);
     final AtomicInteger counter = new AtomicInteger(0);
@@ -135,22 +136,30 @@ public class TestHdfsMountpointRenewer {
 
     mptRenewer.updateMptFromZk(conf);
     assertEquals(1, counter.get());
-    assertTrue(conf.get("dfs.nameservices").equals(
-        clusterName + "-0," + clusterName + "-1," + clusterName + "-2"));
+    Collection<String> collection =
+        conf.getStringCollection("dfs.nameservices");
+    assertTrue(collection.contains("c4tst-non-exist"));
     for (int i = 0; i < 3; i++) {
       cn = clusterName + "-" + i;
-      assertTrue(conf.get(
+      assertTrue(collection.contains(cn));
+      assertEquals("hdfs://" + cn + "/user/h_d_p/dir-" + i, conf.get(
           Constants.CONFIG_VIEWFS_PREFIX + "." + clusterName + "."
-              + Constants.CONFIG_VIEWFS_LINK + "." + "/user/h_d_p/dir-" + i)
-          .equals("hdfs://" + cn + "/user/h_d_p/dir-" + i));
-      assertTrue(conf.get("dfs.client.failover.proxy.provider." + cn).equals(
-          "org.apache.hadoop.hdfs.server.namenode.ha."
-              + "ConfiguredFailoverProxyProvider"));
-      assertTrue(conf.get("dfs.ha.namenodes." + cn).equals("host0,host1"));
-      assertTrue(conf.get("dfs.namenode.rpc-address." + cn + ".host0")
-          .equals("ip:port"));
-      assertTrue(conf.get("dfs.namenode.rpc-address." + cn + ".host1")
-          .equals("ip:port"));
+              + Constants.CONFIG_VIEWFS_LINK + "." + "/user/h_d_p/dir-" + i));
+      assertEquals(
+          "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+          conf.get("dfs.client.failover.proxy.provider." + cn));
+      assertEquals("host0,host1", conf.get("dfs.ha.namenodes." + cn));
+      if (i == 0) {
+        assertEquals("localhost:port",
+            conf.get("dfs.namenode.rpc-address." + cn + ".host0"));
+        assertEquals("localhost:port",
+            conf.get("dfs.namenode.rpc-address." + cn + ".host1"));
+      } else {
+        assertEquals("ip:port",
+            conf.get("dfs.namenode.rpc-address." + cn + ".host0"));
+        assertEquals("ip:port",
+            conf.get("dfs.namenode.rpc-address." + cn + ".host1"));
+      }
     }
   }
 
