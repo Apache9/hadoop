@@ -2063,11 +2063,14 @@ public class DataNode extends ReconfigurableBase
             false);
 
         // send data & checksum
+        long start = System.nanoTime();
         blockSender.sendBlock(out, unbufOut, throttler);
+        long duration = (System.nanoTime() - start)/1000000;
 
         // no response necessary
         LOG.info(getClass().getSimpleName() + ": Transmitted " + b
-            + " (numBytes=" + b.getNumBytes() + ") to " + curTarget);
+            + " (numBytes=" + b.getNumBytes() + ") to " + curTarget
+            + " Duration: " + duration + " ms");
 
         // read ack
         if (isClient) {
