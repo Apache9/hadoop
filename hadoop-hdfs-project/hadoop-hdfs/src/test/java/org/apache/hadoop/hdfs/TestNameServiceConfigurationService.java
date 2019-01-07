@@ -34,6 +34,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 import static org.junit.Assert.assertEquals;
@@ -51,6 +52,7 @@ public class TestNameServiceConfigurationService {
   static class GetHandler implements HttpHandler {
     String conf;
     String catalog;
+    public static AtomicBoolean sleep = new AtomicBoolean(false);
     public GetHandler(String catalog, String conf) {
       super();
       this.catalog = catalog;
@@ -77,6 +79,13 @@ public class TestNameServiceConfigurationService {
             "{\n" + "\"code\": 200,\n" + "\"data\": " + data + ",\n"
                 + "\"description\": \"save success\"\n" + "}";
         responseHeaders.set("Context-Type", "application/json");
+        if (sleep.get()) {
+          try {
+            Thread.sleep(5000);
+          } catch (InterruptedException e) {
+            NameServiceConfigurationService.LOG.warn("Interrupted", e);
+          }
+        }
         httpExchange.sendResponseHeaders(200, 0);
         OutputStream responseBodyOut = httpExchange.getResponseBody();
         responseBodyOut.write(jsonString.getBytes());
@@ -200,6 +209,22 @@ public class TestNameServiceConfigurationService {
     bos.close();
     assertTrue(tstFs.exists(
         new Path("hdfs://" + NAMESERVICE + "/testVisitingUnconfiguredHDFS")));
+  }
+
+  @Test(timeout=10000)
+  public void testSocketTimeout() throws Exception {
+    // create an empty configuration, and use it to create FileSystem
+    Configuration defaultConf = new Configuration(false);
+    setNameServiceConf(defaultConf);
+    try {
+      GetHandler.sleep.set(true);
+      FileSystem.get(new URI("hdfs://" + NAMESERVICE + "/"), defaultConf);
+      fail("Expected java.lang.IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertExceptionContains("java.net.UnknownHostException", e);
+    } finally {
+      GetHandler.sleep.set(false);
+    }
   }
 
   @Test

@@ -7,6 +7,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.NameServiceConfigurationService;
 import org.apache.http.Consts;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -88,7 +89,13 @@ public final class NameServiceUtil {
       "configuration.service.name.url.put";
   public static final String CONFIGURATION_SERVICE_NAME_URL_PUT_DEFAULT =
       "https://%s-ns.api.xiaomi.net:%d/%s/api/ns/put";
-
+  public static final String NAME_SERVICE_CONNECTION_REQUEST_TIME_OUT =
+      "name.service.connection.request.timeout";
+  public static final int NAME_SERVICE_CONNECTION_REQUEST_TIME_OUT_DEFAULT = 3000;
+  public static final String NAME_SERVICE_CONNECT_TIMEOUT = "name.service.connect.timeout";
+  public static final int NAME_SERVICE_CONNECT_TIMEOUT_DEFAULT = 3000;
+  public static final String NAME_SERVICE_SOCKET_TIMEOUT = "name.service.socket.timeout";
+  public static final int NAME_SERVICE_SOCKET_TIMEOUT_DEFAULT = 1000;
   public static final Log LOG = LogFactory.getLog(NameServiceUtil.class);
 
   private NameServiceUtil() {
@@ -159,7 +166,7 @@ public final class NameServiceUtil {
 
     // get remote conf
     Configuration remoteConf = new Configuration(false);
-    byte[] data = getDataThroughHttp(url);
+    byte[] data = getDataThroughHttp(url, localConf);
     data = Base64.decodeBase64(data);
     try {
       ByteArrayInputStream in = new ByteArrayInputStream(data);
@@ -234,7 +241,7 @@ public final class NameServiceUtil {
         + teamId + "&path=" + path;
     Configuration catalogConf = new Configuration(false);
     try {
-      byte[] data = getDataThroughHttp(catalogUrl);
+      byte[] data = getDataThroughHttp(catalogUrl, localConf);
       JSONObject obj = new JSONObject(new String(data));
       Iterator ite = obj.keys();
       while (ite.hasNext()) {
@@ -289,8 +296,21 @@ public final class NameServiceUtil {
     }
   }
 
-  private static byte[] getDataThroughHttp(String url) throws IOException {
+  private static byte[] getDataThroughHttp(String url, Configuration conf)
+      throws IOException {
+    int conRequestTimeout =
+        conf.getInt(NAME_SERVICE_CONNECTION_REQUEST_TIME_OUT,
+            NAME_SERVICE_CONNECTION_REQUEST_TIME_OUT_DEFAULT);
+    int conTimeout = conf.getInt(NAME_SERVICE_CONNECT_TIMEOUT,
+        NAME_SERVICE_CONNECT_TIMEOUT_DEFAULT);
+    int socketTimeout = conf.getInt(NAME_SERVICE_SOCKET_TIMEOUT,
+        NAME_SERVICE_SOCKET_TIMEOUT_DEFAULT);
     HttpGet httpGet = new HttpGet(url);
+    RequestConfig config =
+        RequestConfig.custom().setConnectionRequestTimeout(conRequestTimeout)
+            .setConnectTimeout(conTimeout).setSocketTimeout(socketTimeout)
+            .build();
+    httpGet.setConfig(config);
     byte[] data = null;
     try {
       JSONObject obj = getResponseThroughHttp(httpGet);
