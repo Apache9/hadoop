@@ -21,29 +21,39 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.security.PrivilegedExceptionAction;
 import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Time;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static junit.framework.TestCase.assertFalse;
 import static junit.framework.TestCase.assertTrue;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT;
+import static org.apache.hadoop.hdfs.server.namenode.NameNode.getRemoteUser;
+import static org.apache.hadoop.fs.CommonConfigurationKeys.FS_TRASH_INTERVAL_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeys.FS_TRASH_CHECKPOINT_INTERVAL_KEY;
+
 
 /**
  * Test trash using HDFS
  */
 public class TestHDFSTrash {
   private static MiniDFSCluster cluster = null;
+  private static final int MSECS_PER_MINUTE = 60 * 1000;
+  private static final long threadSleepTime = 3000;// sleep time 3seconds
 
   @BeforeClass
   public static void setUp() throws Exception {
     Configuration conf = new HdfsConfiguration();
     conf.set("dfs.shell.delete.checkpath", "/user/*/:/tmp");
-    conf.set("fs.trash.interval", "5");
+    conf.set(FS_TRASH_INTERVAL_KEY, "2"); // default trashttl 120 seconds
+    conf.set(FS_TRASH_CHECKPOINT_INTERVAL_KEY, "0.1"); // emptier interval 6 seconds
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
   }
 
@@ -369,5 +379,190 @@ public class TestHDFSTrash {
     Path path2 = new Path("/tmp/a/b");
     fs.create(path2);
     assertTrue(trash.moveToTrash(path2));
+  }
+
+  public String runShell(String args[]) throws IOException {
+    FileSystem fs = cluster.getFileSystem();
+    Configuration conf = fs.getConf();
+    FsShell shell = new FsShell();
+    shell.setConf(conf);
+    PrintStream stdout = System.out;
+    PrintStream stderr = System.err;
+    ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+    PrintStream newOut = new PrintStream(byteStream);
+    System.setOut(newOut);
+    System.setErr(newOut);
+    try {
+      shell.run(args);
+    } catch (Exception e) {
+      System.err.println(
+          "Exception raised from Trash.run " + e.getLocalizedMessage());
+    }
+    String output = byteStream.toString();
+    System.setOut(stdout);
+    System.setErr(stderr);
+    return output;
+  }
+
+  @Test
+  public void testTrashPathAndTrashTTL() throws Exception {
+    FileSystem fs = cluster.getFileSystem();
+    Configuration conf = fs.getConf();
+    FsShell shell = new FsShell();
+    shell.setConf(conf);
+
+    shell.run(new String[] { "-mkdir", "-p", "/user/testUser" });
+    shell.run(new String[] { "-chown", "testUser", "/user/testUser" });
+
+    UserGroupInformation ugi = UserGroupInformation
+        .createUserForTesting("testUser", new String[] { "testUser" });
+    UserGroupInformation.setLoginUser(ugi);
+
+    // ex1
+    {
+      shell.run(new String[] { "-mkdir", "/user/testUser/dir1" });
+      shell.run(new String[] { "-rmr", "/user/testUser/dir1" });
+      String trash = "/user/" + getRemoteUser().getShortUserName()
+          + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+          + "/dir1";
+      assertTrue(fs.exists(new Path(trash)));
+      shell.run(new String[] { "-rmr", "/user/testUser/.Trash" });
+      assertTrue(!fs.exists(new Path(trash)));
+    }
+
+    // ex2
+    {
+      shell.run(new String[] { "-mkdir", "/user/testUser/dir2" });
+      shell.run(new String[] { "-rmr", "-skipTrash", "/user/testUser/dir2" });
+      String trash = "/user/" + getRemoteUser().getShortUserName()
+          + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+          + "/dir2";
+      assertTrue(!fs.exists(new Path(trash)));
+    }
+
+    // ex3
+    {
+      shell.run(new String[] { "-mkdir", "-p", "/user/testUser/dir3" });
+      shell.run(new String[] { "-setfattr", "-n", "user.istrashpath", "-v",
+          "01", "/user/testUser/dir3" });
+      shell.run(new String[] { "-rmr", "-skipTrash", "/user/testUser/dir3" });
+      String trash = "/user/" + getRemoteUser().getShortUserName()
+          + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+          + "/dir3";
+      assertTrue(fs.exists(new Path(trash)));
+      shell.run(new String[] { "-rmr", "/user/testUser/.Trash" });
+      assertTrue(!fs.exists(new Path(trash)));
+    }
+
+    // ex4
+    {
+      shell.run(new String[] { "-mkdir", "-p", "/user/testUser/dir4/sub" });
+      shell.run(new String[] { "-setfattr", "-n", "user.istrashpath", "-v",
+          "01", "/user/testUser/dir4" });
+      shell.run(
+          new String[] { "-rmr", "-skipTrash", "/user/testUser/dir4/sub" });
+      String trash = "/user/" + getRemoteUser().getShortUserName()
+          + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+          + "/dir4/sub";
+      assertTrue(fs.exists(new Path(trash)));
+      shell.run(new String[] { "-rmr", "/user/testUser/.Trash" });
+      assertTrue(!fs.exists(new Path(trash)));
+    }
+
+    // ex5
+    {
+      shell.run(new String[] { "-mkdir", "/user/testUser/dir5" });
+      shell.run(new String[] { "-setfattr", "-n", "user.istrashpath", "-v",
+          "01", "/user/testUser" });
+      shell.run(new String[] { "-rmr", "-skipTrash", "/user/testUser/dir5" });
+      String trash = "/user/" + getRemoteUser().getShortUserName()
+          + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+          + "/dir5";
+      assertTrue(fs.exists(new Path(trash)));
+      String msg = runShell(new String[] { "-rmr", "/user/testUser/.Trash" });
+      assertTrue(
+          msg.indexOf("Only super user could delete the trash file") != -1);
+    }
+
+    // ex6
+    {
+      shell.run(new String[] { "-mkdir", "-p", "/user/testUser/dir6/sub" });
+      shell.run(new String[] { "-setfattr", "-n", "user.istrashpath", "-v",
+          "01", "/user/testUser" });
+      shell.run(new String[] { "-setfattr", "-n", "user.istrashpath", "-v",
+          "01", "/user/testUser/dir6" });
+      shell.run(
+          new String[] { "-rmr", "-skipTrash", "/user/testUser/dir6/sub" });
+      String trash = "/user/" + getRemoteUser().getShortUserName()
+          + "/.Trash/Current/user/" + getRemoteUser().getShortUserName()
+          + "/dir6/sub";
+      assertTrue(fs.exists(new Path(trash)));
+      String msg = runShell(new String[] { "-rmr", "/user/testUser/.Trash" });
+      assertTrue(
+          msg.indexOf("Only super user could delete the trash file") != -1);
+    }
+
+    //trashTTL
+    Trash trash = new Trash(conf);
+
+    // Start Emptier in background
+    Runnable emptier = trash.getEmptier();
+    Thread emptierThread = new Thread(emptier);
+    emptierThread.start();
+    //ex1
+    {
+      shell.run(new String[] { "-mkdir", "/user/testUser/dir1" });
+      shell.run(new String[] { "-setfattr", "-n", "user.trashttl", "-v", "1",
+              "/user/testUser" }); //set trashttl 1min
+      shell.run(new String[] { "-rmr", "/user/testUser/dir1" });
+      String trashPath =
+              "/user/" + getRemoteUser().getShortUserName() + "/.Trash";
+      assertTrue(verifyTrashPath(fs,trashPath));
+    }
+
+    //ex2
+    {
+      shell.run(new String[] { "-mkdir", "/user/testUser/dir2" });
+      shell.run(new String[] { "-setfattr", "-n", "user.trashttl", "-v", "1",
+              "/user/testUser" }); //set trashttl 1min
+      shell.run(new String[] { "-setfattr", "-n", "user.istrashpath", "-v",
+              "01", "/user/testUser" }); //open soft delete
+      shell.run(new String[] { "-rmr", "/user/testUser/dir2" });
+
+      String trashPath =
+              "/user/" + getRemoteUser().getShortUserName() + "/.Trash";
+      assertTrue(verifyTrashPath(fs,trashPath));
+    }
+
+  }
+
+  boolean verifyTrashPath(FileSystem fs, String trashPath)
+      throws IOException, InterruptedException {
+    boolean res = false;
+    Configuration conf = fs.getConf();
+    long emptierInterval =
+        (long) (conf.getFloat(FS_TRASH_CHECKPOINT_INTERVAL_KEY,
+            FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT) * MSECS_PER_MINUTE);
+    assertTrue(emptierInterval != 0);
+    assertTrue(fs.listStatus(new Path(trashPath)).length == 1);
+    byte[] value =
+        fs.getXAttr(new Path("/user/testUser"), new String("user.trashttl"));
+    String s = new String(value);
+    long trashttl = Long.parseLong(s) * MSECS_PER_MINUTE;
+    assertTrue(trashttl == 60000);
+    long now = Time.now();
+    long span = 0;
+    while (true) {
+      if (fs.listStatus(new Path(trashPath)).length == 0) {
+        span = Time.now() - now;
+        break;
+      }
+      Thread.sleep(threadSleepTime);
+    }
+    if (span >= trashttl
+        && span <= trashttl + emptierInterval + threadSleepTime) {
+      res = true;
+    }
+    return res;
   }
 }

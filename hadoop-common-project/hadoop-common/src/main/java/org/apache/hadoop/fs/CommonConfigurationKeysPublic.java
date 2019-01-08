@@ -376,5 +376,17 @@ public class CommonConfigurationKeysPublic {
       2000;
   public static final String HADOOP_FED_RENAME_TOKEN = "hadoop.fed.rename.token";
   public static final String HADOOP_FED_RENAME_TOKEN_DEFAULT = "Subtree";
+
+  //trash path and trash ttl
+  public static final String TRASH_PATH_CONF_FILE = "TrashPath.conf";
+  public static final String TRASH_TTL_CONF_FILE = "TrashTTL.conf";
+  public static final String ATTR_TRASH_PATH_HAS_LOADED =
+          "user.trashpath.hasloaded";
+  public static final String ATTR_TRASH_TTL_HAS_LOADED =
+          "user.trashttl.hasloaded";
+  public static final String ATTR_TRASH_TTL_NAME = "user.trashttl";
+  public static final String ATTR_HAS_LOADED = "01";
+  public static final String ATTR_TRASH_PATH_NAME = "user.istrashpath";
+  public static final String IS_TRASH_PATH = "01";
 }
 

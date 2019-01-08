@@ -22,6 +22,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERV
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.ATTR_TRASH_PATH_NAME;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IS_TRASH_PATH;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_DEFAULT;
@@ -138,13 +140,13 @@ import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
+import java.util.LinkedHashSet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -4140,19 +4142,19 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
   boolean delete(String src, boolean recursive)
       throws AccessControlException, SafeModeException,
       UnresolvedLinkException, IOException {
-
     Path path = new Path(src);
     if (!checkPathCanBeDeleted(path, checkPath)) {
       throw new AccessControlException();
     }
-
-    if (forceToTrash || trashPathConfigMgr.needMoveToTrash(src)) {
+    
+    if (forceToTrash || needMoveToTrash(path)) {
       if (!isInTrash(path)) {
         return moveToTrash(src, recursive);
       } else {
-        if (!superuser.equals(getRemoteUser().getShortUserName()) &&
-                !fsOwner.getShortUserName().equals(getRemoteUser().getShortUserName())) {
-          throw new IOException("Only super user could delete the trash file");
+        if (!superuser.equals(getRemoteUser().getShortUserName()) && !fsOwner
+            .getShortUserName().equals(getRemoteUser().getShortUserName())) {
+          throw new IOException(
+              "Only super user " + "could delete the trash file");
         }
       }
     }
@@ -10323,5 +10325,82 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
       }
     }
     return res;
+  }
+
+  boolean needMoveToTrash(Path path) throws IOException {
+    if (path == null) {
+      throw new IOException("can not delete null path");
+    }
+    if (isInTrash(path)) {
+      return isKBPathSoftDeleteEnabled(path);
+    } else {
+      return isCommonPathSoftDeleteEnabled(path);
+    }
+  }
+
+  boolean isKBPathSoftDeleteEnabled(Path path) throws IOException {
+    boolean res = false;
+    String pathStr = path.toUri().getPath();
+    int index = pathStr.indexOf(".Trash");
+    String kerberosPathStr = pathStr.substring(0, index);
+    String value =
+        getTrashPathXAttr(new Path(kerberosPathStr), ATTR_TRASH_PATH_NAME);
+    LOG.debug("curPath:" + kerberosPathStr + "  " + ATTR_TRASH_PATH_NAME + ":"
+        + value);
+    if (IS_TRASH_PATH.equals(value)) {
+      LOG.info("curKerberosPath:" + kerberosPathStr + "  "
+          + "can not delete trash by itself");
+      res = true;
+    }
+    return res;
+  }
+
+  boolean isCommonPathSoftDeleteEnabled(Path path) {
+    String src = path.toUri().getPath();
+    Path effectTrashPath = null;
+    boolean res = false;
+    List<Path> allPaths = new LinkedList<>();
+    do {
+      allPaths.add(path);
+      path = path.getParent();
+    } while (path != null);
+    try {
+      ListIterator<Path> iter = allPaths.listIterator();
+      while (iter.hasNext()) {
+        Path curPath = iter.next();
+        String value = getTrashPathXAttr(curPath, ATTR_TRASH_PATH_NAME);
+        LOG.debug("curPath:" + curPath.toUri().getPath() + "  "
+            + ATTR_TRASH_PATH_NAME + ":" + value);
+        if (IS_TRASH_PATH.equals(value)) {
+          res = true;
+          effectTrashPath = curPath;
+          break;
+        }
+      }
+    } catch (IOException e) {
+      LOG.error("got XAttr [" + ATTR_TRASH_PATH_NAME + "] "
+          + "fail in srcPath [" + src + "] " + "exception:" + e);
+    }
+    LOG.debug("path [" + src + "] " + "foundTrashPath [" + res + "] "
+        + "effectTrashPath [" + effectTrashPath + "]");
+    return res;
+  }
+
+  private String getTrashPathXAttr(Path path, String name) throws IOException {
+    if (getFileInfo(path.toUri().getPath(), true) == null) {
+      return null;
+    }
+    byte[] res = null;
+    String src = path.toUri().getPath();
+    XAttr isTrashPath = XAttrHelper.buildXAttr(name);
+    List<XAttr> allXAttrs = getXAttrs(src, null);
+    for (XAttr xAttr : allXAttrs) {
+      if (xAttr.getNameSpace().equals(isTrashPath.getNameSpace())
+          && xAttr.getName().equals(isTrashPath.getName())) {
+        res = xAttr.getValue();
+        break;
+      }
+    }
+    return org.apache.commons.codec.binary.StringUtils.newStringUtf8(res);
   }
 }

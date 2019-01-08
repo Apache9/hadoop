@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Trash;
+import org.apache.hadoop.fs.TrashPathAndTrashTTL;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.ha.HAServiceProtocol.StateChangeRequestInfo;
 import org.apache.hadoop.ha.HAServiceStatus;
@@ -273,6 +274,8 @@ public class NameNode implements NameNodeStatusMXBean {
   /** httpServer */
   protected NameNodeHttpServer httpServer;
   private Thread emptier;
+  private Thread setTrashPath;
+  private Thread setTrashTTL;
   /** only used for testing purposes  */
   protected boolean stopRequested = false;
   /** Registration information of this name-node  */
@@ -700,6 +703,27 @@ public class NameNode implements NameNodeStatusMXBean {
       emptier.interrupt();
       emptier = null;
     }
+  }
+  
+  private void loadTrashPathAndTrashTTL(final Configuration conf, FSNamesystem namesystem)
+      throws IOException {
+    FileSystem fs =
+        SecurityUtil.doAsLoginUser(new PrivilegedExceptionAction<FileSystem>() {
+          @Override
+          public FileSystem run() throws IOException {
+            return FileSystem.get(conf);
+          }
+        });
+    TrashPathAndTrashTTL trashPathAndTrashTTL =
+        new TrashPathAndTrashTTL(fs, namesystem);
+
+    this.setTrashPath =
+        new Thread(trashPathAndTrashTTL.setTrashPath(), "set TrashPath");
+    this.setTrashPath.start();
+
+    this.setTrashTTL =
+        new Thread(trashPathAndTrashTTL.setTrashTTL(), "set TrashTTL");
+    this.setTrashTTL.start();
   }
   
   private void startHttpServer(final Configuration conf) throws IOException {
@@ -1659,6 +1683,7 @@ public class NameNode implements NameNodeStatusMXBean {
       try {
         namesystem.startActiveServices();
         startTrashEmptier(conf);
+        loadTrashPathAndTrashTTL(conf, namesystem);
       } catch (Throwable t) {
         doImmediateShutdown(t);
       }

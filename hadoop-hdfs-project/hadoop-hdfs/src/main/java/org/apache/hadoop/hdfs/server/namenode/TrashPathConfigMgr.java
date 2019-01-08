@@ -26,6 +26,7 @@ public class TrashPathConfigMgr implements Runnable {
   private long lastModifiedTime = 0;
   private AtomicBoolean running = new AtomicBoolean(false);
 
+
   public TrashPathConfigMgr(Configuration conf) {
     refreshInterval = conf.getLong(DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_KEY, DFS_NAMENODE_TRASH_PATH_CONF_REFRESH_INTERVAL_DEFAULT);
   }
@@ -98,7 +99,6 @@ public class TrashPathConfigMgr implements Runnable {
     if (pathStr == null || trashPathList == null) {
       return false;
     }
-
     String[] pathNodes = pathStr.split("/");
     if (pathNodes == null) {
       return false;
@@ -114,7 +114,7 @@ public class TrashPathConfigMgr implements Runnable {
     }
     return false;
   }
-
+  
   @Override
   public void run() {
     while (running.get()) {

@@ -21,6 +21,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKP
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKPOINT_INTERVAL_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.ATTR_TRASH_TTL_NAME;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -33,7 +34,9 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Map;
 
+import org.apache.commons.codec.binary.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -179,7 +182,7 @@ public class TrashPolicyDefault extends TrashPolicy {
         while(fs.exists(trashPath)) {
           trashPath = new Path(orig + Time.now());
         }
-        
+
         if (fs.rename(path, trashPath))           // move to current trash
           return true;
       } catch (IOException e) {
@@ -297,7 +300,7 @@ public class TrashPolicyDefault extends TrashPolicy {
 
     }
 
-    private String getUserFromHome (FileStatus home) {
+    private String getKBPathFromHome (FileStatus home) {
       String homePath = home.getPath().toUri().toString();
       String[] pathNodes = homePath.substring(homePath.indexOf("/user")).split("/");
       if (pathNodes == null || pathNodes.length < 3) {
@@ -306,9 +309,9 @@ public class TrashPolicyDefault extends TrashPolicy {
       if (!pathNodes[1].equalsIgnoreCase("user")) {
         return null;
       }
-
-      LOG.info("get user " + pathNodes[2]);
-      return pathNodes[2];
+      String kbPathStr = "/user/" + pathNodes[2];
+      LOG.info("get kerberos path: " + kbPathStr);
+      return kbPathStr;
     }
 
     @Override
@@ -346,12 +349,10 @@ public class TrashPolicyDefault extends TrashPolicy {
                 TrashPolicyDefault trash = new TrashPolicyDefault(
                     fs, home.getPath(), conf);
                 long userSpecifiedDeletionInterval = deletionInterval;
-                String user = getUserFromHome(home);
-                if (trashTTLConfig != null && user != null && trashTTLConfig.containsKey(user)) {
-                  userSpecifiedDeletionInterval = trashTTLConfig.get(user);
-                  if (userSpecifiedDeletionInterval <= 0) {
-                    userSpecifiedDeletionInterval = deletionInterval;
-                  }
+                String kbPathStr = getKBPathFromHome(home);
+                long trashttl = getTrashTTL(kbPathStr);
+                if (trashttl > 0) {
+                  userSpecifiedDeletionInterval = trashttl;
                 }
                 trash.deleteCheckpoint(userSpecifiedDeletionInterval);
                 trash.createCheckpoint();
@@ -376,6 +377,25 @@ public class TrashPolicyDefault extends TrashPolicy {
     }
     private long floor(long time, long interval) {
       return (time / interval) * interval;
+    }
+
+    private long getTrashTTL(String kbPathStr) throws IOException {
+      long trashttl = 0;
+      Path kbPath = new Path(kbPathStr);
+      if (fs.exists(kbPath)) {
+        Map<String, byte[]> allXAttrs = fs.getXAttrs(kbPath);
+        if (allXAttrs != null && allXAttrs.containsKey(ATTR_TRASH_TTL_NAME)) {
+          byte[] value = allXAttrs.get(ATTR_TRASH_TTL_NAME);
+          String s = StringUtils.newStringUtf8(value);
+          try {
+            trashttl = Long.parseLong(s) * MSECS_PER_MINUTE;
+            LOG.info("kbPath: " + kbPathStr + " , " + "trashttl: " + trashttl);
+          } catch (NumberFormatException e) {
+            LOG.error("can not parse string to long");
+          }
+        }
+      }
+      return trashttl;
     }
   }
 
