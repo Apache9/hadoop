@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -575,6 +576,65 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       report.append('\n');
       i++;
     }
+
+    LocatedBlock lBlk = blocks.getLastLocatedBlock();
+    List<LocatedBlock> locatedBlocks = blocks.getLocatedBlocks();
+    if (CollectionUtils.isNotEmpty(locatedBlocks)) {
+      LocatedBlock lastLocationBlock = locatedBlocks.get(locatedBlocks.size() - 1);
+      if (lBlk != null
+              && !lBlk.getBlock().equals(lastLocationBlock.getBlock())) {
+        ExtendedBlock block = lBlk.getBlock();
+        boolean isCorrupt = lBlk.isCorrupt();
+        String blkName = block.toString();
+        DatanodeInfo[] locs = lBlk.getLocations();
+        NumberReplicas numberReplicas = namenode.getNamesystem().getBlockManager().countNodes(block.getLocalBlock());
+        int liveReplicas = numberReplicas.liveReplicas();
+        res.totalReplicas += liveReplicas;
+        // Check if block is Corrupt
+        if (isCorrupt) {
+          corrupt++;
+          res.corruptBlocks++;
+          out.print("\n" + path + ": CORRUPT blockpool " + block.getBlockPoolId() +
+                  " block " + block.getBlockName()+"\n");
+        }
+        report.append(i + ". " + blkName + " len=" + block.getNumBytes());
+        if (liveReplicas == 0) {
+          report.append(" MISSING!");
+          if ((showLocations || showRacks) && (locs != null)) {
+            StringBuilder sb = new StringBuilder(" Recorded locations [");
+            for (int j = 0; j < locs.length; j++) {
+              if (j > 0) { sb.append(", "); }
+              if (showRacks)
+                sb.append(NodeBase.getPath(locs[j]));
+              else
+                sb.append(locs[j]);
+            }
+            sb.append(']');
+            report.append(" " + sb.toString());
+          }
+          res.addMissing(block.toString(), block.getNumBytes());
+          missing++;
+          missize += block.getNumBytes();
+        } else {
+          report.append(" repl=" + liveReplicas);
+          if (showLocations || showRacks) {
+            StringBuilder sb = new StringBuilder("[");
+            for (int j = 0; j < locs.length; j++) {
+              if (j > 0) { sb.append(", "); }
+              if (showRacks)
+                sb.append(NodeBase.getPath(locs[j]));
+              else
+                sb.append(locs[j]);
+            }
+            sb.append(']');
+            report.append(" " + sb.toString());
+          }
+        }
+        report.append('\n');
+      }
+    }
+
+
     if ((missing > 0) || (corrupt > 0)) {
       if (!showFiles && (missing > 0)) {
         out.print("\n" + path + ": MISSING " + missing
