@@ -69,6 +69,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.namenode.NamenodeFsck.Result;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.hdfs.tools.DFSck;
@@ -1098,6 +1099,127 @@ public class TestFsck {
       assertTrue(runFsck.contains("/.snapshot/mySnapShot/srcdat"));
       runFsck = runFsck(conf, 0, true, "/", "-files");
       assertFalse(runFsck.contains("mySnapShot"));
+    } finally {
+      cluster.shutdown();
+    }
+  }
+
+  @Test
+  public void testDatanodeUnderReplicatedCheckOpen() throws Exception {
+
+    final short REPL_FACTOR = 2;
+    short NUM_DN = 2;
+    final long fileLen = 1024;
+    final long blockSize = 512;
+    final long blkNum = fileLen / blockSize + (fileLen % blockSize > 0 ? 1 : 0);
+
+    String[] racks = { "/rack1", "/rack2" };
+    String[] hosts = { "host1", "host2" };
+
+    Configuration conf = new Configuration();
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 2);
+
+    MiniDFSCluster cluster = null;
+    DistributedFileSystem dfs = null;
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DN).hosts(hosts)
+        .racks(racks).build();
+
+    assertNotNull("Failed Cluster Creation", cluster);
+    cluster.waitClusterUp();
+    dfs = cluster.getFileSystem();
+    assertNotNull("Failed to get FileSystem", dfs);
+
+    DFSTestUtil util = new DFSTestUtil.Builder().
+        setName(getClass().getSimpleName()).setNumFiles(1).build();
+    //create files
+    final String pathString = new String("/testfile");
+    final Path path = new Path(pathString);
+    util.createFile(dfs, path, fileLen-10, REPL_FACTOR, 1000L);
+    util.waitReplication(dfs, path, REPL_FACTOR);
+
+    cluster.stopDataNode(0);
+    cluster.restartNameNode(0);
+    cluster.waitActive();
+    dfs.append(path);
+    //run fsck
+    try {
+      //illegal input test
+      String runFsckResult = null;
+      //general test
+      runFsckResult =
+          runFsck(conf, 0, true, "/", "-underReplicate", "127.0.0.1");
+      assertTrue(runFsckResult.contains("Decommission in progress:false"));
+      assertTrue(
+          runFsckResult.contains("Under replicated blocks(" + blkNum + ")"));
+      assertTrue(runFsckResult.contains(
+          "Under Replicated Blocks in files under construction(" + blkNum
+              + ")"));
+      assertTrue(runFsckResult.contains("Blocks with no live replicas(0)"));
+      System.out.println(runFsckResult);
+    } finally {
+      cluster.shutdown();
+    }
+  }
+
+  @Test
+  public void testDatanodeUnderReplicatedCheckDecommission() throws Exception {
+
+    final short REPL_FACTOR = 2;
+    short NUM_DN = 2;
+    final long fileLen = 1024;
+    final long blockSize = 512;
+    final long blkNum = fileLen / blockSize + (fileLen % blockSize > 0 ? 1 : 0);
+
+    String[] racks = { "/rack1", "/rack2" };
+    String[] hosts = { "host1", "host2" };
+
+    Configuration conf = new Configuration();
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 2);
+
+    MiniDFSCluster cluster = null;
+    DistributedFileSystem dfs = null;
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DN).hosts(hosts)
+        .racks(racks).build();
+
+    assertNotNull("Failed Cluster Creation", cluster);
+    cluster.waitClusterUp();
+    dfs = cluster.getFileSystem();
+    assertNotNull("Failed to get FileSystem", dfs);
+
+    DFSTestUtil util = new DFSTestUtil.Builder().
+        setName(getClass().getSimpleName()).setNumFiles(1).build();
+    //create files
+    final String pathString = new String("/testfile");
+    final Path path = new Path(pathString);
+    util.createFile(dfs, path, fileLen-10, REPL_FACTOR, 1000L);
+    util.waitReplication(dfs, path, REPL_FACTOR);
+
+    cluster.stopDataNode(0);
+    cluster.restartNameNode(0);
+    cluster.waitActive();
+    DatanodeDescriptor dnd =
+        cluster.getNameNode().getNamesystem().getBlockManager()
+            .getDatanodeManager().getDatanodeByHost("127.0.0.1");
+    cluster.getNameNode().getNamesystem().getBlockManager()
+        .getDatanodeManager().startDecommission(dnd);
+
+    //run fsck
+    try {
+      //illegal input test
+      String runFsckResult = null;
+      //general test
+      runFsckResult =
+          runFsck(conf, 0, true, "/", "-underReplicate", "127.0.0.1");
+      assertTrue(runFsckResult.contains("Decommission in progress:true"));
+      assertTrue(
+          runFsckResult.contains("Under replicated blocks(" + blkNum + ")"));
+      assertTrue(runFsckResult
+          .contains("Under Replicated Blocks in files under construction(0)"));
+      assertTrue(runFsckResult
+          .contains("Blocks with no live replicas(" + blkNum + ")"));
+      System.out.println(runFsckResult);
     } finally {
       cluster.shutdown();
     }

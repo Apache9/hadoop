@@ -98,6 +98,8 @@ public class DFSck extends Configured implements Tool {
       + "\t-blockId\tprint out which file this blockId belongs to, locations"
       + " (nodes, racks) of this block, and other diagnostics info"
       + " (under replicated, corrupted or not, etc)\n\n"
+      + "\t-underReplicate\tprint out the under replicated blocks on this "
+      + "datanode.\n\n"
       + "Please Note:\n"
       + "\t1. By default fsck ignores files opened for write, "
       + "use -openforwrite to report such files. They are usually "
@@ -298,6 +300,8 @@ public class DFSck extends Configured implements Tool {
     boolean includeSnapshots = false;
     boolean blockId = false;
     String blockIdStr = null;
+    boolean underReplicate = false;
+    String datanode = null;
     for (int idx = 0; idx < args.length; idx++) {
       if (args[idx].equals("-move")) {
         move = true;
@@ -328,6 +332,16 @@ public class DFSck extends Configured implements Tool {
         }
         blockId = true;
         blockIdStr = sb.toString();
+      } else if (args[idx].equals("-underReplicate")) {
+        idx++;
+        if (idx < args.length && args[idx] != null) {
+          underReplicate = true;
+          datanode = args[idx];
+        } else {
+          System.err.println("fsck: datanode host is needed.");
+          printUsage(System.err);
+          return -1;
+        }
       } else if (!args[idx].startsWith("-")) {
         if (null == dir) {
           dir = args[idx];
@@ -391,6 +405,9 @@ public class DFSck extends Configured implements Tool {
     if (blockId) {
       url.append("&blockId=").append(URLEncoder.encode(blockIdStr, "UTF-8"));
     }
+    if (underReplicate) {
+      url.append("&underReplicate=").append(URLEncoder.encode(datanode, "UTF-8"));
+    }
 
     url.append("&path=").append(URLEncoder.encode(dir, "UTF-8"));
     if (doListCorruptFileBlocks) {
@@ -429,6 +446,8 @@ public class DFSck extends Configured implements Tool {
       errCode = 2;
     } else if (lastLine.endsWith(NamenodeFsck.DECOMMISSIONING_STATUS)) {
       errCode = 3;
+    } else if (lastLine.endsWith(NamenodeFsck.REPLICATION_CK_SUCCESS)) {
+      errCode = 0;
     }
     return errCode;
   }

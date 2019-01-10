@@ -3271,6 +3271,50 @@ public class BlockManager {
     return new NumberReplicas(live, decommissioned, corrupt, excess, stale);
   }
 
+  /**
+   * Put nodes that don't have enough replicas to the corresponding list.
+   * @param node - the datanode to search block
+   * @param underReplicatedInOpenFiles - block is uc and isn't min replicated.
+   * @param underReplicatedBlocks - block that doesn't have enough replicas.
+   * @param decommissionOnlyReplicas - block has no live replicas and there
+   *                                 are replicas on decommissioning nodes.
+   * @return true if node is decommission in progress and first block report has
+   *         received.
+   */
+  public boolean countReplication(DatanodeDescriptor node,
+      List<BlockInfo> underReplicatedInOpenFiles,
+      List<BlockInfo> underReplicatedBlocks,
+      List<BlockInfo> decommissionOnlyReplicas) {
+    final Iterator<? extends BlockInfo> it = node.getBlockIterator();
+    boolean isDecommission =
+        node.isDecommissionInProgress() && node.checkBlockReportReceived();
+    while(it.hasNext()) {
+      final BlockInfo block = it.next();
+      BlockCollection bc = block.getBlockCollection();
+      if (bc != null) {
+        NumberReplicas num = countNodes(block);
+        int curReplicas = num.liveReplicas();
+        int curExpectedReplicas = getReplication(block);
+
+        if (curExpectedReplicas > curReplicas) {
+          if (bc.isUnderConstruction()) {
+            if (block.equals(bc.getLastBlock())
+                && curReplicas > minReplication) {
+              continue;
+            }
+            underReplicatedInOpenFiles.add(block);
+          }
+          underReplicatedBlocks.add(block);
+          if (isDecommission && (curReplicas == 0) && (
+              num.decommissionedReplicas() > 0)) {
+            decommissionOnlyReplicas.add(block);
+          }
+        }
+      }
+    }
+    return isDecommission;
+  }
+
   /** 
    * Simpler, faster form of {@link #countNodes(Block)} that only returns the number
    * of live nodes.  If in startup safemode (or its 30-sec extension period),

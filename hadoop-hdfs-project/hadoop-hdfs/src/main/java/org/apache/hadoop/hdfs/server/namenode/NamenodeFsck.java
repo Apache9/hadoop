@@ -27,6 +27,7 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -113,6 +114,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
   public static final String DECOMMISSIONED_STATUS = "is DECOMMISSIONED";
   public static final String NONEXISTENT_STATUS = "does not exist";
   public static final String FAILURE_STATUS = "FAILED";
+  public static final String REPLICATION_CK_SUCCESS = "replication check done";
   
   private final NameNode namenode;
   private final NetworkTopology networktopology;
@@ -153,6 +155,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
   String path = "/";
 
   private String blockIds = null;
+  private String datanode = null;
 
   // We return back N files that are corrupt; the list of files returned is
   // ordered by block id; to allow continuation support, pass in the last block
@@ -209,7 +212,68 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
         this.snapshottableDirs = new ArrayList<String>();
       } else if (key.equals("blockId")) {
         this.blockIds = pmap.get("blockId")[0];
+      } else if (key.equals("underReplicate")) {
+        this.datanode = pmap.get("underReplicate")[0];
       }
+    }
+  }
+
+  public void dnUnderReplicatedCK() {
+    List<BlockInfo> underReplicatedInOpenFiles = new ArrayList<>();
+    List<BlockInfo> underReplicatedBlocks = new ArrayList<>();
+    List<BlockInfo> decommissionOnlyReplicas = new ArrayList<>();
+    boolean decommissionInProgress = false;
+    try {
+      decommissionInProgress = namenode.getNamesystem()
+          .countUnderReplicatedBlks(datanode, underReplicatedInOpenFiles,
+              underReplicatedBlocks, decommissionOnlyReplicas);
+    } catch (IOException e) {
+      out.println(e.getMessage());
+      LOG.warn("bad replication check", e);
+      return;
+    }
+    out.println("Decommission in progress:" + decommissionInProgress);
+    out.println(String
+        .format("Under replicated blocks(%d):", underReplicatedBlocks.size()));
+    outputBlock(underReplicatedBlocks);
+    out.println(String.format("Blocks with no live replicas(%d):",
+        decommissionOnlyReplicas.size()));
+    outputBlock(decommissionOnlyReplicas);
+    out.println(String
+        .format("Under Replicated Blocks in files under construction(%d):",
+            underReplicatedInOpenFiles.size()));
+    outputBlock(underReplicatedInOpenFiles);
+    out.println("Details:");
+    HashSet<BlockInfo> set = new HashSet<>();
+    for (BlockInfo blk : underReplicatedBlocks) {
+      set.add(blk);
+    }
+    for (BlockInfo blk : underReplicatedInOpenFiles) {
+      set.add(blk);
+    }
+    for (BlockInfo blk : decommissionOnlyReplicas) {
+      set.add(blk);
+    }
+    for (BlockInfo blk : set) {
+      INodeFile bc = (INodeFile) blk.getBlockCollection();
+      out.print(String
+          .format("%-14s\t%-10s\t%-18s\t%-2d\t%-12d\t", blk.getBlockName(),
+              blk.getGenerationStamp(), blk.getBlockUCState(),
+              bc.getFileReplication(), bc.getPreferredBlockSize()));
+      if (bc.isUnderConstruction()) {
+        out.print("open \t");
+      } else {
+        out.print("close\t");
+      }
+      out.println(bc.getFullPathName());
+    }
+    out.println();
+    out.println(REPLICATION_CK_SUCCESS);
+  }
+
+  void outputBlock(List<BlockInfo> blkList) {
+    for (BlockInfo blk : blkList) {
+      out.println(blk.getBlockName());
     }
   }
 
@@ -285,15 +349,17 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
   public void fsck() {
     final long startTime = Time.now();
     try {
-      if(blockIds != null) {
-
+      StringBuilder msg = new StringBuilder();
+      msg.append(
+          "FSCK started by " + UserGroupInformation.getCurrentUser() + " from "
+              + remoteAddress + " for path " + path + " at " + new Date());
+      out.println(msg);
+      if (datanode != null) {
+        msg.append(" for Datanode host:" + datanode + "\n");
+        dnUnderReplicatedCK();
+      } else if (blockIds != null) {
         String[] blocks = blockIds.split(" ");
-        StringBuilder sb = new StringBuilder();
-        sb.append("FSCK started by " +
-            UserGroupInformation.getCurrentUser() + " from " +
-            remoteAddress + " at " + new Date());
-        out.println(sb.toString());
-        sb.append(" for blockIds: \n");
+        msg.append(" for blockIds: \n");
         for (String blk: blocks) {
           if(blk == null || !blk.contains("blk_")) {
             out.println("Incorrect blockId format: " + blk);
@@ -306,69 +372,61 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
           } finally {
             namenode.getNamesystem().readUnlock();
           }
-          sb.append(blk + "\n");
+          msg.append(blk + "\n");
         }
-        LOG.info(sb.toString());
-        namenode.getNamesystem().logFsckEvent("/", remoteAddress);
         out.flush();
-        return;
-      }
-
-      String msg = "FSCK started by " + UserGroupInformation.getCurrentUser()
-          + " from " + remoteAddress + " for path " + path + " at " + new Date();
-      LOG.info(msg);
-      out.println(msg);
-      namenode.getNamesystem().logFsckEvent(path, remoteAddress);
-
-      if (snapshottableDirs != null) {
-        SnapshottableDirectoryStatus[] snapshotDirs = namenode.getRpcServer()
-            .getSnapshottableDirListing();
-        if (snapshotDirs != null) {
-          for (SnapshottableDirectoryStatus dir : snapshotDirs) {
-            snapshottableDirs.add(dir.getFullPath().toString());
+      } else {
+        if (snapshottableDirs != null) {
+          SnapshottableDirectoryStatus[] snapshotDirs = namenode.getRpcServer().getSnapshottableDirListing();
+          if (snapshotDirs != null) {
+            for (SnapshottableDirectoryStatus dir : snapshotDirs) {
+              snapshottableDirs.add(dir.getFullPath().toString());
+            }
           }
         }
-      }
 
-      final HdfsFileStatus file = namenode.getRpcServer().getFileInfo(path);
-      if (file != null) {
+        final HdfsFileStatus file = namenode.getRpcServer().getFileInfo(path);
+        if (file != null) {
 
-        if (showCorruptFileBlocks) {
-          listCorruptFileBlocks();
-          return;
-        }
-        
-        Result res = new Result(conf);
+          if (showCorruptFileBlocks) {
+            listCorruptFileBlocks();
+            return;
+          }
 
-        check(path, file, res);
+          Result res = new Result(conf);
 
-        out.println(res);
-        out.println(" Number of data-nodes:\t\t" + totalDatanodes);
-        out.println(" Number of racks:\t\t" + networktopology.getNumOfRacks());
+          check(path, file, res);
 
-        out.println("FSCK ended at " + new Date() + " in "
-            + (Time.now() - startTime + " milliseconds"));
+          out.println(res);
+          out.println(" Number of data-nodes:\t\t" + totalDatanodes);
+          out.println(" Number of racks:\t\t" + networktopology.getNumOfRacks());
 
-        // If there were internal errors during the fsck operation, we want to
-        // return FAILURE_STATUS, even if those errors were not immediately
-        // fatal.  Otherwise many unit tests will pass even when there are bugs.
-        if (internalError) {
-          throw new IOException("fsck encountered internal errors!");
-        }
+          out.println(
+              "FSCK ended at " + new Date() + " in " + (Time.now() - startTime + " milliseconds"));
 
-        // DFSck client scans for the string HEALTHY/CORRUPT to check the status
-        // of file system and return appropriate code. Changing the output
-        // string might break testcases. Also note this must be the last line 
-        // of the report.
-        if (res.isHealthy()) {
-          out.print("\n\nThe filesystem under path '" + path + "' " + HEALTHY_STATUS);
+          // If there were internal errors during the fsck operation, we want to
+          // return FAILURE_STATUS, even if those errors were not immediately
+          // fatal.  Otherwise many unit tests will pass even when there are bugs.
+          if (internalError) {
+            throw new IOException("fsck encountered internal errors!");
+          }
+
+          // DFSck client scans for the string HEALTHY/CORRUPT to check the status
+          // of file system and return appropriate code. Changing the output
+          // string might break testcases. Also note this must be the last line
+          // of the report.
+          if (res.isHealthy()) {
+            out.print("\n\nThe filesystem under path '" + path + "' " + HEALTHY_STATUS);
+          } else {
+            out.print("\n\nThe filesystem under path '" + path + "' " + CORRUPT_STATUS);
+          }
+
         } else {
-          out.print("\n\nThe filesystem under path '" + path + "' " + CORRUPT_STATUS);
+          out.print("\n\nPath '" + path + "' " + NONEXISTENT_STATUS);
         }
-
-      } else {
-        out.print("\n\nPath '" + path + "' " + NONEXISTENT_STATUS);
       }
+      namenode.getNamesystem().logFsckEvent(path, remoteAddress);
+      LOG.info(msg);
     } catch (Exception e) {
       String errMsg = "Fsck on path '" + path + "' " + FAILURE_STATUS;
       LOG.warn(errMsg, e);

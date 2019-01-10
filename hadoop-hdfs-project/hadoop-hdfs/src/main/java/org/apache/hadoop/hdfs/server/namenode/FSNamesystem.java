@@ -5360,6 +5360,19 @@ public class FSNamesystem implements Namesystem, FSClusterStats,
     }
   }
 
+  boolean countUnderReplicatedBlks(String dnHost,
+      List<BlockInfo> underReplicatedInOpenFiles,
+      List<BlockInfo> underReplicatedBlocks,
+      List<BlockInfo> decommissionOnlyReplicas) throws IOException {
+    DatanodeDescriptor node =
+        blockManager.getDatanodeManager().getDatanodeByHost(dnHost);
+    if (node == null) {
+      throw new IOException("bad host!");
+    }
+    return blockManager.countReplication(node, underReplicatedInOpenFiles,
+        underReplicatedBlocks, decommissionOnlyReplicas);
+  }
+
   /**
    * Returns whether or not there were available resources at the last check of
    * resources.
