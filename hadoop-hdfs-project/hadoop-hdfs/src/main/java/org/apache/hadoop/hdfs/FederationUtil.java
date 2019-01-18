@@ -64,11 +64,11 @@ public class FederationUtil {
     String proxyProviderClass = config
         .get(DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "." + clusterName);
     for (String nsId : nsIds) {
-      if (config
+      if (zkQuorum != null && config
           .get(CommonConfigurationKeys.ZK_OBSERVER + "." + nsId) == null) {
         config.set(CommonConfigurationKeys.ZK_OBSERVER + "." + nsId, zkQuorum);
       }
-      if (config.get(
+      if (proxyProviderClass != null && config.get(
           DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "." + nsId) == null) {
         config.set(DFS_CLIENT_FAILOVER_PROXY_PROVIDER_KEY_PREFIX + "." + nsId,
             proxyProviderClass);
