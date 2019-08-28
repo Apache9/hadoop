@@ -35,8 +35,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.management.ObjectName;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.AtomicDoubleArray;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -50,6 +48,7 @@ import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.metrics2.util.Metrics2Util.NameValuePair;
 import org.apache.hadoop.metrics2.util.Metrics2Util.TopN;
+import org.apache.hadoop.util.GsonSerialization;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
@@ -131,8 +130,6 @@ public class DecayRpcScheduler implements RpcScheduler,
 
   public static final Logger LOG =
       LoggerFactory.getLogger(DecayRpcScheduler.class);
-
-  private static final ObjectWriter WRITER = new ObjectMapper().writer();
 
   // Track the decayed and raw (no decay) number of calls for each schedulable
   // identity from all previous decay windows: idx 0 for decayed call cost and
@@ -957,7 +954,7 @@ public class DecayRpcScheduler implements RpcScheduler,
       return "{}";
     } else {
       try {
-        return WRITER.writeValueAsString(decisions);
+        return GsonSerialization.prettyWriter().toJson(decisions);
       } catch (Exception e) {
         return "Error: " + e.getMessage();
       }
@@ -966,7 +963,7 @@ public class DecayRpcScheduler implements RpcScheduler,
 
   public String getCallVolumeSummary() {
     try {
-      return WRITER.writeValueAsString(getDecayedCallCosts());
+      return GsonSerialization.prettyWriter().toJson(getDecayedCallCosts());
     } catch (Exception e) {
       return "Error: " + e.getMessage();
     }

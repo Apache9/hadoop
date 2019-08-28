@@ -17,9 +17,10 @@
 
 package org.apache.hadoop.jmx;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
 import org.apache.hadoop.http.HttpServer2;
+import org.apache.hadoop.util.GsonSerialization;
+
+import com.google.gson.stream.JsonWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -130,17 +131,12 @@ public class JMXJsonServlet extends HttpServlet {
   protected transient MBeanServer mBeanServer;
 
   /**
-   * Json Factory to create Json generators for write objects in json format
-   */
-  protected transient JsonFactory jsonFactory;
-  /**
    * Initialize this servlet.
    */
   @Override
   public void init() throws ServletException {
     // Retrieve the MBean server
     mBeanServer = ManagementFactory.getPlatformMBeanServer();
-    jsonFactory = new JsonFactory();
   }
 
   protected boolean isInstrumentationAccessAllowed(HttpServletRequest request, 
@@ -172,8 +168,8 @@ public class JMXJsonServlet extends HttpServlet {
       if (!isInstrumentationAccessAllowed(request, response)) {
         return;
       }
-      JsonGenerator jg = null;
       PrintWriter writer = null;
+      JsonWriter jw = null;
       try {
         writer = response.getWriter();
  
@@ -181,23 +177,21 @@ public class JMXJsonServlet extends HttpServlet {
         response.setHeader(ACCESS_CONTROL_ALLOW_METHODS, "GET");
         response.setHeader(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 
-        jg = jsonFactory.createGenerator(writer);
-        jg.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
-        jg.useDefaultPrettyPrinter();
-        jg.writeStartObject();
+        jw = GsonSerialization.prettyWriter().newJsonWriter(writer);
+        jw.beginObject();
 
         // query per mbean attribute
         String getmethod = request.getParameter("get");
         if (getmethod != null) {
           String[] splitStrings = getmethod.split("\\:\\:");
           if (splitStrings.length != 2) {
-            jg.writeStringField("result", "ERROR");
-            jg.writeStringField("message", "query format is not as expected.");
-            jg.flush();
+            jw.name("result").value("ERROR");
+            jw.name("message").value("query format is not as expected.");
+            jw.flush();
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return;
           }
-          listBeans(jg, new ObjectName(splitStrings[0]), splitStrings[1],
+          listBeans(jw, new ObjectName(splitStrings[0]), splitStrings[1],
               response);
           return;
         }
@@ -207,10 +201,10 @@ public class JMXJsonServlet extends HttpServlet {
         if (qry == null) {
           qry = "*:*";
         }
-        listBeans(jg, new ObjectName(qry), null, response);
+        listBeans(jw, new ObjectName(qry), null, response);
       } finally {
-        if (jg != null) {
-          jg.close();
+        if (jw != null) {
+          jw.close();
         }
         if (writer != null) {
           writer.close();
@@ -226,14 +220,14 @@ public class JMXJsonServlet extends HttpServlet {
   }
 
   // --------------------------------------------------------- Private Methods
-  private void listBeans(JsonGenerator jg, ObjectName qry, String attribute, 
+  private void listBeans(JsonWriter jw, ObjectName qry, String attribute,
       HttpServletResponse response) 
   throws IOException {
     LOG.debug("Listing beans for "+qry);
     Set<ObjectName> names = null;
     names = mBeanServer.queryNames(qry, null);
 
-    jg.writeArrayFieldStart("beans");
+    jw.beginArray().name("beans");
     Iterator<ObjectName> it = names.iterator();
     while (it.hasNext()) {
       ObjectName oname = it.next();
@@ -293,35 +287,34 @@ public class JMXJsonServlet extends HttpServlet {
         continue;
       }
 
-      jg.writeStartObject();
-      jg.writeStringField("name", oname.toString());
-      
-      jg.writeStringField("modelerType", code);
+      jw.beginObject();
+      jw.name("name").value(oname.toString());
+      jw.name("modelerType").value(code);
       if ((attribute != null) && (attributeinfo == null)) {
-        jg.writeStringField("result", "ERROR");
-        jg.writeStringField("message", "No attribute with name " + attribute
+        jw.name("result").value("ERROR");
+        jw.name("message").value("No attribute with name " + attribute
             + " was found.");
-        jg.writeEndObject();
-        jg.writeEndArray();
-        jg.close();
+        jw.endObject();
+        jw.endArray();
+        jw.close();
         response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         return;
       }
       
       if (attribute != null) {
-        writeAttribute(jg, attribute, attributeinfo);
+        writeAttribute(jw, attribute, attributeinfo);
       } else {
         MBeanAttributeInfo attrs[] = minfo.getAttributes();
         for (int i = 0; i < attrs.length; i++) {
-          writeAttribute(jg, oname, attrs[i]);
+          writeAttribute(jw, oname, attrs[i]);
         }
       }
-      jg.writeEndObject();
+      jw.endObject();
     }
-    jg.writeEndArray();
+    jw.endArray();
   }
 
-  private void writeAttribute(JsonGenerator jg, ObjectName oname, MBeanAttributeInfo attr) throws IOException {
+  private void writeAttribute(JsonWriter jw, ObjectName oname, MBeanAttributeInfo attr) throws IOException {
     if (!attr.isReadable()) {
       return;
     }
@@ -378,51 +371,51 @@ public class JMXJsonServlet extends HttpServlet {
       return;
     }
 
-    writeAttribute(jg, attName, value);
+    writeAttribute(jw, attName, value);
   }
   
-  private void writeAttribute(JsonGenerator jg, String attName, Object value) throws IOException {
-    jg.writeFieldName(attName);
-    writeObject(jg, value);
+  private void writeAttribute(JsonWriter jw, String attName, Object value) throws IOException {
+    jw.name(attName);
+    writeObject(jw, value);
   }
   
-  private void writeObject(JsonGenerator jg, Object value) throws IOException {
+  private void writeObject(JsonWriter jw, Object value) throws IOException {
     if(value == null) {
-      jg.writeNull();
+      jw.nullValue();
     } else {
       Class<?> c = value.getClass();
       if (c.isArray()) {
-        jg.writeStartArray();
+        jw.beginArray();
         int len = Array.getLength(value);
         for (int j = 0; j < len; j++) {
           Object item = Array.get(value, j);
-          writeObject(jg, item);
+          writeObject(jw, item);
         }
-        jg.writeEndArray();
+        jw.endArray();
       } else if(value instanceof Number) {
         Number n = (Number)value;
-        jg.writeNumber(n.toString());
+        jw.value(n);
       } else if(value instanceof Boolean) {
         Boolean b = (Boolean)value;
-        jg.writeBoolean(b);
+        jw.value(b);
       } else if(value instanceof CompositeData) {
         CompositeData cds = (CompositeData)value;
         CompositeType comp = cds.getCompositeType();
         Set<String> keys = comp.keySet();
-        jg.writeStartObject();
+        jw.beginObject();
         for(String key: keys) {
-          writeAttribute(jg, key, cds.get(key));
+          writeAttribute(jw, key, cds.get(key));
         }
-        jg.writeEndObject();
+        jw.endObject();
       } else if(value instanceof TabularData) {
         TabularData tds = (TabularData)value;
-        jg.writeStartArray();
+        jw.beginArray();
         for(Object entry : tds.values()) {
-          writeObject(jg, entry);
+          writeObject(jw, entry);
         }
-        jg.writeEndArray();
+        jw.endArray();
       } else {
-        jg.writeString(value.toString());
+        jw.value(value.toString());
       }
     }
   }

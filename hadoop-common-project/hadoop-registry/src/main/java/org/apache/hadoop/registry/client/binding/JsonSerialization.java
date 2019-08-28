@@ -16,35 +16,24 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.util;
-
-import java.io.EOFException;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.util.Map;
+package org.apache.hadoop.registry.client.binding;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.ObjectWriter;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.*;
 import com.google.common.base.Preconditions;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.GsonSerialization;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.util.Map;
 
 /**
  * Support for marshalling objects to and from JSON.
@@ -57,9 +46,13 @@ import org.apache.hadoop.fs.Path;
  * {@code org.apache.hadoop.registry.client.binding.JsonSerDeser},
  * which is now a subclass of this class.
  * @param <T> Type to marshal.
+ * @deprecated Avoid using this class any more, as jackson has 
+ *             too many CVEs so far. Use gson and
+ *             {@link GsonSerialization} instead.
  */
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
+@Deprecated
 public class JsonSerialization<T> {
 
   private static final Logger LOG =
@@ -96,7 +89,7 @@ public class JsonSerialization<T> {
    * @param pretty generate pretty (indented) output?
    */
   public JsonSerialization(Class<T> classType,
-      boolean failOnUnknownProperties, boolean pretty) {
+                           boolean failOnUnknownProperties, boolean pretty) {
     Preconditions.checkArgument(classType != null, "null classType");
     this.classType = classType;
     this.mapper = new ObjectMapper();

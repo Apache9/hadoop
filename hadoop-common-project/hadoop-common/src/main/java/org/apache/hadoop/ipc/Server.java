@@ -115,6 +115,7 @@ import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.ExitUtil;
+import org.apache.hadoop.util.GsonSerialization;
 import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -122,7 +123,6 @@ import org.apache.htrace.core.SpanId;
 import org.apache.htrace.core.TraceScope;
 import org.apache.htrace.core.Tracer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedOutputStream;
@@ -3483,13 +3483,8 @@ public abstract class Server {
    * Get the NumOpenConnections/User.
    */
   public String getNumOpenConnectionsPerUser() {
-    ObjectMapper mapper = new ObjectMapper();
-    try {
-      return mapper
-          .writeValueAsString(connectionManager.getUserToConnectionsMap());
-    } catch (IOException ignored) {
-    }
-    return null;
+    return GsonSerialization.prettyWriter().toJson(
+      connectionManager.getUserToConnectionsMap());
   }
 
   /**
