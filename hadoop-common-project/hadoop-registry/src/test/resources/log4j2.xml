@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Appenders>
+    <Console name="stdout" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{ISO8601} [%t] %-5p %c{2} (%F:%M(%L)) - %m%n"/>
+    </Console>
+    <Console name="subprocess" target="SYSTEM_OUT">
+      <PatternLayout pattern="[%c{1}]: %m%n"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="INFO">
+      <AppenderRef ref="stdout"/>
+    </Root>
+    <Logger name="org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdaterImpl" level="WARN"/>
+    <Logger name="org.apache.directory.api.ldap" level="ERROR"/>
+    <Logger name="org.apache.curator.framework.state.ConnectionStateManager" level="ERROR"/>
+    <Logger name="org.apache.curator.framework.imps" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.util.AbstractLivelinessMonitor" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.server.resourcemanager.security" level="WARN"/>
+    <Logger name="org.apache.hadoop.util.NativeCodeLoader" level="ERROR"/>
+    <Logger name="org.apache.hadoop.yarn.server.nodemanager.security" level="WARN"/>
+    <Logger name="org.apache.hadoop.hdfs" level="WARN"/>
+    <Logger name="org.apache.zookeeper" level="INFO"/>
+    <Logger name="org.apache.hadoop.service" level="DEBUG"/>
+    <Logger name="org.apache.hadoop.metrics2" level="ERROR"/>
+    <Logger name="org.apache.directory.server" level="ERROR"/>
+    <Logger name="org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.registry" level="DEBUG"/>
+    <Logger name="org.apache.hadoop.security.token.delegation" level="WARN"/>
+    <Logger name="org.apache.hadoop.hdfs.server.blockmanagement" level="WARN"/>
+    <Logger name="org.apache.hadoop.hdfs.server.datanode.BlockPoolSliceScanner" level="WARN"/>
+    <Logger name="org.apache.hadoop.hdfs.server.namenode.FSNamesystem.audit" level="WARN"/>
+    <Logger name="org.apache.hadoop.util.HostsFileReader" level="WARN"/>
+    <Logger name="org.apache.hadoop.security.UserGroupInformation" level="DEBUG"/>
+    <Logger name="org.apache.hadoop.yarn.event.AsyncDispatcher" level="WARN"/>
+    <Logger name="org.apache.zookeeper.ClientCnxn" level="DEBUG"/>
+    <Logger name="org.apache.hadoop.yarn.server.resourcemanager.RMNMInfo" level="WARN"/>
+  </Loggers>
+</Configuration>

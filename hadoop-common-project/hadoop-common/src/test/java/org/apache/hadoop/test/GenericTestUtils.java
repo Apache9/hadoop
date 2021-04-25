@@ -35,10 +35,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
-import java.util.Enumeration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -49,8 +49,6 @@ import java.util.regex.Pattern;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
@@ -58,13 +56,14 @@ import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.hadoop.util.DurationInfo;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
-import org.apache.log4j.Appender;
-import org.apache.log4j.Layout;
-import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
-import org.apache.log4j.PatternLayout;
-import org.apache.log4j.WriterAppender;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.core.appender.WriterAppender;
+import org.apache.logging.log4j.core.config.Configurator;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.mockito.invocation.InvocationOnMock;
@@ -117,108 +116,17 @@ public abstract class GenericTestUtils {
   public static final String ERROR_INVALID_ARGUMENT =
       "Total wait time should be greater than check interval time";
 
-  /**
-   * @deprecated use {@link #disableLog(org.slf4j.Logger)} instead
-   */
-  @Deprecated
-  @SuppressWarnings("unchecked")
-  public static void disableLog(Log log) {
-    // We expect that commons-logging is a wrapper around Log4j.
-    disableLog((Log4JLogger) log);
-  }
-
-  @Deprecated
-  public static Logger toLog4j(org.slf4j.Logger logger) {
-    return LogManager.getLogger(logger.getName());
-  }
-
-  /**
-   * @deprecated use {@link #disableLog(org.slf4j.Logger)} instead
-   */
-  @Deprecated
-  public static void disableLog(Log4JLogger log) {
-    log.getLogger().setLevel(Level.OFF);
-  }
-
-  /**
-   * @deprecated use {@link #disableLog(org.slf4j.Logger)} instead
-   */
-  @Deprecated
-  public static void disableLog(Logger logger) {
-    logger.setLevel(Level.OFF);
-  }
-
   public static void disableLog(org.slf4j.Logger logger) {
-    disableLog(toLog4j(logger));
-  }
-
-  /**
-   * @deprecated
-   * use {@link #setLogLevel(org.slf4j.Logger, org.slf4j.event.Level)} instead
-   */
-  @Deprecated
-  @SuppressWarnings("unchecked")
-  public static void setLogLevel(Log log, Level level) {
-    // We expect that commons-logging is a wrapper around Log4j.
-    setLogLevel((Log4JLogger) log, level);
-  }
-
-  /**
-   * A helper used in log4j2 migration to accept legacy
-   * org.apache.commons.logging apis.
-   * <p>
-   * And will be removed after migration.
-   *
-   * @param log   a log
-   * @param level level to be set
-   */
-  @Deprecated
-  public static void setLogLevel(Log log, org.slf4j.event.Level level) {
-    setLogLevel(log, Level.toLevel(level.toString()));
-  }
-
-  /**
-   * @deprecated
-   * use {@link #setLogLevel(org.slf4j.Logger, org.slf4j.event.Level)} instead
-   */
-  @Deprecated
-  public static void setLogLevel(Log4JLogger log, Level level) {
-    log.getLogger().setLevel(level);
-  }
-
-  /**
-   * @deprecated
-   * use {@link #setLogLevel(org.slf4j.Logger, org.slf4j.event.Level)} instead
-   */
-  @Deprecated
-  public static void setLogLevel(Logger logger, Level level) {
-    logger.setLevel(level);
-  }
-
-  /**
-   * @deprecated
-   * use {@link #setLogLevel(org.slf4j.Logger, org.slf4j.event.Level)} instead
-   */
-  @Deprecated
-  public static void setLogLevel(org.slf4j.Logger logger, Level level) {
-    setLogLevel(toLog4j(logger), level);
+    Configurator.setLevel(logger.getName(), Level.OFF);
   }
 
   public static void setLogLevel(org.slf4j.Logger logger,
-                                 org.slf4j.event.Level level) {
-    setLogLevel(toLog4j(logger), Level.toLevel(level.toString()));
+      org.slf4j.event.Level level) {
+    Configurator.setLevel(logger.getName(), Level.toLevel(level.toString()));
   }
 
   public static void setRootLogLevel(org.slf4j.event.Level level) {
-    setLogLevel(LogManager.getRootLogger(), Level.toLevel(level.toString()));
-  }
-
-  public static void setCurrentLoggersLogLevel(org.slf4j.event.Level level) {
-    for (Enumeration<?> loggers = LogManager.getCurrentLoggers();
-        loggers.hasMoreElements();) {
-      Logger logger = (Logger) loggers.nextElement();
-      logger.setLevel(Level.toLevel(level.toString()));
-    }
+    Configurator.setRootLevel(Level.toLevel(level.toString()));
   }
 
   public static org.slf4j.event.Level toLevel(String level) {
@@ -508,26 +416,22 @@ public abstract class GenericTestUtils {
   public static class LogCapturer {
     private StringWriter sw = new StringWriter();
     private WriterAppender appender;
-    private Logger logger;
-
-    public static LogCapturer captureLogs(Log l) {
-      Logger logger = ((Log4JLogger)l).getLogger();
-      return new LogCapturer(logger);
-    }
+    private org.apache.logging.log4j.core.Logger logger;
 
     public static LogCapturer captureLogs(org.slf4j.Logger logger) {
-      return new LogCapturer(toLog4j(logger));
+      return new LogCapturer(LogManager.getLogger(logger.getName()));
     }
 
-    private LogCapturer(Logger logger) {
-      this.logger = logger;
-      Appender defaultAppender = Logger.getRootLogger().getAppender("stdout");
+    private LogCapturer(Logger l) {
+      this.logger = (org.apache.logging.log4j.core.Logger) l;
+      Map<String, Appender> appenders = logger.getAppenders();
+      Appender defaultAppender = appenders.get("stdout");
       if (defaultAppender == null) {
-        defaultAppender = Logger.getRootLogger().getAppender("console");
+        defaultAppender = appenders.get("console");
       }
-      final Layout layout = (defaultAppender == null) ? new PatternLayout() :
+      final Layout layout = (defaultAppender == null) ? PatternLayout.createDefaultLayout() :
           defaultAppender.getLayout();
-      this.appender = new WriterAppender(layout, sw);
+      this.appender = WriterAppender.newBuilder().setLayout(layout).setTarget(sw).build();
       logger.addAppender(this.appender);
     }
 

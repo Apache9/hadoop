@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Appenders>
+    <Console name="test" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{ABSOLUTE} %5p %c{1}:%L - %m%n"/>
+    </Console>
+  </Appenders>
+</Configuration>

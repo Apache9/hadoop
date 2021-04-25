@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Appenders>
+    <Console name="stdout" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{ISO8601} [%t] %-5p %c{2} (%F:%M(%L)) - %m%n"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="info">
+      <AppenderRef ref="stdout"/>
+    </Root>
+    <Logger name="org.apache.hadoop.mapred.IndexCache" level="WARN"/>
+    <Logger name="org.apache.hadoop.ipc" level="WARN"/>
+    <Logger name="org.apache.hadoop.mapred.ShuffleHandler" level="WARN"/>
+    <Logger name="BlockStateChange" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.util.AbstractLivelinessMonitor" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.server.resourcemanager.security" level="WARN"/>
+    <Logger name="org.apache.hadoop.util.NativeCodeLoader" level="ERROR"/>
+    <Logger name="org.apache.hadoop.fs.s3a.S3AStorageStatistics" level="INFO"/>
+    <Logger name="org.apache.hadoop.yarn.util.ResourceCalculatorPlugin" level="ERROR"/>
+    <Logger name="org.apache.hadoop.security.authentication.server.AuthenticationFilter" level="WARN"/>
+    <Logger name="org.apache.hadoop.fs.s3a.s3guard.Operations" level="DEBUG"/>
+    <Logger name="org.apache.hadoop.metrics2" level="WARN"/>
+    <Logger name="org.apache.hadoop.hdfs.server" level="ERROR"/>
+    <Logger name="org.apache.hadoop.ipc.Server" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.server.nodemanager" level="WARN"/>
+    <Logger name="org.apache.hadoop.hdfs.DFSUtil" level="WARN"/>
+    <Logger name="org.apache.commons.beanutils" level="WARN"/>
+    <Logger name="org.apache.hadoop.conf.Configuration.deprecation" level="WARN"/>
+    <Logger name="org.apache.hadoop.security.token.delegation" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.event" level="WARN"/>
+    <Logger name="org.apache.hadoop.net.NetworkTopology" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.webapp.WebApps" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.server.resourcemanager.scheduler" level="WARN"/>
+    <Logger name="org.apache.hadoop.util.GSet" level="WARN"/>
+    <Logger name="org.apache.hadoop.hdfs.StateChange" level="WARN"/>
+    <Logger name="org.apache.hadoop.util.HostsFileReader" level="WARN"/>
+    <Logger name="org.apache.hadoop.http" level="WARN"/>
+    <Logger name="org.apache.hadoop.mapreduce.lib.output" level="DEBUG"/>
+    <Logger name="org.apache.hadoop.util.JvmPauseMonitor" level="WARN"/>
+  </Loggers>
+</Configuration>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Appenders>
+    <Console name="stdout" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{ISO8601} %-5p %c{1} - %m%n"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="INFO">
+      <AppenderRef ref="stdout"/>
+    </Root>
+    <Logger name="org.apache.curator" level="INFO"/>
+    <Logger name="com.sun.jersey.server.wadl.generators.WadlGeneratorJAXBGrammarGenerator" level="OFF"/>
+    <Logger name="org.eclipse.jetty" level="INFO"/>
+    <Logger name="org.apache.directory.server.core" level="OFF"/>
+    <Logger name="org.apache.zookeeper" level="INFO"/>
+    <Logger name="com.sun.jersey.server.wadl.generators.AbstractWadlGeneratorGrammarGenerator" level="OFF"/>
+    <Logger name="org.apache.hadoop.security" level="OFF"/>
+    <Logger name="org.apache.hadoop.conf" level="ERROR"/>
+    <Logger name="org.apache.hadoop.crytpo.key.kms.server" level="ALL"/>
+    <Logger name="org.apache.hadoop.util.NativeCodeLoader" level="OFF"/>
+  </Loggers>
+</Configuration>

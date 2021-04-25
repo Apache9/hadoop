@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Appenders>
+    <RollingFile name="CATALINA" fileName="target/appcatalog.log" append="true" filePattern="target/appcatalog.log%d{'.'yyyy-MM-dd'.log'}">
+      <PatternLayout pattern="%d [%t] %-5p %c- %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy modulate="true"/>
+      </Policies>
+      <DefaultRolloverStrategy max="2147483647"/>
+    </RollingFile>
+  </Appenders>
+  <Loggers>
+    <Root level="INFO">
+      <AppenderRef ref="CATALINA"/>
+    </Root>
+  </Loggers>
+</Configuration>

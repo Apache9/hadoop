@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Appenders>
+    <Console name="stdout" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{ISO8601} %-5p [%t] %c{2} (%F:%M(%L)) - %m%n"/>
+    </Console>
+    <RollingFile name="restservicelog" fileName="${REST_SERVICE_LOG_DIR}/restservice.log" filePattern="${REST_SERVICE_LOG_DIR}/restservice.log.%i">
+      <PatternLayout pattern="%d{ISO8601} [%t] %-5p %c{2} - %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="1GB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="10"/>
+    </RollingFile>
+    <Console name="subprocess" target="SYSTEM_OUT">
+      <PatternLayout pattern="[%c{1}]: %m%n"/>
+    </Console>
+    <Console name="stderr" target="SYSTEM_ERR">
+      <PatternLayout pattern="%d{ISO8601} [%t] %-5p %c{2} - %m%n"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="INFO">
+      <AppenderRef ref="restservicelog"/>
+    </Root>
+    <Logger name="org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdaterImpl" level="WARN"/>
+    <Logger name="org.apache.hadoop.hdfs.shortcircuit" level="ERROR"/>
+    <Logger name="org.apache.curator.framework.state" level="ERROR"/>
+    <Logger name="org.apache.curator.framework.imps" level="WARN"/>
+    <Logger name="org.mortbay.log" level="DEBUG"/>
+    <Logger name="org.apache.hadoop.util.NativeCodeLoader" level="ERROR"/>
+    <Logger name="org.apache.hadoop.hdfs" level="WARN"/>
+    <Logger name="org.apache.zookeeper" level="WARN"/>
+    <Logger name="org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor" level="WARN"/>
+  </Loggers>
+</Configuration>

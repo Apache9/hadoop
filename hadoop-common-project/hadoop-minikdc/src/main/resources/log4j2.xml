@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Appenders>
+    <Console name="stdout" target="SYSTEM_ERR">
+      <PatternLayout pattern="%d{ISO8601} %-5p %c{1} - %m%n"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="INFO">
+      <AppenderRef ref="stdout"/>
+    </Root>
+    <Logger name="org.apache.directory" level="OFF"/>
+    <Logger name="org.apache.directory.server.kerberos" level="INFO">
+      <AppenderRef ref="stdout"/>
+    </Logger>
+    <Logger name="net.sf.ehcache" level="INFO">
+      <AppenderRef ref="stdout"/>
+    </Logger>
+  </Loggers>
+</Configuration>

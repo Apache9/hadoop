@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Properties>
+    <Property name="datanode.metrics.logger">INFO,NullAppender</Property>
+    <Property name="hadoop.log.dir">.</Property>
+    <Property name="hadoop.log.file">hadoop.log</Property>
+    <Property name="hadoop.log.maxbackupindex">20</Property>
+    <Property name="hadoop.log.maxfilesize">256MB</Property>
+    <Property name="hadoop.root.logger">INFO,console</Property>
+    <Property name="hadoop.security.log.file">SecurityAuth-${user.name}.audit</Property>
+    <Property name="hadoop.security.log.maxbackupindex">20</Property>
+    <Property name="hadoop.security.log.maxfilesize">256MB</Property>
+    <Property name="hadoop.security.logger">INFO,NullAppender</Property>
+    <Property name="hdfs.audit.log.maxbackupindex">20</Property>
+    <Property name="hdfs.audit.log.maxfilesize">256MB</Property>
+    <Property name="hdfs.audit.logger">INFO,NullAppender</Property>
+    <Property name="namenode.metrics.logger">INFO,NullAppender</Property>
+    <Property name="nm.audit.log.maxbackupindex">20</Property>
+    <Property name="nm.audit.log.maxfilesize">256MB</Property>
+    <Property name="nm.audit.logger">INFO,NullAppender</Property>
+    <Property name="rm.audit.log.maxbackupindex">20</Property>
+    <Property name="rm.audit.log.maxfilesize">256MB</Property>
+    <Property name="rm.audit.logger">INFO,NullAppender</Property>
+    <Property name="yarn.ewma.cleanupInterval">300</Property>
+    <Property name="yarn.ewma.maxUniqueMessages">250</Property>
+    <Property name="yarn.ewma.messageAgeLimitSeconds">86400</Property>
+    <Property name="yarn.server.resourcemanager.appsummary.log.file">rm-appsummary.log</Property>
+    <Property name="yarn.server.resourcemanager.appsummary.logger">${hadoop.root.logger}</Property>
+  </Properties>
+  <Appenders>
+    <RollingFile name="RFAS" fileName="./SecurityAuth-${user.name}.audit" filePattern="./SecurityAuth-${user.name}.audit.%i">
+      <PatternLayout pattern="%d{ISO8601} %p %c: %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="256MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="20"/>
+    </RollingFile>
+    <Console name="console" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{ISO8601} %p %c{2}: %m%n"/>
+    </Console>
+    <RollingFile name="DNMETRICSRFA" fileName="./datanode-metrics.log" filePattern="./datanode-metrics.log.%i">
+      <PatternLayout pattern="%d{ISO8601} %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="64MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="1"/>
+    </RollingFile>
+    <Null name="NullAppender"/>
+    <RollingFile name="NNMETRICSRFA" fileName="./namenode-metrics.log" filePattern="./namenode-metrics.log.%i">
+      <PatternLayout pattern="%d{ISO8601} %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="64MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="1"/>
+    </RollingFile>
+    <RollingFile name="DRFA" fileName="./hadoop.log" filePattern="./hadoop.log%d{.yyyy-MM-dd}">
+      <PatternLayout pattern="%d{ISO8601} %p %c: %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy modulate="true"/>
+      </Policies>
+      <DefaultRolloverStrategy max="2147483647"/>
+    </RollingFile>
+    <RollingFile name="RFA" fileName="./hadoop.log" filePattern="./hadoop.log.%i">
+      <PatternLayout pattern="%d{ISO8601} %p %c: %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="256MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="20"/>
+    </RollingFile>
+    <RollingFile name="DRFAS" fileName="./SecurityAuth-${user.name}.audit" filePattern="./SecurityAuth-${user.name}.audit%d{.yyyy-MM-dd}">
+      <PatternLayout pattern="%d{ISO8601} %p %c: %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy modulate="true"/>
+      </Policies>
+      <DefaultRolloverStrategy max="2147483647"/>
+    </RollingFile>
+    <RollingFile name="RMSUMMARY" fileName="./rm-appsummary.log" filePattern="./rm-appsummary.log.%i">
+      <PatternLayout pattern="%d{ISO8601} %p %c{2}: %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="256MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="20"/>
+    </RollingFile>
+    <RollingFile name="RFAAUDIT" fileName="./hdfs-audit.log" filePattern="./hdfs-audit.log.%i">
+      <PatternLayout pattern="%d{ISO8601} %p %c{2}: %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="256MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="20"/>
+    </RollingFile>
+    <RollingFile name="NMAUDIT" fileName="./nm-audit.log" filePattern="./nm-audit.log.%i">
+      <PatternLayout pattern="%d{ISO8601}%p %c{2}: %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="256MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="20"/>
+    </RollingFile>
+    <RollingFile name="RMAUDIT" fileName="./rm-audit.log" filePattern="./rm-audit.log.%i">
+      <PatternLayout pattern="%d{ISO8601} %p %c{2}: %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="256MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="20"/>
+    </RollingFile>
+  </Appenders>
+  <Loggers>
+    <Root level="INFO">
+      <AppenderRef ref="console"/>
+    </Root>
+    <Logger name="SecurityLogger" level="${hadoop.security.logger}"/>
+    <Logger name="NameNodeMetricsLog" level="${namenode.metrics.logger}"/>
+    <Logger name="com.amazonaws.http.AmazonHttpClient" level="ERROR"/>
+    <Logger name="org.apache.hadoop.yarn.server.nodemanager.NMAuditLogger" level="${nm.audit.logger}"/>
+    <Logger name="DataNodeMetricsLog" level="${datanode.metrics.logger}"/>
+    <Logger name="org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger" level="${rm.audit.logger}"/>
+    <Logger name="org.apache.hadoop.yarn.server.resourcemanager.RMAppManager$ApplicationSummary" level="${yarn.server.resourcemanager.appsummary.logger}"/>
+    <Logger name="org.apache.hadoop.hdfs.server.namenode.FSNamesystem.audit" level="${hdfs.audit.logger}"/>
+    <Logger name="org.apache.commons.beanutils" level="WARN"/>
+  </Loggers>
+</Configuration>

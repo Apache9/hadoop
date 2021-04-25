@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?><Configuration name="Log4j1">
+  <Appenders>
+    <Console name="stdout" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{ISO8601} [%t] %-5p %c{2} (%F:%M(%L)) - %m%n"/>
+    </Console>
+    <RollingFile name="DNMETRICSRFA" fileName="${hadoop.log.dir}/datanode-metrics.log" filePattern="${hadoop.log.dir}/datanode-metrics.log.%i">
+      <PatternLayout pattern="%d{ISO8601} %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="64MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="1"/>
+    </RollingFile>
+    <RollingFile name="NNMETRICSRFA" fileName="${hadoop.log.dir}/namenode-metrics.log" filePattern="${hadoop.log.dir}/namenode-metrics.log.%i">
+      <PatternLayout pattern="%d{ISO8601} %m%n"/>
+      <Policies>
+        <SizeBasedTriggeringPolicy size="64MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="1"/>
+    </RollingFile>
+  </Appenders>
+  <Loggers>
+    <Root level="info">
+      <AppenderRef ref="stdout"/>
+    </Root>
+    <Logger name="com.sun.jersey.server.wadl.generators.WadlGeneratorJAXBGrammarGenerator" level="OFF"/>
+    <Logger name="DataNodeMetricsLog" level="INFO">
+      <AppenderRef ref="DNMETRICSRFA"/>
+    </Logger>
+    <Logger name="NameNodeMetricsLog" level="INFO">
+      <AppenderRef ref="NNMETRICSRFA"/>
+    </Logger>
+  </Loggers>
+</Configuration>
