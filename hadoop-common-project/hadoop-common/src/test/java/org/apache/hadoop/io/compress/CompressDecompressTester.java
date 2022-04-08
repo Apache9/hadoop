@@ -19,6 +19,7 @@ package org.apache.hadoop.io.compress;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -28,26 +29,24 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.compress.lz4.Lz4Compressor;
 import org.apache.hadoop.io.compress.snappy.SnappyCompressor;
 import org.apache.hadoop.io.compress.zlib.BuiltInZlibDeflater;
 import org.apache.hadoop.io.compress.zlib.ZlibCompressor;
 import org.apache.hadoop.io.compress.zlib.ZlibFactory;
-import org.apache.hadoop.util.NativeCodeLoader;
-import org.apache.log4j.Logger;
-import org.junit.Assert;
-
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
-import static org.junit.Assert.*;
+import org.apache.hadoop.util.NativeCodeLoader;
+import org.junit.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CompressDecompressTester<T extends Compressor, E extends Decompressor> {
 
-  private static final Logger logger = Logger
+  private static final Logger logger = LoggerFactory
       .getLogger(CompressDecompressTester.class);
 
   private final byte[] originalRawData;
@@ -491,7 +490,7 @@ public class CompressDecompressTester<T extends Compressor, E extends Decompress
   
   abstract static class TesterCompressionStrategy {
 
-    protected final Logger logger = Logger.getLogger(getClass());
+    protected final Logger logger = LoggerFactory.getLogger(getClass());
 
     abstract void assertCompression(String name, Compressor compressor,
         Decompressor decompressor, byte[] originalRawData) throws Exception;

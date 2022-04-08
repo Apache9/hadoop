@@ -18,18 +18,14 @@
 
 package org.apache.hadoop.hdfs;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.IOException;
+import static org.junit.Assert.*;
+
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.TreeMap;
 import java.util.zip.CRC32;
-
-import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -47,10 +43,9 @@ import org.apache.hadoop.hdfs.server.namenode.FSImageTestUtil;
 import org.apache.hadoop.hdfs.server.namenode.IllegalReservedPathException;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.junit.Test;
-
-import static org.junit.Assert.*;
+import org.slf4j.LoggerFactory;
 
 /**
  * This tests data transfer protocol handling in the Datanode. It sends
@@ -318,7 +313,8 @@ public class TestDFSUpgradeFromImage {
     
     // Attach our own log appender so we can verify output
     final LogVerificationAppender appender = new LogVerificationAppender();
-    final Logger logger = Logger.getRootLogger();
+    final org.apache.logging.log4j.core.Logger logger =
+            (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
     logger.addAppender(appender);
 
     // Upgrade should now fail
@@ -334,6 +330,8 @@ public class TestDFSUpgradeFromImage {
       int md5failures = appender.countExceptionsWithMessage(
           " is corrupt with MD5 checksum of ");
       assertEquals("Upgrade did not fail with bad MD5", 1, md5failures);
+    } finally {
+      logger.removeAppender(appender);
     }
   }
 

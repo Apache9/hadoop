@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.net.URISyntaxException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -32,8 +33,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.Whitebox;
 import org.apache.hadoop.util.ThreadUtil;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.PropertyConfigurator;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -66,16 +66,13 @@ public class TestKMSAudit {
   public final Timeout testTimeout = new Timeout(180000);
 
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws IOException, URISyntaxException {
     originalOut = System.err;
     memOut = new ByteArrayOutputStream();
     filterOut = new FilterOut(memOut);
     capturedOut = new PrintStream(filterOut);
     System.setErr(capturedOut);
-    InputStream is =
-        ThreadUtil.getResourceAsStream("log4j-kmsaudit.properties");
-    PropertyConfigurator.configure(is);
-    IOUtils.closeStream(is);
+    Configurator.reconfigure(getClass().getResource("log4j2-kmsaudit.properties").toURI());
     Configuration conf = new Configuration();
     this.kmsAudit = new KMSAudit(conf);
   }
@@ -83,7 +80,7 @@ public class TestKMSAudit {
   @After
   public void cleanUp() {
     System.setErr(originalOut);
-    LogManager.resetConfiguration();
+    Configurator.reconfigure();
     kmsAudit.shutdown();
   }
 

@@ -307,7 +307,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <systemPropertyVariables>
-                        <log4j.configuration>file:${project.build.testOutputDirectory}/log4j.properties</log4j.configuration>
+                        <log4j2.configurationFile>file:${project.build.testOutputDirectory}/log4j2.properties</log4j2.configurationFile>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -437,7 +437,7 @@
                         <exclude>src/main/webapp//**/*.svg</exclude>
                         <exclude>src/test/javascript/karma.conf.js</exclude>
                         <exclude>src/test/resources/configsets/exampleCollection/conf/params.json</exclude>
-                        <exclude>src/test/resources/log4j.properties</exclude>
+                        <exclude>src/test/resources/log4j2.properties</exclude>
                         <exclude>src/test/resources/jaas.config</exclude>
                         <exclude>.bowerrc</exclude>
                         <exclude>.yarnrc</exclude>

@@ -13,23 +13,19 @@
  */
 package org.apache.hadoop.security.authentication.util;
 
+import static org.mockito.Mockito.*;
+
 import java.nio.charset.Charset;
 import java.util.Properties;
 import java.util.Random;
 import javax.servlet.ServletContext;
-
 import org.apache.curator.test.TestingServer;
-import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 public class TestZKSignerSecretProvider {
 
@@ -40,8 +36,7 @@ public class TestZKSignerSecretProvider {
   private final long rolloverFrequency = timeout / 2;
 
   {
-    LogManager.getLogger(
-        RolloverSignerSecretProvider.LOG.getName()).setLevel(Level.DEBUG);
+    Configurator.setLevel(RolloverSignerSecretProvider.LOG.getName(), Level.DEBUG);
   }
 
   @Before

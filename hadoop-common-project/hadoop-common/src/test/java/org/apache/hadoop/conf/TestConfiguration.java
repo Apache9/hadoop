@@ -17,55 +17,25 @@
  */
 package org.apache.hadoop.conf;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedWriter;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStreamWriter;
-import java.io.StringWriter;
+import static java.util.concurrent.TimeUnit.*;
+import static org.apache.hadoop.conf.StorageUnit.*;
+import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
+import static org.junit.Assert.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.ConcurrentModificationException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
-import static java.util.concurrent.TimeUnit.*;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
-import org.assertj.core.api.Assertions;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
-import static org.apache.hadoop.conf.StorageUnit.BYTES;
-import static org.apache.hadoop.conf.StorageUnit.GB;
-import static org.apache.hadoop.conf.StorageUnit.KB;
-import static org.apache.hadoop.conf.StorageUnit.MB;
-import static org.apache.hadoop.conf.StorageUnit.TB;
-import static org.junit.Assert.*;
-
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration.IntegerRanges;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.net.NetUtils;
@@ -73,12 +43,14 @@ import org.apache.hadoop.security.alias.CredentialProvider;
 import org.apache.hadoop.security.alias.CredentialProviderFactory;
 import org.apache.hadoop.security.alias.LocalJavaKeyStoreProvider;
 import org.apache.hadoop.test.GenericTestUtils;
-
-import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
-
-import org.apache.log4j.AppenderSkeleton;
-import org.apache.log4j.Logger;
-import org.apache.log4j.spi.LoggingEvent;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.assertj.core.api.Assertions;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 import org.mockito.Mockito;
 
 public class TestConfiguration {
@@ -221,7 +193,8 @@ public class TestConfiguration {
 
     // Attach our own log appender so we can verify output
     TestAppender appender = new TestAppender();
-    final Logger logger = Logger.getRootLogger();
+
+    final Logger logger = (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
     logger.addAppender(appender);
 
     try {
@@ -230,11 +203,11 @@ public class TestConfiguration {
       conf.addResource(in2);
       assertEquals("should see the first value", "A", conf.get("prop"));
 
-      List<LoggingEvent> events = appender.getLog();
+      List<LogEvent> events = appender.getLog();
       assertEquals("overriding a final parameter should cause logging", 1,
           events.size());
-      LoggingEvent loggingEvent = events.get(0);
-      String renderedMessage = loggingEvent.getRenderedMessage();
+      LogEvent loggingEvent = events.get(0);
+      String renderedMessage = loggingEvent.getMessage().getFormattedMessage();
       assertTrue("did not see expected string inside message "+ renderedMessage,
           renderedMessage.contains("an attempt to override final parameter: "
               + "prop;  Ignoring."));
@@ -259,7 +232,7 @@ public class TestConfiguration {
 
     // Attach our own log appender so we can verify output
     TestAppender appender = new TestAppender();
-    final Logger logger = Logger.getRootLogger();
+    final Logger logger = (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
     logger.addAppender(appender);
 
     try {
@@ -268,9 +241,9 @@ public class TestConfiguration {
       conf.addResource(in2);
       assertEquals("A", conf.get("prop"));
 
-      List<LoggingEvent> events = appender.getLog();
-      for (LoggingEvent loggingEvent : events) {
-        System.out.println("Event = " + loggingEvent.getRenderedMessage());
+      List<LogEvent> events = appender.getLog();
+      for (LogEvent loggingEvent : events) {
+        System.out.println("Event = " + loggingEvent.getMessage().getFormattedMessage());
       }
       assertTrue("adding same resource twice should not cause logging",
           events.isEmpty());
@@ -296,7 +269,7 @@ public class TestConfiguration {
 
     // Attach our own log appender so we can verify output
     TestAppender appender = new TestAppender();
-    final Logger logger = Logger.getRootLogger();
+    final Logger logger = (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
     logger.addAppender(appender);
 
     try {
@@ -304,9 +277,9 @@ public class TestConfiguration {
       conf.addResource(in1);
       assertEquals("should see the value", "A", conf.get("prop"));
 
-      List<LoggingEvent> events = appender.getLog();
-      for (LoggingEvent loggingEvent : events) {
-        System.out.println("Event = " + loggingEvent.getRenderedMessage());
+      List<LogEvent> events = appender.getLog();
+      for (LogEvent loggingEvent : events) {
+        System.out.println("Event = " + loggingEvent.getMessage().getFormattedMessage());
       }
       assertTrue("adding same resource twice should not cause logging",
           events.isEmpty());
@@ -330,7 +303,7 @@ public class TestConfiguration {
 
     // Attach our own log appender so we can verify output
     TestAppender appender = new TestAppender();
-    final Logger logger = Logger.getRootLogger();
+    final Logger logger = (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
     logger.addAppender(appender);
 
     try {
@@ -338,11 +311,11 @@ public class TestConfiguration {
       conf.addResource(in1);
       assertEquals("should see the value", "A", conf.get("prop"));
 
-      List<LoggingEvent> events = appender.getLog();
+      List<LogEvent> events = appender.getLog();
       assertEquals("overriding a final parameter should cause logging", 1,
           events.size());
-      LoggingEvent loggingEvent = events.get(0);
-      String renderedMessage = loggingEvent.getRenderedMessage();
+      LogEvent loggingEvent = events.get(0);
+      String renderedMessage = loggingEvent.getMessage().getFormattedMessage();
       assertTrue("did not see expected string inside message "+ renderedMessage,
           renderedMessage.contains("an attempt to override final parameter: "
               + "prop;  Ignoring."));
@@ -355,22 +328,19 @@ public class TestConfiguration {
   /**
    * A simple appender for white box testing.
    */
-  private static class TestAppender extends AppenderSkeleton {
-    private final List<LoggingEvent> log = new ArrayList<>();
+  private static class TestAppender extends AbstractAppender {
+    private final List<LogEvent> log = new ArrayList<>();
 
-    @Override public boolean requiresLayout() {
-      return false;
-    }
-
-    @Override protected void append(final LoggingEvent loggingEvent) {
-      log.add(loggingEvent);
-    }
-
-    @Override public void close() {
-    }
-
-    public List<LoggingEvent> getLog() {
+    public List<LogEvent> getLog() {
       return new ArrayList<>(log);
+    }
+
+    TestAppender() {
+      super("TestAppender", null, null, true, null);
+    }
+    @Override
+    public void append(LogEvent event) {
+      log.add(event);
     }
   }
 

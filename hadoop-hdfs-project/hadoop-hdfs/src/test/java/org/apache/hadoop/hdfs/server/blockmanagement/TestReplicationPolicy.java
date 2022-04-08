@@ -18,40 +18,19 @@
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOADBYSTORAGETYPE_KEY;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
-
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.StorageType;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
-import org.apache.hadoop.hdfs.DFSTestUtil;
-import org.apache.hadoop.hdfs.DFSUtil;
-import org.apache.hadoop.hdfs.HdfsConfiguration;
-import org.apache.hadoop.hdfs.LogVerificationAppender;
-import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.TestBlockStoragePolicy;
+import org.apache.hadoop.hdfs.*;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -69,9 +48,9 @@ import org.apache.hadoop.hdfs.server.namenode.TestINodeFile;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
-import org.apache.log4j.spi.LoggingEvent;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -509,24 +488,27 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
     }
     
     final LogVerificationAppender appender = new LogVerificationAppender();
-    final Logger logger = Logger.getRootLogger();
+    final org.apache.logging.log4j.core.Logger logger =
+            (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
     logger.addAppender(appender);
-    
-    // try to choose NUM_OF_DATANODES which is more than actually available
-    // nodes.
-    DatanodeStorageInfo[] targets = chooseTarget(dataNodes.length);
-    assertEquals(targets.length, dataNodes.length - 2);
+    try {
+      // try to choose NUM_OF_DATANODES which is more than actually available
+      // nodes.
+      DatanodeStorageInfo[] targets = chooseTarget(dataNodes.length);
+      assertEquals(targets.length, dataNodes.length - 2);
 
-    final List<LoggingEvent> log = appender.getLog();
-    assertNotNull(log);
-    assertFalse(log.size() == 0);
-    final LoggingEvent lastLogEntry = log.get(log.size() - 1);
-    
-    assertTrue(Level.WARN.isGreaterOrEqual(lastLogEntry.getLevel()));
-    // Suppose to place replicas on each node but two data nodes are not
-    // available for placing replica, so here we expect a short of 2
-    assertTrue(((String)lastLogEntry.getMessage()).contains("in need of 2"));
+      final List<LogEvent> log = appender.getLog();
+      assertNotNull(log);
+      assertFalse(log.size() == 0);
+      final LogEvent lastLogEntry = log.get(log.size() - 1);
 
+      assertTrue(Level.WARN.isMoreSpecificThan(lastLogEntry.getLevel()));
+      // Suppose to place replicas on each node but two data nodes are not
+      // available for placing replica, so here we expect a short of 2
+      assertTrue(lastLogEntry.getMessage().getFormattedMessage().contains("in need of 2"));
+    } finally {
+      logger.removeAppender(appender);
+    }
     resetHeartbeatForStorages();
   }
 
@@ -1711,16 +1693,21 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
   @Test
   public void testChosenFailureForStorageType() {
     final LogVerificationAppender appender = new LogVerificationAppender();
-    final Logger logger = Logger.getRootLogger();
+    final org.apache.logging.log4j.core.Logger logger =
+            (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
     logger.addAppender(appender);
 
-    DatanodeStorageInfo[] targets = replicator.chooseTarget(filename, 1,
-        dataNodes[0], new ArrayList<DatanodeStorageInfo>(), false, null,
-        BLOCK_SIZE, TestBlockStoragePolicy.POLICY_SUITE.getPolicy(
-            HdfsConstants.StoragePolicy.COLD.value()), null);
-    assertEquals(0, targets.length);
-    assertNotEquals(0,
-        appender.countLinesWithMessage("NO_REQUIRED_STORAGE_TYPE"));
+    try {
+      DatanodeStorageInfo[] targets = replicator.chooseTarget(filename, 1,
+              dataNodes[0], new ArrayList<DatanodeStorageInfo>(), false, null,
+              BLOCK_SIZE, TestBlockStoragePolicy.POLICY_SUITE.getPolicy(
+                      HdfsConstants.StoragePolicy.COLD.value()), null);
+      assertEquals(0, targets.length);
+      assertNotEquals(0,
+              appender.countLinesWithMessage("NO_REQUIRED_STORAGE_TYPE"));
+    } finally {
+      logger.removeAppender(appender);
+    }
   }
 
   @Test

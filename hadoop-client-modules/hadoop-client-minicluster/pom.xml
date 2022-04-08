@@ -696,7 +696,7 @@
                       <exclude>commons-logging:commons-logging</exclude>
                       <exclude>junit:junit</exclude>
                       <exclude>com.google.code.findbugs:jsr305</exclude>
-                      <exclude>log4j:log4j</exclude>
+                      <exclude>org.apache.logging.log4j:*</exclude>
                       <exclude>org.eclipse.jetty.websocket:websocket-common</exclude>
                       <exclude>org.eclipse.jetty.websocket:websocket-api</exclude>
                       <!-- We need a filter that matches just those things that are included in the above artiacts -->
@@ -807,8 +807,8 @@
                       <artifact>org.apache.hadoop:*</artifact>
                       <excludes>
                         <!-- No shipping log4j configs in a downstream facing library -->
-                        <exclude>log4j.properties</exclude>
-                        <exclude>container-log4j.properties</exclude>
+                        <exclude>log4j2.properties</exclude>
+                        <exclude>container-log4j2.properties</exclude>
                         <!-- keep optional runtime configuration out of the jar; downstream can provide -->
                         <exclude>capacity-scheduler.xml</exclude>
                         <exclude>krb5.conf</exclude>
@@ -898,6 +898,8 @@
                         <exclude>org/apache/commons/logging/**/*</exclude>
                         <exclude>org/apache/log4j/*</exclude>
                         <exclude>org/apache/log4j/**/*</exclude>
+                        <exclude>org/apache/logging/log4j/*</exclude>
+                        <exclude>org/apache/logging/log4j/**/*</exclude>
                         <exclude>**/pom.xml</exclude>
                         <!-- Our non-shaded JUnit library -->
                         <exclude>org/junit/*</exclude>

@@ -351,7 +351,7 @@ public class DataNode extends ReconfigurableBase
               FS_DU_INTERVAL_KEY,
               FS_GETSPACEUSED_JITTER_KEY));
 
-  public static final Log METRICS_LOG = LogFactory.getLog("DataNodeMetricsLog");
+  public static final Logger METRICS_LOG = LoggerFactory.getLogger("DataNodeMetricsLog");
 
   private static final String DATANODE_HTRACE_PREFIX = "datanode.htrace.";
   private final FileIoProvider fileIoProvider;
@@ -3957,8 +3957,6 @@ public class DataNode extends ReconfigurableBase
     if (metricsLoggerPeriodSec <= 0) {
       return;
     }
-
-    MetricsLoggerTask.makeMetricsLoggerAsync(METRICS_LOG);
 
     // Schedule the periodic logging.
     metricsLoggerTimer = new ScheduledThreadPoolExecutor(1);

@@ -40,6 +40,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.fs.LocalFileSystem;
+import org.apache.logging.log4j.LogManager;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -74,7 +76,6 @@ import org.apache.hadoop.test.PathUtils;
 import org.apache.hadoop.util.ExitUtil.ExitException;
 import org.apache.hadoop.util.ExitUtil;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.log4j.Logger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -89,7 +90,7 @@ import javax.management.ObjectName;
 public class TestStartup {
   public static final String NAME_NODE_HOST = "localhost:";
   public static final String WILDCARD_HTTP_HOST = "0.0.0.0:";
-  private static final org.slf4j.Logger LOG =
+  private static final Logger LOG =
       LoggerFactory.getLogger(TestStartup.class.getName());
   private Configuration config;
   private File hdfsDir=null;
@@ -505,47 +506,50 @@ public class TestStartup {
     }
 
     try {
-        LOG.info("\n===========================================\n" +
-                 "Starting empty cluster");
-        
+      LOG.info("\n===========================================\n" +
+              "Starting empty cluster");
+
+      cluster = new MiniDFSCluster.Builder(config)
+              .numDataNodes(0)
+              .format(true)
+              .build();
+      cluster.waitActive();
+
+      FileSystem fs = cluster.getFileSystem();
+      fs.mkdirs(new Path("/test"));
+
+      LOG.info("Shutting down cluster #1");
+      cluster.shutdown();
+      cluster = null;
+
+      // Corrupt the md5 files in all the namedirs
+      corruptFSImageMD5(true);
+
+      // Attach our own log appender so we can verify output
+      final LogVerificationAppender appender = new LogVerificationAppender();
+      final org.apache.logging.log4j.core.Logger logger =
+              (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
+      logger.addAppender(appender);
+
+      // Try to start a new cluster
+      LOG.info("\n===========================================\n" +
+              "Starting same cluster after simulated crash");
+      try {
         cluster = new MiniDFSCluster.Builder(config)
-          .numDataNodes(0)
-          .format(true)
-          .build();
-        cluster.waitActive();
-        
-        FileSystem fs = cluster.getFileSystem();
-        fs.mkdirs(new Path("/test"));
-        
-        LOG.info("Shutting down cluster #1");
-        cluster.shutdown();
-        cluster = null;
-
-        // Corrupt the md5 files in all the namedirs
-        corruptFSImageMD5(true);
-
-        // Attach our own log appender so we can verify output
-        final LogVerificationAppender appender = new LogVerificationAppender();
-        final Logger logger = Logger.getRootLogger();
-        logger.addAppender(appender);
-
-        // Try to start a new cluster
-        LOG.info("\n===========================================\n" +
-        "Starting same cluster after simulated crash");
-        try {
-          cluster = new MiniDFSCluster.Builder(config)
-            .numDataNodes(0)
-            .format(false)
-            .build();
-          fail("Should not have successfully started with corrupt image");
-        } catch (IOException ioe) {
-          GenericTestUtils.assertExceptionContains(
-              "Failed to load FSImage file", ioe);
-          int md5failures = appender.countExceptionsWithMessage(
-              " is corrupt with MD5 checksum of ");
-          // Two namedirs, so should have seen two failures
-          assertEquals(2, md5failures);
-        }
+                .numDataNodes(0)
+                .format(false)
+                .build();
+        fail("Should not have successfully started with corrupt image");
+      } catch (IOException ioe) {
+        GenericTestUtils.assertExceptionContains(
+                "Failed to load FSImage file", ioe);
+        int md5failures = appender.countExceptionsWithMessage(
+                " is corrupt with MD5 checksum of ");
+        // Two namedirs, so should have seen two failures
+        assertEquals(2, md5failures);
+      } finally {
+        logger.removeAppender(appender);
+      }
     } finally {
       if (cluster != null) {
         cluster.shutdown();

@@ -18,23 +18,14 @@
 
 package org.apache.hadoop.yarn.util;
 
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.io.File;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.Time;
-import org.apache.log4j.Appender;
-import org.apache.log4j.AppenderSkeleton;
-import org.apache.log4j.Priority;
-import org.apache.log4j.LogManager;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.apache.hadoop.util.GenericsUtil.isLog4jLogger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.event.Level;
 
 public class TestAdHocLogDumper {
 
@@ -43,21 +34,9 @@ public class TestAdHocLogDumper {
 
   @Test
   public void testDumpingSchedulerLogs() throws Exception {
-
-    Map<Appender, Priority> levels = new HashMap<>();
     String logFilename = "test.log";
     Logger logger = LoggerFactory.getLogger(TestAdHocLogDumper.class);
-    if (isLog4jLogger(this.getClass())) {
-      for (Enumeration appenders = LogManager.getRootLogger().
-          getAllAppenders(); appenders.hasMoreElements();) {
-        Object obj = appenders.nextElement();
-        if (obj instanceof AppenderSkeleton) {
-          AppenderSkeleton appender = (AppenderSkeleton) obj;
-          levels.put(appender, appender.getThreshold());
-        }
-      }
-    }
-
+    Level currentLogLevel = GenericTestUtils.getLevel(logger);
     AdHocLogDumper dumper = new AdHocLogDumper(this.getClass().getName(),
         logFilename);
     dumper.dumpLogs("DEBUG", 1000);
@@ -71,16 +50,8 @@ public class TestAdHocLogDumper {
     Assert.assertTrue(logFile.length() != 0);
 
     // make sure levels are set back to their original values
-    if (isLog4jLogger(this.getClass())) {
-      for (Enumeration appenders = LogManager.getRootLogger().
-          getAllAppenders(); appenders.hasMoreElements();) {
-        Object obj = appenders.nextElement();
-        if (obj instanceof AppenderSkeleton) {
-          AppenderSkeleton appender = (AppenderSkeleton) obj;
-          Assert.assertEquals(levels.get(appender), appender.getThreshold());
-        }
-      }
-    }
+    Assert.assertEquals(currentLogLevel, GenericTestUtils.getLevel(logger));
+
     boolean del = logFile.delete();
     if(!del) {
       LOG.info("Couldn't clean up after test");

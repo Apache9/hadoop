@@ -17,14 +17,16 @@
 */
 package org.apache.hadoop.log;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.io.File;
 import java.net.SocketException;
 import java.net.URI;
 import java.util.concurrent.Callable;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.commons.logging.impl.Log4JLogger;
+import javax.net.ssl.SSLException;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
@@ -40,23 +42,15 @@ import org.apache.hadoop.security.authentication.KerberosTestUtils;
 import org.apache.hadoop.security.authentication.client.KerberosAuthenticator;
 import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.ssl.KeyStoreTestUtil;
-import org.junit.Assert;
-
 import org.apache.hadoop.test.GenericTestUtils;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.net.ssl.SSLException;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import org.slf4j.event.Level;
 
 /**
  * Test LogLevel.
@@ -70,8 +64,7 @@ public class TestLogLevel extends KerberosSecurityTestcase {
   private final String logName = TestLogLevel.class.getName();
   private String clientPrincipal;
   private String serverPrincipal;
-  private final Log testlog = LogFactory.getLog(logName);
-  private final Logger log = ((Log4JLogger)testlog).getLogger();
+  private final Logger log = LoggerFactory.getLogger(logName);
   private final static String PRINCIPAL = "loglevel.principal";
   private final static String KEYTAB  = "loglevel.keytab";
   private static final String PREFIX = "hadoop.http.authentication.";
@@ -254,7 +247,7 @@ public class TestLogLevel extends KerberosSecurityTestcase {
     if (!LogLevel.isValidProtocol(connectProtocol)) {
       throw new Exception("Invalid client protocol " + connectProtocol);
     }
-    Level oldLevel = log.getEffectiveLevel();
+    Level oldLevel = GenericTestUtils.getLevel(log);
     Assert.assertNotEquals("Get default Log Level which shouldn't be ERROR.",
         Level.ERROR, oldLevel);
 
@@ -326,7 +319,7 @@ public class TestLogLevel extends KerberosSecurityTestcase {
     cli.run(setLevelArgs);
 
     assertEquals("new level not equal to expected: ", newLevel.toUpperCase(),
-        log.getEffectiveLevel().toString());
+        GenericTestUtils.getLevel(log).toString());
   }
 
   /**

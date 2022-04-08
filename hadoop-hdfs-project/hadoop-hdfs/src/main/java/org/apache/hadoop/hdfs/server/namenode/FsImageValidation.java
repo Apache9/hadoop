@@ -39,7 +39,8 @@ import org.apache.hadoop.util.GSet;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.log4j.Level;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -125,15 +126,7 @@ public class FsImageValidation {
     }
 
     static void setLogLevel(Class<?> clazz, Level level) {
-      final Log log = LogFactory.getLog(clazz);
-      if (log instanceof Log4JLogger) {
-        final org.apache.log4j.Logger logger = ((Log4JLogger) log).getLogger();
-        logger.setLevel(level);
-        LOG.info("setLogLevel {} to {}, getEffectiveLevel() = {}",
-            clazz.getName(), level, logger.getEffectiveLevel());
-      } else {
-        LOG.warn("Failed setLogLevel {} to {}", clazz.getName(), level);
-      }
+      Configurator.setLevel(clazz, level);
     }
 
     static String toCommaSeparatedNumber(long n) {

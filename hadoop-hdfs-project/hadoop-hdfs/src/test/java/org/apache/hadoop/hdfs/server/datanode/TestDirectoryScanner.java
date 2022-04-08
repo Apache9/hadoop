@@ -79,8 +79,8 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.Time;
-import org.apache.log4j.SimpleLayout;
-import org.apache.log4j.WriterAppender;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.appender.WriterAppender;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -416,8 +416,8 @@ public class TestDirectoryScanner {
 
     //add a logger stream to check what has printed to log
     ByteArrayOutputStream loggerStream = new ByteArrayOutputStream();
-    org.apache.log4j.Logger rootLogger =
-        org.apache.log4j.Logger.getRootLogger();
+    org.apache.logging.log4j.core.Logger rootLogger =
+            (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
     GenericTestUtils.setRootLogLevel(Level.INFO);
     WriterAppender writerAppender =
         new WriterAppender(new SimpleLayout(), loggerStream);

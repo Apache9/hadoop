@@ -17,6 +17,10 @@
  */
 package org.apache.hadoop.test;
 
+import static org.apache.hadoop.fs.contract.ContractTestUtils.createFile;
+import static org.apache.hadoop.util.functional.CommonCallableSupplier.submit;
+import static org.apache.hadoop.util.functional.CommonCallableSupplier.waitForCompletion;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -38,7 +42,6 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
-import java.util.Enumeration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -46,37 +49,24 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
-
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.hadoop.util.DurationInfo;
+import org.apache.hadoop.util.Sets;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
-import org.apache.log4j.Appender;
-import org.apache.log4j.Layout;
-import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
-import org.apache.log4j.PatternLayout;
-import org.apache.log4j.WriterAppender;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
-import org.apache.hadoop.util.Sets;
-
-import static org.apache.hadoop.fs.contract.ContractTestUtils.createFile;
-import static org.apache.hadoop.util.functional.CommonCallableSupplier.submit;
-import static org.apache.hadoop.util.functional.CommonCallableSupplier.waitForCompletion;
+import org.slf4j.event.Level;
 
 /**
  * Test provides some very generic helpers which might be used across the tests
@@ -85,7 +75,7 @@ public abstract class GenericTestUtils {
 
   public static final int EXECUTOR_THREAD_COUNT = 64;
 
-  private static final org.slf4j.Logger LOG =
+  private static final Logger LOG =
       LoggerFactory.getLogger(GenericTestUtils.class);
 
   public static final String PREFIX = "file-";
@@ -117,122 +107,51 @@ public abstract class GenericTestUtils {
   public static final String ERROR_INVALID_ARGUMENT =
       "Total wait time should be greater than check interval time";
 
-  /**
-   * @deprecated use {@link #disableLog(org.slf4j.Logger)} instead
-   */
-  @Deprecated
-  @SuppressWarnings("unchecked")
-  public static void disableLog(Log log) {
-    // We expect that commons-logging is a wrapper around Log4j.
-    disableLog((Log4JLogger) log);
+  private static void disableLog(org.apache.logging.log4j.core.Logger logger) {
+    logger.setLevel(org.apache.logging.log4j.Level.OFF);
   }
 
-  @Deprecated
-  public static Logger toLog4j(org.slf4j.Logger logger) {
-    return LogManager.getLogger(logger.getName());
+  private static org.apache.logging.log4j.core.Logger toLog4j(Logger logger) {
+    return (org.apache.logging.log4j.core.Logger) org.apache.logging.log4j.LogManager.getLogger(
+        logger.getName());
   }
 
-  /**
-   * @deprecated use {@link #disableLog(org.slf4j.Logger)} instead
-   */
-  @Deprecated
-  public static void disableLog(Log4JLogger log) {
-    log.getLogger().setLevel(Level.OFF);
-  }
-
-  /**
-   * @deprecated use {@link #disableLog(org.slf4j.Logger)} instead
-   */
-  @Deprecated
-  public static void disableLog(Logger logger) {
-    logger.setLevel(Level.OFF);
-  }
-
-  public static void disableLog(org.slf4j.Logger logger) {
-    disableLog(toLog4j(logger));
-  }
-
-  /**
-   * @deprecated
-   * use {@link #setLogLevel(org.slf4j.Logger, org.slf4j.event.Level)} instead
-   */
-  @Deprecated
-  @SuppressWarnings("unchecked")
-  public static void setLogLevel(Log log, Level level) {
-    // We expect that commons-logging is a wrapper around Log4j.
-    setLogLevel((Log4JLogger) log, level);
-  }
-
-  /**
-   * A helper used in log4j2 migration to accept legacy
-   * org.apache.commons.logging apis.
-   * <p>
-   * And will be removed after migration.
-   *
-   * @param log   a log
-   * @param level level to be set
-   */
-  @Deprecated
-  public static void setLogLevel(Log log, org.slf4j.event.Level level) {
-    setLogLevel(log, Level.toLevel(level.toString()));
-  }
-
-  /**
-   * @deprecated
-   * use {@link #setLogLevel(org.slf4j.Logger, org.slf4j.event.Level)} instead
-   */
-  @Deprecated
-  public static void setLogLevel(Log4JLogger log, Level level) {
-    log.getLogger().setLevel(level);
-  }
-
-  /**
-   * @deprecated
-   * use {@link #setLogLevel(org.slf4j.Logger, org.slf4j.event.Level)} instead
-   */
-  @Deprecated
-  public static void setLogLevel(Logger logger, Level level) {
+  private static void setLogLevel(org.apache.logging.log4j.core.Logger logger,
+      org.apache.logging.log4j.Level level) {
     logger.setLevel(level);
   }
 
-  /**
-   * @deprecated
-   * use {@link #setLogLevel(org.slf4j.Logger, org.slf4j.event.Level)} instead
-   */
-  @Deprecated
-  public static void setLogLevel(org.slf4j.Logger logger, Level level) {
-    setLogLevel(toLog4j(logger), level);
+  public static void disableLog(Logger logger) {
+    disableLog(toLog4j(logger));
   }
 
-  public static void setLogLevel(org.slf4j.Logger logger,
-                                 org.slf4j.event.Level level) {
-    setLogLevel(toLog4j(logger), Level.toLevel(level.toString()));
+  public static void setLogLevel(Logger logger,
+      Level level) {
+    setLogLevel(toLog4j(logger), org.apache.logging.log4j.Level.toLevel(level.toString()));
   }
 
-  public static void setRootLogLevel(org.slf4j.event.Level level) {
-    setLogLevel(LogManager.getRootLogger(), Level.toLevel(level.toString()));
+  public static void setRootLogLevel(Level level) {
+    setLogLevel((org.apache.logging.log4j.core.Logger) org.apache.logging.log4j.LogManager
+        .getRootLogger(), org.apache.logging.log4j.Level.toLevel(level.toString()));
   }
 
-  public static void setCurrentLoggersLogLevel(org.slf4j.event.Level level) {
-    for (Enumeration<?> loggers = LogManager.getCurrentLoggers();
-        loggers.hasMoreElements();) {
-      Logger logger = (Logger) loggers.nextElement();
-      logger.setLevel(Level.toLevel(level.toString()));
-    }
+  public static Level toLevel(String level) {
+    return toLevel(level, Level.DEBUG);
   }
 
-  public static org.slf4j.event.Level toLevel(String level) {
-    return toLevel(level, org.slf4j.event.Level.DEBUG);
-  }
-
-  public static org.slf4j.event.Level toLevel(
-      String level, org.slf4j.event.Level defaultLevel) {
+  public static Level toLevel(
+      String level, Level defaultLevel) {
     try {
-      return org.slf4j.event.Level.valueOf(level);
+      return Level.valueOf(level);
     } catch (IllegalArgumentException e) {
       return defaultLevel;
     }
   }
+
+  public static Level getLevel(Logger logger) {
+    return toLevel(toLog4j(logger).getLevel().toString(), Level.INFO);
+  }
+
   /**
    * Extracts the name of the method where the invocation has happened
    * @return String name of the invoking method
@@ -532,28 +451,18 @@ public abstract class GenericTestUtils {
 
   public static class LogCapturer {
     private StringWriter sw = new StringWriter();
-    private WriterAppender appender;
-    private Logger logger;
+    private org.apache.logging.log4j.core.appender.WriterAppender appender;
+    private org.apache.logging.log4j.core.Logger logger;
 
-    public static LogCapturer captureLogs(Log l) {
-      Logger logger = ((Log4JLogger)l).getLogger();
-      return new LogCapturer(logger);
-    }
-
-    public static LogCapturer captureLogs(org.slf4j.Logger logger) {
+    public static LogCapturer captureLogs(Logger logger) {
       return new LogCapturer(toLog4j(logger));
     }
 
-    private LogCapturer(Logger logger) {
+    private LogCapturer(org.apache.logging.log4j.core.Logger logger) {
       this.logger = logger;
-      Appender defaultAppender = Logger.getRootLogger().getAppender("stdout");
-      if (defaultAppender == null) {
-        defaultAppender = Logger.getRootLogger().getAppender("console");
-      }
-      final Layout layout = (defaultAppender == null) ? new PatternLayout() :
-          defaultAppender.getLayout();
-      this.appender = new WriterAppender(layout, sw);
-      logger.addAppender(this.appender);
+      this.appender = org.apache.logging.log4j.core.appender.WriterAppender.newBuilder()
+          .setName("test").setTarget(sw).build();
+      this.logger.addAppender(this.appender);
     }
 
     public String getOutput() {
@@ -574,7 +483,7 @@ public abstract class GenericTestUtils {
    * method is called, then waits on another before continuing.
    */
   public static class DelayAnswer implements Answer<Object> {
-    private final org.slf4j.Logger LOG;
+    private final Logger LOG;
 
     private final CountDownLatch fireLatch = new CountDownLatch(1);
     private final CountDownLatch waitLatch = new CountDownLatch(1);
@@ -587,7 +496,7 @@ public abstract class GenericTestUtils {
     private volatile Throwable thrown;
     private volatile Object returnValue;
 
-    public DelayAnswer(org.slf4j.Logger log) {
+    public DelayAnswer(Logger log) {
       this.LOG = log;
     }
 
@@ -684,13 +593,13 @@ public abstract class GenericTestUtils {
    */
   public static class DelegateAnswer implements Answer<Object> {
     private final Object delegate;
-    private final org.slf4j.Logger log;
+    private final Logger log;
 
     public DelegateAnswer(Object delegate) {
       this(null, delegate);
     }
 
-    public DelegateAnswer(org.slf4j.Logger log, Object delegate) {
+    public DelegateAnswer(Logger log, Object delegate) {
       this.log = log;
       this.delegate = delegate;
     }

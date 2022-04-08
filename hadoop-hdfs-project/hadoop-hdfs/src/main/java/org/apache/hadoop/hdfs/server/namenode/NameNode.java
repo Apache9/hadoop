@@ -408,8 +408,8 @@ public class NameNode extends ReconfigurableBase implements
 
   private static final String NAMENODE_HTRACE_PREFIX = "namenode.htrace.";
 
-  public static final Log MetricsLog =
-      LogFactory.getLog("NameNodeMetricsLog");
+  public static final Logger MetricsLog =
+      LoggerFactory.getLogger("NameNodeMetricsLog");
 
   protected FSNamesystem namesystem; 
   protected final NamenodeRole role;
@@ -838,8 +838,6 @@ public class NameNode extends ReconfigurableBase implements
     if (metricsLoggerPeriodSec <= 0) {
       return;
     }
-
-    MetricsLoggerTask.makeMetricsLoggerAsync(MetricsLog);
 
     // Schedule the periodic logging.
     metricsLoggerTimer = new ScheduledThreadPoolExecutor(1);

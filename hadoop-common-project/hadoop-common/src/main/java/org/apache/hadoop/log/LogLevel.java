@@ -24,33 +24,29 @@ import java.io.PrintWriter;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.regex.Pattern;
-
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSocketFactory;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-
-import org.apache.hadoop.classification.VisibleForTesting;
-import org.apache.hadoop.thirdparty.com.google.common.base.Charsets;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.commons.logging.impl.Jdk14Logger;
-import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
 import org.apache.hadoop.security.authentication.client.KerberosAuthenticator;
 import org.apache.hadoop.security.ssl.SSLFactory;
+import org.apache.hadoop.thirdparty.com.google.common.base.Charsets;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ServletUtil;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Change log level in runtime.
@@ -321,11 +317,11 @@ public class LogLevel {
 
     @Override
     public void doGet(HttpServletRequest request, HttpServletResponse response
-        ) throws ServletException, IOException {
+    ) throws ServletException, IOException {
 
       // Do the authorization
       if (!HttpServer2.hasAdministratorAccess(getServletContext(), request,
-          response)) {
+              response)) {
         return;
       }
 
@@ -336,24 +332,16 @@ public class LogLevel {
       if (logName != null) {
         out.println("<br /><hr /><h3>Results</h3>");
         out.println(MARKER
-            + "Submitted Class Name: <b>" + logName + "</b><br />");
+                + "Submitted Class Name: <b>" + logName + "</b><br />");
 
-        Log log = LogFactory.getLog(logName);
+        Logger log = LoggerFactory.getLogger(logName);
         out.println(MARKER
-            + "Log Class: <b>" + log.getClass().getName() +"</b><br />");
+                + "Log Class: <b>" + log.getClass().getName() + "</b><br />");
         if (level != null) {
           out.println(MARKER + "Submitted Level: <b>" + level + "</b><br />");
         }
-
-        if (log instanceof Log4JLogger) {
-          process(((Log4JLogger)log).getLogger(), level, out);
-        }
-        else if (log instanceof Jdk14Logger) {
-          process(((Jdk14Logger)log).getLogger(), level, out);
-        }
-        else {
-          out.println("Sorry, " + log.getClass() + " not supported.<br />");
-        }
+        process((org.apache.logging.log4j.core.Logger) org.apache.logging.log4j.LogManager.getLogger(
+                logName), level, out);
       }
 
       out.println(FORMS);
@@ -361,44 +349,26 @@ public class LogLevel {
     }
 
     static final String FORMS = "\n<br /><hr /><h3>Get / Set</h3>"
-        + "\n<form>Class Name: <input type='text' size='50' name='log' /> "
-        + "<input type='submit' value='Get Log Level' />"
-        + "</form>"
-        + "\n<form>Class Name: <input type='text' size='50' name='log' /> "
-        + "Level: <input type='text' name='level' /> "
-        + "<input type='submit' value='Set Log Level' />"
-        + "</form>";
+            + "\n<form>Class Name: <input type='text' size='50' name='log' /> "
+            + "<input type='submit' value='Get Log Level' />"
+            + "</form>"
+            + "\n<form>Class Name: <input type='text' size='50' name='log' /> "
+            + "Level: <input type='text' name='level' /> "
+            + "<input type='submit' value='Set Log Level' />"
+            + "</form>";
 
-    private static void process(org.apache.log4j.Logger log, String level,
-        PrintWriter out) throws IOException {
+    private static void process(org.apache.logging.log4j.core.Logger log, String level,
+                                PrintWriter out) {
       if (level != null) {
-        if (!level.equalsIgnoreCase(org.apache.log4j.Level.toLevel(level)
-            .toString())) {
+        if (!level.equalsIgnoreCase(org.apache.logging.log4j.Level.toLevel(level)
+                .toString())) {
           out.println(MARKER + "Bad Level : <b>" + level + "</b><br />");
         } else {
-          log.setLevel(org.apache.log4j.Level.toLevel(level));
+          log.setLevel(org.apache.logging.log4j.Level.toLevel(level));
           out.println(MARKER + "Setting Level to " + level + " ...<br />");
         }
       }
-      out.println(MARKER
-          + "Effective Level: <b>" + log.getEffectiveLevel() + "</b><br />");
-    }
-
-    private static void process(java.util.logging.Logger log, String level,
-        PrintWriter out) throws IOException {
-      if (level != null) {
-        String levelToUpperCase = level.toUpperCase();
-        try {
-          log.setLevel(java.util.logging.Level.parse(levelToUpperCase));
-        } catch (IllegalArgumentException e) {
-          out.println(MARKER + "Bad Level : <b>" + level + "</b><br />");
-        }
-        out.println(MARKER + "Setting Level to " + level + " ...<br />");
-      }
-
-      java.util.logging.Level lev;
-      for(; (lev = log.getLevel()) == null; log = log.getParent());
-      out.println(MARKER + "Effective Level: <b>" + lev + "</b><br />");
+      out.println(MARKER + "Effective Level: <b>" + log.getLevel() + "</b><br />");
     }
   }
 }

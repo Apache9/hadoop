@@ -18,20 +18,18 @@
 
 package org.apache.hadoop.yarn.util;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import org.apache.hadoop.util.Time;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.junit.Assert;
+import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Marker;
 import org.slf4j.MarkerFactory;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Level;
-import org.apache.hadoop.util.Time;
-import org.junit.Assert;
-import org.junit.Test;
-
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 public class TestLog4jWarningErrorMetricsAppender {
 
@@ -45,37 +43,33 @@ public class TestLog4jWarningErrorMetricsAppender {
   void setupAppender(int cleanupIntervalSeconds, long messageAgeLimitSeconds,
       int maxUniqueMessages) {
     removeAppender();
-    appender =
-        new Log4jWarningErrorMetricsAppender(cleanupIntervalSeconds,
-          messageAgeLimitSeconds, maxUniqueMessages);
-    LogManager.getRootLogger().addAppender(appender);
+    appender = Log4jWarningErrorMetricsAppender.newBuilder()
+            .setCleanupInterval(cleanupIntervalSeconds)
+            .setMessageAgeLimitSeconds(messageAgeLimitSeconds)
+            .setMaxUniqueMessages(maxUniqueMessages).build();
+
+    ((org.apache.logging.log4j.core.Logger)LogManager.getRootLogger()).addAppender(appender);
   }
 
   void removeAppender() {
-    LogManager.getRootLogger().removeAppender(appender);
+    ((org.apache.logging.log4j.core.Logger)LogManager.getRootLogger()).removeAppender(appender);
   }
 
   void logMessages(Level level, String message, int count) {
     for (int i = 0; i < count; ++i) {
-      switch (level.toInt()) {
-      case Level.FATAL_INT:
+      int intLevel = level.intLevel();
+      if (intLevel == Level.FATAL.intLevel()) {
         LOG.error(FATAL, message);
-        break;
-      case Level.ERROR_INT:
+      } else if (intLevel == Level.ERROR.intLevel()) {
         LOG.error(message);
-        break;
-      case Level.WARN_INT:
+      } else if (intLevel == Level.WARN.intLevel()) {
         LOG.warn(message);
-        break;
-      case Level.INFO_INT:
+      } else if (intLevel == Level.INFO.intLevel()) {
         LOG.info(message);
-        break;
-      case Level.DEBUG_INT:
+      } else if (intLevel == Level.DEBUG.intLevel()) {
         LOG.debug(message);
-        break;
-      case Level.TRACE_INT:
+      } else if (intLevel == Level.TRACE.intLevel()) {
         LOG.trace(message);
-        break;
       }
     }
   }

@@ -60,8 +60,6 @@ import org.apache.hadoop.mapreduce.v2.api.records.TaskState;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskType;
 import org.apache.hadoop.util.ApplicationClassLoader;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.yarn.ContainerLogAppender;
-import org.apache.hadoop.yarn.ContainerRollingLogAppender;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
 import org.apache.hadoop.yarn.api.records.LocalResource;
@@ -587,9 +585,7 @@ public class MRApps extends Apps {
   }
   
   /**
-   * Add the JVM system properties necessary to configure
-   *  {@link ContainerLogAppender} or
-   *  {@link ContainerRollingLogAppender}.
+   * Add the JVM system properties necessary to configure log4j appenders.
    *
    * @param task for map/reduce, or null for app master
    * @param vargs the argument list to append to
@@ -600,7 +596,7 @@ public class MRApps extends Apps {
     String log4jPropertyFile =
         conf.get(MRJobConfig.MAPREDUCE_JOB_LOG4J_PROPERTIES_FILE, "");
     if (log4jPropertyFile.isEmpty()) {
-      vargs.add("-Dlog4j.configuration=container-log4j.properties");
+      vargs.add("-Dlog4j2.configurationFile=container-log4j.properties");
     } else {
       URI log4jURI = null;
       try {
@@ -609,7 +605,7 @@ public class MRApps extends Apps {
         throw new IllegalArgumentException(e);
       }
       Path log4jPath = new Path(log4jURI);
-      vargs.add("-Dlog4j.configuration="+log4jPath.getName());
+      vargs.add("-Dlog4j2.configurationFile="+log4jPath.getName());
     }
 
     long logSize;
